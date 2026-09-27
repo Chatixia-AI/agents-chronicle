@@ -1,0 +1,196 @@
+import json
+
+import pytest
+
+from chronicle.analyze import analyze_session, normalize_analysis
+from chronicle.db import kv_get
+from chronicle.digest import build_digest
+from chronicle.llm import UsageLimitError, parse_json_object
+from chronicle.redact import redact
+from chronicle.synthesize import GLOBAL, projects_needing_synthesis, synthesize_project
+from chronicle.worker import PAUSE_KEY, pending_sessions, run_worker
+
+from conftest import CWD, SECRET, SID, fake_log
+
+
+def test_digest_is_redacted_and_structured(synced):
+    header, d = build_digest(synced["conn"], SID, 100_000)
+    assert d.level == 3 and len(d.chunks) == 1
+    assert SECRET not in d.text and "[REDACTED" in d.text
+    assert "### [1] USER" in d.text and "### [2] USER" in d.text and "sent while the agent was working" in d.text
+    assert "→ Bash: pytest tests/test_login.py -x" in d.text
+    assert "✗ File does not exist." in d.text
+    assert "subagent report: Logout lives in session.py" in d.text
+    assert "auth.py (+2/-1)" in header
+
+
+def test_digest_chunks_long_sessions(synced):
+    _, d = build_digest(synced["conn"], SID, 300)
+    assert len(d.chunks) > 1
+    assert all(c.strip() for c in d.chunks)
+
+
+def test_analyze_session_stores_overview_and_knowledge(synced):
+    conn, cfg = synced["conn"], synced["cfg"]
+    data = analyze_session(conn, cfg, SID)
+    s = conn.execute("SELECT * FROM sessions WHERE id=?", (SID,)).fetchone()
+    assert s["analysis_status"] == "done" and s["outcome"] == "completed"
+    assert s["title"] == "Fixed login token expiry bug"
+    assert s["analysis_model"] == "claude-sonnet-5"  # the model that did the work, not the first listed
+    assert json.loads(s["work_types_json"]) == ["bugfix"]
+    assert json.loads(s["tags_json"]) == ["auth", "pytest"]
+    assert json.loads(s["friction_json"])[0] == {"kind": "other", "note": "read a missing file"}
+    ks = conn.execute("SELECT kind, title, confidence, scope FROM knowledge WHERE session_id=? ORDER BY id", (SID,)).fetchall()
+    assert [tuple(k) for k in ks] == [
+        ("fix", "Token TTL compared in seconds vs ms", "high", "project"),
+        ("learning", "Unknown kinds become learnings", "medium", "global"),
+    ]
+    call = fake_log(synced)[-1]
+    assert SECRET not in call["prompt_head"]
+    for flag in ("--no-session-persistence", "--safe-mode", "--tools", "--strict-mcp-config"):
+        assert flag in call["args"]
+    assert "--json-schema" not in call["args"]
+    # re-analysis replaces the session's extracted knowledge instead of duplicating it
+    analyze_session(conn, cfg, SID)
+    assert conn.execute("SELECT COUNT(*) FROM knowledge WHERE session_id=?", (SID,)).fetchone()[0] == 2
+
+
+def test_map_reduce_for_long_sessions(synced):
+    conn, cfg = synced["conn"], synced["cfg"]
+    cfg.analysis.chunk_chars = 400
+    analyze_session(conn, cfg, SID)
+    calls = fake_log(synced)
+    parts = [c for c in calls if "<transcript_part" in c["prompt_head"]]
+    assert len(parts) >= 2
+    assert "<part_notes>" in calls[-1]["prompt_head"]
+    kinds = [r[0] for r in conn.execute("SELECT kind FROM analyses WHERE target=?", (SID,))]
+    assert kinds.count("chunk") == len(parts) and kinds[-1] == "session"
+
+
+def test_usage_limit_pauses_the_worker(synced, monkeypatch):
+    conn, cfg = synced["conn"], synced["cfg"]
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "limit")
+    with pytest.raises(UsageLimitError):
+        analyze_session(conn, cfg, SID)
+    assert conn.execute("SELECT analysis_status FROM sessions WHERE id=?", (SID,)).fetchone()[0] == "pending"
+    report = run_worker(cfg, synthesize=False, export=False)
+    assert report.paused_until and report.failed
+    assert kv_get(conn, PAUSE_KEY)
+    # while paused, the worker does not call Claude again
+    before = len(fake_log(synced))
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "ok")
+    report = run_worker(cfg, synthesize=False, export=False)
+    assert report.paused_until and len(fake_log(synced)) == before
+
+
+def test_worker_end_to_end(synced):
+    cfg, conn = synced["cfg"], synced["conn"]
+    assert pending_sessions(conn, cfg, 10) == [SID]
+    report = run_worker(cfg)
+    assert report.analyzed == [SID] and not report.failed
+    assert CWD in report.synthesized
+    kb = conn.execute("SELECT * FROM project_kb WHERE project_path=?", (CWD,)).fetchone()
+    assert kb and "Demo app overview." in kb["markdown"] and "Token TTL unit mismatch." in kb["markdown"]
+    assert report.exported > 0
+    notes = list((cfg.notes_dir / "Sessions").rglob("*.md"))
+    assert len(notes) == 2  # the transcript session + the history-only one
+    text = next(n for n in notes if SID[:8] in n.name).read_text()
+    assert text.startswith("---\nsession_id: " + SID) and "Token TTL compared" in text and SECRET not in text
+    assert (cfg.notes_dir / "Home.md").exists() and (cfg.notes_dir / "Projects" / "demo-app.md").exists()
+    # nothing left to do: a second run is a no-op
+    again = run_worker(cfg)
+    assert not again.analyzed and again.exported == 0
+
+
+def test_synthesis_threshold_and_global(synced):
+    cfg, conn = synced["cfg"], synced["conn"]
+    analyze_session(conn, cfg, SID)
+    assert CWD in projects_needing_synthesis(conn, cfg)
+    synthesize_project(conn, cfg, CWD)
+    assert CWD not in projects_needing_synthesis(conn, cfg)
+    synthesize_project(conn, cfg, GLOBAL)
+    assert conn.execute("SELECT COUNT(*) FROM project_kb WHERE project_path=?", (GLOBAL,)).fetchone()[0] == 1
+
+
+def test_parse_json_object_variants():
+    assert parse_json_object('{"a": 1}') == {"a": 1}
+    assert parse_json_object('Sure!\n```json\n{"a": 1}\n```') == {"a": 1}
+    assert parse_json_object('prefix {"a": {"b": 2}} suffix') == {"a": {"b": 2}}
+    assert parse_json_object('{"parameter": {"title": "t", "summary": "s"}}') == {"title": "t", "summary": "s"}
+    assert parse_json_object("not json") is None
+
+
+def test_normalize_analysis_defaults():
+    n = normalize_analysis({"title": "t"})
+    assert n["outcome"] == "unclear" and n["knowledge"] == [] and n["sentiment"] == "unclear"
+
+
+def test_redaction_patterns():
+    text = ("key sk-ant-api03-abcdefghijklmnopqrstuvwxyz ghp_" + "a" * 36 + " AKIAABCDEFGHIJKLMNOP "
+            "postgres://user:hunter2pass@db:5432/x password=supersecret1 dapi" + "0" * 32 + " Bearer abcdefghijklmnopqrstuvwxyz123")
+    out = redact(text)
+    for leaked in ("sk-ant-api03", "ghp_aaaa", "AKIAABCD", "hunter2pass", "supersecret1", "dapi0000", "abcdefghijklmnopqrstuvwxyz123"):
+        assert leaked not in out, leaked
+    assert "postgres://user:[REDACTED]@db" in out
+
+
+def test_weekly_review(synced):
+    from chronicle.reviews import generate_review, review_ready, week_bounds
+
+    conn, cfg = synced["conn"], synced["cfg"]
+    key = week_bounds("2026-W38")[0]
+    assert key == "2026-W38"
+    data = generate_review(conn, cfg, key)
+    assert data["headline"] == "Fixed login"
+    row = conn.execute("SELECT * FROM reviews WHERE period=?", (key,)).fetchone()
+    assert row["n_sessions"] == 1 and "## Suggestions" in row["markdown"] and "- [ ] logout" in row["markdown"]
+    assert review_ready(conn, key) == (False, "exists")
+    from chronicle.export_md import export_markdown
+
+    export_markdown(conn, cfg)
+    assert (cfg.notes_dir / "Reviews" / f"{key}.md").exists()
+
+
+def test_parse_json_object_local_repairs():
+    broken = '{"a": "regex \\d+ and C:\\Users\\x", "b": "line1\nline2", "c": "ok \\"quoted\\""}'
+    assert parse_json_object(broken) == {"a": "regex \\d+ and C:\\Users\\x", "b": "line1\nline2", "c": 'ok "quoted"'}
+
+
+def test_hung_call_hits_wall_clock_deadline(synced, monkeypatch):
+    import time
+
+    import chronicle.llm as llm
+
+    monkeypatch.setattr(llm, "POLL_S", 0.2)
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "hang")
+    cfg = synced["cfg"]
+    cfg.analysis.timeout_seconds = 1
+    t0 = time.monotonic()
+    with pytest.raises(llm.LLMError, match="timed out"):
+        llm.ClaudeRunner(cfg).run("x", {"type": "object"}, system="s")
+    assert time.monotonic() - t0 < 10  # the child was killed, not waited for
+
+
+def test_sleep_interrupted_call_is_requeued_without_penalty(synced, monkeypatch):
+    import chronicle.llm as llm
+
+    monkeypatch.setattr(llm, "POLL_S", 0.2)
+    monkeypatch.setattr(llm, "SLEEP_GRACE_S", -1)  # simulate: wall clock ran ahead of the monotonic clock
+    monkeypatch.setenv("FAKE_CLAUDE_MODE", "hang")
+    conn, cfg = synced["conn"], synced["cfg"]
+    with pytest.raises(llm.SleepInterruptedError):
+        analyze_session(conn, cfg, SID)
+    row = conn.execute("SELECT analysis_status, analysis_attempts FROM sessions WHERE id=?", (SID,)).fetchone()
+    assert tuple(row) == ("pending", 0)
+
+
+def test_synthesis_waits_for_queued_sessions(synced):
+    conn, cfg = synced["conn"], synced["cfg"]
+    analyze_session(conn, cfg, SID)
+    conn.execute("INSERT INTO sessions(id, source, project_path, analysis_status) VALUES ('q1', 'transcript', ?, 'pending')", (CWD,))
+    conn.commit()
+    assert CWD not in projects_needing_synthesis(conn, cfg)  # one more session of this project is still queued
+    assert CWD in projects_needing_synthesis(conn, cfg, force=True)
+    conn.execute("UPDATE sessions SET analysis_status = 'done' WHERE id = 'q1'")
+    conn.commit()
+    assert CWD in projects_needing_synthesis(conn, cfg)

@@ -1,0 +1,322 @@
+"""MCP server (stdio, JSON-RPC 2.0) that lets Claude Code query the Chronicle vault."""
+
+from __future__ import annotations
+
+import json
+import os
+import sys
+from datetime import timedelta
+
+from . import __version__
+from .config import Config
+from .agents import short_name
+from .db import connect
+from .search import search_knowledge, search_sessions
+from .synthesize import GLOBAL, kb_for_path
+from .util import human_duration, local_str, one_line, to_iso, truncate, utcnow
+from .views import project_labels, resolve_session_id, session_markdown, session_record
+
+SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
+
+INSTRUCTIONS = (
+    "Chronicle is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob), with AI-extracted knowledge "
+    "(fixes, gotchas, decisions, project facts, commands, preferences) and per-project knowledge bases. "
+    "Use it to recall how something was solved before, why a decision was made, how a project is run or "
+    "deployed, or what the user prefers, before re-deriving it."
+)
+
+_PROJECT_PROP = {"type": "string", "description": "Project path or name. Defaults to all projects."}
+TOOLS = [
+    {
+        "name": "search_knowledge",
+        "description": "Search knowledge extracted from past Claude Code sessions (fixes, gotchas, decisions, "
+                       "facts, commands, preferences). Best first stop for 'have we solved this before?'.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string", "description": "Words to search for (substring match, 3+ characters work best)"},
+                "project": _PROJECT_PROP,
+                "kind": {"type": "string", "enum": ["fix", "gotcha", "learning", "decision", "pattern", "command",
+                                                    "fact", "preference", "reference", "todo"]},
+                "limit": {"type": "integer", "default": 15},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "search_sessions",
+        "description": "Full-text search across past session transcripts (prompts, Claude's replies, tool calls) "
+                       "and session summaries. Returns matching sessions with snippets.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "project": _PROJECT_PROP,
+                "limit": {"type": "integer", "default": 10},
+            },
+            "required": ["query"],
+        },
+    },
+    {
+        "name": "get_session",
+        "description": "Overview of one past session: summary, outcome, knowledge, files changed, prompts.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"session_id": {"type": "string", "description": "Session id or unique prefix"}},
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "get_transcript",
+        "description": "Read part of a past session's conversation (user prompts and Claude's replies, optionally tool calls).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string"},
+                "offset": {"type": "integer", "default": 0, "description": "Index of the first message to return"},
+                "limit": {"type": "integer", "default": 40},
+                "include_tools": {"type": "boolean", "default": False},
+            },
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "project_knowledge",
+        "description": "The synthesized knowledge base for a project (architecture, how to run/test/deploy, "
+                       "gotchas, decisions, open threads). Defaults to the current working directory's project. "
+                       "Use project='global' for the cross-project playbook.",
+        "inputSchema": {"type": "object", "properties": {"project": {"type": "string"}}},
+    },
+    {
+        "name": "glossary",
+        "description": "The developer's own vocabulary: internal system and service names, acronyms, domain terms "
+                       "(incl. translations). With a term: its definition, aliases, how each project uses it and where "
+                       "it appears. Without: the glossary of a project (default: the current one).",
+        "inputSchema": {
+            "type": "object",
+            "properties": {"term": {"type": "string"}, "project": {"type": "string"}},
+        },
+    },
+    {
+        "name": "recent_sessions",
+        "description": "List recent sessions, optionally for one project.",
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "project": _PROJECT_PROP,
+                "days": {"type": "integer", "default": 14},
+                "limit": {"type": "integer", "default": 15},
+            },
+        },
+    },
+]
+
+
+class Tools:
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.conn = connect(cfg.db_path)
+        self.cwd = os.getcwd()
+
+    def _resolve_project(self, project: str | None) -> str | None:
+        if not project:
+            return None
+        row = self.conn.execute(
+            "SELECT project_path FROM sessions WHERE project_path = ? OR project_name = ? LIMIT 1", (project, project)
+        ).fetchone()
+        if row:
+            return row[0]
+        for path, label in project_labels(self.conn).items():
+            if label.lower() == project.lower() or path.lower().endswith("/" + project.lower()):
+                return path
+        return project
+
+    def search_knowledge(self, query: str, project: str | None = None, kind: str | None = None, limit: int = 15) -> str:
+        rows = search_knowledge(self.conn, query, project=self._resolve_project(project), kind=kind, limit=limit)
+        if not rows:
+            return f"No knowledge found for {query!r}."
+        out = [f"{len(rows)} knowledge item(s) for {query!r}:\n"]
+        for k in rows:
+            src = f"session {k['session_id'][:8]} ({local_str(k.get('session_started'), '%Y-%m-%d')})" if k["session_id"] else k["source"]
+            out.append(f"## [{k['kind']}] {k['title']}\n_{k.get('project_name') or '-'} · {k.get('confidence') or '-'} confidence · {src}_\n\n"
+                       f"{truncate(k.get('body') or '', 1500)}\n")
+        return "\n".join(out)
+
+    def search_sessions(self, query: str, project: str | None = None, limit: int = 10) -> str:
+        rows = search_sessions(self.conn, query, project=self._resolve_project(project), limit=limit)
+        if not rows:
+            return f"No sessions matched {query!r}."
+        out = [f"{len(rows)} session(s) matching {query!r}:\n"]
+        for s in rows:
+            out.append(f"- **{s['title']}** — `{s['session_id'][:8]}` · {s.get('project_name')} · "
+                       f"{local_str(s.get('started_at'), '%Y-%m-%d')} · {s.get('outcome') or 'not analyzed'} · {s['hits']} hit(s)")
+            for sn in s["snippets"]:
+                out.append(f"  - ({sn['kind']}) {sn['text']}")
+        out.append("\nUse get_session or get_transcript with the session id for details.")
+        return "\n".join(out)
+
+    def get_session(self, session_id: str) -> str:
+        sid = resolve_session_id(self.conn, session_id)
+        if not sid:
+            return f"No unique session matches {session_id!r}."
+        return session_markdown(session_record(self.conn, sid))
+
+    def get_transcript(self, session_id: str, offset: int = 0, limit: int = 40, include_tools: bool = False) -> str:
+        sid = resolve_session_id(self.conn, session_id)
+        if not sid:
+            return f"No unique session matches {session_id!r}."
+        kinds = ["prompt", "text", "command", "interrupt", "compact"] + (["tool_use", "tool_result"] if include_tools else [])
+        rows = self.conn.execute(
+            f"SELECT ts, kind, tool_name, is_error, text FROM events WHERE session_id = ? AND agent_id = '' "
+            f"AND kind IN ({','.join('?' * len(kinds))}) ORDER BY seq LIMIT ? OFFSET ?",
+            [sid, *kinds, limit, offset],
+        ).fetchall()
+        total = self.conn.execute(
+            f"SELECT COUNT(*) FROM events WHERE session_id = ? AND agent_id = '' AND kind IN ({','.join('?' * len(kinds))})",
+            [sid, *kinds],
+        ).fetchone()[0]
+        label = {"prompt": "USER", "text": "CLAUDE", "command": "COMMAND", "interrupt": "INTERRUPT",
+                 "compact": "COMPACTION", "tool_use": "TOOL", "tool_result": "RESULT"}
+        out = [f"Messages {offset}–{offset + len(rows) - 1} of {total} (session {sid[:8]}):\n"]
+        for r in rows:
+            text = truncate(r["text"] or "", 4000 if r["kind"] in ("prompt", "text") else 600)
+            err = " (error)" if r["is_error"] else ""
+            out.append(f"[{local_str(r['ts'], '%m-%d %H:%M')}] {label.get(r['kind'], r['kind'])}{err}: {text}\n")
+        if offset + len(rows) < total:
+            out.append(f"…more: call again with offset={offset + len(rows)}")
+        return "\n".join(out)
+
+    def project_knowledge(self, project: str | None = None) -> str:
+        if project and project.lower() in ("global", GLOBAL):
+            row = self.conn.execute("SELECT * FROM project_kb WHERE project_path = ?", (GLOBAL,)).fetchone()
+            return row["markdown"] if row else "No global playbook has been synthesized yet."
+        path = self._resolve_project(project) if project else None
+        kb = None
+        if path:
+            row = self.conn.execute("SELECT * FROM project_kb WHERE project_path = ?", (path,)).fetchone()
+            kb = dict(row) if row else None
+        else:
+            kb = kb_for_path(self.conn, self.cwd)
+            path = kb["project_path"] if kb else self.cwd
+        if kb:
+            return kb["markdown"]
+        items = search_knowledge(self.conn, None, project=path, limit=25)
+        if not items:
+            return f"No knowledge recorded yet for {path}."
+        lines = [f"No synthesized knowledge base yet for {path}; latest knowledge items:\n"]
+        lines += [f"- [{k['kind']}] **{k['title']}** — {one_line(k.get('body') or '', 300)}" for k in items]
+        return "\n".join(lines)
+
+    def glossary(self, term: str | None = None, project: str | None = None) -> str:
+        from .glossary import glossary_entries, lookup
+
+        if term:
+            e = lookup(self.conn, term)
+            if not e:
+                return f"{term!r} is not in the glossary."
+            lines = [f"**{e['term']}** ({e['category']})" + (f" — also: {', '.join(e['aliases'])}" if e["aliases"] else ""),
+                     "", e["definition"] or ""]
+            for u in e["usage"]:
+                if u["context"]:
+                    lines.append(f"- {u['project_name']}: {u['context']}")
+            if e["related"]:
+                lines.append("Related: " + ", ".join(e["related"]))
+            if e["n_sessions"]:
+                lines.append(f"Mentioned in {e['n_sessions']} sessions ({local_str(e['first_seen'], '%Y-%m-%d')} → "
+                             f"{local_str(e['last_seen'], '%Y-%m-%d')}): " + ", ".join(
+                                 f"{s['title']} `{s['id'][:8]}`" for s in e["top_sessions"][:3]))
+            return "\n".join(lines)
+        path = self._resolve_project(project) if project else (kb_for_path(self.conn, self.cwd) or {}).get("project_path")
+        entries = glossary_entries(self.conn, project=path) if path else glossary_entries(self.conn)
+        if not entries:
+            return "No glossary yet."
+        return "\n".join(f"- **{e['term']}** ({e['category']}): {one_line(e['definition'] or '', 200)}" for e in entries[:120])
+
+    def recent_sessions(self, project: str | None = None, days: int = 14, limit: int = 15) -> str:
+        since = to_iso(utcnow() - timedelta(days=days))
+        params: list = [since]
+        sql = ("SELECT id, started_at, title, project_name, outcome, n_prompts, active_s, agent FROM sessions "
+               "WHERE started_at >= ?")
+        path = self._resolve_project(project)
+        if path:
+            sql += " AND project_path = ?"
+            params.append(path)
+        rows = self.conn.execute(sql + " ORDER BY started_at DESC LIMIT ?", [*params, limit]).fetchall()
+        if not rows:
+            return "No sessions in that window."
+        return "\n".join(
+            f"- {local_str(r['started_at'])} · **{r['title']}** · {r['project_name']} · {short_name(r['agent'])} · "
+            f"{r['outcome'] or 'not analyzed'} · "
+            f"{r['n_prompts']} prompts · {human_duration(r['active_s'])} · `{r['id'][:8]}`" for r in rows
+        )
+
+
+def _write(msg: dict) -> None:
+    sys.stdout.write(json.dumps(msg, ensure_ascii=False) + "\n")
+    sys.stdout.flush()
+
+
+def serve(cfg: Config) -> int:
+    tools = Tools(cfg)
+    handlers = {t["name"]: getattr(tools, t["name"]) for t in TOOLS}
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            msg = json.loads(line)
+        except ValueError:
+            _write({"jsonrpc": "2.0", "id": None, "error": {"code": -32700, "message": "Parse error"}})
+            continue
+        if isinstance(msg, list):  # JSON-RPC batch (allowed by protocol 2025-03-26)
+            replies = [r for r in (_handle(m, handlers) for m in msg) if r is not None]
+            if replies:
+                sys.stdout.write(json.dumps(replies, ensure_ascii=False) + "\n")
+                sys.stdout.flush()
+            continue
+        reply = _handle(msg, handlers)
+        if reply is not None:
+            _write(reply)
+    return 0
+
+
+def _handle(msg, handlers) -> dict | None:
+    """Handle one JSON-RPC message; returns the response, or None for notifications."""
+    if not isinstance(msg, dict) or "method" not in msg:
+        return None
+    mid, method, params = msg.get("id"), msg["method"], msg.get("params") or {}
+    if mid is None:  # notification (initialized, cancelled, ...)
+        return None
+    try:
+        if method == "initialize":
+            requested = params.get("protocolVersion")
+            result = {
+                "protocolVersion": requested if requested in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0],
+                "capabilities": {"tools": {"listChanged": False}},
+                "serverInfo": {"name": "chronicle", "version": __version__},
+                "instructions": INSTRUCTIONS,
+            }
+        elif method == "ping":
+            result = {}
+        elif method == "tools/list":
+            result = {"tools": TOOLS}
+        elif method == "tools/call":
+            name = params.get("name")
+            fn = handlers.get(name)
+            if not fn:
+                result = {"content": [{"type": "text", "text": f"Unknown tool {name}"}], "isError": True}
+            else:
+                try:
+                    text = fn(**(params.get("arguments") or {}))
+                    result = {"content": [{"type": "text", "text": text}], "isError": False}
+                except TypeError as exc:
+                    result = {"content": [{"type": "text", "text": f"Bad arguments: {exc}"}], "isError": True}
+        elif method in ("resources/list", "resources/templates/list"):
+            result = {"resources": [] if method == "resources/list" else [], "resourceTemplates": []}
+        elif method == "prompts/list":
+            result = {"prompts": []}
+        else:
+            return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32601, "message": f"Method not found: {method}"}}
+        return {"jsonrpc": "2.0", "id": mid, "result": result}
+    except Exception as exc:  # keep serving
+        return {"jsonrpc": "2.0", "id": mid, "error": {"code": -32603, "message": str(exc)[:500]}}

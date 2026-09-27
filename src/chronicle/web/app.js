@@ -1,0 +1,1826 @@
+/* Claude Chronicle dashboard: vanilla JS, no build step. */
+"use strict";
+
+// =====================================================================================
+// DOM helpers (all untrusted text goes through textContent)
+// =====================================================================================
+const $ = (sel, root = document) => root.querySelector(sel);
+const SVGNS = "http://www.w3.org/2000/svg";
+
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  setAttrs(e, attrs);
+  append(e, kids);
+  return e;
+}
+function s(tag, attrs, ...kids) {
+  const e = document.createElementNS(SVGNS, tag);
+  setAttrs(e, attrs);
+  append(e, kids);
+  return e;
+}
+function setAttrs(e, attrs) {
+  if (!attrs) return;
+  for (const [k, v] of Object.entries(attrs)) {
+    if (v == null || v === false) continue;
+    if (k === "class") e.setAttribute("class", v);
+    else if (k === "style" && typeof v === "object") Object.assign(e.style, v);
+    else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
+    else if (k === "html") e.innerHTML = v; // only for output of our own escaping renderers
+    else if (k === "text") e.textContent = v;
+    else e.setAttribute(k, v === true ? "" : v);
+  }
+}
+function append(e, kids) {
+  for (const kid of kids.flat(Infinity)) {
+    if (kid == null || kid === false || kid === "") continue;
+    e.append(kid instanceof Node ? kid : document.createTextNode(String(kid)));
+  }
+}
+function safeUrl(u) { return /^https?:\/\//i.test(String(u || "")) ? String(u) : null; }
+function extLink(url, label) {
+  const u = safeUrl(url);
+  return u ? h("a", { href: u, target: "_blank", rel: "noopener" }, label) : h("span", null, label);
+}
+function escapeHtml(t) {
+  return String(t ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+}
+
+// =====================================================================================
+// Icons: 24px stroke glyphs drawn in currentColor (strings are path data; [tag, attrs] for other shapes)
+// =====================================================================================
+const C10 = ["circle", { cx: 12, cy: 12, r: 10 }];
+const ICONS = {
+  overview: [["rect", { x: 3, y: 3, width: 7, height: 9, rx: 1.5 }], ["rect", { x: 14, y: 3, width: 7, height: 5, rx: 1.5 }],
+    ["rect", { x: 14, y: 12, width: 7, height: 9, rx: 1.5 }], ["rect", { x: 3, y: 16, width: 7, height: 5, rx: 1.5 }]],
+  sessions: ["M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"],
+  prompts: ["M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", "M8 8h8", "M8 12h5"],
+  knowledge: ["M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z", "M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"],
+  projects: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
+  glossary: ["M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20", "m8 13 4-7 4 7", "M9.1 11h5.8"],
+  reviews: [["rect", { x: 3, y: 4, width: 18, height: 18, rx: 2 }], "M16 2v4", "M8 2v4", "M3 10h18", "m9 16 2 2 4-4"],
+  sources: ["M12 22v-5", "M9 8V2", "M15 8V2", "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"],
+  status: ["M22 12h-4l-3 9L9 3l-3 9H2"],
+  search: [["circle", { cx: 11, cy: 11, r: 7 }], "m21 21-4.3-4.3"],
+  sync: ["M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16", "M16 16h5v5"],
+  moon: ["M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"],
+  sun: [["circle", { cx: 12, cy: 12, r: 4 }], "M12 2v2", "M12 20v2", "m4.93 4.93 1.41 1.41", "m17.66 17.66 1.41 1.41", "M2 12h2", "M20 12h2", "m6.34 17.66-1.41 1.41", "m19.07 4.93-1.41 1.41"],
+  clock: [["circle", { cx: 12, cy: 12, r: 9 }], "M12 7v5l3 2"],
+  zap: ["M13 2 3 14h9l-1 8 10-12h-9z"],
+  tokens: ["M4 9h16", "M4 15h16", "M10 3 8 21", "M16 3l-2 18"],
+  cost: ["M12 2v20", "M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"],
+  diff: ["M12 3v12", "M6 9h12", "M6 21h12"],
+  sparkles: ["M12 3l1.7 4.6L18.3 9.3l-4.6 1.7L12 15.6l-1.7-4.6L5.7 9.3l4.6-1.7z", "M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"],
+  pin: ["M12 17v5", "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"],
+  x: ["M18 6 6 18", "m6 6 12 12"],
+  arrow: ["M5 12h14", "m12 5 7 7-7 7"],
+  branch: ["M6 3v12", ["circle", { cx: 18, cy: 6, r: 3 }], ["circle", { cx: 6, cy: 18, r: 3 }], "M18 9a9 9 0 0 1-9 9"],
+  flame: ["M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"],
+  calendar: [["rect", { x: 3, y: 4, width: 18, height: 18, rx: 2 }], "M16 2v4", "M8 2v4", "M3 10h18"],
+  dot: [["circle", { cx: 12, cy: 12, r: 3 }]],
+  // knowledge kinds
+  fix: ["M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"],
+  gotcha: ["m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3", "M12 9v4", "M12 17h.01"],
+  learning: ["M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5", "M9 18h6", "M10 22h4"],
+  decision: ["M12 3v3", "M12 13v8", "M5 6h11l3 3.5-3 3.5H5z"],
+  pattern: ["M8.3 10a.7.7 0 0 1-.63-1.02l3.7-6a.7.7 0 0 1 1.26 0l3.7 6A.7.7 0 0 1 15.7 10z", ["rect", { x: 3, y: 14, width: 7, height: 7, rx: 1 }], ["circle", { cx: 17.5, cy: 17.5, r: 3.5 }]],
+  command: ["m4 17 6-6-6-6", "M12 19h8"],
+  fact: [C10, "M12 16v-4", "M12 8h.01"],
+  preference: [["circle", { cx: 12, cy: 8, r: 4 }], "M5 21a7 7 0 0 1 14 0"],
+  reference: ["M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71", "M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"],
+  todo: [["rect", { x: 3, y: 3, width: 18, height: 18, rx: 2 }], "m9 12 2 2 4-4"],
+  // outcomes and analysis states
+  completed: [C10, "m9 12 2 2 4-4"],
+  partial: [C10, ["path", { d: "M12 2a10 10 0 0 1 0 20z", class: "solid" }]],
+  blocked: [C10, "m4.9 4.9 14.2 14.2"],
+  abandoned: [C10, "m15 9-6 6", "m9 9 6 6"],
+  exploratory: [C10, "m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36z"],
+  unclear: [C10, "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3", "M12 17h.01"],
+  history: ["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M12 7v5l4 2"],
+  queued: [C10, "M12 6v6l4 2"],
+  running: ["M21 12a9 9 0 1 1-6.22-8.56"],
+  skipped: [C10, "M8 12h8"],
+  // glossary categories
+  file: ["M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z", "M14 2v6h6"],
+  concept: ["M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5", "M9 18h6", "M10 22h4"],
+  component: ["M8.3 10a.7.7 0 0 1-.63-1.02l3.7-6a.7.7 0 0 1 1.26 0l3.7 6A.7.7 0 0 1 15.7 10z", ["rect", { x: 3, y: 14, width: 7, height: 7, rx: 1 }], ["circle", { cx: 17.5, cy: 17.5, r: 3.5 }]],
+  data: [["ellipse", { cx: 12, cy: 5, rx: 9, ry: 3 }], "M3 5v14a9 3 0 0 0 18 0V5", "M3 12a9 3 0 0 0 18 0"],
+  domain: [C10, "M2 12h20", "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"],
+  tool: ["M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"],
+  library: ["M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z", "M3.3 7 12 12l8.7-5", "M12 22V12"],
+  system: [["rect", { x: 5, y: 5, width: 14, height: 14, rx: 2 }], ["rect", { x: 9, y: 9, width: 6, height: 6, rx: 1 }], "M9 2v3", "M15 2v3", "M9 19v3", "M15 19v3", "M2 9h3", "M2 15h3", "M19 9h3", "M19 15h3"],
+  platform: ["m12 2 10 5-10 5L2 7z", "m2 17 10 5 10-5", "m2 12 10 5 10-5"],
+  organization: [["rect", { x: 4, y: 2, width: 16, height: 20, rx: 2 }], "M9 22v-4h6v4", "M8 6h.01", "M12 6h.01", "M16 6h.01", "M8 10h.01", "M12 10h.01", "M16 10h.01", "M8 14h.01", "M12 14h.01", "M16 14h.01"],
+  service: [["rect", { x: 2, y: 3, width: 20, height: 8, rx: 2 }], ["rect", { x: 2, y: 13, width: 20, height: 8, rx: 2 }], "M6 7h.01", "M6 17h.01"],
+  acronym: ["M4 7V4h16v3", "M9 20h6", "M12 4v16"],
+};
+ICONS.person = ICONS.preference;
+ICONS.other = ICONS.dot;
+function icon(name, cls = "") {
+  return s("svg", { class: `icon ${cls}`, viewBox: "0 0 24 24", "aria-hidden": "true" },
+    (ICONS[name] || ICONS.dot).map((p) => (typeof p === "string" ? s("path", { d: p }) : s(p[0], p[1]))));
+}
+
+// =====================================================================================
+// Formatting
+// =====================================================================================
+const nf = new Intl.NumberFormat();
+function fmtNum(n) { return n == null ? "–" : nf.format(Math.round(n)); }
+function fmtCompact(n) {
+  if (n == null || isNaN(n)) return "–";
+  const a = Math.abs(n);
+  const f = (v, u) => (v >= 100 ? v.toFixed(0) : v >= 10 ? v.toFixed(1).replace(/\.0$/, "") : v.toFixed(1).replace(/\.0$/, "")) + u;
+  if (a >= 1e9) return f(n / 1e9, "B");
+  if (a >= 1e6) return f(n / 1e6, "M");
+  if (a >= 1e3) return f(n / 1e3, "k");
+  return String(Math.round(n));
+}
+function fmtCost(v) {
+  if (v == null) return "–";
+  if (v >= 1000) return "$" + nf.format(Math.round(v));
+  if (v >= 100) return "$" + v.toFixed(0);
+  return "$" + v.toFixed(2);
+}
+function fmtDur(sec) {
+  if (sec == null) return "–";
+  sec = Math.round(sec);
+  if (sec < 60) return sec + "s";
+  const m = Math.floor(sec / 60), hh = Math.floor(m / 60), d = Math.floor(hh / 24);
+  if (d >= 1) return `${d}d ${hh % 24}h`;
+  if (hh >= 1) return `${hh}h ${String(m % 60).padStart(2, "0")}m`;
+  return `${m}m`;
+}
+function fmtHours(sec) { if (sec == null) return "–"; const hrs = sec / 3600; return `${hrs >= 10 ? Math.round(hrs) : Math.round(hrs * 10) / 10}h`; }
+const dateFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric" });
+const dateYFmt = new Intl.DateTimeFormat(undefined, { year: "numeric", month: "short", day: "numeric" });
+const dtFmt = new Intl.DateTimeFormat(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+const timeFmt = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit" });
+const wdFmt = new Intl.DateTimeFormat(undefined, { weekday: "short", month: "short", day: "numeric", year: "numeric" });
+function d(ts) { return ts ? new Date(ts) : null; }
+function fmtDate(ts) { return ts ? dateFmt.format(d(ts)) : "–"; }
+function fmtDateY(ts) { return ts ? dateYFmt.format(d(ts)) : "–"; }
+function fmtDT(ts) { return ts ? dtFmt.format(d(ts)) : "–"; }
+function fmtTime(ts) { return ts ? timeFmt.format(d(ts)) : ""; }
+function ago(ts) {
+  if (!ts) return "never";
+  const sec = (Date.now() - new Date(ts).getTime()) / 1000;
+  if (sec < 60) return "just now";
+  if (sec < 3600) return Math.round(sec / 60) + " min ago";
+  if (sec < 86400) return Math.round(sec / 3600) + " h ago";
+  return Math.round(sec / 86400) + " d ago";
+}
+function localDate(ts) { // YYYY-MM-DD in local time
+  const x = new Date(ts);
+  return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
+}
+function shortPath(p, root) {
+  if (!p) return "";
+  if (root && p.startsWith(root.replace(/\/$/, "") + "/")) return p.slice(root.replace(/\/$/, "").length + 1);
+  return p.replace(/^\/Users\/[^/]+/, "~");
+}
+
+const KIND = {
+  fix: "Fix", gotcha: "Gotcha", learning: "Learning", decision: "Decision", pattern: "Pattern",
+  command: "Command", fact: "Fact", preference: "Preference", reference: "Reference", todo: "Todo",
+};
+function kindLabel(k) { return KIND[k] || k || "Note"; }
+function kindChip(k) { return h("span", { class: "kind-chip" }, icon(KIND[k] ? k : "dot"), kindLabel(k)); }
+function catBadge(c) { return h("span", { class: "badge cat" }, icon(ICONS[c] && c !== "x" ? c : "dot"), c || "other"); }
+// outcome -> [status class, label]; status colors always travel with an icon and a label
+const OUTCOME = {
+  completed: ["good", "Completed"], partial: ["warning", "Partial"], blocked: ["critical", "Blocked"],
+  abandoned: ["serious", "Abandoned"], exploratory: ["accent", "Exploratory"], unclear: ["", "Unclear"],
+};
+const STATUS_LABEL = {
+  pending: "queued", stale: "needs re-analysis", running: "analyzing…", error: "analysis failed", skipped: "skipped", done: "analyzed",
+};
+const STATUS_ICON = { pending: "queued", stale: "queued", running: "running", error: "gotcha", skipped: "skipped", done: "completed" };
+
+const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob" };
+const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob" };
+function agentShort(a) { return AGENT_SHORT[a] || a || "Claude"; }
+function agentName(a) { return AGENTS[a] || "Claude Code"; }
+function agentTag(a, title) { return a && a !== "claude" ? h("span", { class: "agent-tag", title: title || `${agentName(a)} session` }, agentShort(a)) : null; }
+
+function outcomeBadge(outcome, status, source) {
+  if (source === "history") return h("span", { class: "badge", title: "Recovered from prompt history; transcript was deleted before Chronicle" }, icon("history"), "history");
+  if (outcome && OUTCOME[outcome]) {
+    const [cls, label] = OUTCOME[outcome];
+    return h("span", { class: `badge ${cls}` }, icon(outcome), label);
+  }
+  const cls = status === "error" ? "critical" : status === "running" ? "accent" : "";
+  return h("span", { class: `badge ${cls}` }, icon(STATUS_ICON[status] || "dot", status === "running" ? "spin" : ""), STATUS_LABEL[status] || status || "–");
+}
+function confidenceMeter(level) { // three steps; the fill is the accent, the track a lighter step of it
+  const n = { high: 3, medium: 2, low: 1 }[level] || 0;
+  return n ? h("span", { class: "meter", title: `${level} confidence`, "aria-label": `${level} confidence` },
+    [1, 2, 3].map((i) => h("i", { class: i <= n ? "on" : "" }))) : null;
+}
+
+// =====================================================================================
+// Markdown (escape first, then a small safe subset)
+// =====================================================================================
+function mdInline(t) {
+  const codes = [];
+  t = t.replace(/`([^`\n]+)`/g, (m, c) => { codes.push(`<code>${c}</code>`); return `\u0001${codes.length - 1}\u0001`; });
+  t = t.replace(/\*\*([^*\n]+)\*\*/g, "<strong>$1</strong>");
+  t = t.replace(/(^|[^*\w])\*([^*\n]+)\*(?!\w)/g, "$1<em>$2</em>");
+  t = t.replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g, '<a href="$2" target="_blank" rel="noopener">$1</a>');
+  t = t.replace(/(^|[\s(])(https?:\/\/[^\s<)]+)/g, '$1<a href="$2" target="_blank" rel="noopener">$2</a>');
+  t = t.replace(/&lt;sub&gt;(.*?)&lt;\/sub&gt;/g, '<span class="muted">$1</span>');
+  return t.replace(/\u0001(\d+)\u0001/g, (m, i) => codes[+i]);
+}
+function md(src) {
+  if (!src) return "";
+  const blocks = [];
+  let text = escapeHtml(src).replace(/```[\w+-]*[^\S\n]*\n?([\s\S]*?)```/g, (m, code) => {
+    blocks.push(`<pre><code>${code.replace(/\n$/, "")}</code></pre>`);
+    return `\n\u0000${blocks.length - 1}\u0000\n`;
+  });
+  const out = [];
+  let list = null, para = [], table = null;
+  const flushPara = () => { if (para.length) { out.push(`<p>${mdInline(para.join("<br>"))}</p>`); para = []; } };
+  const flushList = () => { if (list) { out.push(`<${list.type}>${list.items.map((i) => `<li>${mdInline(i)}</li>`).join("")}</${list.type}>`); list = null; } };
+  const flushTable = () => {
+    if (table) {
+      const rows = table.filter((r) => !/^\s*\|?\s*:?-{2,}/.test(r));
+      out.push("<table>" + rows.map((r, i) => "<tr>" + r.replace(/^\s*\|/, "").replace(/\|\s*$/, "").split("|")
+        .map((c) => (i === 0 ? `<th>${mdInline(c.trim())}</th>` : `<td>${mdInline(c.trim())}</td>`)).join("") + "</tr>").join("") + "</table>");
+      table = null;
+    }
+  };
+  for (const line of text.split("\n")) {
+    let m;
+    if (/^\u0000\d+\u0000$/.test(line.trim())) { flushPara(); flushList(); flushTable(); out.push(line.trim()); continue; }
+    if (/^\s*\|.*\|\s*$/.test(line)) { flushPara(); flushList(); (table ||= []).push(line); continue; }
+    flushTable();
+    if ((m = line.match(/^(#{1,4})\s+(.*)/))) { flushPara(); flushList(); out.push(`<h4>${mdInline(m[2])}</h4>`); continue; }
+    if ((m = line.match(/^\s*(?:[-*+]|\d+[.)])\s+(?:\[[ xX]\]\s+)?(.*)/))) {
+      flushPara();
+      const type = /^\s*\d/.test(line) ? "ol" : "ul";
+      if (!list || list.type !== type) { flushList(); list = { type, items: [] }; }
+      list.items.push(m[1]);
+      continue;
+    }
+    if ((m = line.match(/^&gt;\s?(.*)/))) { flushPara(); flushList(); out.push(`<blockquote>${mdInline(m[1])}</blockquote>`); continue; }
+    if (!line.trim()) { flushPara(); flushList(); continue; }
+    if (list && /^\s{2,}\S/.test(line)) { list.items[list.items.length - 1] += " " + line.trim(); continue; }
+    flushList();
+    para.push(line);
+  }
+  flushPara(); flushList(); flushTable();
+  return out.join("").replace(/\u0000(\d+)\u0000/g, (m, i) => blocks[+i]);
+}
+function mdEl(src, cls = "") { return h("div", { class: `md gloss ${cls}`, html: md(src) }); }
+function snippetEl(text) { // server marks matches with «»
+  return h("span", { html: escapeHtml(text).replace(/«(.*?)»/g, "<mark>$1</mark>") });
+}
+
+// =====================================================================================
+// API
+// =====================================================================================
+async function api(path, params) {
+  const url = new URL(path, location.origin);
+  if (params) for (const [k, v] of Object.entries(params)) if (v != null && v !== "") url.searchParams.set(k, v);
+  const res = await fetch(url);
+  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  return res.json();
+}
+async function post(path, body) {
+  const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Chronicle": "1" }, body: JSON.stringify(body || {}) });
+  return res.json();
+}
+let toastTimer;
+function toast(msg, ms = 3500) {
+  const t = $("#toast");
+  t.textContent = msg;
+  t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => (t.hidden = true), ms);
+}
+
+// =====================================================================================
+// Tooltip (values lead, labels follow)
+// =====================================================================================
+const tip = () => $("#tooltip");
+function showTip(evt, value, label, extra) {
+  const t = tip();
+  t.replaceChildren(
+    h("div", { class: "tt-value" }, value),
+    label ? h("div", { class: "tt-label" }, label) : null,
+    extra ? h("div", { class: "tt-label" }, extra) : null,
+  );
+  t.hidden = false;
+  moveTip(evt);
+}
+function moveTip(evt) {
+  const t = tip();
+  const pad = 14, r = t.getBoundingClientRect();
+  let x = evt.clientX + pad, y = evt.clientY + pad;
+  if (x + r.width > innerWidth - 8) x = evt.clientX - r.width - pad;
+  if (y + r.height > innerHeight - 8) y = evt.clientY - r.height - pad;
+  t.style.left = x + "px";
+  t.style.top = y + "px";
+}
+function hideTip() { tip().hidden = true; }
+function hoverable(node, getContent, { focusable = true } = {}) {
+  node.addEventListener("pointerenter", (e) => { const [v, l, x] = getContent(); showTip(e, v, l, x); node.classList.add("hover"); });
+  node.addEventListener("pointermove", moveTip);
+  node.addEventListener("pointerleave", () => { hideTip(); node.classList.remove("hover"); });
+  if (!focusable) return; // inside a link or row that is itself focusable
+  node.setAttribute("tabindex", "0");
+  node.addEventListener("focus", () => { const r = node.getBoundingClientRect(); const [v, l, x] = getContent(); showTip({ clientX: r.right, clientY: r.top }, v, l, x); });
+  node.addEventListener("blur", hideTip);
+}
+
+// =====================================================================================
+// Charts
+// =====================================================================================
+function niceTicks(max, count = 4) {
+  if (!max || max <= 0) return [0, 1];
+  const raw = max / count, mag = Math.pow(10, Math.floor(Math.log10(raw)));
+  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((st) => st >= raw) || raw;
+  const ticks = [];
+  for (let v = 0; v <= max + step * 0.001; v += step) ticks.push(v);
+  if (ticks[ticks.length - 1] < max) ticks.push(ticks[ticks.length - 1] + step);
+  return ticks;
+}
+function barPath(x, y, w, hgt, r) {
+  if (hgt <= 0) return "";
+  r = Math.min(r, w / 2, hgt);
+  return `M${x},${y + hgt}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + hgt}Z`;
+}
+function responsive(container, draw) {
+  let last = 0;
+  const run = () => { const w = container.clientWidth; if (w && Math.abs(w - last) > 2) { last = w; container.replaceChildren(); draw(w); } };
+  const ro = new ResizeObserver(() => requestAnimationFrame(run));
+  ro.observe(container);
+  requestAnimationFrame(run);
+}
+
+// A chart card: title, hint, optional tools, and a table-view twin.
+function chartCard(title, hint, drawFn, table, tools = [], iconName = null) {
+  const body = h("div", { class: "chart" });
+  const tableBox = h("div", { class: "table-scroll", hidden: true });
+  let showingTable = false;
+  const toggle = h("button", { class: "link-btn", type: "button", onclick: () => {
+    showingTable = !showingTable;
+    toggle.textContent = showingTable ? "Chart" : "Table";
+    body.hidden = showingTable;
+    tableBox.hidden = !showingTable;
+    if (showingTable && !tableBox.firstChild) tableBox.append(renderTable(typeof table === "function" ? table() : table));
+  } }, "Table");
+  const card = h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("div", null, h("div", { class: "card-title" }, iconName ? icon(iconName) : null, h("h2", null, title)), hint ? h("div", { class: "hint" }, hint) : null),
+      h("div", { class: "tools" }, tools, table ? toggle : null)),
+    body, tableBox);
+  responsive(body, (w) => drawFn(body, w));
+  return card;
+}
+function renderTable(spec) {
+  return h("table", { class: "table-view" },
+    h("thead", null, h("tr", null, spec.columns.map((c, i) => h("th", { class: spec.num?.[i] ? "num" : "" }, c)))),
+    h("tbody", null, spec.rows.map((r) => h("tr", null, r.map((c, i) => h("td", { class: spec.num?.[i] ? "num" : "" }, c))))));
+}
+
+function columnChart(container, width, data, { value, fmt, label, height = 210, avg = 0, name = "Daily", unit = 1 }) {
+  const m = { l: 44, r: 8, t: 10, b: 24 };
+  const iw = width - m.l - m.r, ih = height - m.t - m.b;
+  const vals = data.map(value);
+  const max = Math.max(0, ...vals);
+  const ticks = niceTicks(max / unit).map((t) => t * unit);
+  const top = ticks[ticks.length - 1] || 1;
+  const band = iw / Math.max(data.length, 1);
+  const bw = Math.max(2, Math.min(24, band - 2));
+  const svg = s("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": "column chart" });
+  const g = s("g", { transform: `translate(${m.l},${m.t})` });
+  svg.append(g);
+  for (const t of ticks) {
+    const y = ih - (t / top) * ih;
+    g.append(s("line", { class: t === 0 ? "baseline" : "gridline", x1: 0, x2: iw, y1: Math.round(y) + 0.5, y2: Math.round(y) + 0.5 }));
+    g.append(s("text", { class: "axis tick-num chart-label", x: -8, y: y + 3.5, "text-anchor": "end" }, fmt(t)));
+  }
+  // trailing moving average, same unit and axis as the bars
+  const means = avg ? vals.map((_, i) => { const win = vals.slice(Math.max(0, i - avg + 1), i + 1); return win.reduce((a, b) => a + b, 0) / win.length; }) : null;
+  const every = Math.max(1, Math.ceil(data.length / Math.max(2, Math.floor(iw / 70))));
+  data.forEach((dd, i) => {
+    const v = vals[i], x = i * band + (band - bw) / 2, bh = (v / top) * ih;
+    if (bh > 0) g.append(s("path", { class: "bar", d: barPath(x, ih - bh, bw, Math.max(bh, 1), 4) }));
+    if (i % every === 0) g.append(s("text", { class: "chart-label", x: i * band + band / 2, y: ih + 16, "text-anchor": "middle" }, fmtDate(dd.date + "T12:00:00")));
+  });
+  if (means && data.length > avg) {
+    g.append(s("path", { class: "avg-line", d: "M" + means.map((v, i) => `${(i * band + band / 2).toFixed(1)},${(ih - (v / top) * ih).toFixed(1)}`).join("L") }));
+    container.append(legendKey([["accent", name], ["line", `${avg}-day average`]]));
+  }
+  data.forEach((dd, i) => {
+    const hit = s("rect", { class: "hit", x: i * band, y: 0, width: band, height: ih });
+    hoverable(hit, () => [fmt(vals[i]), label(dd), means ? `${avg}-day average ${fmt(means[i])}` : null]);
+    g.append(hit);
+  });
+  container.append(svg);
+}
+
+function heatColor(level) { return `var(--seq-${level})`; }
+
+function calendarHeatmap(container, width, rows) {
+  const byDate = Object.fromEntries(rows.map((r) => [r.date, r]));
+  const today = new Date(); today.setHours(12, 0, 0, 0);
+  const first = rows.length ? new Date(rows[0].date + "T12:00:00") : today;
+  const active = new Set(rows.filter((r) => r.sessions).map((r) => r.date));
+  let longest = 0, run = 0;
+  for (const d = new Date(first); d <= today; d.setDate(d.getDate() + 1)) {
+    run = active.has(localDate(d)) ? run + 1 : 0;
+    longest = Math.max(longest, run);
+  }
+  let streak = 0;
+  const back = new Date(today);
+  if (!active.has(localDate(back))) back.setDate(back.getDate() - 1); // today's first session may still be ahead
+  while (active.has(localDate(back))) { streak++; back.setDate(back.getDate() - 1); }
+  const busiest = rows.reduce((b, r) => ((r.active_s || 0) > (b?.active_s || 0) ? r : b), null);
+  const side = width >= 560 ? 190 : 0;
+  const left = 30, topPad = 16, gap = 3, gridW = width - side;
+  const dataWeeks = Math.ceil((today - first) / (7 * 86400000)) + 1;
+  const weeks = Math.max(1, Math.min(53, Math.floor((gridW - left) / (10 + gap)), Math.max(dataWeeks, 18)));
+  const start = new Date(today); start.setDate(start.getDate() - start.getDay() - (weeks - 1) * 7);
+  const cell = Math.max(9, Math.min(20, Math.floor((gridW - left) / weeks) - gap));
+  const step = cell + gap;
+  const height = topPad + 7 * step + 4, svgW = left + weeks * step;
+  const svg = s("svg", { width: svgW, height, viewBox: `0 0 ${svgW} ${height}`, role: "img", "aria-label": "activity calendar" });
+  const days = (n) => `${n} day${n === 1 ? "" : "s"}`;
+  const stats = h("div", { class: "cal-stats" },
+    fact("current streak", days(streak)), fact("longest streak", days(longest)), fact("active days this year", fmtNum(active.size)),
+    busiest?.active_s ? fact("busiest day", `${fmtDate(busiest.date + "T12:00:00")} · ${fmtDur(busiest.active_s)}`) : null);
+  const thresholds = [1, 15 * 60, 30 * 60, 3600, 2 * 3600, 4 * 3600];
+  ["Mon", "Wed", "Fri"].forEach((lbl, i) => svg.append(s("text", { class: "chart-label", x: 0, y: topPad + (1 + i * 2) * step + cell - 2 }, lbl)));
+  let lastMonth = -1;
+  for (let w = 0; w < weeks; w++) {
+    for (let dow = 0; dow < 7; dow++) {
+      const day = new Date(start); day.setDate(start.getDate() + w * 7 + dow);
+      if (day > today) continue;
+      const key = localDate(day), r = byDate[key];
+      const activeS = r ? r.active_s || 0 : 0;
+      let level = 0;
+      thresholds.forEach((t, i) => { if (activeS >= t) level = i + 1; });
+      if (r && r.sessions && level === 0) level = 1;
+      const rect = s("rect", { class: "cell", x: left + w * step, y: topPad + dow * step, width: cell, height: cell, rx: cell > 12 ? 3 : 2, fill: heatColor(level) });
+      hoverable(rect, () => [r ? `${fmtDur(activeS)} active` : "No sessions", wdFmt.format(day), r ? `${r.sessions} session${r.sessions === 1 ? "" : "s"} · ${r.prompts || 0} prompts` : null]);
+      rect.addEventListener("click", () => r && go(`#/sessions?day=${key}`));
+      svg.append(rect);
+      if (dow === 0 && day.getMonth() !== lastMonth && day.getDate() <= 7) {
+        lastMonth = day.getMonth();
+        svg.append(s("text", { class: "chart-label", x: left + w * step, y: 10 }, day.toLocaleString(undefined, { month: "short" })));
+      }
+    }
+  }
+  container.append(h("div", { class: "cal-wrap" },
+    h("div", null, svg, scaleLegend(["none", "<15m", "15–30m", "30m–1h", "1–2h", "2–4h", "4h+"])), stats));
+}
+function scaleLegend(labels) {
+  return h("div", { class: "scale-legend" }, "Less", labels.map((l, i) => h("i", { style: { background: heatColor(i) }, title: l })), "More");
+}
+
+function hourGrid(container, width, rows) {
+  const counts = {}; let max = 0;
+  rows.forEach((r) => { counts[`${r.dow}-${r.hour}`] = r.n; max = Math.max(max, r.n); });
+  const left = 34, topPad = 4, bottom = 18, gap = 2;
+  const cell = Math.max(8, Math.min(24, Math.floor((width - left) / 24) - gap));
+  const step = cell + gap, height = topPad + 7 * step + bottom;
+  const svg = s("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": "activity by hour of week" });
+  const order = [1, 2, 3, 4, 5, 6, 0], names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+  order.forEach((dow, row) => {
+    svg.append(s("text", { class: "chart-label", x: 0, y: topPad + row * step + cell - 3 }, names[row]));
+    for (let hr = 0; hr < 24; hr++) {
+      const n = counts[`${dow}-${hr}`] || 0;
+      const level = n === 0 ? 0 : Math.min(6, 1 + Math.floor((n / (max || 1)) * 5.999));
+      const rect = s("rect", { class: "cell", x: left + hr * step, y: topPad + row * step, width: cell, height: cell, rx: 2, fill: heatColor(level) });
+      hoverable(rect, () => [`${n} prompt${n === 1 ? "" : "s"}`, `${names[row]} ${String(hr).padStart(2, "0")}:00–${String((hr + 1) % 24).padStart(2, "0")}:00`]);
+      svg.append(rect);
+    }
+  });
+  for (let hr = 0; hr < 24; hr += 3) svg.append(s("text", { class: "chart-label", x: left + hr * step, y: height - 4 }, String(hr).padStart(2, "0")));
+  const peak = rows.reduce((b, r) => (r.n > (b?.n || 0) ? r : b), null);
+  const dayName = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+  container.append(svg, h("div", { class: "chart-foot" }, scaleLegend(["0", "", "", "", "", "", "max"]),
+    peak ? h("span", { class: "chart-note" }, "Busiest hour: ", h("b", null, `${dayName[peak.dow]} ${String(peak.hour).padStart(2, "0")}:00`), ` · ${fmtNum(peak.n)} prompts`) : null));
+}
+
+// Horizontal bars; `part` splits each bar's end into a second (critical) segment, e.g. failed calls
+function hbars(items, { label, value, fmt, href, sub, max, part, lead } = {}) {
+  const top = max ?? Math.max(0, ...items.map(value));
+  if (!items.length) return h("div", { class: "empty" }, "No data");
+  return h("div", { class: "hbars" }, items.map((it) => {
+    const v = value(it), p = part ? Math.min(part(it) || 0, v) : 0;
+    const text = label(it);
+    const name = href ? h("a", { class: "name", href: href(it), title: text }, lead ? lead(it) : null, text) : h("span", { class: "name", title: text }, lead ? lead(it) : null, text);
+    const pct = (n) => (top ? (n / top) * 100 : 0);
+    const row = h("div", { class: "hbar" }, name,
+      h("div", { class: "track" }, h("div", { class: `fill ${p ? "has-part" : ""}`, style: { width: `${Math.max(0.5, pct(v - p))}%` } }),
+        p ? h("div", { class: "fill part", style: { width: `${pct(p)}%` } }) : null),
+      h("span", { class: "val" }, fmt(v), sub ? h("span", { class: "muted" }, " ", sub(it)) : null));
+    return row;
+  }));
+}
+
+// Trend sparkline: the de-emphasis hue for the line, the accent for the current period (last point)
+function sparkEl(values, { height = 30 } = {}) {
+  const box = h("div", { class: "spark", style: { height: `${height}px` } });
+  if (!values.length || values.every((v) => !v)) return box;
+  responsive(box, (w) => {
+    const max = Math.max(...values), n = values.length, pad = 4;
+    const x = (i) => (n === 1 ? w / 2 : pad + (i / (n - 1)) * (w - 2 * pad));
+    const y = (v) => height - 4 - (max ? (v / max) * (height - 10) : 0);
+    const pts = values.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+    box.append(s("svg", { width: w, height, viewBox: `0 0 ${w} ${height}`, "aria-hidden": "true" },
+      s("path", { class: "spark-area", d: `M${x(0).toFixed(1)},${height}L${pts.join("L")}L${x(n - 1).toFixed(1)},${height}Z` }),
+      s("path", { class: "spark-line", d: "M" + pts.join("L") }),
+      s("circle", { class: "spark-dot", cx: x(n - 1), cy: y(values[n - 1]), r: 3.5 })));
+  });
+  return box;
+}
+
+function contextChart(container, width, calls, markers) {
+  const main = calls.filter((c) => !c.agent_id);
+  if (main.length < 2) { container.append(h("div", { class: "empty" }, "Not enough API calls to chart")); return; }
+  const m = { l: 46, r: 12, t: 16, b: 24 }, height = 210;
+  const iw = width - m.l - m.r, ih = height - m.t - m.b;
+  const ctx = main.map((c) => (c.input_tokens || 0) + (c.cache_read_tokens || 0) + (c.cache_write_tokens || 0));
+  const ticks = niceTicks(Math.max(...ctx));
+  const top = ticks[ticks.length - 1] || 1;
+  const x = (i) => (i / (main.length - 1)) * iw, y = (v) => ih - (v / top) * ih;
+  const svg = s("svg", { width, height, viewBox: `0 0 ${width} ${height}`, role: "img", "aria-label": "context window per API call" });
+  const g = s("g", { transform: `translate(${m.l},${m.t})` });
+  svg.append(g);
+  for (const t of ticks) {
+    g.append(s("line", { class: t === 0 ? "baseline" : "gridline", x1: 0, x2: iw, y1: Math.round(y(t)) + 0.5, y2: Math.round(y(t)) + 0.5 }));
+    g.append(s("text", { class: "chart-label tick-num", x: -8, y: y(t) + 3.5, "text-anchor": "end" }, fmtCompact(t)));
+  }
+  const idxAt = (ts) => { const i = main.findIndex((c) => c.ts >= ts); return i === -1 ? main.length - 1 : i; };
+  (markers || []).filter((mk) => mk.kind === "compact").forEach((mk) => {
+    const xi = x(idxAt(mk.ts));
+    g.append(s("line", { class: "marker-line", x1: xi, x2: xi, y1: -6, y2: ih }));
+    g.append(s("text", { class: "marker-label", x: xi + 3, y: -4 }, "compacted"));
+  });
+  (markers || []).filter((mk) => mk.kind === "prompt").forEach((mk) => {
+    const xi = x(idxAt(mk.ts));
+    g.append(s("line", { class: "baseline", x1: xi, x2: xi, y1: ih, y2: ih + 5 }));
+  });
+  const linePts = ctx.map((v, i) => `${x(i).toFixed(1)},${y(v).toFixed(1)}`);
+  g.append(s("path", { class: "area", d: `M0,${ih}L${linePts.join("L")}L${iw},${ih}Z` }));
+  g.append(s("path", { class: "line", d: "M" + linePts.join("L") }));
+  const peak = ctx.indexOf(Math.max(...ctx));
+  const compactXs = (markers || []).filter((mk) => mk.kind === "compact").map((mk) => x(idxAt(mk.ts)));
+  const px = x(peak), crowded = compactXs.some((cx) => Math.abs(cx - px) < 90) || y(ctx[peak]) < 14;
+  // beside the peak when a compaction label sits above it, otherwise just above
+  g.append(s("text", { class: "chart-label peak-label", x: crowded ? Math.max(px - 8, 70) : Math.min(px, iw - 60), y: crowded ? y(ctx[peak]) + 14 : y(ctx[peak]) - 6,
+    "text-anchor": crowded ? "end" : "start" }, `peak ${fmtCompact(ctx[peak])}`));
+  g.append(s("text", { class: "chart-label", x: 0, y: ih + 17 }, fmtTime(main[0].ts)));
+  g.append(s("text", { class: "chart-label", x: iw, y: ih + 17, "text-anchor": "end" }, fmtTime(main[main.length - 1].ts)));
+  g.append(s("text", { class: "chart-label", x: iw / 2, y: ih + 17, "text-anchor": "middle" }, `${main.length} API calls · ticks mark prompts`));
+  const cross = s("line", { class: "crosshair", y1: 0, y2: ih, visibility: "hidden" });
+  const dot = s("circle", { class: "dot", r: 4, visibility: "hidden" });
+  g.append(cross, dot);
+  const overlay = s("rect", { class: "hit", x: 0, y: 0, width: iw, height: ih });
+  overlay.addEventListener("pointermove", (e) => {
+    const r = overlay.getBoundingClientRect();
+    const i = Math.max(0, Math.min(main.length - 1, Math.round(((e.clientX - r.left) / r.width) * (main.length - 1))));
+    const c = main[i];
+    cross.setAttribute("x1", x(i)); cross.setAttribute("x2", x(i)); cross.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(i)); dot.setAttribute("cy", y(ctx[i])); dot.setAttribute("visibility", "visible");
+    showTip(e, `${fmtCompact(ctx[i])} context tokens`, `Call ${i + 1} · ${fmtDT(c.ts)} · ${c.model || ""}`,
+      `output ${fmtCompact(c.output_tokens)} · cache read ${fmtCompact(c.cache_read_tokens)} · ${fmtCost(c.cost_usd)}`);
+  });
+  overlay.addEventListener("pointerleave", () => { hideTip(); cross.setAttribute("visibility", "hidden"); dot.setAttribute("visibility", "hidden"); });
+  g.append(overlay);
+  container.append(svg);
+}
+
+// =====================================================================================
+// Router
+// =====================================================================================
+const routes = [];
+function route(pattern, view) { routes.push([pattern, view]); }
+function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
+function parseHash() {
+  const raw = location.hash.slice(1) || "/";
+  const [path, qs] = raw.split("?");
+  return { path, params: Object.fromEntries(new URLSearchParams(qs || "")) };
+}
+function setParams(params) {
+  const { path } = parseHash();
+  const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString();
+  history.replaceState(null, "", `#${path}${qs ? "?" + qs : ""}`);
+}
+let renderSeq = 0;
+async function render() {
+  const { path, params } = parseHash();
+  const app = $("#app");
+  const seq = ++renderSeq;
+  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === navKey(path)));
+  for (const [pattern, view] of routes) {
+    const m = path.match(pattern);
+    if (!m) continue;
+    app.classList.add("loading");
+    try {
+      const [node] = await Promise.all([view(params, ...m.slice(1).map(decodeURIComponent)), loadGlossary()]);
+      if (seq !== renderSeq) return;
+      app.replaceChildren(node);
+      app.querySelectorAll(".gloss").forEach((el) => glossify(el));
+    } catch (err) {
+      if (seq !== renderSeq) return;
+      app.replaceChildren(h("div", { class: "card empty" }, `Could not load: ${err.message}`));
+    } finally {
+      if (seq === renderSeq) app.classList.remove("loading");
+    }
+    hideTip();
+    return;
+  }
+  app.replaceChildren(h("div", { class: "card empty" }, "Not found"));
+}
+function navKey(path) {
+  if (path.startsWith("/session")) return "sessions";
+  if (path.startsWith("/project")) return "projects";
+  if (path.startsWith("/knowledge")) return "knowledge";
+  if (path.startsWith("/status")) return "status";
+  if (path.startsWith("/reviews")) return "reviews";
+  if (path.startsWith("/sources")) return "sources";
+  if (path.startsWith("/glossary")) return "glossary";
+  if (path === "/" || path === "") return "overview";
+  return "";
+}
+
+let projectsCache = null;
+async function projectOptions(selected) {
+  projectsCache ||= await api("/api/projects");
+  return [h("option", { value: "" }, "All projects"),
+    ...projectsCache.map((p) => h("option", { value: p.project_path, selected: p.project_path === selected }, p.label))];
+}
+function segControl(options, value, onChange) {
+  return h("div", { class: "seg", role: "group" }, options.map(([v, label]) =>
+    h("button", { type: "button", class: v === value ? "on" : "", "aria-pressed": String(v === value), onclick: () => onChange(v) }, label)));
+}
+
+// Cards/List switch of the list pages; each page remembers its layout in this browser
+const viewModes = {};
+function viewMode(page, fallback) {
+  if (!(page in viewModes)) {
+    let saved = null;
+    try { saved = localStorage.getItem(`chronicle.view.${page}`); } catch { /* storage blocked: use the default */ }
+    viewModes[page] = saved === "cards" || saved === "list" ? saved : fallback;
+  }
+  return viewModes[page];
+}
+function viewToggle(page, mode) {
+  const icon = (rects) => s("svg", { viewBox: "0 0 16 16", "aria-hidden": "true" },
+    rects.map(([x, y, w, ht]) => s("rect", { x, y, width: w, height: ht, rx: 1.2 })));
+  const seg = segControl([
+    ["cards", [icon([[1.5, 1.5, 5.5, 5.5], [9, 1.5, 5.5, 5.5], [1.5, 9, 5.5, 5.5], [9, 9, 5.5, 5.5]]), "Cards"]],
+    ["list", [icon([[1.5, 2.2, 13, 1.8], [1.5, 7.1, 13, 1.8], [1.5, 12, 13, 1.8]]), "List"]],
+  ], mode, (v) => {
+    if (v === mode) return;
+    viewModes[page] = v;
+    try { localStorage.setItem(`chronicle.view.${page}`, v); } catch { /* remembered for this tab only */ }
+    render();
+  });
+  seg.classList.add("view-toggle");
+  seg.setAttribute("aria-label", "Layout");
+  return seg;
+}
+
+// A table sorted in the browser. cols: { key, label, num, desc, value(item) } (no value: not sortable; desc: sort
+// descending on first click); row(item) returns the item's <tr> (or [] to skip it); group splits the default order.
+function localTable(items, cols, row, { sort = null, order = "asc", group = null, empty = "Nothing matches", cls = "" } = {}) {
+  const state = { sort, order };
+  const thead = h("thead"), tbody = h("tbody");
+  function draw() {
+    const col = cols.find((c) => c.key === state.sort && c.value);
+    const dir = state.order === "asc" ? 1 : -1;
+    const list = !col ? items : [...items].sort((a, b) => {
+      const va = col.value(a), vb = col.value(b);
+      if (va == null || vb == null || va === "" || vb === "") return (va == null || va === "") - (vb == null || vb === ""); // blanks last
+      return (typeof va === "number" && typeof vb === "number" ? va - vb : String(va).localeCompare(String(vb))) * dir;
+    });
+    thead.replaceChildren(h("tr", null, cols.map((c) => {
+      const th = h("th", { class: `${c.value ? "sortable" : ""} ${c.num ? "num" : ""}`, "aria-sort": c.key === state.sort ? (state.order === "asc" ? "ascending" : "descending") : null },
+        c.label, c.key === state.sort ? h("span", { class: "arrow" }, state.order === "asc" ? " ↑" : " ↓") : null);
+      if (c.value) th.addEventListener("click", () => {
+        state.order = state.sort === c.key ? (state.order === "asc" ? "desc" : "asc") : (c.desc ? "desc" : "asc");
+        state.sort = c.key;
+        draw();
+      });
+      return th;
+    })));
+    const rows = [];
+    let current;
+    for (const item of list) {
+      const tr = row(item);
+      if (Array.isArray(tr) && !tr.length) continue;
+      if (group && (!state.sort || state.sort === group.key)) {
+        const g = group.of(item);
+        if (g !== current) rows.push(h("tr", { class: "group-row", id: group.id ? group.id(g) : null }, h("th", { colspan: cols.length }, (current = g))));
+      }
+      rows.push(tr);
+    }
+    tbody.replaceChildren(...(rows.length ? rows : [h("tr", null, h("td", { colspan: cols.length, class: "empty" }, empty))]));
+  }
+  draw();
+  return h("div", { class: "table-wrap" }, h("table", { class: `data list-table ${cls}` }, thead, tbody));
+}
+
+// A table row that opens a detail row under it (click, Enter or Space)
+function expandable(tr, colspan, detail, { indent = 0 } = {}) {
+  let open = null;
+  const toggle = () => {
+    if (open) { open.remove(); open = null; }
+    else {
+      open = h("tr", { class: "detail-row" }, indent ? h("td", { colspan: indent }) : null, h("td", { colspan: colspan - indent }, detail()));
+      tr.after(open);
+      open.querySelectorAll(".gloss").forEach((el) => glossify(el));
+    }
+    tr.classList.toggle("open", !!open);
+    tr.setAttribute("aria-expanded", String(!!open));
+  };
+  tr.classList.add("row-link");
+  tr.tabIndex = 0;
+  tr.setAttribute("aria-expanded", "false");
+  tr.addEventListener("click", (e) => { if (!e.target.closest("a, button, .gterm")) toggle(); });
+  tr.addEventListener("keydown", (e) => { if ((e.key === "Enter" || e.key === " ") && e.target === tr) { e.preventDefault(); toggle(); } });
+  tr.closeDetail = () => { if (open) toggle(); };
+  return tr;
+}
+function plainText(src) { // one-line excerpt of markdown
+  return String(src || "").replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/^\s{0,3}(?:#{1,6}|>|[-*+]|\d+\.)\s+/gm, "").replace(/\*\*|__|`/g, "").replace(/\s+/g, " ").trim();
+}
+function tile(label, value, { delta, spark, title, iconName } = {}) {
+  return h("div", { class: "tile", title },
+    h("div", { class: "label" }, iconName ? icon(iconName) : null, label),
+    h("div", { class: "value" }, value),
+    h("div", { class: "foot" }, delta != null ? h("span", { class: "delta" }, delta) : h("span")),
+    spark || null);
+}
+function fact(label, value) { return h("div", { class: "fact" }, h("b", null, value), h("span", null, label)); }
+function fmtRate(v) { return v >= 100 ? fmtCompact(v) : v >= 10 ? v.toFixed(0) : v >= 1 ? v.toFixed(1) : v ? v.toFixed(2) : "0"; }
+function pctText(part, whole) { return whole ? `${((part / whole) * 100).toFixed(part / whole < 0.1 ? 1 : 0)}%` : "–"; }
+function cardHead(title, { iconName, hint, tools } = {}) {
+  return h("div", { class: "card-head" },
+    h("div", { class: "card-title" }, iconName ? icon(iconName) : null, h("h2", null, title)),
+    hint || tools ? h("div", { class: "tools" }, hint ? (typeof hint === "string" ? h("span", { class: "hint" }, hint) : hint) : null, tools || null) : null);
+}
+function legendKey(items) { // [[swatch class, label]]; identity never rides on color alone
+  return h("span", { class: "mini-legend" }, items.map(([cls, label]) => h("span", null, h("i", { class: `sw ${cls}` }), label)));
+}
+function deltaText(cur, prev, days) {
+  if (prev == null || !prev) return cur ? `new vs prior ${days}d` : null;
+  const pct = ((cur - prev) / prev) * 100;
+  if (!isFinite(pct)) return null;
+  return `${pct >= 0 ? "▲" : "▼"} ${Math.abs(pct).toFixed(0)}% vs prior ${days}d`;
+}
+
+// =====================================================================================
+// Overview
+// =====================================================================================
+route(/^\/?$/, async (params) => {
+  const days = params.days || "90", project = params.project || "", agent = params.agent || "";
+  const metric = params.metric || "active_s";
+  const data = await api("/api/overview", { days, project, agent });
+  const t = data.totals, p = data.previous || {};
+  const update = (patch) => { setParams({ days, project, agent, metric, ...patch }); render(); };
+  // fill missing days so the time axis is honest
+  const daily = fillDays(data.daily, days === "all" ? null : +days);
+  // a delta only means something when recording covered the whole prior period; otherwise show a daily rate
+  const DAY = 86400000, firstAt = t.first_at ? new Date(t.first_at).getTime() : Date.now();
+  const spanDays = Math.max(1, Math.min(days === "all" ? Infinity : +days, Math.ceil((Date.now() - firstAt) / DAY)));
+  const fullPrior = days !== "all" && firstAt <= Date.now() - 2 * +days * DAY;
+  const second = (cur, prev, f) => (fullPrior ? deltaText(cur, prev, days) : `${f(cur / spanDays)} a day`);
+  const sparkOf = (key) => sparkEl(bucket(daily.map((x) => x[key] || 0), 12));
+  const activeDays = daily.filter((x) => (x.active_s || 0) > 0 || x.sessions).length;
+  let longest = 0, run = 0;
+  for (const x of daily) { run = (x.active_s || 0) > 0 || x.sessions ? run + 1 : 0; longest = Math.max(longest, run); }
+  const periodName = days === "all" ? "all time" : `the last ${days} days`;
+  const hero = h("div", { class: "tile hero", title: "Active time: the sum of gaps under 15 minutes between events" },
+    h("div", { class: "label" }, icon("clock"), "Active time"),
+    h("div", { class: "value" }, fmtHours(t.active_s)),
+    h("div", { class: "hero-sub" }, `across ${fmtNum(t.sessions)} sessions in ${fmtNum(t.projects)} projects, ${periodName}`),
+    h("div", { class: "hero-facts" },
+      fact("active days", `${fmtNum(activeDays)} of ${fmtNum(Math.min(daily.length, spanDays))}`),
+      fact("per active day", activeDays ? fmtDur(t.active_s / activeDays) : "–"),
+      fact("longest run", `${longest} day${longest === 1 ? "" : "s"}`)),
+    sparkEl(bucket(daily.map((x) => x.active_s || 0), 24), { height: 46 }));
+  const tiles = h("div", { class: "kpis" }, hero,
+    tile("Sessions", fmtNum(t.sessions), { iconName: "sessions", delta: second(t.sessions, p.sessions, fmtRate), spark: sparkOf("sessions") }),
+    tile("Prompts", fmtNum(t.prompts), { iconName: "prompts", delta: second(t.prompts, p.prompts, fmtRate), spark: sparkOf("prompts") }),
+    tile("Tool calls", fmtCompact(t.tool_calls), { iconName: "zap", delta: `${fmtNum(t.tool_errors)} failed · ${pctText(t.tool_errors, t.tool_calls)}`, spark: sparkOf("tool_calls") }),
+    tile("Lines changed", `+${fmtCompact(t.lines_added)}`, { iconName: "diff", delta: `−${fmtCompact(t.lines_removed)} removed`, spark: sparkOf("lines_added") }),
+    tile("Tokens", fmtCompact(t.tokens), { iconName: "tokens", delta: second(t.tokens, p.tokens, fmtCompact), spark: sparkOf("tokens"), title: "Input + output + cache read + cache write" }),
+    tile("Est. API cost", fmtCost(t.cost), { iconName: "cost", delta: second(t.cost, p.cost, fmtCost), spark: sparkOf("cost"), title: "API list-price equivalent; subscriptions are billed differently. Newer GPT models are estimated at GPT-5 rates." }),
+    tile("Knowledge", fmtNum(t.knowledge), { iconName: "sparkles", delta: `${fmtNum(t.analyzed)} sessions analyzed` }),
+    tile("Projects", fmtNum(t.projects), { iconName: "projects", delta: data.projects[0] ? `most time: ${data.projects[0].label}` : null }));
+  const metrics = {
+    sessions: ["Sessions", (x) => x.sessions, fmtNum],
+    active_s: ["Active time", (x) => x.active_s, fmtHours, 3600],
+    tokens: ["Tokens", (x) => x.tokens, fmtCompact],
+    cost: ["Est. cost", (x) => x.cost, fmtCost],
+  };
+  const [mLabel, mValue, mFmt, mUnit] = metrics[metric] || metrics.active_s;
+  const dailyCard = chartCard(`Daily ${mLabel.toLowerCase()}`, days === "all" ? "All time" : `Last ${days} days`,
+    (el, w) => columnChart(el, w, daily, { value: (x) => mValue(x) || 0, fmt: mFmt, label: (x) => wdFmt.format(new Date(x.date + "T12:00:00")), avg: daily.length >= 21 ? 7 : 0, name: `Daily ${mLabel.toLowerCase()}`, height: 320, unit: mUnit || 1 }),
+    () => ({ columns: ["Date", mLabel], num: [false, true], rows: daily.filter((x) => mValue(x)).map((x) => [x.date, mFmt(mValue(x))]) }),
+    [segControl(Object.entries(metrics).map(([k, v]) => [k, v[0]]), metric, (v) => update({ metric: v }))], "status");
+  const outcomesCard = h("section", { class: "card" }, cardHead("Outcomes", { iconName: "completed", hint: "from session analysis" }),
+    outcomeBreakdown(data.outcomes),
+    data.work_types.length ? [h("div", { class: "subhead" }, "Work types"),
+      hbars(data.work_types.slice(0, 6).map(([w, n]) => ({ w, n })), { label: (x) => x.w, value: (x) => x.n, fmt: fmtNum })] : null);
+  const cal = chartCard("Activity calendar", "Active time per day · click a day to see its sessions",
+    (el, w) => calendarHeatmap(el, w, data.calendar),
+    () => ({ columns: ["Date", "Sessions", "Prompts", "Active"], num: [false, true, true, true], rows: data.calendar.map((r) => [r.date, r.sessions, r.prompts || 0, fmtDur(r.active_s)]) }),
+    [], "calendar");
+  const hours = chartCard("When you work", "Prompts by weekday and hour, local time",
+    (el, w) => hourGrid(el, w, data.hours),
+    () => ({ columns: ["Weekday", "Hour", "Prompts"], num: [false, true, true], rows: data.hours.map((r) => [["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"][r.dow], r.hour, r.n]) }),
+    [], "clock");
+  const projCard = h("section", { class: "card" }, cardHead("Projects", { iconName: "projects", hint: "by active time · sessions" }),
+    hbars(data.projects, { label: (x) => x.label, value: (x) => x.active_s || 0, fmt: fmtDur, href: (x) => `#/project?path=${encodeURIComponent(x.project_path)}`, sub: (x) => `· ${x.sessions}` }));
+  const toolCard = h("section", { class: "card" }, cardHead("Tools", { iconName: "zap", hint: legendKey([["accent", "calls"], ["critical", "failed"]]) }),
+    hbars(groupMcp(data.tools).slice(0, 12), { label: (x) => x.name, value: (x) => x.n, fmt: fmtCompact, part: (x) => x.errors || 0, sub: (x) => (x.errors ? `(${fmtCompact(x.errors)})` : "") }));
+  const modelCard = h("section", { class: "card" }, cardHead("Models", { iconName: "system", hint: "est. API cost · tokens" }),
+    hbars(data.models, { label: (x) => x.model, value: (x) => x.cost || 0, fmt: fmtCost, sub: (x) => `· ${fmtCompact(x.tokens)}` }),
+    data.agents && data.agents.length > 1 && !agent ? [h("div", { class: "subhead" }, "Agents"),
+      hbars(data.agents, { label: (x) => agentName(x.agent), value: (x) => x.active_s || 0, fmt: fmtDur, href: (x) => `#/?agent=${x.agent}`, sub: (x) => `· ${x.sessions} sessions` })] : null);
+  const recent = h("section", { class: "card" }, cardHead("Recent sessions", { iconName: "sessions", tools: h("a", { href: "#/sessions", class: "hint link-arrow" }, "All sessions", icon("arrow")) }),
+    sessionList(data.recent));
+  const know = h("section", { class: "card" }, cardHead("Latest knowledge", { iconName: "knowledge", tools: h("a", { href: "#/knowledge", class: "hint link-arrow" }, "Browse", icon("arrow")) }),
+    knowledgeList(data.knowledge.slice(0, 8)));
+  const since = t.first_at ? `since ${fmtDateY(t.first_at)}` : "";
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Overview"),
+      h("div", { class: "sub" }, `${fmtNum(t.sessions)} sessions across ${fmtNum(t.projects)} projects ${since}`)),
+      h("div", { class: "head-actions" },
+        segControl([["7", "7d"], ["30", "30d"], ["90", "90d"], ["180", "180d"], ["all", "All"]], days, (v) => update({ days: v })),
+        segControl([["", "All agents"], ...Object.keys(AGENTS).filter((a) => a === agent || (data.agents || []).some((x) => x.agent === a))
+          .map((a) => [a, agentName(a)])], agent, (v) => update({ agent: v })),
+        h("select", { "aria-label": "Project", onchange: (e) => update({ project: e.target.value }) }, await projectOptions(project)))),
+    tiles,
+    h("div", { class: "grid cols-main section-gap" }, dailyCard, outcomesCard),
+    h("div", { class: "grid cols-2 section-gap" }, cal, hours),
+    h("div", { class: "grid cols-3 section-gap" }, projCard, toolCard, modelCard),
+    h("div", { class: "grid cols-2 section-gap" }, recent, know));
+});
+
+function groupMcp(tools) {
+  const out = {};
+  for (const t of tools) {
+    const m = t.name.match(/^mcp__(.+?)__/);
+    const name = m ? `MCP: ${m[1].replace(/^claude_ai_/, "")}` : t.name;
+    const g = (out[name] ||= { name, n: 0, errors: 0 });
+    g.n += t.n;
+    g.errors += t.errors || 0;
+  }
+  return Object.values(out).sort((a, b) => b.n - a.n);
+}
+
+function fillDays(daily, days) {
+  if (!daily.length) return [];
+  const map = Object.fromEntries(daily.map((x) => [x.date, x]));
+  const end = new Date(); end.setHours(12, 0, 0, 0);
+  const start = days ? new Date(end.getTime() - (days - 1) * 86400000) : new Date(daily[0].date + "T12:00:00");
+  const out = [];
+  for (let t = new Date(start); t <= end; t.setDate(t.getDate() + 1)) {
+    const key = localDate(t);
+    out.push(map[key] || { date: key, sessions: 0, prompts: 0, active_s: 0, tokens: 0, cost: 0, tool_calls: 0, lines_added: 0 });
+  }
+  return out;
+}
+function bucket(values, n) {
+  if (values.length <= n) return values;
+  const size = values.length / n, out = [];
+  for (let i = 0; i < n; i++) out.push(values.slice(Math.floor(i * size), Math.floor((i + 1) * size)).reduce((a, b) => a + b, 0));
+  return out;
+}
+
+function outcomeOf(x) { // -> [status class, icon, label] for a session row
+  if (x.source === "history") return ["", "history", "history"];
+  if (x.outcome && OUTCOME[x.outcome]) return [OUTCOME[x.outcome][0], x.outcome, OUTCOME[x.outcome][1]];
+  return [x.analysis_status === "error" ? "critical" : "", STATUS_ICON[x.analysis_status] || "dot", STATUS_LABEL[x.analysis_status] || "–"];
+}
+function sessionList(items) {
+  if (!items.length) return h("div", { class: "empty" }, "No sessions yet");
+  return h("div", { class: "session-list" }, items.map((x) => {
+    const [cls, ic, label] = outcomeOf(x);
+    return h("a", { class: "session-item", href: `#/session/${x.id}` },
+      h("span", { class: `status-icon ${cls}`, title: label }, icon(ic), h("span", { class: "sr-only" }, label)),
+      h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, x.title || "(untitled)", agentTag(x.agent)),
+        h("div", { class: "m" }, `${x.project_name || "–"} · ${ago(x.started_at)} · ${fmtDur(x.active_s)} active · ${x.n_prompts} prompt${x.n_prompts === 1 ? "" : "s"}`)),
+      h("div", { class: "r" }, fmtCost(x.est_cost_usd)));
+  }));
+}
+function knowledgeList(items) {
+  if (!items.length) return h("div", { class: "empty" }, "No analyzed knowledge yet. Sessions are analyzed automatically once idle.");
+  return h("div", { class: "session-list" }, items.map((k) => h("a", { class: "session-item", href: `#/knowledge?q=${encodeURIComponent(k.title.slice(0, 60))}` },
+    h("span", { class: "kind-icon", title: kindLabel(k.kind) }, icon(KIND[k.kind] ? k.kind : "dot")),
+    h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, k.title),
+      h("div", { class: "m" }, [kindLabel(k.kind), k.scope === "global" ? "global" : k.project_name, ago(k.created_at)].filter(Boolean).join(" · "))),
+    h("div", { class: "r" }, confidenceMeter(k.confidence)))));
+}
+const OUTCOME_ORDER = ["completed", "partial", "exploratory", "blocked", "abandoned", "unclear", "not analyzed"];
+function outcomeBreakdown(outcomes) {
+  const total = outcomes.reduce((a, o) => a + o.n, 0);
+  if (!total) return h("div", { class: "empty" }, "No sessions yet");
+  const rank = (o) => { const i = OUTCOME_ORDER.indexOf(o.outcome); return i < 0 ? 99 : i; };
+  const items = [...outcomes].sort((a, b) => rank(a) - rank(b));
+  const cls = (o) => (OUTCOME[o] ? OUTCOME[o][0] || "neutral" : "none");
+  const label = (o) => (OUTCOME[o] ? OUTCOME[o][1] : o === "not analyzed" ? "Not analyzed" : o);
+  const href = (o) => `#/sessions?outcome=${o === "not analyzed" ? "none" : o}`;
+  const pct = (n) => `${Math.round((n / total) * 100)}%`;
+  return h("div", { class: "outcomes" },
+    h("div", { class: "stackbar", role: "img", "aria-label": items.map((o) => `${label(o.outcome)}: ${o.n}`).join(", ") },
+      items.map((o) => {
+        const seg = h("a", { class: `seg s-${cls(o.outcome)}`, href: href(o.outcome), style: { flexGrow: String(o.n) }, "aria-label": `${label(o.outcome)}: ${o.n}` });
+        hoverable(seg, () => [`${fmtNum(o.n)} sessions · ${pct(o.n)}`, label(o.outcome)]);
+        return seg;
+      })),
+    h("div", { class: "legend-list" }, items.map((o) => h("a", { class: `legend-row s-${cls(o.outcome)}`, href: href(o.outcome) },
+      icon(OUTCOME[o.outcome] ? o.outcome : o.outcome === "not analyzed" ? "queued" : "dot"),
+      h("span", { class: "lname" }, label(o.outcome)), h("span", { class: "lval" }, fmtNum(o.n)), h("span", { class: "lpct" }, pct(o.n))))));
+}
+
+// =====================================================================================
+// Sessions list
+// =====================================================================================
+route(/^\/sessions$/, async (params) => {
+  const state = { q: params.q || "", project: params.project || "", outcome: params.outcome || "", status: params.status || "",
+    days: params.days || "", sort: params.sort || "started_at", order: params.order || "desc", day: params.day || "",
+    agent: params.agent || "" };
+  const mode = viewMode("sessions", "list");
+  let offset = 0, scale = null;
+  const tbody = h("tbody");
+  const cards = h("div", { class: "scard-grid" });
+  const countEl = h("span", { class: "sub" });
+  const moreBtn = h("button", { class: "btn", type: "button", onclick: () => load(true) }, "Load more");
+  async function load(more) {
+    if (!more) { offset = 0; tbody.replaceChildren(); cards.replaceChildren(); }
+    const q = { ...state, limit: 60, offset };
+    if (state.day) {
+      const start = new Date(state.day + "T00:00:00");
+      q.days = "";
+      q.since = start.toISOString();
+      q.until = new Date(start.getTime() + 86400000).toISOString();
+    }
+    const data = await api("/api/sessions", q);
+    if (!more) scale = { active: Math.max(1, ...data.items.map((x) => x.active_s || 0)), tokens: Math.max(1, ...data.items.map((x) => x.tokens || 0)),
+      cost: Math.max(0.01, ...data.items.map((x) => x.est_cost_usd || 0)) }; // bars compare rows within the first page
+    data.items.forEach((x) => (mode === "list" ? tbody.append(sessionRow(x, scale)) : cards.append(sessionCard(x))));
+    offset += data.items.length;
+    countEl.textContent = state.day ? `${fmtNum(data.total)} sessions on ${fmtDateY(state.day + "T12:00:00")}` : `${fmtNum(data.total)} sessions`;
+    moreBtn.hidden = offset >= data.total;
+    if (!data.total) {
+      if (mode === "list") tbody.append(h("tr", null, h("td", { colspan: 9, class: "empty" }, "No sessions match")));
+      else cards.append(h("div", { class: "card empty" }, "No sessions match"));
+    }
+  }
+  const sorts = [["started_at:desc", "Newest first"], ["started_at:asc", "Oldest first"], ["active_s:desc", "Most active time"],
+    ["tokens:desc", "Most tokens"], ["est_cost_usd:desc", "Highest est. cost"], ["n_tool_calls:desc", "Most tool calls"],
+    ["n_prompts:desc", "Most prompts"], ["title:asc", "Title A–Z"]];
+  const sortNow = `${state.sort}:${state.order}`;
+  const sortSel = mode === "cards" ? h("select", { "aria-label": "Sort sessions", onchange: (e) => { [state.sort, state.order] = e.target.value.split(":"); refresh(); } },
+    (sorts.some(([v]) => v === sortNow) ? sorts : [[sortNow, "Custom order"], ...sorts]).map(([v, l]) => h("option", { value: v, selected: v === sortNow }, l))) : null;
+  const refresh = () => { setParams(state); load(false); };
+  let debounce;
+  const search = h("input", { class: "input", type: "search", placeholder: "Search titles, summaries and transcripts…", value: state.q, style: { minWidth: "300px" },
+    oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { state.q = e.target.value; refresh(); }, 300); } });
+  const sel = (key, opts) => h("select", { onchange: (e) => { state[key] = e.target.value; refresh(); } },
+    opts.map(([v, l]) => h("option", { value: v, selected: state[key] === v }, l)));
+  const cols = [["started_at", "Started"], ["title", "Session"], ["project_name", "Project"], ["n_prompts", "Prompts", 1], ["n_tool_calls", "Tools", 1],
+    ["active_s", "Active", 1], ["tokens", "Tokens", 1], ["est_cost_usd", "Est. cost", 1], [null, "Outcome"]];
+  const thead = h("thead", null, h("tr", null, cols.map(([key, label, num]) => {
+    const th = h("th", { class: `${key ? "sortable" : ""} ${num ? "num" : ""}` }, label, key === state.sort ? h("span", { class: "arrow" }, state.order === "asc" ? " ↑" : " ↓") : null);
+    if (key) th.addEventListener("click", () => { state.order = state.sort === key && state.order === "desc" ? "asc" : "desc"; state.sort = key; setParams(state); render(); });
+    return th;
+  })));
+  await load(false);
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Sessions"), countEl), viewToggle("sessions", mode)),
+    h("div", { class: "filters" }, search,
+      h("select", { onchange: (e) => { state.project = e.target.value; refresh(); } }, await projectOptions(state.project)),
+      sel("outcome", [["", "Any outcome"], ["completed", "Completed"], ["partial", "Partial"], ["blocked", "Blocked"], ["abandoned", "Abandoned"], ["exploratory", "Exploratory"], ["unclear", "Unclear"], ["none", "Not analyzed"]]),
+      sel("status", [["", "Any status"], ["done", "Analyzed"], ["pending", "Queued"], ["stale", "Needs re-analysis"], ["error", "Failed"], ["skipped", "Skipped"]]),
+      sel("agent", [["", "All agents"], ...Object.entries(AGENTS)]),
+      sel("days", [["", "All time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"]]),
+      sortSel,
+      state.day ? h("button", { class: "chip on", type: "button", title: "Clear the day filter", onclick: () => { state.day = ""; refresh(); } }, icon("calendar"), state.day, icon("x")) : null),
+    mode === "list" ? h("section", { class: "card flush" }, h("div", { class: "table-wrap" }, h("table", { class: "data" }, thead, tbody))) : cards,
+    h("div", { class: "load-more" }, moreBtn));
+});
+
+function sessionCard(x) {
+  const [cls] = outcomeOf(x);
+  const stat = (ic, value, label, title) => h("span", { title }, icon(ic), h("b", null, value), label ? ` ${label}` : null);
+  return h("a", { class: `card scard o-${cls || "neutral"}`, href: `#/session/${x.id}` },
+    h("div", { class: "scard-head" },
+      h("div", { class: "t" }, x.title || "(untitled)", agentTag(x.agent),
+        x.source === "codex-import" ? h("span", { class: "agent-tag", title: "Claude Code deleted this transcript; recovered from Codex's copy" }, "recovered") : null),
+      outcomeBadge(x.outcome, x.analysis_status, x.source)),
+    h("div", { class: "m" }, `${x.project_name || "–"} · ${fmtDT(x.started_at)} · ${fmtDur(x.active_s)} active`),
+    x.summary ? h("div", { class: "s" }, x.summary) : null,
+    x.tags?.length ? h("div", { class: "ktags" }, x.tags.slice(0, 5).map((t) => h("span", { class: "tag" }, t))) : null,
+    h("div", { class: "scard-stats" },
+      stat("prompts", fmtNum(x.n_prompts), x.n_prompts === 1 ? "prompt" : "prompts"),
+      stat("zap", fmtNum(x.n_tool_calls), x.n_tool_errors ? `(${fmtNum(x.n_tool_errors)} failed)` : "calls", "Tool calls"),
+      stat("tokens", fmtCompact(x.tokens), null, "Tokens"),
+      stat("cost", fmtCost(x.est_cost_usd).replace(/^\$/, ""), null, "Estimated API cost")));
+}
+
+function barCell(text, v, max) { // a number with a small magnitude bar under it
+  return h("td", { class: "num" }, text, max ? h("div", { class: "cellbar", "aria-hidden": "true" }, h("i", { style: { width: `${Math.min(100, ((v || 0) / max) * 100)}%` } })) : null);
+}
+function sessionRow(x, scale = null) {
+  const tr = h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a")) go(`#/session/${x.id}`); } },
+    h("td", { class: "nowrap" }, h("div", null, fmtDT(x.started_at)), h("div", { class: "muted small" }, ago(x.started_at))),
+    h("td", { class: "title-cell" }, h("div", { class: "t" }, x.title || "(untitled)", agentTag(x.agent),
+      x.source === "codex-import" ? h("span", { class: "agent-tag", title: "Claude Code deleted this transcript; recovered from Codex's copy" }, "recovered") : null),
+      x.summary ? h("div", { class: "s" }, x.summary) : null,
+      x.tags?.length ? h("div", null, x.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null),
+    h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(x.project_path || "")}` }, x.project_name || "–")),
+    h("td", { class: "num" }, fmtNum(x.n_prompts)),
+    h("td", { class: "num" }, fmtNum(x.n_tool_calls), x.n_tool_errors ? h("div", { class: "muted" }, `${x.n_tool_errors} failed`) : null),
+    barCell(fmtDur(x.active_s), x.active_s, scale?.active),
+    barCell(fmtCompact(x.tokens), x.tokens, scale?.tokens),
+    barCell(fmtCost(x.est_cost_usd), x.est_cost_usd, scale?.cost),
+    h("td", null, outcomeBadge(x.outcome, x.analysis_status, x.source)));
+  return tr;
+}
+
+// =====================================================================================
+// Session detail
+// =====================================================================================
+route(/^\/session\/([\w-]+)$/, async (params, id) => {
+  const sx = await api(`/api/sessions/${id}`);
+  const analyzing = h("button", { class: "btn primary", type: "button", onclick: async () => {
+    analyzing.disabled = true;
+    analyzing.textContent = "Analyzing…";
+    const r = await post(`/api/sessions/${sx.id}/analyze`);
+    toast(r.started ? "Analysis started (via headless Claude Code). This page refreshes when it finishes." : "Analysis already running");
+    watchJob(`analyze:${sx.id}`);
+  } }, sx.analysis_status === "done" ? "Re-analyze" : "Analyze now");
+  if (sx.source === "history") analyzing.hidden = true;
+  const head = h("div", { class: "session-head" },
+    h("div", { style: { minWidth: 0, flex: 1 } },
+      h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/sessions" }, "Sessions"), " / ", sx.id.slice(0, 8)),
+      h("h1", null, sx.title || "(untitled session)"),
+      h("div", { class: "meta" },
+        h("span", null, "Project ", h("a", { href: `#/project?path=${encodeURIComponent(sx.project_path || "")}` }, h("b", null, sx.project_name || "–"))),
+        h("span", null, `${fmtDT(sx.started_at)} → ${fmtDT(sx.ended_at)}`),
+        h("span", null, h("b", null, fmtDur(sx.active_s)), " active · ", fmtDur(sx.duration_s), " wall"),
+        sx.git_branch ? h("span", null, "branch ", h("code", null, sx.git_branch)) : null,
+        sx.primary_model ? h("span", null, h("code", null, sx.primary_model)) : null,
+        sx.cc_version ? h("span", { class: "muted" }, `${agentName(sx.agent)} ${sx.cc_version}`) : null,
+        sx.source_present === 0 && sx.source !== "history" ? h("span", { class: "badge", title: "The agent deleted the original; Chronicle's archive keeps it" }, "original deleted · archived") : null,
+        sx.source === "codex-import" ? h("span", { class: "badge accent", title: "Claude Code deleted this transcript; Chronicle recovered it from the copy Codex Desktop imported" }, h("span", { class: "sdot" }), "recovered via Codex") : null)),
+    h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source), analyzing));
+  const tiles = h("div", { class: "tiles" },
+    tile("Prompts", fmtNum(sx.n_prompts), { iconName: "prompts", delta: sx.n_interrupts ? `${sx.n_interrupts} interrupt${sx.n_interrupts === 1 ? "" : "s"}` : "no interrupts" }),
+    tile("Tool calls", fmtNum(sx.n_tool_calls), { iconName: "zap", delta: `${fmtNum(sx.n_tool_errors)} failed · ${pctText(sx.n_tool_errors, sx.n_tool_calls)}` }),
+    tile("Tokens", fmtCompact(sx.total_tokens), { iconName: "tokens", delta: sx.sub_tokens ? `${fmtCompact(sx.sub_tokens)} by subagents` : null }),
+    tile("Est. API cost", fmtCost(sx.est_cost_usd), { iconName: "cost", delta: sx.sub_cost_usd ? `${fmtCost(sx.sub_cost_usd)} subagents` : null }),
+    tile("Lines", `+${fmtCompact(sx.lines_added)}`, { iconName: "diff", delta: `−${fmtCompact(sx.lines_removed)} · ${sx.n_files} files` }),
+    tile("Peak context", fmtCompact(sx.peak_context), { iconName: "status", delta: sx.n_compactions ? `${sx.n_compactions} compaction${sx.n_compactions === 1 ? "" : "s"}` : "no compaction" }),
+    tile("Subagents", fmtNum(sx.n_subagents), { iconName: "branch", delta: sx.workflows?.length ? `${sx.workflows.length} workflows` : null }));
+  // summary
+  const summary = h("section", { class: "card summary-card" }, h("div", { class: "card-head" }, h("h2", null, "Summary"),
+    sx.analyzed_at ? h("span", { class: "hint" }, `analyzed ${ago(sx.analyzed_at)} · ${sx.analysis_model || ""}`) : null));
+  if (sx.summary) {
+    summary.append(h("div", { class: "summary gloss" }, sx.summary));
+    const kv = h("dl", { class: "kv" });
+    if (sx.goal) kv.append(h("dt", null, "Goal"), h("dd", null, sx.goal));
+    if (sx.outcome_note) kv.append(h("dt", null, "Outcome"), h("dd", null, sx.outcome_note));
+    if (sx.work_types?.length) kv.append(h("dt", null, "Work"), h("dd", null, sx.work_types.join(", ")));
+    if (sx.sentiment && sx.sentiment !== "unclear") kv.append(h("dt", null, "Mood"), h("dd", null, sx.sentiment));
+    if (sx.tags?.length) kv.append(h("dt", null, "Tags"), h("dd", null, sx.tags.map((t) => h("span", { class: "tag" }, t))));
+    summary.append(kv);
+    if (sx.highlights?.length) summary.append(h("div", { class: "subhead" }, "Highlights"), h("ul", { class: "bullets" }, sx.highlights.map((x) => h("li", null, x))));
+    if (sx.open_threads?.length) summary.append(h("div", { class: "subhead" }, "Open threads"), h("ul", { class: "checklist" }, sx.open_threads.map((x) => h("li", null, x))));
+    if (sx.friction?.length) summary.append(h("div", { class: "subhead" }, "Friction"), h("ul", { class: "bullets" }, sx.friction.map((f) => h("li", null, h("b", null, f.kind), ": ", f.note))));
+  } else {
+    const reason = sx.source === "history" ? "Only prompts survive for this session (recovered from Claude Code's prompt history)."
+      : `Not analyzed yet (${STATUS_LABEL[sx.analysis_status] || sx.analysis_status}${sx.analysis_reason ? ": " + sx.analysis_reason : ""}).`;
+    summary.append(h("div", { class: "muted" }, reason), sx.first_prompt ? h("div", { class: "subhead" }, "First prompt") : null,
+      sx.first_prompt ? h("div", { style: { whiteSpace: "pre-wrap" } }, sx.first_prompt.slice(0, 1200)) : null);
+  }
+  const knowledge = sx.knowledge.length ? h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, `Knowledge (${sx.knowledge.length})`)),
+    h("div", { class: "grid" }, sx.knowledge.map((k) => knowledgeCard(k, { hideSession: true })))) : null;
+  const ctxCard = chartCard("Context window", "Tokens in context per API call (main thread)",
+    (el, w) => contextChart(el, w, sx.api_calls, sx.markers),
+    () => ({ columns: ["#", "Time", "Model", "Context", "Output", "Cost"], num: [true, false, false, true, true, true],
+      rows: sx.api_calls.filter((c) => !c.agent_id).map((c, i) => [i + 1, fmtDT(c.ts), c.model || "", fmtNum(c.input_tokens + c.cache_read_tokens + c.cache_write_tokens), fmtNum(c.output_tokens), fmtCost(c.cost_usd)]) }));
+  const toolsCard = h("section", { class: "card" }, cardHead("Tools", { iconName: "zap", hint: legendKey([["accent", "calls"], ["critical", "failed"]]) }),
+    hbars(sx.tool_stats.slice(0, 12), { label: (x) => x.name.replace(/^mcp__/, "mcp:"), value: (x) => x.n, fmt: fmtNum, part: (x) => x.errors || 0, sub: (x) => (x.errors ? `(${x.errors})` : "") }));
+  const changed = sx.files.filter((f) => f.edits || f.writes);
+  const filesCard = h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Files"), h("span", { class: "hint" }, `${changed.length} changed · ${sx.files.length} touched`)),
+    sx.files.length ? h("div", { class: "table-scroll" }, h("table", { class: "table-view" },
+      h("thead", null, h("tr", null, h("th", null, "File"), h("th", { class: "num" }, "Reads"), h("th", { class: "num" }, "Edits"), h("th", { class: "num" }, "Lines"))),
+      h("tbody", null, sx.files.slice(0, 60).map((f) => h("tr", null, h("td", { class: "mono", title: f.path, style: { fontSize: "12px" } }, shortPath(f.path, sx.project_path)),
+        h("td", { class: "num" }, f.reads || ""), h("td", { class: "num" }, (f.edits + f.writes) || ""),
+        h("td", { class: "num" }, f.lines_added || f.lines_removed ? `+${f.lines_added}/−${f.lines_removed}` : "")))))) : h("div", { class: "empty" }, "No files"));
+  const extras = [];
+  if (sx.subagents.length) extras.push(h("div", { class: "subhead" }, "Subagents"), h("div", { class: "table-scroll" }, h("table", { class: "table-view" },
+    h("tbody", null, sx.subagents.map((a) => h("tr", null, h("td", null, h("b", null, a.agent_type || "agent"), " ", a.description || a.agent_id),
+      h("td", { class: "num" }, `${a.n_tool_calls} tools`), h("td", { class: "num" }, fmtCost(a.est_cost_usd))))))));
+  if (sx.prs.length) extras.push(h("div", { class: "subhead" }, "Pull requests"), h("ul", { class: "bullets" }, sx.prs.map((p) => h("li", null, extLink(p.url, `${p.repo}#${p.number}`)))));
+  if (sx.artifacts.length) extras.push(h("div", { class: "subhead" }, "Artifacts"), h("ul", { class: "bullets" }, sx.artifacts.map((a) => h("li", null, extLink(a.url, a.title || a.url)))));
+  if (sx.workflows.length) extras.push(h("div", { class: "subhead" }, "Workflows"), h("ul", { class: "bullets" }, sx.workflows.map((w) => h("li", null, h("b", null, w.name || w.id), ` · ${w.status || ""} · ${w.agents || 0} agents · ${fmtCompact(w.tokens)} tokens`, w.summary ? h("div", { class: "muted" }, w.summary) : null))));
+  const chipsOf = (obj, label) => Object.keys(obj || {}).length ? [h("div", { class: "subhead" }, label), h("div", null, Object.entries(obj).map(([k, v]) => h("span", { class: "tag" }, `${k}${v > 1 ? " ×" + v : ""}`)))] : [];
+  extras.push(...chipsOf(sx.skills, "Skills"), ...chipsOf(sx.mcp, "MCP servers"), ...chipsOf(sx.commands, "Slash commands"));
+  if (sx.analyses.length) extras.push(h("div", { class: "subhead" }, "Analysis runs"), h("ul", { class: "bullets" }, sx.analyses.map((a) =>
+    h("li", null, `${fmtDT(a.started_at)} · ${a.kind} · ${a.status}${a.cost_usd != null ? " · " + fmtCost(a.cost_usd) : ""}${a.model ? " · " + a.model : ""}`, a.error ? h("div", { class: "muted" }, a.error.slice(0, 200)) : null))));
+  const extrasCard = extras.length ? h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Context")), extras) : null;
+  const transcript = transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "");
+  return h("div", null, head, tiles,
+    h("div", { class: "grid cols-main section-gap" },
+      h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
+      h("div", { class: "grid", style: { alignContent: "start" } }, ctxCard, toolsCard, filesCard, extrasCard)),
+    h("div", { class: "section-gap" }, transcript));
+});
+
+function transcriptCard(sx, focusSeq, agent) {
+  const assistant = agentShort(sx.agent);
+  const state = { agent, kinds: new Set(["prompt", "text", "tool", "system", "command"]), offset: 0 };
+  const list = h("div", { class: "transcript" });
+  const more = h("button", { class: "btn", type: "button", onclick: () => load(true) }, "Load more");
+  const info = h("span", { class: "hint" });
+  const kindMap = { prompt: ["prompt", "attachment"], text: ["text"], tool: ["tool_use", "tool_result"], thinking: ["thinking"],
+    system: ["compact", "interrupt", "api_error", "notice", "notification", "compact_summary", "meta", "command_output", "bash_output"], command: ["command", "bash_input"] };
+  let toolBlock = null, toolRows = {};
+  async function load(append) {
+    if (!append) { state.offset = 0; list.replaceChildren(); toolBlock = null; toolRows = {}; }
+    const kinds = [...state.kinds].flatMap((k) => kindMap[k]).join(",");
+    const params = { agent: state.agent, kinds, limit: 400, offset: state.offset };
+    if (focusSeq != null && !append) params.around = focusSeq;
+    const data = await api(`/api/sessions/${sx.id}/events`, params);
+    state.offset = data.offset + data.items.length;
+    for (const ev of data.items) renderEvent(ev);
+    more.hidden = state.offset >= data.total;
+    info.textContent = `${fmtNum(Math.min(state.offset, data.total))} of ${fmtNum(data.total)} events`;
+    if (focusSeq != null && !append) {
+      const target = list.querySelector(`[data-seq="${focusSeq}"]`);
+      if (target) { target.classList.add("highlight"); setTimeout(() => target.scrollIntoView({ block: "center" }), 60); }
+      focusSeq = null;
+    }
+  }
+  function renderEvent(ev) {
+    if (ev.kind === "tool_use") {
+      if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); list.append(toolBlock); }
+      const row = h("details", { class: "tool-row", "data-seq": ev.seq },
+        h("summary", null, h("span", { class: "ticon" }, "•"), h("span", { class: "tname" }, (ev.tool_name || "tool").replace(/^mcp__/, "mcp:")),
+          h("span", { class: "tsum", title: ev.text }, ev.text.includes(": ") ? ev.text.split(": ").slice(1).join(": ") : ""),
+          h("span", { class: "tstat" }, fmtTime(ev.ts))));
+      const detail = h("div", { class: "tdetail" });
+      if (ev.meta?.input) detail.append(h("div", { class: "plabel" }, "Input"), h("pre", null, prettyJson(ev.meta.input)));
+      row.append(detail);
+      toolBlock.append(row);
+      if (ev.tool_use_id) toolRows[ev.tool_use_id] = row;
+      return;
+    }
+    if (ev.kind === "tool_result") {
+      const row = ev.tool_use_id && toolRows[ev.tool_use_id];
+      const body = [h("div", { class: "plabel" }, ev.is_error ? "Error" : "Result"), h("pre", null, ev.text || "(empty)")];
+      if (row) {
+        row.querySelector(".ticon").textContent = ev.is_error ? "✗" : "✓";
+        if (ev.is_error) row.classList.add("err");
+        row.querySelector(".tdetail").append(...body);
+      } else {
+        if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); list.append(toolBlock); }
+        toolBlock.append(h("details", { class: `tool-row ${ev.is_error ? "err" : ""}`, "data-seq": ev.seq },
+          h("summary", null, h("span", { class: "ticon" }, ev.is_error ? "✗" : "✓"), h("span", { class: "tname" }, ev.tool_name || "result"), h("span", { class: "tsum" }, (ev.text || "").slice(0, 160)), h("span", { class: "tstat" }, fmtTime(ev.ts))),
+          h("div", { class: "tdetail" }, body)));
+      }
+      return;
+    }
+    toolBlock = null;
+    let node;
+    const who = (label, extra) => h("div", { class: "who" }, h("b", null, label), h("span", null, fmtDT(ev.ts)), extra || null);
+    switch (ev.kind) {
+      case "prompt":
+        node = h("div", { class: "msg user", "data-seq": ev.seq }, who(ev.meta?.subagent ? "Task prompt" : "You", ev.meta?.queued ? h("span", { class: "tag" }, `queued while ${assistant} worked`) : null),
+          h("div", { class: "body" }, ev.text));
+        break;
+      case "text":
+        node = h("div", { class: "msg assistant", "data-seq": ev.seq }, who(assistant, [ev.meta?.model ? h("span", { class: "muted" }, ev.meta.model) : null, ev.meta?.phase === "commentary" ? h("span", { class: "tag" }, "progress") : null]), mdEl(ev.text));
+        break;
+      case "thinking":
+        node = h("div", { class: "msg thinking", "data-seq": ev.seq }, who("Thinking"), h("div", { style: { whiteSpace: "pre-wrap" } }, ev.text));
+        break;
+      case "command": case "bash_input":
+        node = h("div", { class: "msg user", "data-seq": ev.seq }, who(ev.kind === "command" ? "Command" : "Shell"), h("code", null, ev.text));
+        break;
+      default:
+        node = h("div", { class: "msg system", "data-seq": ev.seq }, h("b", null, ev.kind.replace(/_/g, " ")), " · ", fmtTime(ev.ts), " — ", (ev.text || "").slice(0, 600));
+    }
+    list.append(node);
+    if (ev.kind === "text" || ev.kind === "prompt") glossify(node, 4);
+  }
+  const chip = (key, label) => {
+    const c = h("button", { type: "button", class: `chip ${state.kinds.has(key) ? "on" : ""}`, onclick: () => {
+      state.kinds.has(key) ? state.kinds.delete(key) : state.kinds.add(key);
+      c.classList.toggle("on");
+      load(false);
+    } }, label);
+    return c;
+  };
+  const agentSel = h("select", { onchange: (e) => { state.agent = e.target.value; load(false); } },
+    sx.agents.map((a) => h("option", { value: a.agent_id, selected: a.agent_id === state.agent }, a.label.slice(0, 90))));
+  const expand = h("button", { class: "chip", type: "button", onclick: () => {
+    const open = !expand.classList.contains("on");
+    expand.classList.toggle("on", open);
+    list.querySelectorAll("details.tool-row").forEach((d) => (d.open = open));
+  } }, "Expand tools");
+  load(false);
+  return h("section", { class: "card" },
+    h("div", { class: "card-head" }, h("h2", null, "Transcript"), info),
+    h("div", { class: "transcript-controls" }, sx.agents.length > 1 ? agentSel : null,
+      chip("prompt", "Prompts"), chip("text", "Claude"), chip("tool", "Tool calls"), chip("command", "Commands"), chip("system", "System"), chip("thinking", "Thinking"), expand),
+    list, h("div", { class: "load-more" }, more));
+}
+function prettyJson(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); } catch (e) { return text; }
+}
+
+// =====================================================================================
+// Knowledge
+// =====================================================================================
+function knowledgeCard(k, { compact = false, hideSession = false } = {}) {
+  const body = mdEl(k.body || "", `kbody ${compact ? "clamp" : ""}`);
+  const card = h("article", { class: `kcard ${k.pinned ? "pinned" : ""}` },
+    h("div", { class: "khead" }, kindChip(k.kind),
+      h("span", { class: "kmeta" },
+        k.scope === "global" ? h("span", { class: "scope-tag", title: "Applies across projects" }, icon("domain"), "global") : null,
+        k.source === "memory" ? h("span", { class: "scope-tag", title: "Imported from the agent's own memory notes" }, icon("knowledge"), `${agentShort(k.agent)} memory`) : null,
+        confidenceMeter(k.confidence))),
+    h("div", { class: "ktitle" }, k.title), body,
+    k.tags?.length ? h("div", { class: "ktags" }, k.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null);
+  if (compact && (k.body || "").length > 380) {
+    const more = h("button", { class: "link-btn more-btn", type: "button", onclick: () => { body.classList.toggle("clamp"); more.textContent = body.classList.contains("clamp") ? "More" : "Less"; } }, "More");
+    card.append(more);
+  }
+  card.append(h("div", { class: "kfoot" },
+    h("span", { class: "kfoot-meta" },
+      k.project_name ? h("span", { class: "meta-item", title: k.project_path || "" }, icon("projects"), k.project_name) : null,
+      !hideSession && k.session_id ? h("a", { class: "meta-item session-link", href: `#/session/${k.session_id}`, title: k.session_title || "" }, icon("sessions"), h("span", { class: "ellipsis" }, k.session_title || "session")) : null,
+      k.created_at ? h("span", { class: "meta-item" }, fmtDate(k.created_at)) : null),
+    knowledgeActions(k, card, () => card.remove())));
+  return card;
+}
+function knowledgeActions(k, node, onDismiss) {
+  const pin = h("button", { type: "button", title: k.pinned ? "Unpin" : "Pin (always kept in syntheses)", "aria-pressed": String(!!k.pinned), onclick: async () => {
+    await post(`/api/knowledge/${k.id}`, { pinned: !k.pinned });
+    k.pinned = !k.pinned;
+    node.classList.toggle("pinned", k.pinned);
+    pin.title = k.pinned ? "Unpin" : "Pin (always kept in syntheses)";
+    pin.setAttribute("aria-pressed", String(k.pinned));
+    toast(k.pinned ? "Pinned" : "Unpinned");
+  } }, icon("pin"));
+  return h("div", { class: "kactions" }, pin,
+    h("button", { type: "button", title: "Dismiss (hide and exclude from knowledge bases)", onclick: async () => {
+      await post(`/api/knowledge/${k.id}`, { status: "dismissed" });
+      k.dismissed = true;
+      onDismiss();
+      toast("Dismissed");
+    } }, icon("x")));
+}
+function knowledgeTable(items) {
+  const scopeOf = (k) => (k.scope === "global" ? "global" : k.project_name || "");
+  const cols = [
+    { key: "kind", label: "Kind", value: (k) => kindLabel(k.kind) },
+    { key: "title", label: "Knowledge", value: (k) => k.title },
+    { key: "project", label: "Project", value: scopeOf },
+    { key: "session", label: "From" },
+    { key: "confidence", label: "Confidence", value: (k) => ({ high: 0, medium: 1, low: 2 })[k.confidence] ?? 3 },
+    { key: "created", label: "Added", desc: true, value: (k) => k.created_at },
+    { key: "actions", label: "" },
+  ];
+  const row = (k) => {
+    if (k.dismissed) return [];
+    const tr = h("tr", { class: k.pinned ? "pinned" : "" },
+      h("td", { class: "nowrap kind-cell" }, icon(KIND[k.kind] ? k.kind : "dot"), kindLabel(k.kind)),
+      h("td", { class: "title-cell" }, h("div", { class: "t" }, k.title), k.body ? h("div", { class: "s" }, plainText(k.body)) : null),
+      h("td", { class: "nowrap" }, scopeOf(k) || "–"),
+      h("td", { class: "from-cell" }, k.session_id ? h("a", { href: `#/session/${k.session_id}` }, (k.session_title || "session").slice(0, 44))
+        : h("span", { class: "muted" }, k.source === "memory" ? `${agentShort(k.agent)} memory` : "–")),
+      h("td", { class: "nowrap" }, confidenceMeter(k.confidence) || h("span", { class: "muted" }, "–")),
+      h("td", { class: "nowrap" }, fmtDate(k.created_at)));
+    tr.append(h("td", { class: "actions-cell" }, knowledgeActions(k, tr, () => { tr.closeDetail(); tr.remove(); })));
+    return expandable(tr, cols.length, () => [mdEl(k.body || "", "kbody"),
+      k.tags?.length ? h("div", { style: { marginTop: "6px" } }, k.tags.map((t) => h("span", { class: "tag" }, t))) : null], { indent: 1 });
+  };
+  return localTable(items, cols, row, { empty: "No knowledge matches", cls: "knowledge-table" });
+}
+
+route(/^\/knowledge$/, async (params) => {
+  const state = { q: params.q || "", kind: params.kind || "", project: params.project || "", source: params.source || "" };
+  const mode = viewMode("knowledge", "cards");
+  const box = h("div");
+  const count = h("span", { class: "sub" });
+  const chipsBox = h("div", { class: "filters", style: { marginBottom: "14px" } });
+  let loaded = false;
+  async function load() {
+    const data = await api("/api/knowledge", { ...state, limit: 400 });
+    box.replaceChildren(mode === "list" ? h("section", { class: "card flush" }, knowledgeTable(data.items))
+      : data.items.length ? h("div", { class: "kgrid" }, data.items.map((k) => knowledgeCard(k, { compact: true })))
+      : h("div", { class: "card empty" }, "No knowledge matches"));
+    if (loaded) box.querySelectorAll(".gloss").forEach((el) => glossify(el)); // the first render is glossified by render()
+    loaded = true;
+    count.textContent = `${fmtNum(data.items.length)} items`;
+    const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
+    chipsBox.replaceChildren(
+      h("button", { type: "button", class: `chip ${!state.kind ? "on" : ""}`, onclick: () => { state.kind = ""; refresh(); } }, "All", h("span", { class: "count" }, total)),
+      ...Object.entries(KIND).filter(([k]) => data.counts[k]).map(([k, label]) =>
+        h("button", { type: "button", class: `chip ${state.kind === k ? "on" : ""}`, onclick: () => { state.kind = k; refresh(); } }, icon(k), label, h("span", { class: "count" }, data.counts[k]))));
+  }
+  const refresh = () => { setParams(state); load(); };
+  let debounce;
+  await load();
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Knowledge"), count),
+      h("div", { class: "head-actions" }, viewToggle("knowledge", mode), h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, "Global playbook"))),
+    h("div", { class: "filters" },
+      h("input", { class: "input", type: "search", placeholder: "Search knowledge…", value: state.q, style: { minWidth: "280px" },
+        oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { state.q = e.target.value; refresh(); }, 250); } }),
+      h("select", { onchange: (e) => { state.project = e.target.value; refresh(); } }, await projectOptions(state.project)),
+      h("select", { onchange: (e) => { state.source = e.target.value; refresh(); } },
+        [["", "All sources"], ["analysis", "Extracted from sessions"], ["memory", "Agent memory files"]].map(([v, l]) => h("option", { value: v, selected: state.source === v }, l)))),
+    chipsBox, box);
+});
+
+// =====================================================================================
+// Projects
+// =====================================================================================
+route(/^\/projects$/, async () => {
+  const projects = await api("/api/projects");
+  projectsCache = projects;
+  const mode = viewMode("projects", "cards");
+  const href = (p) => `#/project?path=${encodeURIComponent(p.project_path || "")}`;
+  const listView = () => h("section", { class: "card flush" }, localTable(projects, [
+    { key: "label", label: "Project", value: (p) => p.label },
+    { key: "sessions", label: "Sessions", num: true, desc: true, value: (p) => p.sessions },
+    { key: "active", label: "Active", num: true, desc: true, value: (p) => p.active_s },
+    { key: "knowledge", label: "Knowledge", num: true, desc: true, value: (p) => p.knowledge },
+    { key: "cost", label: "Est. cost", num: true, desc: true, value: (p) => p.cost },
+    { key: "last", label: "Last session", desc: true, value: (p) => p.last },
+    { key: "kb", label: "Knowledge base", desc: true, value: (p) => p.kb_updated },
+  ], (p) => h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a")) go(href(p)); } },
+    h("td", { class: "title-cell" }, h("div", { class: "t" }, h("a", { href: href(p), class: "plain" }, p.label)),
+      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : " (not on disk)")),
+    h("td", { class: "num" }, fmtNum(p.sessions)),
+    h("td", { class: "num" }, fmtDur(p.active_s)),
+    h("td", { class: "num" }, fmtNum(p.knowledge)),
+    h("td", { class: "num" }, fmtCost(p.cost)),
+    h("td", { class: "nowrap" }, fmtDate(p.last)),
+    h("td", { class: "nowrap muted" }, p.kb_updated ? `updated ${ago(p.kb_updated)}` : "none yet")), { empty: "No projects yet", cls: "projects-table" }));
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Projects"), h("div", { class: "sub" }, `${projects.length} projects`)),
+      h("div", { class: "head-actions" }, viewToggle("projects", mode), h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, "Global playbook"))),
+    mode === "list" ? listView() : h("div", { class: "proj-cards" }, projects.map((p) => projectCard(p, href(p)))));
+});
+
+function weeklyBars(values) { // active time per week, oldest first; hover for the week
+  const box = h("div", { class: "wbars", role: "img", "aria-label": "Active time per week, last 12 weeks" });
+  const max = Math.max(0, ...values);
+  values.forEach((v, i) => {
+    const start = new Date(Date.now() - ((values.length - 1 - i) * 7 + 6) * 86400000);
+    const bar = h("i", { class: v ? "" : "zero", style: v ? { height: `${Math.max(10, (v / max) * 100)}%` } : null });
+    hoverable(bar, () => [v ? `${fmtDur(v)} active` : "No sessions", `Week of ${fmtDate(start.toISOString())}`], { focusable: false });
+    box.append(bar);
+  });
+  return box;
+}
+function miniOutcomes(outs) { // thin stacked status bar + the top labels in words
+  const entries = OUTCOME_ORDER.filter((o) => outs[o]).map((o) => [o, outs[o]]);
+  const total = entries.reduce((a, [, n]) => a + n, 0);
+  if (!total) return null;
+  const cls = (o) => (OUTCOME[o] ? OUTCOME[o][0] || "neutral" : "none");
+  const label = (o) => (OUTCOME[o] ? OUTCOME[o][1].toLowerCase() : "not analyzed");
+  return h("div", { class: "mini-outcomes" },
+    h("div", { class: "stackbar thin", "aria-hidden": "true" }, entries.map(([o, n]) => h("span", { class: `seg s-${cls(o)}`, style: { flexGrow: String(n) } }))),
+    h("div", { class: "mo-text" }, entries.slice(0, 3).map(([o, n]) => h("span", { class: `s-${cls(o)}` }, icon(OUTCOME[o] ? o : "queued"), `${n} ${label(o)}`))));
+}
+function projectCard(p, href) {
+  return h("a", { class: "card proj-card", href },
+    h("div", { class: "pc-head" },
+      h("div", { style: { minWidth: 0 } },
+        h("div", { class: "pname" }, p.label, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, `${n} ${agentName(a)} session${n === 1 ? "" : "s"}`))),
+        h("div", { class: "ppath", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : " · not on disk")),
+      p.kb_updated ? h("span", { class: "badge", title: `Knowledge base updated ${fmtDT(p.kb_updated)}` }, icon("knowledge"), "KB")
+        : h("span", { class: "badge muted-badge", title: "No knowledge base yet" }, "no KB")),
+    weeklyBars(p.weekly || []),
+    h("div", { class: "pstats" },
+      h("span", { title: "Sessions" }, icon("sessions"), h("b", null, fmtNum(p.sessions))),
+      h("span", { title: "Active time" }, icon("clock"), h("b", null, fmtDur(p.active_s))),
+      h("span", { title: "Knowledge items" }, icon("sparkles"), h("b", null, fmtNum(p.knowledge))),
+      h("span", { title: "Estimated API cost" }, icon("cost"), h("b", null, fmtCost(p.cost)))),
+    miniOutcomes(p.outcomes || {}),
+    h("div", { class: "pfoot" }, `Last session ${ago(p.last)}`, h("span", { class: "muted" }, "12 weeks")));
+}
+
+route(/^\/project$/, async (params) => {
+  const path = params.path || "";
+  const p = await api("/api/project", { path });
+  const isGlobal = path === "__global__";
+  const synth = h("button", { class: "btn primary", type: "button", onclick: async () => {
+    synth.disabled = true; synth.textContent = "Synthesizing…";
+    const r = await post("/api/synthesize", { path });
+    toast(r.started ? "Synthesizing the knowledge base with Claude Code…" : "Already running");
+    watchJob(`synthesize:${path}`);
+  } }, p.kb ? "Re-synthesize" : "Synthesize now");
+  const kbCard = h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, isGlobal ? "Playbook" : "Knowledge base"),
+    p.kb ? h("span", { class: "hint" }, `updated ${ago(p.kb.updated_at)} · ${p.kb.n_items} items · ${p.kb.model || ""}`) : null));
+  if (p.kb) {
+    const data = JSON.parse(p.kb.kb_json || "{}");
+    const kIndex = Object.fromEntries((p.knowledge || []).map((k) => [k.id, k]));
+    if (data.overview) kbCard.append(mdEl(data.overview));
+    for (const sec of data.sections || []) {
+      if (!sec.items?.length) continue;
+      kbCard.append(h("div", { class: "kb-section" }, h("h3", null, sec.title),
+        h("ul", null, sec.items.map((it) => h("li", null, h("span", { html: mdInline(escapeHtml(it.text || "")) }),
+          it.sources?.length ? h("span", { class: "src-link" }, "[", it.sources.slice(0, 5).map((id, i) => [i ? ", " : "",
+            kIndex[id]?.session_id ? h("a", { href: `#/session/${kIndex[id].session_id}`, title: kIndex[id].title }, `k${id}`) : `k${id}`]), "]") : null)))));
+    }
+  } else {
+    kbCard.append(h("div", { class: "empty" }, "No synthesized knowledge base yet. It is built automatically once a few sessions have been analyzed, or synthesize it now."));
+  }
+  if (isGlobal) {
+    return h("div", null, h("div", { class: "page-head" }, h("div", null, h("h1", null, "Global playbook"),
+      h("div", { class: "sub" }, "Cross-project learnings and your working preferences, distilled from every session")), synth), kbCard);
+  }
+  const st = p.stats;
+  const tiles = h("div", { class: "tiles" },
+    tile("Sessions", fmtNum(st.sessions), { iconName: "sessions" }), tile("Active time", fmtDur(st.active_s), { iconName: "clock" }),
+    tile("Prompts", fmtNum(st.prompts), { iconName: "prompts" }), tile("Tokens", fmtCompact(st.tokens), { iconName: "tokens" }),
+    tile("Est. API cost", fmtCost(st.cost), { iconName: "cost" }), tile("Lines", `+${fmtCompact(st.lines_added)}`, { iconName: "diff", delta: `−${fmtCompact(st.lines_removed)}` }));
+  const filesCard = h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Most edited files")),
+    hbars(p.files, { label: (f) => shortPath(f.path, path), value: (f) => f.edits, fmt: fmtNum, sub: (f) => `· +${fmtCompact(f.added)}/−${fmtCompact(f.removed)}` }));
+  const sessions = h("section", { class: "card", style: { padding: "4px 6px" } }, h("div", { class: "table-wrap" }, h("table", { class: "data" },
+    h("thead", null, h("tr", null, ["Started", "Session", "Project", "Prompts", "Tools", "Active", "Tokens", "Est. cost", "Outcome"].map((c, i) => h("th", { class: i >= 3 && i <= 7 ? "num" : "" }, c)))),
+    h("tbody", null, p.sessions.map(sessionRow)))));
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/projects" }, "Projects"), " / "),
+      h("h1", null, p.label), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)), synth),
+    tiles,
+    h("div", { class: "grid cols-main section-gap" }, kbCard, h("div", { class: "grid", style: { alignContent: "start" } }, filesCard)),
+    p.glossary && p.glossary.length ? [
+      h("h2", { style: { margin: "22px 0 10px" } }, `Glossary (${p.glossary.length})`, " ",
+        h("a", { class: "hint", style: { fontSize: "12.5px", fontWeight: 400 }, href: `#/glossary?project=${encodeURIComponent(path)}` }, "open →")),
+      h("section", { class: "card" }, h("dl", { class: "kv", style: { marginTop: 0 } }, p.glossary.map((g) => [
+        h("dt", null, h("a", { href: `#/glossary?term=${encodeURIComponent(g.term)}` }, g.term)),
+        h("dd", null, g.definition, g.context ? h("div", { class: "muted" }, g.context) : null)])))] : null,
+    h("h2", { class: "section-gap", style: { margin: "22px 0 10px" } }, `Knowledge (${p.knowledge.length})`),
+    h("div", { class: "kgrid" }, p.knowledge.map((k) => knowledgeCard(k, { compact: true }))),
+    h("h2", { style: { margin: "22px 0 10px" } }, `Sessions (${p.sessions.length})`), sessions);
+});
+
+// =====================================================================================
+// Search
+// =====================================================================================
+route(/^\/search$/, async (params) => {
+  const q = params.q || "";
+  $("#global-q").value = q;
+  if (!q.trim()) return h("div", { class: "card empty" }, "Type a query in the search box. Trigram search matches any 3+ character substring, in any language.");
+  const data = await api("/api/search", { q });
+  const total = data.sessions.length + data.knowledge.length + data.events.length;
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, `Search: ${q}`), h("div", { class: "sub" }, total ? `${data.knowledge.length} knowledge items · ${data.sessions.length} sessions · ${data.events.length} transcript hits` : "No results"))),
+    h("div", { class: "grid cols-2" },
+      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Sessions")),
+        data.sessions.length ? data.sessions.map((sx) => h("div", { class: "search-hit" },
+          h("a", { href: `#/session/${sx.session_id}` }, h("b", null, sx.title || "(untitled)")),
+          h("span", { class: "muted" }, ` · ${sx.project_name || ""} · ${fmtDate(sx.started_at)} · ${sx.hits} hits`),
+          sx.snippets.map((sn) => h("div", { class: "snip" }, h("span", { class: "muted" }, `${sn.kind}: `), sn.seq != null ? h("a", { href: `#/session/${sx.session_id}?seq=${sn.seq}${sn.agent_id ? "&agent=" + sn.agent_id : ""}`, style: { color: "inherit" } }, snippetEl(sn.text)) : snippetEl(sn.text))))) : h("div", { class: "empty" }, "No sessions")),
+      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Knowledge")),
+        data.knowledge.length ? h("div", { class: "grid" }, data.knowledge.map((k) => knowledgeCard(k, { compact: true }))) : h("div", { class: "empty" }, "No knowledge"))),
+    h("section", { class: "card section-gap" }, h("div", { class: "card-head" }, h("h2", null, "Transcript hits")),
+      data.events.length ? data.events.map((e) => h("div", { class: "search-hit" },
+        h("a", { href: `#/session/${e.session_id}?seq=${e.seq}${e.agent_id ? "&agent=" + e.agent_id : ""}` }, e.title || e.session_id.slice(0, 8)),
+        h("span", { class: "muted" }, ` · ${e.kind}${e.tool_name ? " " + e.tool_name : ""} · ${e.project_name || ""} · ${fmtDT(e.ts)}`),
+        h("div", { class: "snip" }, snippetEl(e.snippet)))) : h("div", { class: "empty" }, "No transcript hits")));
+});
+
+// =====================================================================================
+// Glossary: term linking everywhere + the A–Z page
+// =====================================================================================
+let glossaryTerms = null, glossaryRes = [], glossaryIndex = {}, glossaryLoaded = 0;
+const escRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+async function loadGlossary(force) {
+  if (glossaryTerms && !force && Date.now() - glossaryLoaded < 300000) return;
+  try { glossaryTerms = await api("/api/glossary/terms"); } catch (e) { glossaryTerms = []; }
+  glossaryLoaded = Date.now();
+  glossaryIndex = {};
+  const insensitive = [], sensitive = [];
+  const cjk = /[぀-ヿ㐀-鿿가-힯]/;
+  for (const t of glossaryTerms) {
+    for (const name of [t.term, ...(t.aliases || [])]) {
+      if (!name || name.length < 3) continue;
+      if (/^[a-z]+$/.test(name)) continue; // plain lowercase words ("derived", "node") would underline ordinary prose
+      if (name !== t.term) { // an alias that is just a broader word of the term ("Azure" for "Azure OpenAI") misleads
+        const inside = new RegExp(`(^|[^\\p{L}\\p{N}])${escRe(name.toLowerCase())}([^\\p{L}\\p{N}]|$)`, "u");
+        if (name.length < t.term.length && inside.test(t.term.toLowerCase())) continue;
+      }
+      if (glossaryIndex[name]) continue;
+      glossaryIndex[name] = t;
+      glossaryIndex[name.toLowerCase()] ||= t;
+      const isCjk = cjk.test(name);
+      const pattern = isCjk ? escRe(name) : `(?<![\\p{L}\\p{N}_])${escRe(name)}(?![\\p{L}\\p{N}_])`;
+      // single words match as written (so "Storage" never underlines "storage"); phrases and identifiers ignore case
+      (!isCjk && /^[\p{L}\p{N}]+$/u.test(name) ? sensitive : insensitive).push([name.length, pattern]);
+    }
+  }
+  const build = (alts, flags) => {
+    alts.sort((a, b) => b[0] - a[0]);
+    return alts.length ? new RegExp(alts.map((a) => a[1]).join("|"), flags) : null;
+  };
+  glossaryRes = [build(insensitive, "giu"), build(sensitive, "gu")].filter(Boolean);
+}
+function glossify(root, max = 12) {
+  if (!glossaryRes.length || !root) return;
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement.closest("code, pre, a, button, select, input, textarea, .gterm, .who, .kfoot, .tag")
+      ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  const seen = new Set();
+  let count = 0;
+  for (const node of nodes) {
+    if (count >= max) break;
+    const text = node.nodeValue;
+    const found = [];
+    for (const re of glossaryRes) {
+      re.lastIndex = 0;
+      let m;
+      while ((m = re.exec(text))) found.push({ index: m.index, text: m[0] });
+    }
+    if (!found.length) continue;
+    found.sort((a, b) => a.index - b.index || b.text.length - a.text.length);
+    let last = 0, frag = null;
+    for (const f of found) {
+      if (count >= max || f.index < last) continue; // overlaps an earlier, longer match
+      const entry = glossaryIndex[f.text] || glossaryIndex[f.text.toLowerCase()];
+      if (!entry || seen.has(entry.term)) continue;
+      seen.add(entry.term);
+      count++;
+      frag ||= document.createDocumentFragment();
+      frag.append(text.slice(last, f.index));
+      const span = h("span", { class: "gterm", role: "link", onclick: (e) => { e.stopPropagation(); go(`#/glossary?term=${encodeURIComponent(entry.term)}`); } }, f.text);
+      hoverable(span, () => [entry.term, entry.definition, entry.category]);
+      frag.append(span);
+      last = f.index + f.text.length;
+    }
+    if (frag) { frag.append(text.slice(last)); node.replaceWith(frag); }
+  }
+}
+
+route(/^\/glossary$/, async (params) => {
+  const state = { q: params.q || "", project: params.project || "", category: params.category || "" };
+  const data = await api("/api/glossary", state);
+  const refresh = () => { setParams({ ...state }); render(); };
+  const rebuild = h("button", { class: "btn", type: "button", onclick: async () => {
+    rebuild.disabled = true;
+    const r = await post("/api/glossary/rebuild", { path: state.project || "" });
+    toast(r.started ? "Claude is rebuilding the glossary…" : "Already running");
+    watchJob(`glossary:${state.project || "all"}`);
+  } }, state.project ? "Rebuild this project's glossary" : "Rebuild glossary");
+  let debounce;
+  const mode = viewMode("glossary", "cards");
+  const letterOf = (e) => (e.term[0] && /\p{L}/u.test(e.term[0]) ? e.term[0].toUpperCase() : "#");
+  const groups = {};
+  for (const e of data.items) (groups[letterOf(e)] ||= []).push(e);
+  const letters = Object.keys(groups).sort((a, b) => (a === "#") - (b === "#") || a.localeCompare(b));
+  const usage = (e) => e.usage.some((u) => u.context) ? h("ul", { class: "gusage" }, e.usage.filter((u) => u.context).map((u) =>
+    h("li", null, u.project_path === "__global__" ? h("b", null, "Everywhere") : h("a", { href: `#/project?path=${encodeURIComponent(u.project_path)}` }, h("b", null, String(u.project_name || "").startsWith("/") ? shortPath(u.project_name) : u.project_name)), ": ", u.context))) : null;
+  const related = (e) => e.related.length ? h("div", { style: { marginTop: "8px" } }, e.related.map((r) =>
+    h("a", { class: "tag", href: `#/glossary?term=${encodeURIComponent(r)}` }, r))) : null;
+  const foot = (e) => h("div", { class: "gfoot" },
+    e.n_sessions ? h("span", null, `${e.n_sessions} session${e.n_sessions === 1 ? "" : "s"} · ${fmtCompact(e.n_mentions)} mentions · ${fmtDate(e.first_seen)} → ${fmtDate(e.last_seen)}`) : h("span", null, "not mentioned verbatim in transcripts"),
+    e.top_sessions.slice(0, 3).map((t) => h("a", { href: `#/session/${t.id}` }, (t.title || t.id.slice(0, 8)).slice(0, 48))),
+    e.n_sessions ? h("a", { href: `#/search?q=${encodeURIComponent(e.term)}` }, "all mentions →") : null);
+  const card = (e) => h("article", { class: "card gcard", id: `g-${slugId(e.term)}` },
+    h("div", { class: "ghead" },
+      h("div", { class: "gname" }, h("div", { class: "gterm-title" }, e.term), e.aliases.length ? h("div", { class: "galiases" }, `also ${e.aliases.join(", ")}`) : null),
+      catBadge(e.category)),
+    h("div", { class: "gdef" }, e.definition || ""), usage(e), related(e), foot(e));
+  const listView = () => h("section", { class: "card flush" }, localTable(data.items, [
+    { key: "term", label: "Term", value: (e) => (letterOf(e) === "#" ? "￿" : "") + e.term.toLowerCase() }, // symbols last, as in the A–Z bar
+    { key: "category", label: "Category", value: (e) => e.category || "other" },
+    { key: "definition", label: "Definition" },
+    { key: "sessions", label: "Sessions", num: true, desc: true, value: (e) => e.n_sessions || 0 },
+    { key: "mentions", label: "Mentions", num: true, desc: true, value: (e) => e.n_mentions || 0 },
+    { key: "last", label: "Last seen", desc: true, value: (e) => e.last_seen },
+  ], (e) => expandable(h("tr", { class: "grow", id: `g-${slugId(e.term)}` },
+    h("td", { class: "term-cell" }, h("div", { class: "gterm-title" }, e.term), e.aliases.length ? h("div", { class: "s" }, `also ${e.aliases.join(", ")}`) : null),
+    h("td", null, catBadge(e.category)),
+    h("td", { class: "def-cell" }, e.definition || ""),
+    h("td", { class: "num" }, e.n_sessions ? fmtNum(e.n_sessions) : "–"),
+    h("td", { class: "num" }, e.n_mentions ? fmtCompact(e.n_mentions) : "–"),
+    h("td", { class: "nowrap" }, e.last_seen ? fmtDate(e.last_seen) : "–")), 6, () => [usage(e), related(e), foot(e)]),
+  { sort: "term", group: { key: "term", of: letterOf, id: (l) => `gl-${l}` }, empty: "No terms match.", cls: "glossary-table" }));
+  const page = h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Glossary"),
+      h("div", { class: "sub" }, data.total ? `${fmtNum(data.items.length)} of ${fmtNum(data.total)} terms from your sessions. Hover underlined terms anywhere in Chronicle.` : "No glossary yet")),
+      h("div", { class: "head-actions" }, viewToggle("glossary", mode), rebuild)),
+    h("div", { class: "filters" },
+      h("input", { class: "input", type: "search", placeholder: "Search terms and definitions…", value: state.q, style: { minWidth: "280px" },
+        oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { state.q = e.target.value; refresh(); }, 300); } }),
+      h("select", { onchange: (e) => { state.project = e.target.value; refresh(); } }, await projectOptions(state.project))),
+    h("div", { class: "filters" },
+      h("button", { type: "button", class: `chip ${!state.category ? "on" : ""}`, onclick: () => { state.category = ""; refresh(); } }, "All", h("span", { class: "count" }, data.total)),
+      Object.entries(data.counts).sort((a, b) => b[1] - a[1]).map(([c, n]) =>
+        h("button", { type: "button", class: `chip ${state.category === c ? "on" : ""}`, onclick: () => { state.category = c; refresh(); } }, icon(ICONS[c] ? c : "dot"), c, h("span", { class: "count" }, n)))),
+    letters.length > 3 ? h("div", { class: "letters" }, letters.map((l) => h("a", { href: "#", onclick: (ev) => { ev.preventDefault(); document.getElementById(`gl-${l}`)?.scrollIntoView({ behavior: "smooth" }); } }, l))) : null,
+    !data.items.length ? h("div", { class: "card empty" }, data.total ? "No terms match." : "The glossary is built by Claude from your knowledge items. Click Rebuild glossary to create it now.")
+      : mode === "list" ? listView()
+      : letters.map((l) => [h("h2", { class: "gletter", id: `gl-${l}` }, l), h("div", { class: "ggrid" }, groups[l].map(card))]));
+  if (params.term) {
+    setTimeout(() => {
+      const target = document.getElementById(`g-${slugId(params.term)}`) ||
+        [...document.querySelectorAll(".gcard, .grow")].find((c) => c.querySelector(".gterm-title").textContent.toLowerCase() === params.term.toLowerCase());
+      if (!target) return;
+      target.classList.add("focus");
+      if (target.classList.contains("grow")) target.click(); // open its details
+      target.scrollIntoView({ block: "center" });
+    }, 50);
+  }
+  return page;
+});
+function slugId(t) { return String(t).toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "-"); }
+
+// =====================================================================================
+// Sources: which agents are connected
+// =====================================================================================
+route(/^\/sources$/, async () => {
+  const sources = await api("/api/connectors");
+  const card = (c) => {
+    const state = c.connected ? ["good", "Connected"] : c.detected ? ["warning", "Detected · not connected"] : ["", "Not installed"];
+    const action = c.connected
+      ? h("button", { class: "btn danger", type: "button", onclick: async (e) => {
+          if (!confirm(`Stop recording ${c.label}? Recorded sessions stay in the vault.`)) return;
+          e.target.disabled = true;
+          const r = await post(`/api/connectors/${c.name}/disconnect`);
+          toast((r.actions || [r.error]).join(" · "), 6000);
+          render();
+        } }, "Disconnect")
+      : h("button", { class: "btn primary", type: "button", disabled: !c.detected, onclick: async (e) => {
+          e.target.disabled = true;
+          e.target.textContent = "Connecting…";
+          const r = await post(`/api/connectors/${c.name}/connect`);
+          toast((r.actions || [r.error]).join(" · ") + (r.sync_started ? " · syncing now" : ""), 7000);
+          if (r.sync_started) watchJob("sync");
+          render();
+        } }, `Connect ${c.label}`);
+    return h("section", { class: "card src-card" },
+      h("div", { class: "src-head" },
+        h("div", null, h("div", { class: "src-name" }, c.label), h("div", { class: "src-vendor" }, [c.vendor, c.version, c.binary ? shortPath(c.binary) : null].filter(Boolean).join(" · "))),
+        h("span", { class: `badge ${state[0]}` }, h("span", { class: "sdot" }), state[1])),
+      h("div", { class: "src-stats" },
+        h("span", null, h("b", null, fmtNum(c.on_disk)), " on disk"),
+        h("span", null, h("b", null, fmtNum(c.recorded.sessions)), " recorded"),
+        h("span", null, h("b", null, fmtNum(c.recorded.analyzed)), " analyzed"),
+        c.recovered ? h("span", null, h("b", null, fmtNum(c.recovered)), c.name === "codex" ? " Claude sessions recovered" : " recovered") : null,
+        h("span", null, "last ", h("b", null, c.recorded.last_session ? ago(c.recorded.last_session) : "never"))),
+      h("div", { class: "checks" }, c.checks.map((k) => h("div", { class: "check" },
+        h("span", { class: `mark ${k.ok ? "ok" : k.ok === null || k.optional ? "na" : "no"}` }, k.ok ? "✓" : k.ok === null || k.optional ? "–" : "✗"),
+        h("div", null, h("div", null, k.label), h("div", { class: "d" }, k.detail))))),
+      c.notes.length ? h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } }, c.notes.join(" · ")) : null,
+      h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, `Recording: ${c.recording}`),
+        h("div", { style: { display: "flex", gap: "8px" } },
+          c.recorded.sessions ? h("a", { class: "btn", href: `#/sessions?agent=${c.name}` }, "Sessions") : null, action)));
+  };
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Sources"),
+      h("div", { class: "sub" }, "The coding agents Chronicle records. Connecting starts archiving and analyzing their sessions and gives the agent Chronicle's MCP tools."))),
+    h("div", { class: "src-grid" }, sources.map(card)));
+});
+
+// =====================================================================================
+// Weekly reviews
+// =====================================================================================
+route(/^\/reviews$/, async () => {
+  const data = await api("/api/reviews");
+  const btn = (label, week) => {
+    const b = h("button", { class: "btn", type: "button", onclick: async () => {
+      b.disabled = true;
+      const r = await post("/api/review", { week });
+      toast(r.started ? "Claude is writing the review…" : "Already running");
+      watchJob(`review:${week || "last"}`);
+    } }, label);
+    return b;
+  };
+  const cards = data.items.map((r, i) => {
+    const body = mdEl(r.markdown);
+    const card = h("section", { class: "card section-gap" }, body);
+    if (i > 0) {
+      body.style.maxHeight = "220px"; body.style.overflow = "hidden";
+      body.style.webkitMaskImage = body.style.maskImage = "linear-gradient(to bottom, #000 60%, transparent)";
+      const more = h("button", { class: "link-btn", type: "button", onclick: () => { body.style.maxHeight = ""; body.style.webkitMaskImage = body.style.maskImage = ""; more.remove(); } }, "Read full review");
+      card.append(more);
+    }
+    return card;
+  });
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Weekly reviews"),
+      h("div", { class: "sub" }, data.auto_ready ? `Review of ${data.last_week} will be written on the next background run`
+        : `Written automatically once a week's sessions are analyzed (${data.last_week}: ${data.auto_note})`)),
+      h("div", { style: { display: "flex", gap: "8px" } }, btn(`Write ${data.last_week}`, data.last_week), btn("This week so far", data.current_week))),
+    cards.length ? cards : h("div", { class: "card empty" }, "No reviews yet."));
+});
+
+// =====================================================================================
+// Status
+// =====================================================================================
+route(/^\/status$/, async () => {
+  const st = await api("/api/status");
+  const row = (ok, label, detail) => h("div", { class: "status-row" }, h("span", { class: ok ? "ok" : "no" }, ok ? "✓" : "✗"), h("span", null, label), detail ? h("span", { class: "muted" }, detail) : null);
+  const counts = st.counts || {};
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Status"), h("div", { class: "sub" }, `Chronicle ${st.version} · last sync ${ago(st.last_sync)}`))),
+    h("div", { class: "grid cols-2" },
+      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Recording")),
+        h("div", { class: "status-list" },
+          row(st.hooks?.SessionEnd, "SessionEnd hook", "archives + ingests each session as it ends"),
+          row(st.launchd?.loaded, "Background agent (launchd)", st.launchd?.loaded ? `runs every 15 min · ${st.launchd.runs || 0} runs · last exit ${st.launchd.last_exit ?? "-"}` : "not loaded"),
+          row(st.mcp, "MCP server registered", "Claude Code can search this vault"),
+          row(!!st.hooks?.SessionStart, "SessionStart knowledge injection", "optional: chronicle install --inject-context")),
+        h("div", { class: "subhead" }, "Storage"),
+        h("div", null, h("span", { class: "codeline" }, st.archive_dir), " raw transcripts (kept forever, gzip)"),
+        h("div", { style: { marginTop: "6px" } }, h("span", { class: "codeline" }, st.notes_dir), " Markdown vault"),
+        h("div", { class: "muted", style: { marginTop: "6px" } }, `Database ${fmtCompact(st.db_size)}B`)),
+      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Analysis")),
+        h("div", { class: "status-list" },
+          h("div", null, `Model `, h("code", null, st.config.model), ` · auto ${st.config.auto ? "on" : "off"} · backfill ${st.config.backfill ? "on" : "off"} · ${st.config.max_per_run} per run`),
+          h("div", null, `${fmtNum(st.pending.ready)} ready now · ${fmtNum(st.pending.queued)} queued/stale · spent ${fmtCost(st.analysis_cost)} (API-equivalent)`),
+          st.paused_until ? h("div", null, `Paused until ${fmtDT(st.paused_until)} (usage limit)`) : null,
+          h("div", null, Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}: ${v}`)))),
+        st.errors.length ? [h("div", { class: "subhead" }, "Recent failures"), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null)));
+});
+
+// =====================================================================================
+// Shell: status pill, jobs, theme, search
+// =====================================================================================
+let watched = new Set(), pollTimer, uiBuild = null;
+function watchJob(name) { watched.add(name); pollStatus(); }
+async function pollStatus() {
+  clearTimeout(pollTimer);
+  let busy = false;
+  try {
+    const st = await api("/api/jobs");
+    if (uiBuild && st.ui_build && st.ui_build !== uiBuild) { location.reload(); return; } // upgraded under us
+    uiBuild ||= st.ui_build;
+    const jobs = st.jobs || {};
+    const running = Object.entries(jobs).filter(([, j]) => j.state === "running");
+    busy = running.length > 0;
+    const pill = $("#status-pill");
+    pill.className = "pill" + (busy ? " busy" : st.paused_until ? " warn" : "");
+    const label = busy ? (running[0][1].message || running[0][0]) : st.paused_until && st.paused_until > new Date().toISOString() ? "analysis paused"
+      : st.pending.ready ? `${st.pending.ready} to analyze` : "up to date";
+    pill.replaceChildren(h("span", { class: "dot" }), label);
+    for (const name of [...watched]) {
+      const j = jobs[name];
+      if (j && j.state !== "running") {
+        watched.delete(name);
+        toast(j.state === "done" ? `Done: ${String(j.result || name).slice(0, 160)}` : `Failed: ${String(j.result).slice(0, 200)}`, 6000);
+        render();
+      }
+    }
+  } catch (e) { /* server restarting */ }
+  pollTimer = setTimeout(pollStatus, busy || watched.size ? 2500 : 20000);
+}
+document.querySelectorAll(".nav a").forEach((a) => a.prepend(icon(a.dataset.nav)));
+$("#global-search").prepend(icon("search", "search-icon"));
+$("#sync-btn").prepend(icon("sync"));
+function themeIcon() {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  $("#theme-btn").replaceChildren(icon(dark ? "sun" : "moon"));
+  $("#theme-btn").title = dark ? "Switch to light theme" : "Switch to dark theme";
+}
+themeIcon();
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeIcon);
+$("#status-pill").addEventListener("click", () => go("#/status"));
+$("#sync-btn").addEventListener("click", async () => {
+  const r = await post("/api/sync");
+  toast(r.started ? "Syncing transcripts and processing the queue…" : "A sync is already running");
+  watchJob("sync");
+});
+$("#theme-btn").addEventListener("click", () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+  root.dataset.theme = dark ? "light" : "dark";
+  try { localStorage.setItem("chronicle-theme", root.dataset.theme); } catch (e) { /* private mode */ }
+  themeIcon();
+});
+$("#global-search").addEventListener("submit", (e) => {
+  e.preventDefault();
+  const q = $("#global-q").value.trim();
+  if (q) go(`#/search?q=${encodeURIComponent(q)}`);
+});
+document.addEventListener("keydown", (e) => {
+  if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) { e.preventDefault(); $("#global-q").focus(); }
+});
+window.addEventListener("hashchange", render);
+render();
+pollStatus();

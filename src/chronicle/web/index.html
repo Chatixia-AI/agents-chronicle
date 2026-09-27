@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Claude Chronicle</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="app.css">
+  <script>
+    try { const t = localStorage.getItem("chronicle-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+  </script>
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="brand-mark"/><path d="M9 10h14M9 16h14M9 22h9" stroke="white" stroke-width="3" stroke-linecap="round"/></svg>
+      <span>Chronicle</span>
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#/" data-nav="overview">Overview</a>
+      <a href="#/sessions" data-nav="sessions">Sessions</a>
+      <a href="#/knowledge" data-nav="knowledge">Knowledge</a>
+      <a href="#/projects" data-nav="projects">Projects</a>
+      <a href="#/glossary" data-nav="glossary">Glossary</a>
+      <a href="#/reviews" data-nav="reviews">Reviews</a>
+      <a href="#/sources" data-nav="sources">Sources</a>
+      <a href="#/status" data-nav="status">Status</a>
+    </nav>
+    <form class="global-search" id="global-search" role="search">
+      <input type="search" id="global-q" placeholder="Search transcripts & knowledge…" autocomplete="off" aria-label="Search">
+      <kbd>/</kbd>
+    </form>
+    <div class="top-actions">
+      <button class="pill" id="status-pill" type="button" title="Background work"></button>
+      <button class="btn" id="sync-btn" type="button" title="Sync transcripts and process the analysis queue">Sync</button>
+      <button class="icon-btn" id="theme-btn" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+    </div>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <div id="tooltip" role="tooltip" hidden></div>
+  <div id="toast" role="status" aria-live="polite" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

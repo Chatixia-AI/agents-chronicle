@@ -1,0 +1,23 @@
+[project]
+name = "claude-chronicle"
+version = "0.1.0"
+description = "Record, archive, analyze and explore every Claude Code session: a local knowledge vault built with Claude Code itself."
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = ["rich>=13.7"]
+
+[project.scripts]
+chronicle = "chronicle.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/chronicle"]
+
+[dependency-groups]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
