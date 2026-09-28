@@ -37,6 +37,7 @@ jobs:
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
+      contents: read   # checkout (a permissions block drops every default, and the repository is private)
       id-token: write  # OIDC for PyPI trusted publishing
     steps:
       - uses: actions/checkout@v6
