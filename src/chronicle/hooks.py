@@ -19,6 +19,11 @@ def _read_payload() -> dict:
         return {}
 
 
+def self_command() -> list[str]:
+    """argv that re-runs this program: the bundled executable inside Chronicle.app, else `python -m chronicle`."""
+    return [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "chronicle"]
+
+
 def spawn_detached(args: list[str], log_path: Path) -> None:
     log_path.parent.mkdir(parents=True, exist_ok=True)
     with open(log_path, "a") as log:
@@ -53,7 +58,7 @@ def _on_session_end(payload: dict, *, ended: bool) -> int:
 
     transcript = payload.get("transcript_path")
     home = chronicle_home()
-    args = [sys.executable, "-m", "chronicle", "ingest-session"]
+    args = [*self_command(), "ingest-session"]
     if transcript:
         args.append(transcript)
     if ended:

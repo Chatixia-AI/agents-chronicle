@@ -315,3 +315,49 @@ def lookup(conn: sqlite3.Connection, term: str) -> dict | None:
             return r
     matches = glossary_entries(conn, query=term)
     return matches[0] if matches else None
+
+
+def map_data(conn: sqlite3.Connection) -> dict:
+    """Everything the dashboard's Map draws: projects, glossary terms with the projects that use them, and the
+    knowledge items each term was distilled from. The browser builds the tree from this."""
+    from .views import project_labels
+
+    labels = project_labels(conn)
+    kinds: dict[str, dict] = {}
+    for r in conn.execute("SELECT project_path, kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY 1, 2"):
+        kinds.setdefault(r["project_path"] or "", {})[r["kind"]] = r["n"]
+    projects = [
+        {"path": r["project_path"], "label": labels.get(r["project_path"], r["project_name"]), "sessions": r["n"],
+         "active_s": r["active_s"] or 0, "last": r["last"], "knowledge": kinds.get(r["project_path"], {})}
+        for r in conn.execute(
+            "SELECT project_path, project_name, COUNT(*) n, SUM(active_s) active_s, MAX(started_at) last FROM sessions "
+            "WHERE project_path IN (SELECT project_path FROM glossary_usage) GROUP BY project_path ORDER BY n DESC")
+    ]
+    if conn.execute("SELECT 1 FROM glossary_usage WHERE project_path = ? LIMIT 1", (GLOBAL,)).fetchone():
+        projects.insert(0, {"path": GLOBAL, "label": "Everywhere", "sessions": None, "active_s": None, "last": None,
+                            "knowledge": kinds.get(GLOBAL, {})})
+    usage: dict[int, list] = {}
+    for u in conn.execute("SELECT term_id, project_path, context, sources_json FROM glossary_usage"):
+        usage.setdefault(u["term_id"], []).append(
+            {"path": u["project_path"], "context": u["context"], "sources": loads(u["sources_json"], []) or []})
+    terms, wanted = [], set()
+    for r in conn.execute("SELECT id, term, category, definition, aliases_json, related_json, n_sessions, n_mentions, "
+                          "first_seen, last_seen FROM glossary"):
+        uses = usage.get(r["id"], [])
+        sources = sorted({s for u in uses for s in u["sources"]})
+        wanted.update(sources)
+        terms.append({"id": r["id"], "term": r["term"], "category": r["category"] or "other",
+                      "definition": r["definition"], "aliases": loads(r["aliases_json"], []) or [],
+                      "related": loads(r["related_json"], []) or [], "n_sessions": r["n_sessions"] or 0,
+                      "n_mentions": r["n_mentions"] or 0, "first_seen": r["first_seen"], "last_seen": r["last_seen"],
+                      "projects": [{"path": u["path"], "context": u["context"]} for u in uses], "knowledge": sources})
+    knowledge = {}
+    ids = sorted(wanted)
+    for i in range(0, len(ids), 500):  # SQLite caps bound parameters per statement
+        chunk = ids[i:i + 500]
+        for k in conn.execute(f"SELECT id, kind, title, session_id, project_path FROM knowledge WHERE status = 'active' "
+                              f"AND id IN ({','.join('?' * len(chunk))})", chunk):
+            knowledge[k["id"]] = dict(k)
+    for t in terms:  # drop sources that were dismissed or superseded since
+        t["knowledge"] = [i for i in t["knowledge"] if i in knowledge]
+    return {"projects": projects, "terms": terms, "knowledge": knowledge}

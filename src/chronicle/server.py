@@ -459,6 +459,11 @@ class App:
         return [{"term": r["term"], "aliases": loads(r["aliases_json"], []) or [], "definition": r["definition"],
                  "category": r["category"]} for r in self.conn.execute("SELECT term, aliases_json, definition, category FROM glossary")]
 
+    def map(self) -> dict:
+        from .glossary import map_data
+
+        return map_data(self.conn)
+
     def action_glossary(self, path: str | None) -> bool:
         from .glossary import build_glossaries
 
@@ -709,6 +714,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.connectors())
                 if p == "/api/glossary/terms":
                     return self._json(app.glossary_terms())
+                if p == "/api/map":
+                    return self._json(app.map())
                 if p == "/api/jobs":
                     return self._json(app.status_small())
                 if p.startswith("/api/"):
@@ -760,12 +767,26 @@ def make_handler(app: App, port: int):
     return Handler
 
 
-def serve(cfg: Config, host: str | None = None, port: int | None = None, open_browser: bool = False) -> None:
+def make_server(cfg: Config, host: str | None = None, port: int | None = None, *,
+                any_port: bool = False) -> ThreadingHTTPServer:
+    """Bind the dashboard. With any_port, fall back to a free port when the configured one is taken."""
     host = host or cfg.server_host
-    port = port or cfg.server_port
+    port = cfg.server_port if port is None else port
     app = App(cfg)
-    httpd = ThreadingHTTPServer((host, port), make_handler(app, port))
-    url = f"http://127.0.0.1:{port}/"
+    try:
+        httpd = ThreadingHTTPServer((host, port), BaseHTTPRequestHandler)
+    except OSError:
+        if not any_port:
+            raise
+        httpd = ThreadingHTTPServer((host, 0), BaseHTTPRequestHandler)
+    # the handler checks Host against the bound port, so it is built once the port is known
+    httpd.RequestHandlerClass = make_handler(app, httpd.server_address[1])
+    return httpd
+
+
+def serve(cfg: Config, host: str | None = None, port: int | None = None, open_browser: bool = False) -> None:
+    httpd = make_server(cfg, host, port)
+    url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"Chronicle dashboard: {url}  (Ctrl+C to stop)")
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()

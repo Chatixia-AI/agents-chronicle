@@ -1,0 +1,94 @@
+name: Release
+
+# Publishing a GitHub release tagged vX.Y.Z (matching pyproject.toml) runs the tests, publishes
+# claude-chronicle to PyPI (trusted publishing, no token) and attaches Chronicle-X.Y.Z-arm64.dmg to the release.
+#
+# The DMG is signed and notarized when these repository secrets exist, otherwise it is ad-hoc signed:
+#   MACOS_CERT_P12            base64 of the "Developer ID Application" certificate + key (.p12)
+#   MACOS_CERT_PASSWORD       its export password
+#   MACOS_CODESIGN_IDENTITY   e.g. "Developer ID Application: Your Name (TEAMID)"
+#   APPLE_ID, APPLE_TEAM_ID, APPLE_APP_PASSWORD   for notarytool (app-specific password)
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:  # dry run: builds the DMG as a workflow artifact, publishes nothing
+
+jobs:
+  test:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - name: Verify tag matches package version
+        if: github.event_name == 'release'
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          PKG=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+          if [ "$TAG" != "$PKG" ]; then
+            echo "::error::Tag v$TAG does not match pyproject.toml version $PKG"
+            exit 1
+          fi
+      - run: uv run --locked pytest -q
+
+  pypi:
+    needs: test
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write  # OIDC for PyPI trusted publishing
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - run: uv build
+      - uses: pypa/gh-action-pypi-publish@release/v1
+
+  macos-app:
+    needs: test
+    runs-on: macos-14  # Apple silicon; PyInstaller cannot cross-build, so an Intel build needs an Intel runner
+    permissions:
+      contents: write  # upload the DMG to the release
+    env:
+      HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+
+      - name: Import signing certificate
+        if: env.HAS_CERT == 'true'
+        env:
+          MACOS_CERT_P12: ${{ secrets.MACOS_CERT_P12 }}
+          MACOS_CERT_PASSWORD: ${{ secrets.MACOS_CERT_PASSWORD }}
+        run: |
+          KC="$RUNNER_TEMP/signing.keychain-db"
+          KCPW=$(uuidgen)
+          security create-keychain -p "$KCPW" "$KC"
+          security set-keychain-settings -lut 21600 "$KC"
+          security unlock-keychain -p "$KCPW" "$KC"
+          echo "$MACOS_CERT_P12" | base64 --decode > "$RUNNER_TEMP/cert.p12"
+          security import "$RUNNER_TEMP/cert.p12" -P "$MACOS_CERT_PASSWORD" -A -t cert -f pkcs12 -k "$KC"
+          security set-key-partition-list -S apple-tool:,apple: -k "$KCPW" "$KC"
+          security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
+          rm "$RUNNER_TEMP/cert.p12"
+
+      - name: Build Chronicle.app and DMG
+        env:
+          CHRONICLE_CODESIGN_IDENTITY: ${{ env.HAS_CERT == 'true' && secrets.MACOS_CODESIGN_IDENTITY || '' }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
+        run: ./packaging/macos/build.sh
+
+      - name: Attach DMG to the release
+        if: github.event_name == 'release'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$GITHUB_REF_NAME" dist/Chronicle-*.dmg --clobber
+
+      - name: Keep DMG as a workflow artifact
+        if: github.event_name != 'release'
+        uses: actions/upload-artifact@v4
+        with:
+          name: Chronicle-dmg
+          path: dist/Chronicle-*.dmg

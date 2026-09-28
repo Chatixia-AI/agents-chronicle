@@ -468,6 +468,12 @@ def cmd_serve(args) -> int:
     return 0
 
 
+def cmd_app(args) -> int:
+    from .desktop import main
+
+    return main()
+
+
 def cmd_export(args) -> int:
     from pathlib import Path
 
@@ -750,6 +756,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int)
     s.add_argument("--open", action="store_true", help="open a browser tab")
     s.set_defaults(fn=cmd_serve)
+
+    s = sub.add_parser("app", help="open the desktop app (macOS; needs the `app` extra)")
+    s.set_defaults(fn=cmd_app)
 
     s = sub.add_parser("export", help="write the Markdown (Obsidian) vault")
     s.add_argument("--out")

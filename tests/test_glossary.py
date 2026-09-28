@@ -72,3 +72,21 @@ def test_parallel_glossary_builds(synced):
     results = build_glossaries(cfg, [CWD, GLOBAL, "/no/knowledge/here"], concurrency=3)
     assert results[CWD] == 2 and results[GLOBAL] == 1 and results["/no/knowledge/here"] == "no knowledge"
     assert conn.execute("SELECT COUNT(*) FROM glossary").fetchone()[0] == 2
+
+
+def test_map_data_links_terms_to_projects_and_knowledge(synced):
+    from chronicle.glossary import map_data
+
+    conn, cfg, _ = _build(synced)
+    data = map_data(conn)
+    assert [p["path"] for p in data["projects"]] == [CWD]
+    assert data["projects"][0]["sessions"] == 1 and data["projects"][0]["label"] == "demo-app"
+    terms = {t["term"]: t for t in data["terms"]}
+    assert terms["pytest"]["projects"] == [{"path": CWD, "context": "runs the login tests"}]
+    assert terms["pytest"]["related"] == ["Token TTL"]
+    for t in terms.values():  # every source is a live knowledge item, shipped alongside
+        assert all(i in data["knowledge"] for i in t["knowledge"])
+    sourced = [t for t in terms.values() if t["knowledge"]]
+    assert sourced and data["knowledge"][sourced[0]["knowledge"][0]]["kind"]
+    conn.execute("UPDATE knowledge SET status = 'dismissed'")
+    assert all(not t["knowledge"] for t in map_data(conn)["terms"])  # dismissed items drop out

@@ -19,10 +19,42 @@ LAUNCHD_LABEL = "com.claude-chronicle.sync"
 UI_LABEL = "com.claude-chronicle.ui"
 HOOK_MARKER = " hook "
 MCP_NAME = "chronicle"
+APP_BUNDLE_ID = "io.github.kayeungadrian-tam.chronicle"
+
+
+def shim_path() -> Path:
+    from .config import chronicle_home
+
+    return chronicle_home() / "bin" / "chronicle"
+
+
+def write_shim(target: str) -> Path:
+    """A stable `chronicle` command that runs the app's bundled executable.
+
+    Hooks and MCP registrations store a command path, and the app's own path changes when it is moved or
+    updated, so they point here instead. The app rewrites this on every launch; if the app has moved since,
+    the shim looks it up by bundle id with Spotlight.
+    """
+    path = shim_path()
+    text = (
+        "#!/bin/sh\n"
+        "# Written by Chronicle.app on every launch. Claude Code hooks and MCP servers run this.\n"
+        f"exe={shlex.quote(target)}\n"
+        '[ -x "$exe" ] || exe="$(mdfind "kMDItemCFBundleIdentifier == \'' + APP_BUNDLE_ID + '\'" | head -n 1)'
+        '/Contents/MacOS/Chronicle"\n'
+        'exec "$exe" "$@"\n'
+    )
+    if not path.exists() or path.read_text() != text:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        path.chmod(0o755)
+    return path
 
 
 def executable() -> str:
     """Absolute path of the installed `chronicle` command (falls back to python -m chronicle)."""
+    if getattr(sys, "frozen", False):  # inside Chronicle.app
+        return str(write_shim(sys.executable))
     found = shutil.which("chronicle")
     if found:  # keep the PATH entry (e.g. ~/.local/bin/chronicle): it survives `uv tool install --force`
         return str(Path(found).absolute())
