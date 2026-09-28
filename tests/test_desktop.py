@@ -97,3 +97,53 @@ def test_version_comes_from_the_package_metadata():
     import chronicle
 
     assert chronicle.__version__ == version("agents-chronicle")
+
+
+def test_app_window_loads_the_transparent_page():
+    from chronicle.desktop import app_url
+
+    assert app_url("http://127.0.0.1:8765/", False) == "http://127.0.0.1:8765/?app=mac"
+    assert app_url("http://127.0.0.1:8765/", True) == "http://127.0.0.1:8765/?app=mac&reduce=1"
+
+
+def test_bridge_exposes_only_window_actions_and_no_way_back_to_the_app():
+    from chronicle.desktop import make_bridge
+
+    calls = []
+
+    class FakeApp:
+        secret = "install_cli and friends"
+
+        def set_appearance(self, theme):
+            calls.append(("appearance", theme))
+
+        def start_drag(self):
+            calls.append(("drag",))
+
+        def title_double_click(self):
+            calls.append(("zoom",))
+
+    bridge = make_bridge(FakeApp())
+    bridge.set_appearance("dark")
+    bridge.start_drag()
+    bridge.title_double_click()
+    assert calls == [("appearance", "dark"), ("drag",), ("zoom",)]
+    assert [n for n in dir(bridge) if not n.startswith("_")] == ["set_appearance", "start_drag", "title_double_click"]
+
+    # pywebview resolves "a.b.c" with getattr, underscores included: nothing reachable that way leads to the app
+    def walk(obj, depth=0, seen=None):
+        seen = seen if seen is not None else set()
+        if depth > 4 or id(obj) in seen:
+            return
+        seen.add(id(obj))
+        assert not isinstance(obj, FakeApp)
+        if isinstance(obj, dict):
+            assert not obj or set(obj) == {"__builtins__"} and obj["__builtins__"] == {}
+        for name in ("__func__", "__self__", "__globals__", "__builtins__", "__closure__", "__class__", "__dict__"):
+            try:
+                walk(getattr(obj, name), depth + 1, seen)
+            except AttributeError:
+                pass
+
+    for name in ("set_appearance", "start_drag", "title_double_click"):
+        walk(getattr(bridge, name))

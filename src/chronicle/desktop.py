@@ -14,6 +14,7 @@ import subprocess
 import sys
 import threading
 import time
+import types
 import webbrowser
 from pathlib import Path
 
@@ -42,6 +43,71 @@ def adopt_login_path() -> None:
         log.warning("could not read PATH from %s: %s", shell, exc)
     dirs += [str(Path(d).expanduser()) for d in EXTRA_PATH]
     os.environ["PATH"] = os.pathsep.join(dict.fromkeys(d for d in dirs if d))
+
+
+def reduce_transparency() -> bool:
+    """macOS Accessibility > Display > Reduce transparency. WebKit has no `prefers-reduced-transparency`,
+    so the app reads the setting and tells the page."""
+    try:
+        import AppKit
+
+        return bool(AppKit.NSWorkspace.sharedWorkspace().accessibilityDisplayShouldReduceTransparency())
+    except Exception:
+        return False
+
+
+def name_process(name: str) -> None:
+    """Run from source, macOS names the app after the interpreter ("python3" in the menu bar and Dock).
+    Chronicle.app gets its name from Info.plist; this covers `chronicle app` from a checkout or pip install."""
+    try:
+        import Foundation
+    except ImportError:
+        return
+    try:
+        bundle = Foundation.NSBundle.mainBundle()
+        info = bundle.localizedInfoDictionary() or bundle.infoDictionary()
+        if info is not None:
+            info["CFBundleName"] = name
+    except Exception:
+        log.debug("could not rename the bundle", exc_info=True)
+    try:
+        Foundation.NSProcessInfo.processInfo().setProcessName_(name)
+    except Exception:
+        log.debug("could not rename the process", exc_info=True)
+
+
+def app_url(base: str, reduce: bool) -> str:
+    """The dashboard as the app window loads it: `app=mac` makes the page transparent over the native glass."""
+    return f"{base}?app=mac" + ("&reduce=1" if reduce else "")
+
+
+def make_bridge(app: DesktopApp):
+    """What the page may call in the app window (`window.pywebview.api`): three window actions, nothing else.
+
+    pywebview resolves a call by walking attribute names ("a.b.c") from this object, underscored ones included, so
+    the object holds no reference to the app. Each method is a copy of a closure with empty globals and builtins:
+    walking `__func__`, `__globals__` or `__builtins__` reaches nothing, and the app sits in a closure cell, which
+    attribute lookups cannot open."""
+
+    def set_appearance(self, theme):
+        """Keep the native glass in step with the page's theme ("light", "dark" or "system")."""
+        app.set_appearance(theme)
+
+    def start_drag(self):
+        """The mouse went down on the toolbar or title strip: move the window with it."""
+        app.start_drag()
+
+    def title_double_click(self):
+        """Double-click on the toolbar: zoom (or minimize) the window, as the system setting says."""
+        app.title_double_click()
+
+    def seal(fn):
+        sealed = types.FunctionType(fn.__code__, {"__builtins__": {}}, fn.__name__, None, fn.__closure__)
+        sealed.__doc__ = fn.__doc__
+        return sealed
+
+    methods = {fn.__name__: seal(fn) for fn in (set_appearance, start_drag, title_double_click)}
+    return type("Bridge", (), {"__slots__": (), **methods})()
 
 
 def in_temporary_location(exe: str | None = None) -> bool:
@@ -159,10 +225,15 @@ class DesktopApp:
         self.window = None
         self.url = ""
         self.items: dict = {}
+        self.styled = False
+        self.last_mouse_down = None
+        self.mouse_monitor = None
         self.bg = Background(self._menu_changed)
 
     # ------------------------------------------------------------------ lifecycle
     def run(self) -> int:
+        if not self.frozen:
+            name_process("Chronicle")  # before pywebview creates the NSApplication
         import webview
 
         from .install import write_shim
@@ -177,9 +248,12 @@ class DesktopApp:
         log.info("app started (%s), dashboard at %s", sys.executable, self.url)
 
         self._install_app_delegate()
-        self.window = webview.create_window("Chronicle", self.url, width=1440, height=920, min_size=(900, 600),
-                                            text_select=True, zoomable=True)
+        # a transparent page over native vibrancy; the page asks to drag the window from its toolbar (start_drag)
+        self.window = webview.create_window("Chronicle", app_url(self.url, reduce_transparency()), width=1440, height=920,
+                                            min_size=(900, 600), text_select=True, zoomable=True,
+                                            transparent=True, vibrancy=True, js_api=make_bridge(self))
         self.window.events.closing += self._on_closing
+        self.window.events.loaded += self._on_loaded
         self.bg.start()
         webview.start(self._started, private_mode=False, storage_path=str(self.cfg.home / "webview"))
         httpd.shutdown()
@@ -209,10 +283,113 @@ class DesktopApp:
         from PyObjCTools import AppHelper
 
         AppHelper.callAfter(self._build_status_item)
+        if not self.frozen:
+            AppHelper.callAfter(self._use_app_icon)
         try:
             self.onboard()
         except Exception:
             log.exception("onboarding failed")
+
+    def _on_loaded(self) -> None:
+        if not self.styled:
+            self.styled = True
+            from PyObjCTools import AppHelper
+
+            AppHelper.callAfter(self._style_window)
+
+    def _style_window(self) -> None:
+        """macOS 26 look: content runs under a transparent titlebar, the traffic lights float over the sidebar
+        (an empty unified toolbar gives them the 52pt band the page's toolbar is centred on), the window keeps
+        its shadow, and the vibrancy uses the sidebar material. Runs once the web view is the content view."""
+        import AppKit
+
+        try:
+            win = self.window.native
+            win.setStyleMask_(win.styleMask() | AppKit.NSWindowStyleMaskFullSizeContentView)
+            win.setTitlebarAppearsTransparent_(True)
+            win.setTitleVisibility_(AppKit.NSWindowTitleHidden)
+            toolbar = AppKit.NSToolbar.alloc().initWithIdentifier_("chronicle")
+            toolbar.setShowsBaselineSeparator_(False)
+            win.setToolbar_(toolbar)
+            win.setToolbarStyle_(AppKit.NSWindowToolbarStyleUnified)
+            win.setHasShadow_(True)  # pywebview's transparent mode turns it off
+            # pywebview paints the titlebar container with the window colour; clear it so the page shows through
+            for view in (win.contentView().superview().subviews() or []):
+                if view.className() == "NSTitlebarContainerView":
+                    view.setBackgroundColor_(AppKit.NSColor.clearColor())
+            stack = [win.contentView()]  # the vibrancy pywebview put behind the page
+            while stack:
+                view = stack.pop()
+                if isinstance(view, AppKit.NSVisualEffectView):
+                    view.setMaterial_(AppKit.NSVisualEffectMaterialSidebar)
+                    view.setBlendingMode_(AppKit.NSVisualEffectBlendingModeBehindWindow)
+                    view.setState_(AppKit.NSVisualEffectStateFollowsWindowActiveState)
+                stack.extend(view.subviews() or [])
+            win.invalidateShadow()
+        except Exception:
+            log.exception("could not style the window")
+
+        # Dragging: the page has no title bar to grab, so it tells us when the mouse went down on its toolbar.
+        # By then WebKit has consumed the event, so keep the latest mouse-down to hand to the window server.
+        def remember(event):
+            self.last_mouse_down = event
+            return event
+
+        try:
+            self.mouse_monitor = AppKit.NSEvent.addLocalMonitorForEventsMatchingMask_handler_(
+                AppKit.NSEventMaskLeftMouseDown, remember)
+        except Exception:
+            log.exception("could not watch for window drags")
+
+    def start_drag(self) -> None:
+        import AppKit
+        from PyObjCTools import AppHelper
+
+        def drag():
+            event, win = self.last_mouse_down, self.window.native
+            if event is not None and event.window() == win and AppKit.NSEvent.pressedMouseButtons() & 1:
+                win.performWindowDragWithEvent_(event)
+
+        AppHelper.callAfter(drag)
+
+    def title_double_click(self) -> None:
+        import AppKit
+        from PyObjCTools import AppHelper
+
+        def act():
+            win = self.window.native
+            action = AppKit.NSUserDefaults.standardUserDefaults().stringForKey_("AppleActionOnDoubleClick") or "Maximize"
+            if action == "Minimize":
+                win.performMiniaturize_(None)
+            elif action != "None":
+                win.performZoom_(None)
+
+        AppHelper.callAfter(act)
+
+    def set_appearance(self, theme: str) -> None:
+        import AppKit
+        from PyObjCTools import AppHelper
+
+        names = {"light": AppKit.NSAppearanceNameAqua, "dark": AppKit.NSAppearanceNameDarkAqua}
+
+        def apply():
+            try:
+                name = names.get(theme)
+                self.window.native.setAppearance_(AppKit.NSAppearance.appearanceNamed_(name) if name else None)
+            except Exception:
+                log.exception("could not set the window appearance")
+
+        AppHelper.callAfter(apply)
+
+    def _use_app_icon(self) -> None:
+        """From source the Dock would show Python's icon; Chronicle.app has its own .icns."""
+        import AppKit
+
+        from .server import WEB_DIR
+
+        image = AppKit.NSImage.alloc().initWithContentsOfFile_(str(WEB_DIR / "icon.png"))
+        if image is not None:
+            AppKit.NSApp.setApplicationIconImage_(image)
 
     def _on_closing(self):
         if self.quitting:

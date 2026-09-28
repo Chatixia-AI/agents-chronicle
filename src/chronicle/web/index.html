@@ -3,41 +3,63 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Claude Chronicle</title>
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%232a78d6'/%3E%3Cpath d='M9 10h14M9 16h14M9 22h9' stroke='white' stroke-width='3' stroke-linecap='round'/%3E%3C/svg%3E">
+  <title>Chronicle</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cdefs%3E%3ClinearGradient id='cg' x1='0' y1='0' x2='0' y2='1'%3E%3Cstop offset='0' stop-color='%234e96fa'/%3E%3Cstop offset='1' stop-color='%23163ea8'/%3E%3C/linearGradient%3E%3C/defs%3E%3Crect width='32' height='32' rx='7.5' fill='url(%23cg)'/%3E%3Crect x='7.6' y='8.4' width='16' height='12' rx='2.6' fill='%23fff' fill-opacity='.32' transform='rotate(-12 16 16)'/%3E%3Crect x='8.2' y='9.8' width='16' height='12' rx='2.6' fill='%23fff' fill-opacity='.5' transform='rotate(-5 16 16)'/%3E%3Crect x='8.4' y='10.8' width='16' height='12' rx='2.6' fill='%23fff'/%3E%3Ccircle cx='12' cy='14.6' r='1.7' fill='%23ffa434'/%3E%3Crect x='14.9' y='13.7' width='7' height='1.8' rx='.9' fill='%23788ec4'/%3E%3Crect x='10.3' y='18.1' width='11.6' height='1.8' rx='.9' fill='%23aabade'/%3E%3C/svg%3E">
+  <link rel="apple-touch-icon" href="icon.png">
   <link rel="stylesheet" href="app.css">
   <script>
-    try { const t = localStorage.getItem("chronicle-theme"); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
+    (function () {
+      var root = document.documentElement, q = new URLSearchParams(location.search);
+      // the macOS app loads ?app=mac: the page goes transparent over the window's native vibrancy
+      if (q.get("app") === "mac") root.classList.add("in-app");
+      if (q.get("reduce") === "1") root.classList.add("os-solid");
+      try {
+        var t = localStorage.getItem("chronicle-theme"); if (t) root.dataset.theme = t;
+        if (localStorage.getItem("chronicle-solid") === "1") root.classList.add("solid");
+        if (localStorage.getItem("chronicle-sidebar") === "0") root.classList.add("no-sidebar");
+      } catch (e) {}
+    })();
   </script>
 </head>
 <body>
-  <header class="topbar">
-    <a class="brand" href="#/">
-      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" class="brand-mark"/><path d="M9 10h14M9 16h14M9 22h9" stroke="white" stroke-width="3" stroke-linecap="round"/></svg>
-      <span>Chronicle</span>
-    </a>
-    <nav class="nav" aria-label="Main">
-      <a href="#/" data-nav="overview">Overview</a>
-      <a href="#/sessions" data-nav="sessions">Sessions</a>
-      <a href="#/knowledge" data-nav="knowledge">Knowledge</a>
-      <a href="#/projects" data-nav="projects">Projects</a>
-      <a href="#/glossary" data-nav="glossary">Glossary</a>
-      <a href="#/map" data-nav="map">Map</a>
-      <a href="#/reviews" data-nav="reviews">Reviews</a>
-      <a href="#/sources" data-nav="sources">Sources</a>
-      <a href="#/status" data-nav="status">Status</a>
-    </nav>
-    <form class="global-search" id="global-search" role="search">
-      <input type="search" id="global-q" placeholder="Search transcripts & knowledge…" autocomplete="off" aria-label="Search">
-      <kbd>/</kbd>
-    </form>
-    <div class="top-actions">
-      <button class="pill" id="status-pill" type="button" title="Background work"></button>
-      <button class="btn" id="sync-btn" type="button" title="Sync transcripts and process the analysis queue">Sync</button>
-      <button class="icon-btn" id="theme-btn" type="button" title="Toggle theme" aria-label="Toggle theme"></button>
+  <div class="shell" id="shell">
+    <div class="titlestrip drag-region" id="titlestrip">
+      <a class="brand" href="#/" aria-label="Chronicle home">
+        <svg viewBox="0 0 32 32" aria-hidden="true"><defs><linearGradient id="cg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#4e96fa"/><stop offset="1" stop-color="#163ea8"/></linearGradient></defs><rect width="32" height="32" rx="7.5" fill="url(#cg)"/><rect x="7.6" y="8.4" width="16" height="12" rx="2.6" fill="#fff" fill-opacity=".32" transform="rotate(-12 16 16)"/><rect x="8.2" y="9.8" width="16" height="12" rx="2.6" fill="#fff" fill-opacity=".5" transform="rotate(-5 16 16)"/><rect x="8.4" y="10.8" width="16" height="12" rx="2.6" fill="#fff"/><circle cx="12" cy="14.6" r="1.7" fill="#ffa434"/><rect x="14.9" y="13.7" width="7" height="1.8" rx=".9" fill="#788ec4"/><rect x="10.3" y="18.1" width="11.6" height="1.8" rx=".9" fill="#aabade"/></svg>
+        <span>Chronicle</span>
+      </a>
     </div>
-  </header>
-  <main id="app" tabindex="-1"></main>
+    <nav class="rail" id="rail" aria-label="Sections"></nav>
+    <aside class="sidebar" id="sidebar"></aside>
+    <div class="stage">
+      <div class="edge" aria-hidden="true"></div>
+      <div class="toolbar drag-region" id="toolbar">
+        <div class="glass">
+          <button class="icon-btn" id="sidebar-btn" type="button" title="Toggle sidebar (⌘B)" aria-label="Toggle sidebar"></button>
+          <button class="icon-btn" id="back-btn" type="button" title="Back" aria-label="Back"></button>
+          <button class="icon-btn" id="fwd-btn" type="button" title="Forward" aria-label="Forward"></button>
+        </div>
+        <div class="crumbs drag-region" id="crumbs"></div>
+        <button class="glass search-pill" id="search-pill" type="button" aria-label="Search or jump to (⌘K)">
+          <span class="sp-label">Search or jump to…</span><kbd>⌘K</kbd>
+        </button>
+        <div class="glass tinted"><button class="text-btn" id="sync-btn" type="button" title="Sync transcripts and process the analysis queue">Sync</button></div>
+      </div>
+      <main id="app" tabindex="-1"></main>
+    </div>
+    <footer class="statusbar" id="statusbar">
+      <div class="st-left">
+        <button type="button" id="status-pill" title="Background work"></button>
+        <span id="status-queue"></span>
+      </div>
+      <div class="st-right">
+        <span id="status-sync"></span>
+        <span id="status-version"></span>
+        <button type="button" id="theme-btn" title="Toggle theme" aria-label="Toggle theme"></button>
+      </div>
+    </footer>
+  </div>
+  <div id="palette" hidden></div>
   <div id="tooltip" role="tooltip" hidden></div>
   <div id="toast" role="status" aria-live="polite" hidden></div>
   <script src="app.js"></script>

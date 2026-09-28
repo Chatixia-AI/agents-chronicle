@@ -58,6 +58,15 @@ const ICONS = {
   knowledge: ["M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z", "M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"],
   projects: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
   glossary: ["M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20", "m8 13 4-7 4 7", "M9.1 11h5.8"],
+  home: ["m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M9 22V12h6v10"],
+  settings: ["M4 21v-7", "M4 10V3", "M12 21v-9", "M12 8V3", "M20 21v-5", "M20 12V3", "M1 14h6", "M9 8h6", "M17 16h6"],
+  sidebar: [["rect", { x: 3, y: 3, width: 18, height: 18, rx: 3 }], "M9 3v18"],
+  left: ["m15 18-6-6 6-6"],
+  right: ["m9 18 6-6-6-6"],
+  outline: ["M8 6h13", "M8 12h13", "M8 18h13", "M3 6h.01", "M3 12h.01", "M3 18h.01"],
+  appearance: [C10, ["path", { d: "M12 2a10 10 0 0 0 0 20z", class: "solid" }]],
+  map: ["m3 6 6-3 6 3 6-3v15l-6 3-6-3-6 3z", "M9 3v15", "M15 6v15"],
+  playbook: [C10, "m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36z"],
   reviews: [["rect", { x: 3, y: 4, width: 18, height: 18, rx: 2 }], "M16 2v4", "M8 2v4", "M3 10h18", "m9 16 2 2 4-4"],
   sources: ["M12 22v-5", "M9 8V2", "M15 8V2", "M18 8v5a4 4 0 0 1-4 4h-4a4 4 0 0 1-4-4V8z"],
   status: ["M22 12h-4l-3 9L9 3l-3 9H2"],
@@ -183,6 +192,7 @@ const KIND = {
   fix: "Fix", gotcha: "Gotcha", learning: "Learning", decision: "Decision", pattern: "Pattern",
   command: "Command", fact: "Fact", preference: "Preference", reference: "Reference", todo: "Todo",
 };
+function kindPlural(k) { const l = kindLabel(k); return /(x|s|ch|sh)$/.test(l) ? `${l}es` : `${l}s`; }
 function kindLabel(k) { return KIND[k] || k || "Note"; }
 function kindChip(k) { return h("span", { class: "kind-chip" }, icon(KIND[k] ? k : "dot"), kindLabel(k)); }
 function catBadge(c) { return h("span", { class: "badge cat" }, icon(ICONS[c] && c !== "x" ? c : "dot"), c || "other"); }
@@ -609,13 +619,17 @@ function setParams(params) {
   const { path } = parseHash();
   const qs = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null && v !== "")).toString();
   history.replaceState(null, "", `#${path}${qs ? "?" + qs : ""}`);
+  lastHash = location.hash;
+  const now = parseHash();
+  markSidebar(now.path, now.params);
+  if (!/^\/(session\/|project$)/.test(path)) setCrumbs(defaultCrumbs(now.path, now.params)); // those pages name themselves
 }
 let renderSeq = 0;
 async function render() {
   const { path, params } = parseHash();
   const app = $("#app");
   const seq = ++renderSeq;
-  document.querySelectorAll(".nav a").forEach((a) => a.classList.toggle("active", a.dataset.nav === navKey(path)));
+  updateShell(path, params);
   for (const [pattern, view] of routes) {
     const m = path.match(pattern);
     if (!m) continue;
@@ -645,6 +659,8 @@ function navKey(path) {
   if (path.startsWith("/sources")) return "sources";
   if (path.startsWith("/glossary")) return "glossary";
   if (path.startsWith("/map")) return "map";
+  if (path.startsWith("/appearance")) return "appearance";
+  if (path.startsWith("/search")) return "search";
   if (path === "/" || path === "") return "overview";
   return "";
 }
@@ -853,7 +869,7 @@ route(/^\/?$/, async (params) => {
     knowledgeList(data.knowledge.slice(0, 8)));
   const since = t.first_at ? `since ${fmtDateY(t.first_at)}` : "";
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Overview"),
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Home"),
       h("div", { class: "sub" }, `${fmtNum(t.sessions)} sessions across ${fmtNum(t.projects)} projects ${since}`)),
       h("div", { class: "head-actions" },
         segControl([["7", "7d"], ["30", "30d"], ["90", "90d"], ["180", "180d"], ["all", "All"]], days, (v) => update({ days: v })),
@@ -1054,6 +1070,7 @@ function sessionRow(x, scale = null) {
 // Session detail
 // =====================================================================================
 route(/^\/session\/([\w-]+)$/, async (params, id) => {
+  const token = renderSeq;
   const sx = await api(`/api/sessions/${id}`);
   const analyzing = h("button", { class: "btn primary", type: "button", onclick: async () => {
     analyzing.disabled = true;
@@ -1064,8 +1081,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   } }, sx.analysis_status === "done" ? "Re-analyze" : "Analyze now");
   if (sx.source === "history") analyzing.hidden = true;
   const head = h("div", { class: "session-head" },
-    h("div", { style: { minWidth: 0, flex: 1 } },
-      h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/sessions" }, "Sessions"), " / ", sx.id.slice(0, 8)),
+    h("div", { style: { minWidth: 0, flex: "1 1 320px" } },
       h("h1", null, sx.title || "(untitled session)"),
       h("div", { class: "meta" },
         h("span", null, "Project ", h("a", { href: `#/project?path=${encodeURIComponent(sx.project_path || "")}` }, h("b", null, sx.project_name || "–"))),
@@ -1077,19 +1093,21 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
         sx.source_present === 0 && sx.source !== "history" ? h("span", { class: "badge", title: "The agent deleted the original; Chronicle's archive keeps it" }, "original deleted · archived") : null,
         sx.source === "codex-import" ? h("span", { class: "badge accent", title: "Claude Code deleted this transcript; Chronicle recovered it from the copy Codex Desktop imported" }, h("span", { class: "sdot" }), "recovered via Codex") : null)),
     h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source), analyzing));
-  const tiles = h("div", { class: "tiles" },
-    tile("Prompts", fmtNum(sx.n_prompts), { iconName: "prompts", delta: sx.n_interrupts ? `${sx.n_interrupts} interrupt${sx.n_interrupts === 1 ? "" : "s"}` : "no interrupts" }),
-    tile("Tool calls", fmtNum(sx.n_tool_calls), { iconName: "zap", delta: `${fmtNum(sx.n_tool_errors)} failed · ${pctText(sx.n_tool_errors, sx.n_tool_calls)}` }),
-    tile("Tokens", fmtCompact(sx.total_tokens), { iconName: "tokens", delta: sx.sub_tokens ? `${fmtCompact(sx.sub_tokens)} by subagents` : null }),
-    tile("Est. API cost", fmtCost(sx.est_cost_usd), { iconName: "cost", delta: sx.sub_cost_usd ? `${fmtCost(sx.sub_cost_usd)} subagents` : null }),
-    tile("Lines", `+${fmtCompact(sx.lines_added)}`, { iconName: "diff", delta: `−${fmtCompact(sx.lines_removed)} · ${sx.n_files} files` }),
-    tile("Peak context", fmtCompact(sx.peak_context), { iconName: "status", delta: sx.n_compactions ? `${sx.n_compactions} compaction${sx.n_compactions === 1 ? "" : "s"}` : "no compaction" }),
-    tile("Subagents", fmtNum(sx.n_subagents), { iconName: "branch", delta: sx.workflows?.length ? `${sx.workflows.length} workflows` : null }));
+  setCrumbs([["Sessions", "#/sessions"], [sx.project_name || "–", `#/project?path=${encodeURIComponent(sx.project_path || "")}`], [sx.title || "(untitled session)"]], token);
+  const sfact = (label, value, note, bad) => h("div", { class: "sfact" }, h("b", null, value), h("span", null, label, note ? h("small", { class: bad ? "bad" : "" }, ` · ${note}`) : null));
+  const tiles = h("div", { class: "sfacts" },
+    sfact("Active", fmtDur(sx.active_s)),
+    sfact("Prompts", fmtNum(sx.n_prompts), sx.n_interrupts ? `${sx.n_interrupts} interrupt${sx.n_interrupts === 1 ? "" : "s"}` : null),
+    sfact("Tool calls", fmtNum(sx.n_tool_calls), sx.n_tool_errors ? `${fmtNum(sx.n_tool_errors)} failed` : null, true),
+    sfact("Tokens", fmtCompact(sx.total_tokens), sx.sub_tokens ? `${fmtCompact(sx.sub_tokens)} subagents` : null),
+    sfact("Est. API cost", fmtCost(sx.est_cost_usd)),
+    sfact("Lines", `+${fmtCompact(sx.lines_added)} −${fmtCompact(sx.lines_removed)}`, `${sx.n_files} files`),
+    sfact("Peak context", fmtCompact(sx.peak_context), sx.n_compactions ? `${sx.n_compactions} compaction${sx.n_compactions === 1 ? "" : "s"}` : null),
+    sx.n_subagents ? sfact("Subagents", fmtNum(sx.n_subagents)) : null);
   // summary
   const summary = h("section", { class: "card summary-card" }, h("div", { class: "card-head" }, h("h2", null, "Summary"),
     sx.analyzed_at ? h("span", { class: "hint" }, `analyzed ${ago(sx.analyzed_at)} · ${sx.analysis_model || ""}`) : null));
   if (sx.summary) {
-    summary.append(h("div", { class: "summary gloss" }, sx.summary));
     const kv = h("dl", { class: "kv" });
     if (sx.goal) kv.append(h("dt", null, "Goal"), h("dd", null, sx.goal));
     if (sx.outcome_note) kv.append(h("dt", null, "Outcome"), h("dd", null, sx.outcome_note));
@@ -1107,7 +1125,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       sx.first_prompt ? h("div", { style: { whiteSpace: "pre-wrap" } }, sx.first_prompt.slice(0, 1200)) : null);
   }
   const knowledge = sx.knowledge.length ? h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, `Knowledge (${sx.knowledge.length})`)),
-    h("div", { class: "grid" }, sx.knowledge.map((k) => knowledgeCard(k, { hideSession: true })))) : null;
+    h("div", { class: "grid" }, sx.knowledge.map((k) => { const c = knowledgeCard(k, { hideSession: true }); c.id = `k-${k.id}`; return c; }))) : null;
   const ctxCard = chartCard("Context window", "Tokens in context per API call (main thread)",
     (el, w) => contextChart(el, w, sx.api_calls, sx.markers),
     () => ({ columns: ["#", "Time", "Model", "Context", "Output", "Cost"], num: [true, false, false, true, true, true],
@@ -1133,42 +1151,134 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   if (sx.analyses.length) extras.push(h("div", { class: "subhead" }, "Analysis runs"), h("ul", { class: "bullets" }, sx.analyses.map((a) =>
     h("li", null, `${fmtDT(a.started_at)} · ${a.kind} · ${a.status}${a.cost_usd != null ? " · " + fmtCost(a.cost_usd) : ""}${a.model ? " · " + a.model : ""}`, a.error ? h("div", { class: "muted" }, a.error.slice(0, 200)) : null))));
   const extrasCard = extras.length ? h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Context")), extras) : null;
-  const transcript = transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "");
-  return h("div", null, head, tiles,
-    h("div", { class: "grid cols-main section-gap" },
-      h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
-      h("div", { class: "grid", style: { alignContent: "start" } }, ctxCard, toolsCard, filesCard, extrasCard)),
-    h("div", { class: "section-gap" }, transcript));
+  // outline: the prompts as they load, and the files that changed
+  const promptList = h("ol", { class: "ol-prompts" });
+  const outline = h("aside", { class: "s-outline", "aria-label": "Session outline" },
+    h("h4", null, "Prompts"), promptList,
+    changed.length ? [h("h4", null, "Files changed"), h("div", { class: "ol-files" }, changed.slice(0, 12).map((f) =>
+      h("div", { title: f.path }, h("span", null, f.path.split("/").pop()), f.lines_added || f.lines_removed ? h("em", null, `+${fmtCompact(f.lines_added)}`) : null)),
+      changed.length > 12 ? h("div", { class: "muted" }, `and ${changed.length - 12} more`) : null)] : null);
+  const tabs = { transcript: null, details: null };
+  const showTab = (name, record = true) => {
+    for (const [k, el] of Object.entries(tabs)) el.hidden = k !== name;
+    tabBar.querySelectorAll("button").forEach((b) => { const on = b.dataset.tab === name; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
+    if (record) setParams({ ...params, tab: name === "details" ? "details" : "" });
+  };
+  const onPrompt = (ev, target) => {
+    if (!ev) { promptList.replaceChildren(); return; }
+    const li = h("li", { "data-seq": ev.seq, tabindex: 0, role: "link", onclick: () => { showTab("transcript"); target.scrollIntoView({ block: "start", behavior: "smooth" }); },
+      onkeydown: (e) => { if (e.key === "Enter") li.click(); } }, h("span", null, (ev.text || "").replace(/\s+/g, " ").slice(0, 120)), h("small", null, fmtTime(ev.ts)));
+    li.target = target;
+    const after = [...promptList.children].find((x) => +x.dataset.seq > ev.seq);
+    promptList.insertBefore(li, after || null);
+  };
+  const transcript = transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "", onPrompt);
+  tabs.transcript = transcript;
+  tabs.details = h("div", { class: "grid cols-main" },
+    h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
+    h("div", { class: "grid", style: { alignContent: "start" } }, ctxCard, toolsCard, filesCard, extrasCard));
+  const tabBar = h("div", { class: "seg s-tabs", role: "group", "aria-label": "Session view" },
+    h("button", { type: "button", "data-tab": "transcript", onclick: () => showTab("transcript") }, "Transcript"),
+    h("button", { type: "button", "data-tab": "details", onclick: () => showTab("details") }, "Details"));
+  const outlineBtn = h("button", { type: "button", class: `chip ol-toggle ${sessionOutline ? "on" : ""}`, "aria-pressed": String(sessionOutline), title: "Show the prompts and files beside the transcript",
+    onclick: () => {
+      sessionOutline = !sessionOutline;
+      try { localStorage.setItem("chronicle.outline", sessionOutline ? "1" : "0"); } catch (e) { /* this tab only */ }
+      outlineBtn.classList.toggle("on", sessionOutline); outlineBtn.setAttribute("aria-pressed", String(sessionOutline));
+      page.classList.toggle("with-outline", sessionOutline);
+    } }, icon("outline"), "Outline");
+  const kchips = sx.knowledge.length ? h("div", { class: "s-kchips" }, sx.knowledge.slice(0, 8).map((k) =>
+    h("button", { type: "button", class: `s-kchip k-${k.kind}`, title: `${kindLabel(k.kind)}: ${k.title}`, onclick: () => {
+      showTab("details");
+      const card = document.getElementById(`k-${k.id}`);
+      if (card) { card.scrollIntoView({ block: "center", behavior: "smooth" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600); }
+    } }, icon(KIND[k.kind] ? k.kind : "dot"), h("span", null, k.title))),
+    sx.knowledge.length > 8 ? h("button", { type: "button", class: "s-kchip more", onclick: () => showTab("details") }, `+${sx.knowledge.length - 8} more`) : null) : null;
+  const page = h("div", { class: `session-page ${sessionOutline ? "with-outline" : ""}` },
+    h("div", { class: "s-main" }, head, tiles,
+      sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary) : null, kchips,
+      h("div", { class: "s-tabbar" }, tabBar, outlineBtn),
+      tabs.transcript, tabs.details),
+    outline);
+  showTab(params.tab === "details" ? "details" : "transcript", false);
+  trackOutline(promptList);
+  return page;
 });
+let sessionOutline = (() => { try { return localStorage.getItem("chronicle.outline") !== "0"; } catch (e) { return true; } })();
+function trackOutline(list) { // mark the prompt currently at the top of the transcript
+  const scroller = $("#app");
+  let raf = 0;
+  const onScroll = () => {
+    if (!list.isConnected) { if (list.seen) scroller.removeEventListener("scroll", onScroll); return; } // gone, or not mounted yet
+    list.seen = true;
+    cancelAnimationFrame(raf);
+    raf = requestAnimationFrame(() => {
+      const top = scroller.getBoundingClientRect().top + 90;
+      let current = null;
+      for (const li of list.children) {
+        const el = li.target;
+        if (!el?.offsetParent) continue;
+        if (el.getBoundingClientRect().top <= top) current = li; else break;
+      }
+      for (const li of list.children) li.classList.toggle("on", li === current);
+    });
+  };
+  scroller.addEventListener("scroll", onScroll, { passive: true });
+}
 
-function transcriptCard(sx, focusSeq, agent) {
+function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
   const assistant = agentShort(sx.agent);
-  const state = { agent, kinds: new Set(["prompt", "text", "tool", "system", "command"]), offset: 0 };
+  const state = { agent, kinds: new Set(["prompt", "text", "tool", "system", "command"]), offset: 0, start: 0, total: 0 };
   const list = h("div", { class: "transcript" });
+  let sink = list; // where renderEvent draws: the list, or a holder for earlier events that are then put in front
   const more = h("button", { class: "btn", type: "button", onclick: () => load(true) }, "Load more");
+  const earlier = h("button", { class: "btn", type: "button", hidden: true, onclick: () => loadEarlier() }, "Load earlier");
   const info = h("span", { class: "hint" });
   const kindMap = { prompt: ["prompt", "attachment"], text: ["text"], tool: ["tool_use", "tool_result"], thinking: ["thinking"],
     system: ["compact", "interrupt", "api_error", "notice", "notification", "compact_summary", "meta", "command_output", "bash_output"], command: ["command", "bash_input"] };
   let toolBlock = null, toolRows = {};
   async function load(append) {
-    if (!append) { state.offset = 0; list.replaceChildren(); toolBlock = null; toolRows = {}; }
+    if (!append) { state.offset = 0; list.replaceChildren(); toolBlock = null; toolRows = {}; if (state.kinds.has("prompt")) onPrompt?.(null); }
     const kinds = [...state.kinds].flatMap((k) => kindMap[k]).join(",");
     const params = { agent: state.agent, kinds, limit: 400, offset: state.offset };
     if (focusSeq != null && !append) params.around = focusSeq;
     const data = await api(`/api/sessions/${sx.id}/events`, params);
+    if (!append) state.start = data.offset; // a deep link (?seq=) starts part-way through
     state.offset = data.offset + data.items.length;
+    state.total = data.total;
     for (const ev of data.items) renderEvent(ev);
-    more.hidden = state.offset >= data.total;
-    info.textContent = `${fmtNum(Math.min(state.offset, data.total))} of ${fmtNum(data.total)} events`;
+    syncControls();
     if (focusSeq != null && !append) {
       const target = list.querySelector(`[data-seq="${focusSeq}"]`);
       if (target) { target.classList.add("highlight"); setTimeout(() => target.scrollIntoView({ block: "center" }), 60); }
       focusSeq = null;
     }
   }
+  function syncControls() {
+    more.hidden = state.offset >= state.total;
+    earlier.hidden = state.start <= 0;
+    earlier.textContent = `Load ${fmtNum(Math.min(400, state.start))} earlier`;
+    info.textContent = `${fmtNum(state.offset - state.start)} of ${fmtNum(state.total)} events`;
+    if (expand.classList.contains("on")) list.querySelectorAll("details.tool-row").forEach((d) => (d.open = true));
+  }
+  async function loadEarlier() {
+    const from = Math.max(0, state.start - 400);
+    const kinds = [...state.kinds].flatMap((k) => kindMap[k]).join(",");
+    const data = await api(`/api/sessions/${sx.id}/events`, { agent: state.agent, kinds, limit: state.start - from, offset: from });
+    const holder = h("div");
+    const keep = toolBlock;
+    sink = holder; toolBlock = null;
+    for (const ev of data.items) renderEvent(ev);
+    sink = list; toolBlock = keep;
+    const anchor = list.firstElementChild, before = anchor?.getBoundingClientRect().top;
+    list.prepend(...holder.childNodes);
+    if (anchor) $("#app").scrollTop += anchor.getBoundingClientRect().top - before; // keep your place
+    state.start = from;
+    syncControls();
+  }
   function renderEvent(ev) {
     if (ev.kind === "tool_use") {
-      if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); list.append(toolBlock); }
+      if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); sink.append(toolBlock); }
       const row = h("details", { class: "tool-row", "data-seq": ev.seq },
         h("summary", null, h("span", { class: "ticon" }, "•"), h("span", { class: "tname" }, (ev.tool_name || "tool").replace(/^mcp__/, "mcp:")),
           h("span", { class: "tsum", title: ev.text }, ev.text.includes(": ") ? ev.text.split(": ").slice(1).join(": ") : ""),
@@ -1188,7 +1298,7 @@ function transcriptCard(sx, focusSeq, agent) {
         if (ev.is_error) row.classList.add("err");
         row.querySelector(".tdetail").append(...body);
       } else {
-        if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); list.append(toolBlock); }
+        if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); sink.append(toolBlock); }
         toolBlock.append(h("details", { class: `tool-row ${ev.is_error ? "err" : ""}`, "data-seq": ev.seq },
           h("summary", null, h("span", { class: "ticon" }, ev.is_error ? "✗" : "✓"), h("span", { class: "tname" }, ev.tool_name || "result"), h("span", { class: "tsum" }, (ev.text || "").slice(0, 160)), h("span", { class: "tstat" }, fmtTime(ev.ts))),
           h("div", { class: "tdetail" }, body)));
@@ -1202,6 +1312,7 @@ function transcriptCard(sx, focusSeq, agent) {
       case "prompt":
         node = h("div", { class: "msg user", "data-seq": ev.seq }, who(ev.meta?.subagent ? "Task prompt" : "You", ev.meta?.queued ? h("span", { class: "tag" }, `queued while ${assistant} worked`) : null),
           h("div", { class: "body" }, ev.text));
+        if (onPrompt && !ev.meta?.subagent && !state.agent) onPrompt(ev, node);
         break;
       case "text":
         node = h("div", { class: "msg assistant", "data-seq": ev.seq }, who(assistant, [ev.meta?.model ? h("span", { class: "muted" }, ev.meta.model) : null, ev.meta?.phase === "commentary" ? h("span", { class: "tag" }, "progress") : null]), mdEl(ev.text));
@@ -1215,30 +1326,32 @@ function transcriptCard(sx, focusSeq, agent) {
       default:
         node = h("div", { class: "msg system", "data-seq": ev.seq }, h("b", null, ev.kind.replace(/_/g, " ")), " · ", fmtTime(ev.ts), " — ", (ev.text || "").slice(0, 600));
     }
-    list.append(node);
+    sink.append(node);
     if (ev.kind === "text" || ev.kind === "prompt") glossify(node, 4);
   }
   const chip = (key, label) => {
-    const c = h("button", { type: "button", class: `chip ${state.kinds.has(key) ? "on" : ""}`, onclick: () => {
+    const c = h("button", { type: "button", class: `chip ${state.kinds.has(key) ? "on" : ""}`, "aria-pressed": String(state.kinds.has(key)), onclick: () => {
       state.kinds.has(key) ? state.kinds.delete(key) : state.kinds.add(key);
       c.classList.toggle("on");
+      c.setAttribute("aria-pressed", String(state.kinds.has(key)));
       load(false);
     } }, label);
     return c;
   };
   const agentSel = h("select", { onchange: (e) => { state.agent = e.target.value; load(false); } },
     sx.agents.map((a) => h("option", { value: a.agent_id, selected: a.agent_id === state.agent }, a.label.slice(0, 90))));
-  const expand = h("button", { class: "chip", type: "button", onclick: () => {
+  const expand = h("button", { class: "chip", type: "button", "aria-pressed": "false", onclick: () => {
     const open = !expand.classList.contains("on");
     expand.classList.toggle("on", open);
+    expand.setAttribute("aria-pressed", String(open));
     list.querySelectorAll("details.tool-row").forEach((d) => (d.open = open));
   } }, "Expand tools");
   load(false);
-  return h("section", { class: "card" },
-    h("div", { class: "card-head" }, h("h2", null, "Transcript"), info),
+  return h("section", { class: "transcript-pane" },
     h("div", { class: "transcript-controls" }, sx.agents.length > 1 ? agentSel : null,
-      chip("prompt", "Prompts"), chip("text", "Claude"), chip("tool", "Tool calls"), chip("command", "Commands"), chip("system", "System"), chip("thinking", "Thinking"), expand),
-    list, h("div", { class: "load-more" }, more));
+      chip("prompt", "Prompts"), chip("text", assistant), chip("tool", "Tool calls"), chip("command", "Commands"), chip("system", "System"), chip("thinking", "Thinking"), expand,
+      h("span", { class: "spacer" }), info),
+    h("div", { class: "load-more earlier" }, earlier), list, h("div", { class: "load-more" }, more));
 }
 function prettyJson(text) {
   try { return JSON.stringify(JSON.parse(text), null, 2); } catch (e) { return text; }
@@ -1422,8 +1535,10 @@ function projectCard(p, href) {
 
 route(/^\/project$/, async (params) => {
   const path = params.path || "";
+  const token = renderSeq;
   const p = await api("/api/project", { path });
   const isGlobal = path === "__global__";
+  setCrumbs(isGlobal ? [["Knowledge", "#/knowledge"], ["Global playbook"]] : [["Projects", "#/projects"], [p.label || shortPath(path)]], token);
   const synth = h("button", { class: "btn primary", type: "button", onclick: async () => {
     synth.disabled = true; synth.textContent = "Synthesizing…";
     const r = await post("/api/synthesize", { path });
@@ -1481,12 +1596,15 @@ route(/^\/project$/, async (params) => {
 // =====================================================================================
 route(/^\/search$/, async (params) => {
   const q = params.q || "";
-  $("#global-q").value = q;
-  if (!q.trim()) return h("div", { class: "card empty" }, "Type a query in the search box. Trigram search matches any 3+ character substring, in any language.");
+  const box = h("form", { class: "search-form", role: "search", onsubmit: (e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) go(`#/search?q=${encodeURIComponent(v)}`); } },
+    icon("search"), h("input", { class: "input", type: "search", name: "q", value: q, placeholder: "Search transcripts and knowledge", "aria-label": "Search transcripts and knowledge", autocomplete: "off" }));
+  if (!q.trim()) return h("div", null, h("div", { class: "page-head" }, h("div", null, h("h1", null, "Search"),
+    h("div", { class: "sub" }, "Trigram search matches any 3+ character substring, in any language. ⌘K jumps straight to a session, term or page."))), box);
   const data = await api("/api/search", { q });
   const total = data.sessions.length + data.knowledge.length + data.events.length;
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, `Search: ${q}`), h("div", { class: "sub" }, total ? `${data.knowledge.length} knowledge items · ${data.sessions.length} sessions · ${data.events.length} transcript hits` : "No results"))),
+    box,
     h("div", { class: "grid cols-2" },
       h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Sessions")),
         data.sessions.length ? data.sessions.map((sx) => h("div", { class: "search-hit" },
@@ -2353,8 +2471,348 @@ route(/^\/status$/, async () => {
 });
 
 // =====================================================================================
-// Shell: status pill, jobs, theme, search
+// Appearance: theme and transparency, remembered in this browser
 // =====================================================================================
+route(/^\/appearance$/, async () => {
+  const root = document.documentElement;
+  const theme = root.dataset.theme || "system";
+  const setTheme = (v) => {
+    if (v === "system") delete root.dataset.theme; else root.dataset.theme = v;
+    try { v === "system" ? localStorage.removeItem("chronicle-theme") : localStorage.setItem("chronicle-theme", v); } catch (e) { /* private mode */ }
+    themeChanged();
+    render();
+  };
+  const solid = root.classList.contains("solid");
+  const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(solid), "aria-label": "Reduce transparency", onclick: () => {
+    const on = !root.classList.contains("solid");
+    root.classList.toggle("solid", on);
+    try { localStorage.setItem("chronicle-solid", on ? "1" : "0"); } catch (e) { /* private mode */ }
+    sw.setAttribute("aria-checked", String(on));
+  } });
+  const row = (label, hint, control) => h("div", { class: "set-row" }, h("div", null, h("b", null, label), hint ? h("div", { class: "muted" }, hint) : null), control);
+  return h("div", { class: "narrow-page" },
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Appearance"), h("div", { class: "sub" }, "Saved in this browser (and in the app window)."))),
+    h("section", { class: "card set-card" },
+      row("Theme", "System follows your Mac's light or dark setting.",
+        segControl([["system", "System"], ["light", "Light"], ["dark", "Dark"]], theme, setTheme)),
+      row("Reduce transparency", root.classList.contains("os-solid")
+        ? "Reduce Transparency is on in macOS accessibility settings, so glass is already off."
+        : "Makes the sidebar, toolbar and search solid instead of translucent.", sw),
+      row("Sidebar", "⌘B shows or hides it. Clicking a section in the rail also brings it back.",
+        h("button", { class: "btn", type: "button", onclick: toggleSidebar }, "Toggle sidebar"))));
+});
+
+// =====================================================================================
+// Shell: rail, section sidebar, toolbar, status bar, command palette
+// =====================================================================================
+const SECTIONS = [
+  { key: "home", label: "Home", href: "#/" },
+  { key: "sessions", label: "Sessions", href: "#/sessions" },
+  { key: "knowledge", label: "Knowledge", href: "#/knowledge" },
+  { key: "projects", label: "Projects", href: "#/projects" },
+  { key: "settings", label: "Settings", href: "#/status" },
+];
+const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
+  projects: "projects", status: "settings", sources: "settings", appearance: "settings" };
+const PAGE_LABEL = { glossary: "Glossary", map: "Map", reviews: "Weekly reviews", status: "Status", sources: "Sources", appearance: "Appearance" };
+let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
+
+function sectionOf(path, params) {
+  const key = navKey(path);
+  if (key === "projects" && params.path === "__global__") return "knowledge"; // the global playbook is knowledge, not a project
+  if (path.startsWith("/session/") && shellSection === "home") return "home"; // opened from Home's list: keep that list
+  return SECTION_OF[key] || null; // search and unknown pages: no section lit, the sidebar stays as it was
+}
+function sectionLink(key) { const sx = SECTIONS.find((x) => x.key === key); return sx ? [sx.label, sx.href] : ["Chronicle", "#/"]; }
+function setCrumbs(items, token = renderSeq) { // [[label, href?], ...]; the last is the current page
+  if (token !== renderSeq) return; // a view that finished after the user moved on
+  const page = items.length ? items[items.length - 1][0] : "";
+  document.title = page && page !== "Home" ? `${page} — Chronicle` : "Chronicle";
+  $("#crumbs").replaceChildren(...items.flatMap(([label, href], i) => [
+    i ? h("span", { class: "sep" }, "›") : null,
+    href && i < items.length - 1 ? h("a", { href }, label) : h("b", { title: label }, label)]).filter(Boolean));
+}
+function defaultCrumbs(path, params) {
+  const key = navKey(path), section = sectionOf(path, params);
+  if (key === "overview") return [["Home"]];
+  if (key === "knowledge") return params.kind ? [sectionLink("knowledge"), [kindPlural(params.kind)]] : [["Knowledge"]];
+  if (key === "projects" && path === "/projects") return [["Projects"]];
+  if (key === "sessions" && path === "/sessions") return [["Sessions"]];
+  if (path === "/search") return [["Search"], ...(params.q ? [[params.q]] : [])];
+  if (!section) return [["Not found"]];
+  if (PAGE_LABEL[key]) return [sectionLink(section), [PAGE_LABEL[key]]];
+  return [sectionLink(section)];
+}
+
+function renderRail() {
+  const rail = $("#rail");
+  const link = (sx) => h("a", { href: sx.href, "data-section": sx.key, title: sx.label, "aria-label": sx.label,
+    onclick: () => { if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.key === "home" ? "home" : sx.key));
+  rail.replaceChildren(...SECTIONS.slice(0, 4).map(link), h("div", { class: "spacer" }), link(SECTIONS[4]));
+}
+
+// ------------------------------------------------------------------ sidebar
+const sbState = { q: "", agent: "", offset: 0, total: 0, projectQ: "" };
+function sbRow(label, href, iconName, count, match) {
+  return h("a", { class: "sb-row", href, title: label, "data-route": match[0], "data-key": match[1] || "", "data-val": match[2] ?? "" },
+    iconName ? icon(iconName) : null, h("span", null, label), count != null ? h("em", null, fmtNum(count)) : null);
+}
+function markSidebar(path, params) {
+  document.querySelectorAll("#sidebar [data-route]").forEach((a) => {
+    const on = a.dataset.route === path && (!a.dataset.key || (params[a.dataset.key] || "") === a.dataset.val);
+    a.classList.toggle("on", on);
+    if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+}
+function dayGroup(ts) {
+  const d0 = new Date(); d0.setHours(0, 0, 0, 0);
+  const t = new Date(ts).getTime(), day = 86400000;
+  if (t >= d0.getTime()) return "Today";
+  if (t >= d0.getTime() - day) return "Yesterday";
+  if (t >= d0.getTime() - 7 * day) return "Previous 7 days";
+  if (t >= d0.getTime() - 30 * day) return "Previous 30 days";
+  return new Intl.DateTimeFormat(undefined, { month: "long", year: "numeric" }).format(new Date(ts));
+}
+async function sessionsSidebar(box, title) {
+  const list = h("div", { class: "sb-scroll" });
+  const count = h("span");
+  const more = h("button", { class: "sb-more", type: "button", onclick: () => load(true) }, "Show more");
+  let lastGroup = null, debounce, loadSeq = 0;
+  async function load(append) {
+    const mine = ++loadSeq; // a newer filter or page wins; older responses are dropped
+    const offset = append ? sbState.offset : 0;
+    const data = await api("/api/sessions", { q: sbState.q, agent: sbState.agent, limit: 60, offset });
+    if (mine !== loadSeq) return;
+    if (!append) { list.replaceChildren(); lastGroup = null; sbState.offset = 0; }
+    more.remove();
+    for (const x of data.items) {
+      const g = dayGroup(x.started_at);
+      if (g !== lastGroup) { lastGroup = g; list.append(h("div", { class: "sb-group" }, g)); }
+      const [cls, , label] = outcomeOf(x);
+      list.append(h("a", { class: `sb-item s-${cls || "none"}`, href: `#/session/${x.id}`, "data-route": `/session/${x.id}`, title: x.title || "(untitled session)" },
+        h("span", { class: "odot", title: label }), h("b", null, x.title || "(untitled session)"),
+        h("small", null, [x.project_name, agentShort(x.agent), x.active_s ? fmtDur(x.active_s) : null].filter(Boolean).join(" · "))));
+    }
+    if (!data.items.length && !append) list.append(h("div", { class: "sb-empty" }, "No sessions match"));
+    sbState.offset += data.items.length;
+    sbState.total = data.total;
+    count.textContent = fmtNum(data.total);
+    if (sbState.offset < data.total) list.append(more);
+    const { path, params } = parseHash();
+    markSidebar(path, params);
+  }
+  const input = h("input", { type: "search", placeholder: "Filter sessions", value: sbState.q, "aria-label": "Filter sessions", autocomplete: "off",
+    oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { sbState.q = e.target.value.trim(); load(false); }, 250); } });
+  const chips = h("div", { class: "sb-chips" }, [["", "All"], ...Object.entries(AGENT_SHORT)].map(([v, l]) =>
+    h("button", { type: "button", class: sbState.agent === v ? "on" : "", "aria-pressed": String(sbState.agent === v), onclick: (e) => {
+      sbState.agent = v;
+      chips.querySelectorAll("button").forEach((b) => { b.classList.toggle("on", b === e.currentTarget); b.setAttribute("aria-pressed", String(b === e.currentTarget)); });
+      load(false);
+    } }, l)));
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, title), count),
+    h("label", { class: "sb-filter" }, icon("search"), input), chips, list);
+  await load(false);
+}
+async function knowledgeSidebar(box) {
+  const data = await api("/api/knowledge", { limit: 1 });
+  const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, "Knowledge"), h("span", null, fmtNum(total))),
+    h("div", { class: "sb-scroll" },
+      sbRow("All knowledge", "#/knowledge", "knowledge", total, ["/knowledge", "kind", ""]),
+      h("div", { class: "sb-group" }, "Kinds"),
+      Object.keys(KIND).filter((k) => data.counts[k]).map((k) => sbRow(kindPlural(k), `#/knowledge?kind=${k}`, k, data.counts[k], ["/knowledge", "kind", k])),
+      h("div", { class: "sb-group" }, "Explore"),
+      sbRow("Glossary", "#/glossary", "glossary", glossaryTerms?.length || null, ["/glossary"]),
+      sbRow("Map", "#/map", "map", null, ["/map"]),
+      sbRow("Global playbook", `#/project?path=${encodeURIComponent("__global__")}`, "playbook", null, ["/project", "path", "__global__"]),
+      sbRow("Weekly reviews", "#/reviews", "reviews", null, ["/reviews"])));
+}
+async function projectsSidebar(box) {
+  projectsCache ||= await api("/api/projects");
+  const list = h("div", { class: "sb-scroll" });
+  const draw = () => {
+    const q = sbState.projectQ.toLowerCase();
+    const shown = projectsCache.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q));
+    list.replaceChildren(sbRow("All projects", "#/projects", "overview", projectsCache.length, ["/projects"]),
+      h("div", { class: "sb-group" }, "Most recent first"),
+      ...shown.map((p) => sbRow(p.label, `#/project?path=${encodeURIComponent(p.project_path || "")}`, "projects", p.sessions, ["/project", "path", p.project_path || ""])),
+      shown.length ? null : h("div", { class: "sb-empty" }, "No projects match"));
+    const { path, params } = parseHash();
+    markSidebar(path, params);
+  };
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, "Projects"), h("span", null, fmtNum(projectsCache.length))),
+    h("label", { class: "sb-filter" }, icon("search"), h("input", { type: "search", placeholder: "Filter projects", value: sbState.projectQ, "aria-label": "Filter projects",
+      oninput: (e) => { sbState.projectQ = e.target.value; draw(); } })), list);
+  draw();
+}
+function settingsSidebar(box) {
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, "Settings")),
+    h("div", { class: "sb-scroll" },
+      sbRow("Status", "#/status", "status", null, ["/status"]),
+      sbRow("Sources", "#/sources", "sources", null, ["/sources"]),
+      sbRow("Appearance", "#/appearance", "appearance", null, ["/appearance"])));
+}
+async function buildSidebar(section) {
+  const mine = ++sbSeq;
+  const box = h("div", { class: "sb-body" }); // drawn off-screen, swapped in only if still wanted
+  try {
+    if (section === "home") await sessionsSidebar(box, "Recent sessions");
+    else if (section === "sessions") await sessionsSidebar(box, "Sessions");
+    else if (section === "knowledge") await knowledgeSidebar(box);
+    else if (section === "projects") await projectsSidebar(box);
+    else settingsSidebar(box);
+  } catch (e) {
+    box.replaceChildren(h("div", { class: "sb-empty" }, `Could not load: ${e.message}`));
+  }
+  if (mine !== sbSeq) return;
+  $("#sidebar").setAttribute("aria-label", `${SECTIONS.find((x) => x.key === section).label} navigation`);
+  $("#sidebar").replaceChildren(box);
+  const { path, params } = parseHash();
+  markSidebar(path, params);
+}
+function toggleSidebar() {
+  const root = document.documentElement;
+  if (matchMedia("(max-width: 860px)").matches) root.classList.toggle("show-sidebar");
+  else {
+    const hidden = root.classList.toggle("no-sidebar");
+    try { localStorage.setItem("chronicle-sidebar", hidden ? "0" : "1"); } catch (e) { /* private mode */ }
+  }
+  sidebarExpanded();
+}
+function sidebarExpanded() {
+  const root = document.documentElement;
+  const open = matchMedia("(max-width: 860px)").matches ? root.classList.contains("show-sidebar") : !root.classList.contains("no-sidebar");
+  $("#sidebar-btn").setAttribute("aria-expanded", String(open));
+}
+function updateShell(path, params) {
+  const section = sectionOf(path, params);
+  document.querySelectorAll("#rail a").forEach((a) => {
+    const on = a.dataset.section === section;
+    a.classList.toggle("on", on);
+    if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
+  });
+  if (section && section !== shellSection) { shellSection = section; buildSidebar(section); }
+  markSidebar(path, params);
+  setCrumbs(defaultCrumbs(path, params));
+  if (path !== lastPath) { $("#app").scrollTop = 0; lastPath = path; }
+  if (location.hash !== lastHash) { // navigation, not a refresh after a background job
+    lastHash = location.hash;
+    document.documentElement.classList.remove("show-sidebar");
+    sidebarExpanded();
+    closePalette();
+  }
+}
+
+// ------------------------------------------------------------------ command palette (⌘K, ⌘P, ⌘⇧P or /)
+const pal = { sel: 0, items: [], seq: 0, open: false, timer: 0, query: "" };
+function paletteCommands() {
+  const dark = isDark();
+  const nav = (label, href, iconName, hint = "") => ({ group: "Go to", label, hint, icon: iconName, run: () => go(href) });
+  return [
+    nav("Home", "#/", "home"), nav("Sessions", "#/sessions", "sessions"), nav("Knowledge", "#/knowledge", "knowledge"),
+    nav("Glossary", "#/glossary", "glossary"), nav("Map", "#/map", "map"), nav("Projects", "#/projects", "projects"),
+    nav("Global playbook", `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav("Weekly reviews", "#/reviews", "reviews"),
+    nav("Status", "#/status", "status"), nav("Sources", "#/sources", "sources"), nav("Appearance", "#/appearance", "appearance"),
+    { group: "Commands", label: "Sync now", icon: "sync", hint: "", run: syncNow },
+    { group: "Commands", label: "Toggle sidebar", icon: "sidebar", hint: "⌘B", run: toggleSidebar },
+    { group: "Commands", label: dark ? "Switch to light theme" : "Switch to dark theme", icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
+    { group: "Commands", label: "Group glossary themes with Claude", icon: "sparkles", hint: "uses Claude", run: async () => {
+      const r = await post("/api/map/themes");
+      toast(r.started ? "Claude is grouping the glossary into themes…" : "Already running");
+      watchJob("themes");
+    } },
+    { group: "Commands", label: "Rebuild the glossary", icon: "glossary", hint: "uses Claude", run: async () => {
+      const r = await post("/api/glossary/rebuild", { path: "" });
+      toast(r.started ? "Claude is rebuilding the glossary…" : "Already running");
+      watchJob("glossary:all");
+    } },
+  ];
+}
+async function paletteSearch(q) {
+  const lq = q.toLowerCase();
+  const out = [];
+  const [sessions, knowledge] = await Promise.all([
+    api("/api/sessions", { q, limit: 6 }).catch(() => ({ items: [] })),
+    api("/api/knowledge", { q, limit: 6 }).catch(() => ({ items: [] })),
+    projectsCache ? null : api("/api/projects").then((p) => { projectsCache = p; }).catch(() => {}),
+  ]);
+  for (const x of sessions.items) out.push({ group: "Sessions", label: x.title || "(untitled session)", icon: "sessions",
+    hint: [x.project_name, fmtDate(x.started_at)].filter(Boolean).join(" · "), run: () => go(`#/session/${x.id}`) });
+  for (const k of knowledge.items) out.push({ group: "Knowledge", label: k.title, icon: KIND[k.kind] ? k.kind : "knowledge",
+    hint: [kindLabel(k.kind), k.project_name].filter(Boolean).join(" · "), run: () => go(`#/knowledge?q=${encodeURIComponent(k.title)}`) });
+  for (const p of (projectsCache || []).filter((p) => p.label.toLowerCase().includes(lq)).slice(0, 5)) out.push({ group: "Projects", label: p.label, icon: "projects",
+    hint: `${fmtNum(p.sessions)} sessions`, run: () => go(`#/project?path=${encodeURIComponent(p.project_path || "")}`) });
+  const terms = (glossaryTerms || []).filter((t) => t.term.toLowerCase().includes(lq) || (t.aliases || []).some((a) => a.toLowerCase().includes(lq)))
+    .sort((a, b) => (b.term.toLowerCase().startsWith(lq) - a.term.toLowerCase().startsWith(lq)) || a.term.length - b.term.length).slice(0, 5);
+  for (const t of terms) out.push({ group: "Glossary", label: t.term, icon: ICONS[t.category] ? t.category : "glossary", hint: t.category || "",
+    run: () => go(`#/glossary?term=${encodeURIComponent(t.term)}`) });
+  return out;
+}
+function drawPalette() {
+  const list = $("#pal-list");
+  if (!list) return;
+  let group = null;
+  list.replaceChildren(...pal.items.flatMap((x, i) => {
+    const head = x.group !== group ? h("div", { class: "pal-group" }, (group = x.group)) : null;
+    return [head, h("div", { class: `pal-item ${i === pal.sel ? "on" : ""}`, role: "option", "aria-selected": String(i === pal.sel), "data-i": i },
+      icon(x.icon), h("span", null, x.label), x.hint ? h("small", null, x.hint) : null)].filter(Boolean);
+  }));
+  if (!pal.items.length) list.append(h("div", { class: "pal-empty" }, "Nothing matches"));
+  list.querySelector(".pal-item.on")?.scrollIntoView({ block: "nearest" });
+}
+function searchItem(q) {
+  return { group: "Search", label: `Search transcripts and knowledge for “${q}”`, icon: "search", hint: "↵", run: () => go(`#/search?q=${encodeURIComponent(q)}`) };
+}
+async function refreshPalette(q) {
+  clearTimeout(pal.timer);
+  const seq = ++pal.seq, query = q.trim(), lq = query.toLowerCase();
+  pal.query = q;
+  const cmds = paletteCommands().filter((c) => !lq || c.label.toLowerCase().includes(lq) || c.group.toLowerCase().includes(lq));
+  pal.items = lq ? [...cmds, searchItem(query)] : cmds; pal.sel = 0; drawPalette();
+  if (lq.length < 2) return;
+  const found = await paletteSearch(query);
+  if (seq !== pal.seq) return;
+  pal.items = [...cmds, ...found, searchItem(query)]; drawPalette();
+}
+function openPalette() {
+  if (pal.open) return;
+  pal.open = true;
+  const box = $("#palette");
+  const input = h("input", { id: "pal-q", type: "text", placeholder: "Search sessions, knowledge, terms and commands", autocomplete: "off", spellcheck: "false",
+    "aria-label": "Search or run a command", role: "combobox", "aria-controls": "pal-list", "aria-expanded": "true",
+    oninput: (e) => { clearTimeout(pal.timer); const v = e.target.value; pal.timer = setTimeout(() => refreshPalette(v), 140); },
+    onkeydown: (e) => {
+      if (e.key === "ArrowDown") { pal.sel = Math.min(pal.sel + 1, pal.items.length - 1); drawPalette(); e.preventDefault(); }
+      else if (e.key === "ArrowUp") { pal.sel = Math.max(pal.sel - 1, 0); drawPalette(); e.preventDefault(); }
+      else if (e.key === "Enter") {
+        e.preventDefault();
+        if (e.target.value !== pal.query) refreshPalette(e.target.value); // typed faster than the debounce
+        runPaletteItem(pal.items[pal.sel]);
+      }
+    } });
+  const list = h("div", { class: "pal-list", id: "pal-list", role: "listbox",
+    onclick: (e) => { const it = e.target.closest(".pal-item"); if (it) runPaletteItem(pal.items[+it.dataset.i]); },
+    onmousemove: (e) => { const it = e.target.closest(".pal-item"); if (it && +it.dataset.i !== pal.sel) { pal.sel = +it.dataset.i; drawPalette(); } } });
+  pal.returnFocus = document.activeElement;
+  box.replaceChildren(h("div", { class: "pal", role: "dialog", "aria-modal": "true", "aria-label": "Search or jump to" },
+    h("div", { class: "pal-in" }, icon("search"), input, h("kbd", null, "esc")), list,
+    h("div", { class: "pal-foot" }, h("span", null, h("kbd", null, "↑"), " ", h("kbd", null, "↓"), " move"), h("span", null, h("kbd", null, "↵"), " open"),
+      h("span", null, h("kbd", null, "⌘K"), " ", h("kbd", null, "⌘P"), " ", h("kbd", null, "/"), " open this"))));
+  box.hidden = false;
+  box.onmousedown = (e) => { if (e.target === box) closePalette(); };
+  refreshPalette("");
+  input.focus();
+}
+function closePalette() {
+  if (!pal.open) return;
+  pal.open = false; pal.seq++; clearTimeout(pal.timer);
+  $("#palette").hidden = true;
+  $("#palette").replaceChildren();
+  if (pal.returnFocus?.isConnected) pal.returnFocus.focus({ preventScroll: true });
+}
+function runPaletteItem(x) { if (!x) return; closePalette(); x.run(); }
+
+// ------------------------------------------------------------------ jobs, status bar, theme
 let watched = new Set(), pollTimer, uiBuild = null;
 function watchJob(name) { watched.add(name); pollStatus(); }
 async function pollStatus() {
@@ -2367,53 +2825,89 @@ async function pollStatus() {
     const jobs = st.jobs || {};
     const running = Object.entries(jobs).filter(([, j]) => j.state === "running");
     busy = running.length > 0;
+    const paused = st.paused_until && st.paused_until > new Date().toISOString();
     const pill = $("#status-pill");
-    pill.className = "pill" + (busy ? " busy" : st.paused_until ? " warn" : "");
-    const label = busy ? (running[0][1].message || running[0][0]) : st.paused_until && st.paused_until > new Date().toISOString() ? "analysis paused"
-      : st.pending.ready ? `${st.pending.ready} to analyze` : "up to date";
-    pill.replaceChildren(h("span", { class: "dot" }), label);
+    pill.className = busy ? "busy" : paused ? "warn" : "";
+    pill.replaceChildren(h("span", { class: "dot" }), busy ? (running[0][1].message || running[0][0]) : paused ? `Analysis paused until ${fmtTime(st.paused_until)}` : "Up to date");
+    const waiting = (st.pending.ready || 0) + (st.pending.queued || 0);
+    $("#status-queue").textContent = waiting ? `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} queued for analysis` : "";
+    $("#status-sync").textContent = st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
+    $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
     for (const name of [...watched]) {
       const j = jobs[name];
       if (j && j.state !== "running") {
         watched.delete(name);
         toast(j.state === "done" ? `Done: ${String(j.result || name).slice(0, 160)}` : `Failed: ${String(j.result).slice(0, 200)}`, 6000);
+        if (name === "sync" || name.startsWith("glossary")) { shellSection = null; projectsCache = null; } // the sidebar's lists and counts may have changed
         render();
       }
     }
   } catch (e) { /* server restarting */ }
   pollTimer = setTimeout(pollStatus, busy || watched.size ? 2500 : 20000);
 }
-document.querySelectorAll(".nav a").forEach((a) => a.prepend(icon(a.dataset.nav)));
-$("#global-search").prepend(icon("search", "search-icon"));
-$("#sync-btn").prepend(icon("sync"));
-function themeIcon() {
-  const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  $("#theme-btn").replaceChildren(icon(dark ? "sun" : "moon"));
-  $("#theme-btn").title = dark ? "Switch to light theme" : "Switch to dark theme";
-}
-themeIcon();
-matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeIcon);
-$("#status-pill").addEventListener("click", () => go("#/status"));
-$("#sync-btn").addEventListener("click", async () => {
+async function syncNow() {
   const r = await post("/api/sync");
   toast(r.started ? "Syncing transcripts and processing the queue…" : "A sync is already running");
   watchJob("sync");
-});
-$("#theme-btn").addEventListener("click", () => {
+}
+function isDark() {
   const root = document.documentElement;
-  const dark = root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
-  root.dataset.theme = dark ? "light" : "dark";
+  return root.dataset.theme ? root.dataset.theme === "dark" : matchMedia("(prefers-color-scheme: dark)").matches;
+}
+function themeChanged() {
+  const dark = isDark();
+  $("#theme-btn").replaceChildren(icon(dark ? "sun" : "moon"));
+  $("#theme-btn").title = dark ? "Switch to light theme" : "Switch to dark theme";
+  // the app window's native glass follows the page's theme, not only the system's
+  try { window.pywebview?.api?.set_appearance?.(document.documentElement.dataset.theme || "system"); } catch (e) { /* not in the app */ }
+}
+function flipTheme() {
+  const root = document.documentElement;
+  root.dataset.theme = isDark() ? "light" : "dark";
   try { localStorage.setItem("chronicle-theme", root.dataset.theme); } catch (e) { /* private mode */ }
-  themeIcon();
+  themeChanged();
+  if (parseHash().path === "/appearance") render();
+}
+
+renderRail();
+$("#sidebar-btn").append(icon("sidebar"));
+$("#back-btn").append(icon("left"));
+$("#fwd-btn").append(icon("right"));
+$("#search-pill").prepend(icon("search"));
+$("#sync-btn").prepend(icon("sync"));
+$("#sidebar-btn").addEventListener("click", toggleSidebar);
+$("#sidebar-btn").setAttribute("aria-controls", "sidebar");
+sidebarExpanded();
+matchMedia("(max-width: 860px)").addEventListener?.("change", sidebarExpanded);
+$("#back-btn").addEventListener("click", () => history.back());
+$("#fwd-btn").addEventListener("click", () => history.forward());
+$("#search-pill").addEventListener("click", openPalette);
+$("#sync-btn").addEventListener("click", syncNow);
+$("#status-pill").addEventListener("click", () => go("#/status"));
+$("#theme-btn").addEventListener("click", flipTheme);
+themeChanged();
+matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeChanged);
+window.addEventListener("pywebviewready", themeChanged);
+document.addEventListener("mousedown", (e) => { // the narrow-window sidebar floats over the page; a click elsewhere closes it
+  if (document.documentElement.classList.contains("show-sidebar") && !e.target.closest("#sidebar, #rail, #sidebar-btn")) document.documentElement.classList.remove("show-sidebar");
 });
-$("#global-search").addEventListener("submit", (e) => {
+// the app window has no title bar: its toolbar and title strip move the window (double-click zooms it)
+document.addEventListener("mousedown", (e) => {
+  const api = window.pywebview?.api;
+  if (!api?.start_drag || e.button !== 0 || !e.target.closest(".drag-region")) return;
+  if (e.target.closest("a, button, input, select, textarea, label, kbd")) return;
   e.preventDefault();
-  const q = $("#global-q").value.trim();
-  if (q) go(`#/search?q=${encodeURIComponent(q)}`);
+  if (e.detail === 2) api.title_double_click(); else api.start_drag();
 });
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 document.addEventListener("keydown", (e) => {
-  if (e.key === "/" && !["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName)) { e.preventDefault(); $("#global-q").focus(); }
+  const mod = IS_MAC ? e.metaKey : e.ctrlKey, key = e.key.toLowerCase();
+  const typing = ["INPUT", "TEXTAREA", "SELECT"].includes(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
+  if (mod && !e.altKey && (key === "k" || key === "p")) { e.preventDefault(); pal.open ? closePalette() : openPalette(); }
+  else if (mod && !e.shiftKey && !e.altKey && key === "b") { e.preventDefault(); toggleSidebar(); }
+  else if (e.key === "Escape" && pal.open) { e.preventDefault(); closePalette(); }
+  else if (e.key === "Escape" && document.documentElement.classList.contains("show-sidebar")) document.documentElement.classList.remove("show-sidebar");
+  else if (e.key === "/" && !mod && !typing && !pal.open) { e.preventDefault(); openPalette(); }
 });
 window.addEventListener("hashchange", render);
 render();

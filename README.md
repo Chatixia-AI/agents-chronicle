@@ -1,6 +1,17 @@
-# Claude Chronicle
+<p align="center"><img src="packaging/macos/icon.png" width="128" height="128" alt="Chronicle app icon: a stack of glass session cards"></p>
 
-English | [日本語](README.ja.md)
+<h1 align="center">Chronicle</h1>
+
+<p align="center"><b>A searchable memory of every coding-agent session you run.</b><br>
+Claude Code, Codex, GitHub Copilot and IBM Bob sessions, archived and turned into knowledge on your own machine.</p>
+
+<p align="center">
+  <a href="https://pypi.org/project/agents-chronicle/"><img src="https://img.shields.io/pypi/v/agents-chronicle?label=PyPI" alt="PyPI version"></a>
+  <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
+  <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS app and CLI">
+</p>
+
+<p align="center">English | <a href="README.ja.md">日本語</a></p>
 
 Records every coding-agent session on this machine (Claude Code, and when connected OpenAI Codex, GitHub
 Copilot and IBM Bob) into a local vault, keeps the raw transcripts forever, and uses Claude Code itself (headless
@@ -36,7 +47,9 @@ open **System Settings → Privacy & Security**, click **Open Anyway** next to t
 There is no Intel build yet; on an Intel Mac use the command line install.
 
 Chronicle then lives in the menu bar. It serves the dashboard in its own window and does the 15-minute
-background sync itself, so it needs no launchd agents; closing the window keeps it running. The menu-bar icon has:
+background sync itself, so it needs no launchd agents; closing the window keeps it running. The window has no
+title bar: the sidebar is native macOS glass (it blurs whatever is behind the window) with the traffic lights on
+top of it, and the window moves by its toolbar or the strip above the sidebar. The menu-bar icon has:
 
 | Menu item | |
 | --- | --- |
@@ -157,16 +170,27 @@ server in `~/.bob/settings/mcp_settings.json`.
 | `chronicle status` | Health: hooks, agents, MCP, queue, failures |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
 
-**Dashboard:** overview (active-time headline with active days and longest run; stat tiles with sparklines and
-a per-day rate until a full prior period exists to compare against; daily chart with a 7-day average; outcome
-breakdown; activity calendar with streaks; busiest hour; projects, tools with failed calls, models and agents),
-sortable/filterable session list, project cards with 12 weeks of activity, session pages (summary, knowledge,
-context-window chart with compactions, tools, files, subagents, PRs, full transcript replay with
-collapsible tool calls and subagent threads), knowledge browser (pin/dismiss), project knowledge
-bases, global playbook, glossary, a mindmap of the glossary (see Map below), weekly reviews, search with
-jump-to-message. Glossary terms are underlined
-wherever they appear (transcripts, knowledge, summaries): hover for the definition, click for the entry.
-Every chart has a table view; light and dark themes.
+**Dashboard:** a simplified VS Code layout in Apple's Liquid Glass style. An icon rail on the left switches between
+**Home**, **Sessions**, **Knowledge**, **Projects** and **Settings**, and the sidebar beside it lists that section:
+recent sessions grouped by day with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
+and Weekly reviews, projects, or Status, Sources and Appearance. **⌘K** (also ⌘P or `/`) opens a palette that jumps
+to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
+themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue and the
+last sync. Glass is kept to the navigation layer (rail, sidebar, toolbar, palette, the Map's floating controls);
+pages sit on a solid surface. **Settings › Appearance** picks the theme and turns on *Reduce transparency*; the app
+also follows the macOS setting of that name.
+
+Pages: Home (active-time headline with active days and longest run; stat tiles with sparklines and a per-day rate
+until a full prior period exists to compare against; daily chart with a 7-day average; outcome breakdown; activity
+calendar with streaks; busiest hour; projects, tools with failed calls, models and agents), a sortable, filterable
+session list, project cards with 12 weeks of activity, session pages (headline figures, the summary and the knowledge
+it produced up top, then **Transcript**: the conversation with one-line tool calls that expand to their input and
+output, and subagent threads; or **Details**: goal, highlights, open threads, the knowledge items, context-window
+chart with compactions, tools, files, subagents, PRs; on wide windows an **Outline** of the prompts and changed files
+sits beside the transcript and follows your scroll), knowledge browser (pin/dismiss), project knowledge bases, global
+playbook, glossary, a mindmap of the glossary (see Map below), weekly reviews, search with jump-to-message. Glossary
+terms are underlined wherever they appear (transcripts, knowledge, summaries): hover for the definition, click for
+the entry. Every chart has a table view; light and dark themes.
 
 **Markdown vault:** `~/.claude-chronicle/notes` (open it as an Obsidian vault): `Home.md`,
 `Sessions/YYYY/MM/*.md` with YAML frontmatter, `Projects/*.md` (knowledge base + session list),
@@ -294,7 +318,7 @@ Bob's login state is never read. Connecting an agent edits its MCP config, backe
 ## Development
 
 ```bash
-uv sync && uv run pytest -q        # 86 tests, ~12 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # 88 tests, ~12 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -305,7 +329,7 @@ in the bundle, such as Open at Login, are hidden). `./packaging/macos/build.sh` 
 app (no arguments) and the CLI (any arguments), which is how hooks and MCP servers run it. Unsigned builds are ad-hoc
 signed and run on the Mac that built them; to distribute, set `CHRONICLE_CODESIGN_IDENTITY` (a Developer ID
 Application certificate) and `NOTARY_KEYCHAIN_PROFILE` (from `xcrun notarytool store-credentials`), and the script
-signs, notarizes and staples the DMG. `packaging/macos/make_icon.py` redraws the icon. `desktop.py` extends
+signs, notarizes and staples the DMG. `packaging/macos/make_icon.py` redraws the icon (the `.icns`, and `web/icon.png`, which the dashboard and a from-source app window use). `desktop.py` extends
 pywebview's Cocoa app delegate, hence the `<7` pin on pywebview.
 
 **Releasing:** bump `version` in `pyproject.toml`, then publish a GitHub release tagged `v<version>`.
