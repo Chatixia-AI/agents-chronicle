@@ -1,5 +1,7 @@
 # Claude Chronicle
 
+English | [日本語](README.ja.md)
+
 Records every coding-agent session on this machine (Claude Code, and when connected OpenAI Codex, GitHub
 Copilot and IBM Bob) into a local vault, keeps the raw transcripts forever, and uses Claude Code itself (headless
 `claude -p`) to turn each session into an overview plus reusable knowledge. Browse everything in a local dashboard,
