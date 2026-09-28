@@ -154,7 +154,12 @@ if mode == "hang":
 if mode == "limit":
     print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "Claude AI usage limit reached|1790000000"}))
     sys.exit(1)
-if "glossary" in system:
+if "into themes" in system:
+    ids = [int(x) for x in __import__("re").findall(r'"id": (\d+)', prompt)]
+    data = {"themes": [{"name": "Testing", "description": "How tests run", "term_ids": ids[:1] + [999999]},
+                       {"name": "Testing", "description": "a duplicate name merges", "term_ids": ids[:1]},
+                       {"name": "", "description": "dropped: no name", "term_ids": ids}]}
+elif "glossary" in system:
     ids = [int(x) for x in __import__("re").findall(r'"id": (\d+)', prompt)]
     everywhere = "cross-project" in system
     data = {"terms": [

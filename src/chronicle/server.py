@@ -464,6 +464,17 @@ class App:
 
         return map_data(self.conn)
 
+    def action_themes(self, force: bool) -> bool:
+        from .glossary import build_themes
+
+        def job(progress):
+            results = build_themes(self.cfg, force=force, concurrency=self.cfg.analysis.concurrency + 1, progress=progress)
+            done = sum(1 for v in results.values() if isinstance(v, int))
+            failed = [f"{c}: {v}" for c, v in results.items() if not isinstance(v, int)]
+            return f"themes for {done}/{len(results)} categories" + (f" ({'; '.join(failed)[:200]})" if failed else "")
+
+        return self.jobs.start("themes", job)
+
     def action_glossary(self, path: str | None) -> bool:
         from .glossary import build_glossaries
 
@@ -750,6 +761,8 @@ def make_handler(app: App, port: int):
                         return self._json(app.action_connector(m.group(1), m.group(2)))
                     except KeyError:
                         return self._json({"error": "unknown connector"}, 404)
+                if p == "/api/map/themes":
+                    return self._json({"started": app.action_themes(bool(body.get("force")))})
                 if p == "/api/glossary/rebuild":
                     return self._json({"started": app.action_glossary(body.get("path") or None)})
                 if p == "/api/review":

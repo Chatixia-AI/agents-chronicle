@@ -149,7 +149,7 @@ server in `~/.bob/settings/mcp_settings.json`.
 | `chronicle analyze <id> \| --pending [--limit N] [--dry-run]` | Analyze now (`--dry-run` shows digest sizes, no tokens spent) |
 | `chronicle synthesize [--project P] [--global] [--all]` | Rebuild knowledge bases |
 | `chronicle export [--full]` | Rewrite the Markdown vault |
-| `chronicle glossary [term] [-p project] [--rebuild --all]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage |
+| `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage; `--themes` groups big categories into themes for the Map |
 | `chronicle review [2026-W39\|current]` | Weekly engineering review written by Claude (automatic for each completed week) |
 | `chronicle forget <id> [--delete-transcript]` | Remove a session from the vault for good (it is never re-ingested) |
 | `chronicle sources` | Which agents are connected, and how |
@@ -181,18 +181,27 @@ project plus a cross-project pass, refreshed whenever a project's knowledge base
 a category, aliases (abbreviations, translations of Japanese business terms), a definition, a per-project usage
 note, related terms, and full-text statistics: how many sessions mention it, first and last seen, top sessions.
 
-**Map:** the dashboard's **Map** page draws the glossary as a collapsible mindmap, built from data Chronicle
-already has (no extra Claude calls). **By category** goes from categories to terms; **By project** goes from
-projects to their categories to terms, with *Everywhere* holding the cross-project terms. Click a node to open or
-close it, and a term to see its definition, where each project uses it, related terms (click to jump there) and
-the knowledge items it was distilled from. Drag or scroll to move, pinch or ⌘-scroll to zoom; **Find a term**
-opens the path to it, and the view glides to keep an opened branch on screen. Colour marks the category (the eight
-largest have their own hue, the rest share grey); a term's dot grows with the number of sessions that mention it
-(1, 2–4, 5+). With nothing selected, the side panel lists the terms shared by the most projects and the most
-discussed ones. File
-names and commands are hidden until you turn on **Files & commands**, no branch draws more than 10 children
-(12 at the top): the most-discussed come first, and *+N more* lists the rest in the side panel, filterable as you
-type, where picking one adds just that node to the map (search and related-term links do the same). Every glossary entry links to its place on the map (*on the map →*).
+**Map:** the dashboard's **Map** page draws the glossary as a collapsible mindmap. **Group by** (top left of the
+map) stacks any of four levels in any order: **Category**, **Theme**, **Project** and **Agent** (the agents whose
+sessions taught the term), with terms last. The side panel's **Views** offer common stacks (Category › Theme,
+Project › Category › Theme, Category › Project, Agent › Category › Theme). Terms open into the knowledge items they
+were distilled from and the sessions that mention them most. Click a node to open or close it and see its details:
+a term's definition, where each project uses it, related terms (click to jump there), its knowledge and sessions;
+a category's themes; a theme's description. Drag or scroll to move, pinch or ⌘-scroll to zoom; **Find a term** opens
+the path to it, and the view glides to keep an opened branch on screen. Colour marks the category (the eight largest
+have their own hue, the rest share grey; project and agent levels are neutral); a term's dot grows with the number
+of sessions that mention it (1, 2–4, 5+). File names and commands are hidden until you turn on **Files & commands**.
+No branch draws more than 10 children (12 at the top; a term shows up to 6 knowledge items and 4 sessions): the
+most-discussed come first, and *+N more* lists the rest in the side panel, filterable as you type, where picking one
+adds just that node to the map (search and related-term links do the same). Every glossary entry links to its place
+on the map (*on the map →*).
+
+**Themes:** Claude splits each glossary category with 25 or more terms into 4–10 named themes (for example concept →
+"Cloud infra, auth & integrations", "Agent dev workflow & tooling"), one `claude -p` call per category, so no level of
+the map is a long list. Themes are rebuilt after glossary rebuilds, only for categories whose terms changed; terms
+added since then show as *Not grouped yet*. Run it by hand with `chronicle glossary --themes [--force]` or the
+**Group with Claude** button in the map's side panel. On a 1,360-term glossary, the ten big categories cost about
+$1.40 API-equivalent in total.
 
 ## What gets recorded
 
@@ -285,7 +294,7 @@ Bob's login state is never read. Connecting an agent edits its MCP config, backe
 ## Development
 
 ```bash
-uv sync && uv run pytest -q        # 83 tests, ~10 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # 86 tests, ~12 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```

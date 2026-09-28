@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 5
+SCHEMA_VERSION = 6
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -290,7 +290,17 @@ CREATE TABLE IF NOT EXISTS glossary (
     first_seen TEXT,
     last_seen TEXT,
     top_sessions_json TEXT,
-    updated_at TEXT
+    updated_at TEXT,
+    theme TEXT                                     -- sub-group within the category (build_themes), NULL if none
+);
+
+CREATE TABLE IF NOT EXISTS glossary_themes (
+    category TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    n_terms INTEGER DEFAULT 0,
+    updated_at TEXT,
+    PRIMARY KEY (category, name)
 );
 
 CREATE TABLE IF NOT EXISTS glossary_usage (

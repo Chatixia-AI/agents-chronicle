@@ -90,3 +90,51 @@ def test_map_data_links_terms_to_projects_and_knowledge(synced):
     assert sourced and data["knowledge"][sourced[0]["knowledge"][0]]["kind"]
     conn.execute("UPDATE knowledge SET status = 'dismissed'")
     assert all(not t["knowledge"] for t in map_data(conn)["terms"])  # dismissed items drop out
+
+
+def test_themes_group_a_category_and_rerun_only_when_it_changes(synced):
+    from chronicle.glossary import build_themes, map_data, themes_due
+
+    conn, cfg, _ = _build(synced)
+    for name in ("ruff", "mypy"):  # two more tools the fake Claude leaves ungrouped
+        conn.execute("INSERT INTO glossary(term, norm, category, definition) VALUES (?, ?, 'tool', 'a tool')", (name, name))
+    conn.commit()
+    assert themes_due(conn, min_terms=3) == ["tool"]
+    assert build_themes(cfg, ["tool"]) == {"tool": 2}
+    themes = {r["name"]: r for r in conn.execute("SELECT * FROM glossary_themes WHERE category = 'tool'")}
+    assert set(themes) == {"Testing", "Other"}  # duplicate and nameless themes dropped, leftovers in Other
+    assert themes["Testing"]["description"] == "How tests run" and themes["Testing"]["n_terms"] == 1
+    assert themes["Other"]["n_terms"] == 2
+    by_term = dict(conn.execute("SELECT term, theme FROM glossary WHERE category = 'tool'").fetchall())
+    assert by_term == {"pytest": "Testing", "ruff": "Other", "mypy": "Other"}
+    assert conn.execute("SELECT COUNT(*) FROM analyses WHERE kind = 'themes'").fetchone()[0] == 1
+    assert themes_due(conn, min_terms=3) == []  # unchanged since grouped
+    conn.execute("INSERT INTO glossary(term, norm, category, definition) VALUES ('black', 'black', 'tool', 'formatter')")
+    conn.commit()
+    assert themes_due(conn, min_terms=3) == ["tool"]
+    data = map_data(conn)
+    assert [t["name"] for t in data["themes"]["tool"]] == ["Other", "Testing"]  # biggest first
+    pytest_term = next(t for t in data["terms"] if t["term"] == "pytest")
+    assert pytest_term["theme"] == "Testing" and pytest_term["agents"] == ["claude"]
+    assert pytest_term["sessions"][0]["id"] == SID and pytest_term["sessions"][0]["title"]
+
+
+def test_dashboard_themes_job_groups_due_categories(synced):
+    import time
+
+    from chronicle.server import App
+
+    conn, cfg, _ = _build(synced)
+    for name in [f"tool{i}" for i in range(30)]:  # a category big enough to be due
+        conn.execute("INSERT INTO glossary(term, norm, category, definition) VALUES (?, ?, 'tool', 'a tool')", (name, name))
+    conn.commit()
+    app = App(cfg)
+    assert app.map()["themes_due"] == ["tool"]
+    assert app.action_themes(force=False) is True
+    for _ in range(100):
+        job = app.jobs.snapshot()["themes"]
+        if job["state"] != "running":
+            break
+        time.sleep(0.1)
+    assert job["state"] == "done" and job["result"] == "themes for 1/1 categories"
+    assert app.map()["themes_due"] == [] and "tool" in app.map()["themes"]

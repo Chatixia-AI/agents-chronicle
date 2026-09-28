@@ -89,3 +89,11 @@ def test_in_temporary_location():
     assert in_temporary_location("/Volumes/Chronicle/Chronicle.app/Contents/MacOS/Chronicle")
     assert in_temporary_location("/private/var/folders/x/AppTranslocation/ABC/d/Chronicle.app/Contents/MacOS/Chronicle")
     assert not in_temporary_location("/Applications/Chronicle.app/Contents/MacOS/Chronicle")
+
+
+def test_version_comes_from_the_package_metadata():
+    from importlib.metadata import version
+
+    import chronicle
+
+    assert chronicle.__version__ == version("agents-chronicle")

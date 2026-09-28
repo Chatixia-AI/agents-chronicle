@@ -117,6 +117,7 @@ def _run_locked(cfg: Config, conn, report: WorkReport, *, session_ids, max_analy
     if synthesize and (cfg.synthesis.auto or force) and runner.available() and not report.paused_until:
         _synthesize(cfg, conn, runner, report, force=force, progress=progress)
         _glossaries(cfg, conn, runner, report, progress=progress)
+        _themes(cfg, report, progress=progress)
         _weekly_review(cfg, conn, runner, report, progress=progress)
     if export and cfg.export_markdown:
         from .export_md import export_markdown
@@ -233,6 +234,17 @@ def _weekly_review(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, 
         conn.rollback()
         log.exception("weekly review %s failed", key)
         report.failed.append((key, f"{type(exc).__name__}: {exc}"))
+
+
+def _themes(cfg: Config, report: WorkReport, *, progress=None):
+    """Re-group the glossary categories whose terms changed in this run's glossary rebuilds (the Map's Theme level)."""
+    from .glossary import build_themes
+
+    if not report.synthesized or report.paused_until:
+        return
+    for cat, result in build_themes(cfg, concurrency=cfg.analysis.concurrency, progress=progress).items():
+        if isinstance(result, str) and result.startswith("failed"):
+            report.failed.append((f"themes:{cat}", result))
 
 
 def _glossaries(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, *, progress=None):

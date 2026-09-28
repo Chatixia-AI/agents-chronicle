@@ -5,7 +5,7 @@ import os
 import tomllib
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_submodules
+from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parents[1]
 HERE = Path(SPECPATH)
@@ -16,7 +16,8 @@ IDENTITY = os.environ.get("CHRONICLE_CODESIGN_IDENTITY") or None
 a = Analysis(
     [str(HERE / "chronicle_app.py")],
     pathex=[str(ROOT / "src")],
-    datas=[(str(ROOT / "src" / "chronicle" / "web"), "chronicle/web")],
+    # the package metadata carries the version (chronicle.__version__ reads it)
+    datas=[(str(ROOT / "src" / "chronicle" / "web"), "chronicle/web")] + copy_metadata("agents-chronicle"),
     # chronicle imports most modules lazily inside functions, and rich loads some of its own on demand
     hiddenimports=collect_submodules("chronicle") + collect_submodules("rich"),
     excludes=["tkinter", "pytest", "PIL"],

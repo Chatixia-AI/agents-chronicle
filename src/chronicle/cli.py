@@ -543,6 +543,18 @@ def cmd_glossary(args) -> int:
         row = conn.execute("SELECT project_path FROM sessions WHERE project_path = ? OR project_name = ? LIMIT 1",
                            (args.project, args.project)).fetchone()
         project = row[0] if row else args.project
+    if args.themes:
+        from .glossary import build_themes, themes_due
+
+        due = themes_due(conn, force=args.force)
+        conn.close()
+        if not due:
+            print("themes are up to date (use --force to regroup anyway)")
+            return 0
+        print(f"grouping {len(due)} categor{'y' if len(due) == 1 else 'ies'} into themes with Claude…")
+        results = build_themes(cfg, due, concurrency=cfg.analysis.concurrency + 1, progress=lambda m: print(f"  {m}"))
+        print(f"done: {sum(1 for v in results.values() if isinstance(v, int))}/{len(due)} categories grouped")
+        return 0 if all(isinstance(v, int) for v in results.values()) else 1
     if args.rebuild:
         targets = [project] if project else ([r[0] for r in conn.execute(
             "SELECT DISTINCT project_path FROM knowledge WHERE status = 'active' AND project_path IS NOT NULL")] + [GLOBAL]
@@ -772,6 +784,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("-c", "--category")
     s.add_argument("--rebuild", action="store_true", help="rebuild with Claude (-p PROJECT or --all)")
     s.add_argument("--all", action="store_true")
+    s.add_argument("--themes", action="store_true", help="group big categories into themes with Claude (the Map's Theme level)")
+    s.add_argument("--force", action="store_true", help="with --themes: regroup categories that have not changed")
     s.set_defaults(fn=cmd_glossary)
 
     s = sub.add_parser("review", help="weekly engineering review written by Claude (default: last completed week)")

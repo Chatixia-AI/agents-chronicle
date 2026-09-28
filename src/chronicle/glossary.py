@@ -317,6 +317,145 @@ def lookup(conn: sqlite3.Connection, term: str) -> dict | None:
     return matches[0] if matches else None
 
 
+# ------------------------------------------------------------------ themes: sub-groups inside big categories
+THEME_MIN_TERMS = 25  # smaller categories are browsable as they are
+THEMES_SYSTEM = """\
+You organize one category of a developer's vocabulary (terms from their coding-agent sessions, each with a short \
+definition) into themes, so that the category can be browsed as a mindmap instead of one long list.
+Make 4 to 10 themes. Name each by subject or system in 1 to 4 words a developer recognizes at a glance (for \
+example "Auth & identity", "Quote pipeline", "Test tooling"), using the language most of the terms use, and \
+describe it in one short sentence. Avoid vague buckets such as "Misc" or "General"; use "Other" only for the few \
+terms that fit nowhere. Put every term id in exactly one theme."""
+
+THEMES_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["themes"],
+    "properties": {
+        "themes": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["name", "description", "term_ids"],
+                "properties": {
+                    "name": {"type": "string"},
+                    "description": {"type": "string"},
+                    "term_ids": {"type": "array", "items": {"type": "integer"}},
+                },
+            },
+        }
+    },
+}
+
+
+def _category_terms(conn: sqlite3.Connection, category: str) -> list[sqlite3.Row]:
+    return conn.execute("SELECT id, term, aliases_json, definition FROM glossary WHERE category = ? ORDER BY id",
+                        (category,)).fetchall()
+
+
+def _fingerprint(rows) -> str:
+    import hashlib
+
+    return hashlib.sha1(",".join(str(r["id"]) for r in rows).encode()).hexdigest()[:16]
+
+
+def themes_due(conn: sqlite3.Connection, *, force: bool = False, min_terms: int = THEME_MIN_TERMS) -> list[str]:
+    """Categories big enough for themes whose term set changed since they were last grouped."""
+    from .db import kv_get
+
+    due = []
+    for (cat,) in conn.execute("SELECT category FROM glossary WHERE category IS NOT NULL GROUP BY category "
+                               "HAVING COUNT(*) >= ? ORDER BY COUNT(*) DESC", (min_terms,)):
+        if force or kv_get(conn, f"themes:{cat}") != _fingerprint(_category_terms(conn, cat)):
+            due.append(cat)
+    return due
+
+
+def _theme_material(rows) -> str:
+    return "<terms>\n" + "\n".join(json.dumps({
+        "id": r["id"], "term": r["term"], "aliases": (loads(r["aliases_json"], []) or [])[:3],
+        "definition": truncate(r["definition"] or "", 200)}, ensure_ascii=False) for r in rows) + "\n</terms>"
+
+
+def _generate_themes(cfg: Config, category: str, rows, runner: ClaudeRunner):
+    prompt = f"<category>{category}</category>\n\n{_theme_material(rows)}\n\nGroup the terms into themes."
+    return runner.run(prompt, THEMES_SCHEMA, system=THEMES_SYSTEM, model=cfg.synthesis.model)
+
+
+def _store_themes(conn: sqlite3.Connection, category: str, rows, res) -> int:
+    """Validate Claude's grouping (unknown ids dropped, every term placed once, leftovers in "Other") and store it."""
+    from .db import kv_set
+
+    valid = {r["id"] for r in rows}
+    placed: dict[int, str] = {}
+    themes: dict[str, str] = {}
+    for t in res.data.get("themes") or []:
+        if not isinstance(t, dict):
+            continue
+        name = one_line(str(t.get("name") or ""), 60).strip()
+        if not name:
+            continue
+        ids = [i for i in (t.get("term_ids") or []) if isinstance(i, int) and i in valid and i not in placed]
+        if not ids:
+            continue
+        themes.setdefault(name, one_line(str(t.get("description") or ""), 240))
+        for i in ids:
+            placed[i] = name
+    for i in valid - placed.keys():
+        placed[i] = "Other"
+        themes.setdefault("Other", "Terms that fit none of the other themes.")
+    try:
+        conn.execute("DELETE FROM glossary_themes WHERE category = ?", (category,))
+        now = utcnow_iso()
+        for name, desc in themes.items():
+            n = sum(1 for v in placed.values() if v == name)
+            conn.execute("INSERT INTO glossary_themes(category, name, description, n_terms, updated_at) VALUES (?,?,?,?,?)",
+                         (category, name, desc, n, now))
+        conn.executemany("UPDATE glossary SET theme = ? WHERE id = ?", [(v, k) for k, v in placed.items()])
+        kv_set(conn, f"themes:{category}", _fingerprint(rows))
+        conn.execute(
+            "INSERT INTO analyses(kind, target, started_at, finished_at, model, status, input_chars, chunks, cost_usd, duration_ms) "
+            "VALUES ('themes', ?, ?, ?, ?, 'done', ?, 1, ?, ?)",
+            (category, now, now, res.model, len(_theme_material(rows)), res.cost_usd, res.duration_ms))
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    log.info("themes for %s: %d themes over %d terms ($%.3f)", category, len(themes), len(valid), res.cost_usd)
+    return len(themes)
+
+
+def build_themes(cfg: Config, categories: list[str] | None = None, *, force: bool = False, concurrency: int = 3,
+                 progress=None) -> dict[str, int | str]:
+    """Group big glossary categories into themes, one Claude call per category (only those that changed)."""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    from .db import connect
+
+    conn = connect(cfg.db_path)
+    runner = ClaudeRunner(cfg)
+    results: dict[str, int | str] = {}
+    try:
+        due = categories if categories is not None else themes_due(conn, force=force)
+        inputs = {c: _category_terms(conn, c) for c in due}
+        inputs = {c: rows for c, rows in inputs.items() if rows}
+        with ThreadPoolExecutor(max_workers=max(1, concurrency)) as pool:
+            futures = {pool.submit(_generate_themes, cfg, c, rows, runner): c for c, rows in inputs.items()}
+            for fut in as_completed(futures):
+                cat = futures[fut]
+                try:
+                    results[cat] = _store_themes(conn, cat, inputs[cat], fut.result())
+                except Exception as exc:
+                    conn.rollback()
+                    results[cat] = f"failed: {exc}"
+                if progress:
+                    progress(f"themes {len(results)}/{len(inputs)}: {cat} -> {results[cat]}")
+    finally:
+        conn.rollback()
+        conn.close()
+    return results
+
 def map_data(conn: sqlite3.Connection) -> dict:
     """Everything the dashboard's Map draws: projects, glossary terms with the projects that use them, and the
     knowledge items each term was distilled from. The browser builds the tree from this."""
@@ -340,9 +479,12 @@ def map_data(conn: sqlite3.Connection) -> dict:
     for u in conn.execute("SELECT term_id, project_path, context, sources_json FROM glossary_usage"):
         usage.setdefault(u["term_id"], []).append(
             {"path": u["project_path"], "context": u["context"], "sources": loads(u["sources_json"], []) or []})
+    sessions = {r["id"]: {"id": r["id"], "title": r["title"], "agent": r["agent"] or "claude", "started_at": r["started_at"],
+                          "project_path": r["project_path"]}
+                for r in conn.execute("SELECT id, title, agent, started_at, project_path FROM sessions")}
     terms, wanted = [], set()
     for r in conn.execute("SELECT id, term, category, definition, aliases_json, related_json, n_sessions, n_mentions, "
-                          "first_seen, last_seen FROM glossary"):
+                          "first_seen, last_seen, theme, top_sessions_json FROM glossary"):
         uses = usage.get(r["id"], [])
         sources = sorted({s for u in uses for s in u["sources"]})
         wanted.update(sources)
@@ -350,14 +492,21 @@ def map_data(conn: sqlite3.Connection) -> dict:
                       "definition": r["definition"], "aliases": loads(r["aliases_json"], []) or [],
                       "related": loads(r["related_json"], []) or [], "n_sessions": r["n_sessions"] or 0,
                       "n_mentions": r["n_mentions"] or 0, "first_seen": r["first_seen"], "last_seen": r["last_seen"],
-                      "projects": [{"path": u["path"], "context": u["context"]} for u in uses], "knowledge": sources})
+                      "theme": r["theme"], "projects": [{"path": u["path"], "context": u["context"]} for u in uses],
+                      "knowledge": sources,
+                      "sessions": [sessions[i] for i in loads(r["top_sessions_json"], []) or [] if i in sessions]})
     knowledge = {}
     ids = sorted(wanted)
     for i in range(0, len(ids), 500):  # SQLite caps bound parameters per statement
         chunk = ids[i:i + 500]
-        for k in conn.execute(f"SELECT id, kind, title, session_id, project_path FROM knowledge WHERE status = 'active' "
-                              f"AND id IN ({','.join('?' * len(chunk))})", chunk):
-            knowledge[k["id"]] = dict(k)
-    for t in terms:  # drop sources that were dismissed or superseded since
+        for k in conn.execute(f"SELECT id, kind, title, body, session_id, project_path, agent FROM knowledge "
+                              f"WHERE status = 'active' AND id IN ({','.join('?' * len(chunk))})", chunk):
+            knowledge[k["id"]] = {**dict(k), "body": truncate(k["body"] or "", 600), "agent": k["agent"] or "claude"}
+    for t in terms:  # drop sources that were dismissed or superseded since; agents = whose sessions taught it
         t["knowledge"] = [i for i in t["knowledge"] if i in knowledge]
-    return {"projects": projects, "terms": terms, "knowledge": knowledge}
+        t["agents"] = sorted({knowledge[i]["agent"] for i in t["knowledge"]} | {s["agent"] for s in t["sessions"]})
+    themes: dict[str, list] = {}
+    for r in conn.execute("SELECT category, name, description, n_terms FROM glossary_themes ORDER BY n_terms DESC"):
+        themes.setdefault(r["category"], []).append({"name": r["name"], "description": r["description"], "n_terms": r["n_terms"]})
+    return {"projects": projects, "terms": terms, "knowledge": knowledge, "themes": themes,
+            "themes_due": themes_due(conn)}
