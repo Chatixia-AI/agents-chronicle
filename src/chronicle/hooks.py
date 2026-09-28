@@ -92,7 +92,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
         kb = kb_for_path(conn, cwd)
         lines: list[str] = []
         if kb:
-            lines.append(f"Chronicle knowledge base for {kb['project_name']} (from past Claude Code sessions, "
+            lines.append(f"Chronicle knowledge base for {kb['project_name']} (from past coding-agent sessions, "
                          f"updated {local_str(kb['updated_at'], '%Y-%m-%d')}):")
             for section in kb_sections(kb):
                 items = section.get("items") or []
@@ -107,7 +107,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
                 (cwd,),
             ).fetchall()
             if rows:
-                lines.append("Chronicle notes from past Claude Code sessions in this project:")
+                lines.append("Chronicle notes from past coding-agent sessions in this project:")
                 lines += [f"- [{r['kind']}] {one_line(r['title'], 200)}" for r in rows]
         recent = conn.execute(
             "SELECT started_at, title, outcome FROM sessions WHERE project_path = ? AND source != 'history' "

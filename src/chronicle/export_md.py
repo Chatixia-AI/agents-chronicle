@@ -148,7 +148,7 @@ def _export_glossary(conn, root: Path, labels: dict, names: dict) -> int:
     entries = glossary_entries(conn)
     if not entries:
         return 0
-    lines = ["# Glossary", "", f"{len(entries)} terms from your Claude Code sessions, A–Z.", ""]
+    lines = ["# Glossary", "", f"{len(entries)} terms from your coding-agent sessions, A–Z.", ""]
     letter = None
     for e in entries:
         first = e["term"][:1].upper() if e["term"][:1].isalpha() else "#"

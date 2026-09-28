@@ -355,7 +355,7 @@ class DesktopApp:
 
         if not self.cfg.claude_bin():
             self.alert("Claude Code not found",
-                       "Chronicle records your Claude Code sessions and uses your Claude Code login (claude -p) to "
+                       "Chronicle records your coding-agent sessions and uses your Claude Code login (claude -p) to "
                        "analyze them. Install Claude Code from claude.com/claude-code and sign in, then choose "
                        "“Connect Claude Code…” from Chronicle's menu-bar icon.", ["OK"])
             return

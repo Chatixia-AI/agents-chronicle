@@ -656,7 +656,8 @@ def cmd_context(args) -> int:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="chronicle",
-        description="Record, archive and analyze every Claude Code session; extract reusable knowledge.",
+        description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob); "
+                    "extract reusable knowledge.",
     )
     sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
 

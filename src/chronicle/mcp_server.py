@@ -1,4 +1,4 @@
-"""MCP server (stdio, JSON-RPC 2.0) that lets Claude Code query the Chronicle vault."""
+"""MCP server (stdio, JSON-RPC 2.0) that lets coding agents (Claude Code, Codex, Copilot, Bob) query the Chronicle vault."""
 
 from __future__ import annotations
 
@@ -29,7 +29,7 @@ _PROJECT_PROP = {"type": "string", "description": "Project path or name. Default
 TOOLS = [
     {
         "name": "search_knowledge",
-        "description": "Search knowledge extracted from past Claude Code sessions (fixes, gotchas, decisions, "
+        "description": "Search knowledge extracted from past coding-agent sessions (fixes, gotchas, decisions, "
                        "facts, commands, preferences). Best first stop for 'have we solved this before?'.",
         "inputSchema": {
             "type": "object",
