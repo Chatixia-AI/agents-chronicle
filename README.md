@@ -66,13 +66,13 @@ servers; data is kept), turn off **Open at Login**, and delete the app.
 ### Command line
 
 ```bash
-uv tool install --python 3.13 claude-chronicle   # puts `chronicle` on PATH (~/.local/bin)
+uv tool install --python 3.13 agents-chronicle   # puts `chronicle` on PATH (~/.local/bin)
 chronicle sync                                   # archive + ingest everything now
 chronicle install                                # hooks, background agents, MCP server
 chronicle connect codex                          # optional: codex, copilot, bob (see Sources)
 ```
 
-Needs [uv](https://docs.astral.sh/uv/) (or `pipx install claude-chronicle`). To install from a checkout instead,
+Needs [uv](https://docs.astral.sh/uv/) (or `pipx install agents-chronicle`). To install from a checkout instead,
 run `uv tool install --python 3.13 .` in it. `chronicle install` does four things (each can be skipped with
 `--no-hooks`, `--no-launchd`, `--no-ui`, `--no-mcp`; preview with `--dry-run`):
 
@@ -89,7 +89,7 @@ session a short digest of the project's knowledge base (off by default; preview 
 Remove everything with `chronicle uninstall` (data is kept; `--purge` deletes it too).
 
 To use the desktop app from a command-line install, add the `app` extra and run `chronicle app`:
-`uv tool install --python 3.13 'claude-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`
+`uv tool install --python 3.13 'agents-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`
 first and let the app connect Claude Code, so the launchd agents do not run alongside it (harmless, but redundant).
 
 ## Sources: Claude Code, Codex, GitHub Copilot, IBM Bob
@@ -298,14 +298,14 @@ signs, notarizes and staples the DMG. `packaging/macos/make_icon.py` redraws the
 pywebview's Cocoa app delegate, hence the `<7` pin on pywebview.
 
 **Releasing:** bump `version` in `pyproject.toml`, then publish a GitHub release tagged `v<version>`.
-`.github/workflows/release.yml` runs the tests, publishes `claude-chronicle` to PyPI (trusted publishing,
+`.github/workflows/release.yml` runs the tests, publishes `agents-chronicle` to PyPI (trusted publishing,
 environment `pypi`) and attaches the DMG to the release (signed and notarized when the `MACOS_*` / `APPLE_*`
 secrets are set; see the workflow header). Running the workflow by hand (**Actions → Release → Run workflow**)
 is a dry run: tests plus a DMG kept as a workflow artifact, nothing published.
 
 One-time setup before the first release:
 
-1. On PyPI, add a *pending publisher* (Account → Publishing): project `claude-chronicle`, owner
+1. On PyPI, add a *pending publisher* (Account → Publishing): project `agents-chronicle`, owner
    `kayeungadrian-tam`, repository `agents-chronicle`, workflow `release.yml`, environment `pypi`.
 2. In the GitHub repository, create an environment named `pypi` (Settings → Environments).
 3. To ship a signed, notarized DMG (Apple Developer Program membership): export the *Developer ID Application*

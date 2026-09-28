@@ -433,7 +433,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         import webview  # noqa: F401
     except ImportError:
-        print("The desktop app needs the `app` extra: uv tool install 'claude-chronicle[app]'", file=sys.stderr)
+        print("The desktop app needs the `app` extra: uv tool install 'agents-chronicle[app]'", file=sys.stderr)
         return 1
     from .util import file_lock, setup_logging
 

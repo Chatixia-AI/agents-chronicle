@@ -1,7 +1,7 @@
 name: Release
 
 # Publishing a GitHub release tagged vX.Y.Z (matching pyproject.toml) runs the tests, publishes
-# claude-chronicle to PyPI (trusted publishing, no token) and attaches Chronicle-X.Y.Z-arm64.dmg to the release.
+# agents-chronicle to PyPI (trusted publishing, no token) and attaches Chronicle-X.Y.Z-arm64.dmg to the release.
 #
 # The DMG is signed and notarized when these repository secrets exist, otherwise it is ad-hoc signed:
 #   MACOS_CERT_P12            base64 of the "Developer ID Application" certificate + key (.p12)
