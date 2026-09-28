@@ -10,7 +10,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONFIG_TOML = """\
-# Claude Chronicle configuration.
+# Chronicle configuration.
 # Edit freely; changes apply on the next sync / worker run.
 
 [sources]

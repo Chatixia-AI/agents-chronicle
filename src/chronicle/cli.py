@@ -384,7 +384,7 @@ def cmd_status(args) -> int:
     counts = {r[0]: r[1] for r in conn.execute("SELECT analysis_status, COUNT(*) FROM sessions GROUP BY 1")}
     pending = count_pending(conn, cfg)
     spent = conn.execute("SELECT COALESCE(SUM(cost_usd),0) FROM analyses").fetchone()[0]
-    console.print(f"[bold]Claude Chronicle[/] · home {cfg.home}")
+    console.print(f"[bold]Chronicle[/] · home {cfg.home}")
     console.print(f"  {ok(hooks.get('SessionEnd'))} SessionEnd hook   {ok(hooks.get('SessionStart'))} SessionStart context hook"
                   f"{' (optional)' if not cfg.inject_session_start else ''}")
     ui = launchd_status(UI_LABEL)

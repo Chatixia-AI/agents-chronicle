@@ -1,4 +1,4 @@
-/* Claude Chronicle dashboard: vanilla JS, no build step. */
+/* Chronicle dashboard: vanilla JS, no build step. */
 "use strict";
 
 // =====================================================================================

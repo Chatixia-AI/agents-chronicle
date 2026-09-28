@@ -184,7 +184,7 @@ def _export_home(conn, root: Path, labels: dict, names: dict) -> int:
     ).fetchone()
     k = conn.execute("SELECT COUNT(*) FROM knowledge WHERE status = 'active'").fetchone()[0]
     lines = [
-        "# Claude Chronicle",
+        "# Chronicle",
         "",
         f"{t['n']} sessions since {local_str(t['first'], '%Y-%m-%d')} · {t['prompts'] or 0} prompts · "
         f"{human_count(t['tools'])} tool calls · {human_duration(t['active'])} active · {human_count(t['tokens'])} tokens · "

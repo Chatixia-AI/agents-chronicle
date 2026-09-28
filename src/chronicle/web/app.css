@@ -1,4 +1,4 @@
-/* Claude Chronicle dashboard. Tokens follow the dataviz reference palette (light + selected dark). */
+/* Chronicle dashboard. Tokens follow the dataviz reference palette (light + selected dark). */
 :root {
   color-scheme: light;
   --page: #f9f9f7;
