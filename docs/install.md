@@ -7,7 +7,7 @@ Chronicle runs on macOS and needs a logged-in [Claude Code](https://claude.com/c
 ## Desktop app
 
 1. Download `Chronicle-<version>-arm64.dmg` from the
-   [latest release](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest) (Apple silicon, macOS 13+).
+   [latest release](https://github.com/Chatixia-AI/agents-chronicle/releases/latest) (Apple silicon, macOS 13+).
 2. Open it and drag **Chronicle** into **Applications**, then open it from there.
 3. On first launch, choose **Connect** to record Claude Code sessions. This adds the `SessionEnd` hook and the MCP
    server (as `chronicle connect claude` does) and makes Chronicle open at login.

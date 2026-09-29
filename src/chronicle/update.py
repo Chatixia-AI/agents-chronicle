@@ -27,7 +27,7 @@ from . import __version__
 
 DIST = "agents-chronicle"
 PYPI_JSON = f"https://pypi.org/pypi/{DIST}/json"
-RELEASES_URL = "https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest"
+RELEASES_URL = "https://github.com/Chatixia-AI/agents-chronicle/releases/latest"
 
 # server.serve() sets this: a plain `chronicle ui` (by hand or launchd) can re-exec itself after an update;
 # the desktop app serves the dashboard from its own process and is restarted by the user instead.
@@ -157,7 +157,7 @@ def check(remote: bool = False, detail: bool = False) -> dict:
     info.update(latest=_remote.get("latest"), checked_at=_remote.get("checked_at"), error=_remote.get("error"))
     info["available"] = bool(info["latest"]) and _vkey(info["latest"]) > _vkey(__version__)
     if info["available"]:
-        info["notes_url"] = f"https://github.com/kayeungadrian-tam/agents-chronicle/releases/tag/v{info['latest']}"
+        info["notes_url"] = f"https://github.com/Chatixia-AI/agents-chronicle/releases/tag/v{info['latest']}"
     if m["kind"] == "app":
         info["note"] = "Download the new version and drag it into Applications."
     return info

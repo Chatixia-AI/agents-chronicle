@@ -6,7 +6,7 @@ Chronicle は macOS で動作し、分析を行うためにログイン済みの
 
 ## デスクトップアプリ
 
-1. [最新リリース](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest)から
+1. [最新リリース](https://github.com/Chatixia-AI/agents-chronicle/releases/latest)から
    `Chronicle-<version>-arm64.dmg` をダウンロードします（Apple シリコン、macOS 13 以降）。
 2. 開いて **Chronicle** を「アプリケーション」フォルダにドラッグし、そこから起動します。
 3. 初回起動時に **Connect** を選ぶと、Claude Code のセッションの記録が始まります。`SessionEnd` フックと MCP サーバーが

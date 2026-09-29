@@ -53,7 +53,7 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
    ```
 
    `chronicle install` は Mac にあるコーディングエージェントを見つけ、どれを記録するか尋ね、過去のセッションを取り込み、
-   ログイン時から Chronicle を動かすかを尋ねます。アプリがよければ[最新リリース](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest)
+   ログイン時から Chronicle を動かすかを尋ねます。アプリがよければ[最新リリース](https://github.com/Chatixia-AI/agents-chronicle/releases/latest)
    （Apple シリコン）からダウンロードして **Connect** を選びます。
 
 2. **いつも通りエージェントを使う。** 各セッションは終了時に記録され、バックグラウンドで分析されます。

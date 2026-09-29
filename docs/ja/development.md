@@ -32,7 +32,7 @@ pywebview の Cocoa アプリデリゲートを拡張しているため、pywebv
 ### 最初のリリースの前に一度だけ必要な設定
 
 1. PyPI で *pending publisher* を追加します（Account → Publishing）：プロジェクト `agents-chronicle`、オーナー
-   `kayeungadrian-tam`、リポジトリ `agents-chronicle`、ワークフロー `release.yml`、環境 `pypi`。
+   `Chatixia-AI`、リポジトリ `agents-chronicle`、ワークフロー `release.yml`、環境 `pypi`。
 2. GitHub リポジトリで `pypi` という名前の環境を作成します（Settings → Environments）。
 3. 署名・公証済みの DMG を配布するには（Apple Developer Program への加入が必要）：*Developer ID Application*
    証明書を鍵ごと `.p12` として書き出し、シークレット `MACOS_CERT_P12`（ファイルの base64）、
@@ -42,7 +42,7 @@ pywebview の Cocoa アプリデリゲートを拡張しているため、pywebv
 
 ## ドキュメントサイト
 
-<https://kayeungadrian-tam.github.io/agents-chronicle/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と `README.ja.md` が
+<https://chronicle.chatixia.net/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と `README.ja.md` が
 ホームページになり、`docs/` の外を指すリンクは `docs/_site/hooks.py` が GitHub へのリンクに書き換えます。
 `main` へのプッシュでドキュメントが変わると、`.github/workflows/docs.yml` が GitHub Pages に公開します。
 

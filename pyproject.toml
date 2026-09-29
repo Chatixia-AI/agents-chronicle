@@ -24,9 +24,9 @@ classifiers = [
 dependencies = ["rich>=13.7"]
 
 [project.urls]
-Documentation = "https://kayeungadrian-tam.github.io/agents-chronicle/"
-Repository = "https://github.com/kayeungadrian-tam/agents-chronicle"
-Issues = "https://github.com/kayeungadrian-tam/agents-chronicle/issues"
+Documentation = "https://chronicle.chatixia.net/"
+Repository = "https://github.com/Chatixia-AI/agents-chronicle"
+Issues = "https://github.com/Chatixia-AI/agents-chronicle/issues"
 
 [project.scripts]
 chronicle = "chronicle.cli:main"
@@ -50,11 +50,11 @@ path = "README.md"
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(src="|\]\()(?!https?://|#)([^")]+\.(?:png|svg|jpg|gif))'
-replacement = '\1https://raw.githubusercontent.com/kayeungadrian-tam/agents-chronicle/main/\2'
+replacement = '\1https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/\2'
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(href="|\]\()(?!https?://|#)([^")]+)'
-replacement = '\1https://github.com/kayeungadrian-tam/agents-chronicle/blob/main/\2'
+replacement = '\1https://github.com/Chatixia-AI/agents-chronicle/blob/main/\2'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chronicle"]

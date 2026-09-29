@@ -2,11 +2,11 @@
 # Preview: uv run --only-group docs mkdocs serve. Published to GitHub Pages by .github/workflows/docs.yml.
 site_name: Chronicle
 site_description: A searchable memory of every coding-agent session you run.
-site_url: https://kayeungadrian-tam.github.io/agents-chronicle/
-repo_url: https://github.com/kayeungadrian-tam/agents-chronicle
+site_url: https://chronicle.chatixia.net/
+repo_url: https://github.com/Chatixia-AI/agents-chronicle
 repo_name: agents-chronicle
 edit_uri: edit/main/docs/
-copyright: MIT license
+copyright: Part of <a href="https://chatixia.net">Chatixia</a> · MIT license
 
 docs_dir: docs
 exclude_docs: |

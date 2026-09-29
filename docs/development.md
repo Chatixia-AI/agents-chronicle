@@ -32,7 +32,7 @@ is a dry run: tests plus a DMG kept as a workflow artifact, nothing published.
 ### One-time setup before the first release
 
 1. On PyPI, add a *pending publisher* (Account → Publishing): project `agents-chronicle`, owner
-   `kayeungadrian-tam`, repository `agents-chronicle`, workflow `release.yml`, environment `pypi`.
+   `Chatixia-AI`, repository `agents-chronicle`, workflow `release.yml`, environment `pypi`.
 2. In the GitHub repository, create an environment named `pypi` (Settings → Environments).
 3. To ship a signed, notarized DMG (Apple Developer Program membership): export the *Developer ID Application*
    certificate with its key as a `.p12`, and add the secrets `MACOS_CERT_P12` (base64 of the file),
@@ -42,7 +42,7 @@ is a dry run: tests plus a DMG kept as a workflow artifact, nothing published.
 
 ## Documentation site
 
-<https://kayeungadrian-tam.github.io/agents-chronicle/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md` and
+<https://chronicle.chatixia.net/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md` and
 `README.ja.md` become the home pages, and `docs/_site/hooks.py` points links that leave `docs/` at GitHub.
 `.github/workflows/docs.yml` publishes it to GitHub Pages on every push to `main` that touches the docs.
 

@@ -55,7 +55,7 @@ You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/clau
 
    `chronicle install` finds the coding agents on your Mac, asks which to record, imports their past sessions and
    asks whether to run Chronicle from login. For the app instead, download it from the
-   [latest release](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest) (Apple silicon) and
+   [latest release](https://github.com/Chatixia-AI/agents-chronicle/releases/latest) (Apple silicon) and
    choose **Connect**.
 
 2. **Use your agents as usual.** Each session is recorded when it ends and analyzed in the background.

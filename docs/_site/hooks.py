@@ -14,7 +14,7 @@ from pathlib import Path
 from mkdocs.structure.files import File
 
 ROOT = Path(__file__).resolve().parents[2]
-GITHUB = "https://github.com/kayeungadrian-tam/agents-chronicle"
+GITHUB = "https://github.com/Chatixia-AI/agents-chronicle"
 ICON = "packaging/macos/icon.png"
 HOMES = {"index.md": "README.md", "ja/index.md": "README.ja.md"}
 SITE_PATHS = {"README.md": "index.md", "docs/README.md": "index.md",
