@@ -1,6 +1,6 @@
 [project]
 name = "agents-chronicle"
-version = "0.1.2"
+version = "0.2.0"
 dynamic = ["readme"]
 description = "Record, archive, analyze and explore every coding-agent session (Claude Code, Codex, Copilot, Bob): a local knowledge vault built with Claude Code itself."
 requires-python = ">=3.11"
@@ -24,7 +24,7 @@ classifiers = [
 dependencies = ["rich>=13.7"]
 
 [project.urls]
-Documentation = "https://github.com/kayeungadrian-tam/agents-chronicle/tree/main/docs"
+Documentation = "https://kayeungadrian-tam.github.io/agents-chronicle/"
 Repository = "https://github.com/kayeungadrian-tam/agents-chronicle"
 Issues = "https://github.com/kayeungadrian-tam/agents-chronicle/issues"
 
@@ -65,6 +65,9 @@ build = [
     "pyinstaller>=6.11",
 ]
 dev = ["pytest>=8"]
+docs = [
+    "mkdocs-material>=9.6",
+]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

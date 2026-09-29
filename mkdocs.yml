@@ -1,0 +1,87 @@
+# The documentation site, built from docs/ and the READMEs as they are (see docs/_site/hooks.py).
+# Preview: uv run --only-group docs mkdocs serve. Published to GitHub Pages by .github/workflows/docs.yml.
+site_name: Chronicle
+site_description: A searchable memory of every coding-agent session you run.
+site_url: https://kayeungadrian-tam.github.io/agents-chronicle/
+repo_url: https://github.com/kayeungadrian-tam/agents-chronicle
+repo_name: agents-chronicle
+edit_uri: edit/main/docs/
+copyright: MIT license
+
+docs_dir: docs
+exclude_docs: |
+  demo/
+  _site/
+hooks:
+  - docs/_site/hooks.py
+
+theme:
+  name: material
+  logo: assets/icon.png
+  favicon: assets/icon.png
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: white
+      accent: blue
+      toggle: { icon: material/weather-night, name: Dark theme }
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: black
+      accent: blue
+      toggle: { icon: material/weather-sunny, name: Light theme }
+  features:
+    - navigation.sections
+    - navigation.footer
+    - navigation.top
+    - search.suggest
+    - search.highlight
+    - content.code.copy
+
+plugins:
+  - search:
+      lang: [en, ja]
+
+markdown_extensions:
+  - admonition
+  - attr_list
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+      slugify: !!python/object/apply:pymdownx.slugs.slugify { kwds: { case: lower } }  # GitHub-style anchors, Japanese included
+  - pymdownx.highlight
+  - pymdownx.superfences
+
+validation:
+  omitted_files: warn
+  absolute_links: ignore
+  unrecognized_links: warn
+  anchors: warn
+
+nav:
+  - Home: index.md
+  - Guide:
+      - Install: install.md
+      - Sources: sources.md
+      - Dashboard, glossary and Map: dashboard.md
+      - Command line: cli.md
+      - MCP server: mcp.md
+  - Reference:
+      - What gets recorded and how analysis works: analysis.md
+      - Configuration: configuration.md
+      - Data and privacy: privacy.md
+      - Troubleshooting: troubleshooting.md
+      - Development: development.md
+  - 日本語:
+      - ホーム: ja/index.md
+      - インストール: ja/install.md
+      - ソース: ja/sources.md
+      - ダッシュボード、用語集、マップ: ja/dashboard.md
+      - コマンドライン: ja/cli.md
+      - MCP サーバー: ja/mcp.md
+      - 記録される内容と分析の仕組み: ja/analysis.md
+      - 設定: ja/configuration.md
+      - データとプライバシー: ja/privacy.md
+      - トラブルシューティング: ja/troubleshooting.md
+      - 開発: ja/development.md

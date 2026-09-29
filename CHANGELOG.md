@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.0 (2026-09-30)
 
 - **Knowledge overview:** the Knowledge section opens on a page with a card each for the Map, All knowledge, the
   Glossary and Weekly reviews, each with a glance at what is inside; the full list moved to **All knowledge**
@@ -70,6 +70,8 @@
   New [MCP server](docs/mcp.md) docs page.
 - MIT license. Documentation split into a short README and pages under `docs/` (English and Japanese), with
   screenshots made from demo data (`docs/demo/make_demo.py`).
+- The source is public, and the documentation is online at <https://kayeungadrian-tam.github.io/agents-chronicle/> (English and Japanese), built from
+  `docs/` and the READMEs with MkDocs.
 
 ## 0.1.2 (2026-09-28)
 

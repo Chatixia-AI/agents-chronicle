@@ -1,0 +1,47 @@
+name: Docs
+
+# Builds the documentation site from docs/ and the READMEs (mkdocs.yml) and publishes it to GitHub Pages.
+# Pull requests only build it, so broken links and anchors fail before they reach main.
+
+on:
+  push:
+    branches: [main]
+    paths: [docs/**, README.md, README.ja.md, mkdocs.yml, packaging/macos/icon.png, pyproject.toml, uv.lock, .github/workflows/docs.yml]
+  pull_request:
+    paths: [docs/**, README.md, README.ja.md, mkdocs.yml, .github/workflows/docs.yml]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pages-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: astral-sh/setup-uv@v7
+      - run: uv run --locked --only-group docs mkdocs build --strict
+        env:
+          NO_MKDOCS_2_WARNING: "1"
+      - uses: actions/upload-pages-artifact@v4
+        if: github.event_name != 'pull_request'
+        with:
+          path: site
+
+  deploy:
+    needs: build
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

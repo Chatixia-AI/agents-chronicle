@@ -5,7 +5,7 @@
 ## Tests and a local install
 
 ```bash
-uv sync && uv run pytest -q        # 88 tests, ~12 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # 128 tests, ~18 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -39,6 +39,17 @@ is a dry run: tests plus a DMG kept as a workflow artifact, nothing published.
    `MACOS_CERT_PASSWORD`, `MACOS_CODESIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`
    (an app-specific password from account.apple.com). Without them the DMG is ad-hoc signed and users have to
    approve it in Privacy & Security.
+
+## Documentation site
+
+<https://kayeungadrian-tam.github.io/agents-chronicle/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md` and
+`README.ja.md` become the home pages, and `docs/_site/hooks.py` points links that leave `docs/` at GitHub.
+`.github/workflows/docs.yml` publishes it to GitHub Pages on every push to `main` that touches the docs.
+
+```bash
+uv run --only-group docs mkdocs serve            # preview at http://127.0.0.1:8000/, reloads on save
+uv run --only-group docs mkdocs build --strict     # what CI runs: fails on broken links and anchors
+```
 
 ## Diagrams
 

@@ -5,7 +5,7 @@
 ## テストとローカルへのインストール
 
 ```bash
-uv sync && uv run pytest -q        # 88 tests, ~12 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # 128 tests, ~18 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -39,6 +39,17 @@ pywebview の Cocoa アプリデリゲートを拡張しているため、pywebv
    `MACOS_CERT_PASSWORD`、`MACOS_CODESIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`
    （account.apple.com で発行するアプリ用パスワード）を追加します。これらがない場合、DMG はアドホック署名となり、
    利用者は「プライバシーとセキュリティ」で許可する必要があります。
+
+## ドキュメントサイト
+
+<https://kayeungadrian-tam.github.io/agents-chronicle/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と `README.ja.md` が
+ホームページになり、`docs/` の外を指すリンクは `docs/_site/hooks.py` が GitHub へのリンクに書き換えます。
+`main` へのプッシュでドキュメントが変わると、`.github/workflows/docs.yml` が GitHub Pages に公開します。
+
+```bash
+uv run --only-group docs mkdocs serve            # http://127.0.0.1:8000/ でプレビュー（保存で再読み込み）
+uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクやアンカーが壊れていると失敗
+```
 
 ## 図
 
