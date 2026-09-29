@@ -16,6 +16,7 @@
 | `chronicle export [--full]` | Markdown 保管庫を書き直す |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | あなたの語彙：社内名称、略語、業務用語と、その定義と使われ方。`--themes` で大きいカテゴリをマップ用のテーマに分けます |
 | `chronicle review [2026-W39\|current]` | Claude が書く週次の振り返り（週が終わるたびに自動作成） |
+| `chronicle import <zip> [--analyze]` | claude.ai のデータエクスポート（.zip、展開したフォルダー、`conversations.json`）からチャットを取り込み（繰り返し可）。[ソース](sources.md)を参照 |
 | `chronicle forget <id> [--delete-transcript]` | セッションを保管庫から完全に削除（再取り込みされません） |
 | `chronicle sources` | 接続中のエージェントと、その記録方法 |
 | `chronicle connect <agent>` / `disconnect <agent>` | `claude`、`codex`、`codex-cloud`、`copilot`、`bob` の記録を開始／停止（データは残ります） |

@@ -5,7 +5,7 @@
 | Page | What's in it |
 | --- | --- |
 | [Install](install.md) | The desktop app and the command-line install, what each sets up, updating, uninstalling |
-| [Sources](sources.md) | Claude Code, Codex, Codex Cloud, GitHub Copilot and IBM Bob: what is read, how each is connected |
+| [Sources](sources.md) | Claude Code, Codex, Codex Cloud, GitHub Copilot, IBM Bob and imported claude.ai chats: what is read, how each is connected |
 | [Dashboard, glossary and Map](dashboard.md) | The layout, keyboard shortcuts, every page, the glossary, the Map and themes |
 | [Command line](cli.md) | Every `chronicle` command and the Markdown vault |
 | [MCP server](mcp.md) | The tools your agents get, connecting Claude Desktop, Cursor, Windsurf, Gemini CLI or any other MCP client |

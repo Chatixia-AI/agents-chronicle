@@ -7,6 +7,7 @@
 Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかに接続するのは、Status ページで
 **Check for updates** を押したときのアップデート確認だけです。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Codex Cloud を接続した場合は、
 同期のたびに `codex cloud` CLI も実行され、Codex のログインで OpenAI からあなた自身のタスクを取得します。こちらから何かを送ることはありません。
+claude.ai のエクスポートを取り込むときは `conversations.json` と `projects.json` だけを読み、`users.json` は開きません。
 
 | ローカルに保存されるもの | 場所 |
 | --- | --- |

@@ -206,8 +206,8 @@ const STATUS_LABEL = {
 };
 const STATUS_ICON = { pending: "queued", stale: "queued", running: "running", error: "gotcha", skipped: "skipped", done: "completed" };
 
-const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob" };
-const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob" };
+const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob", "claude-ai": "Claude.ai" };
+const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob", "claude-ai": "Claude.ai" };
 function agentShort(a) { return AGENT_SHORT[a] || a || "Claude"; }
 function agentName(a) { return AGENTS[a] || "Claude Code"; }
 function agentTag(a, title) { return a && a !== "claude" ? h("span", { class: "agent-tag", title: title || `${agentName(a)} session` }, agentShort(a)) : null; }
@@ -2365,7 +2365,33 @@ route(/^\/map$/, async (params) => {
 // Sources: which agents are connected
 // =====================================================================================
 route(/^\/sources$/, async () => {
-  const [sources, clients] = await Promise.all([api("/api/connectors"), api("/api/mcp-clients")]);
+  const [sources, clients, imports] = await Promise.all([api("/api/connectors"), api("/api/mcp-clients"), api("/api/imports")]);
+  const ai = imports.claude_ai, last = ai.last_import;
+  const picker = h("input", { type: "file", accept: ".zip,.json,application/zip", hidden: true, onchange: async () => {
+    const file = picker.files[0];
+    if (!file) return;
+    importBtn.disabled = true; importBtn.textContent = `Uploading ${fmtCompact(file.size)}B…`;
+    const res = await fetch("/api/import/claude-export", { method: "POST", headers: { "X-Chronicle": "1", "Content-Type": "application/octet-stream" }, body: file });
+    const r = await res.json().catch(() => ({}));
+    importBtn.disabled = false; importBtn.textContent = "Import export…"; picker.value = "";
+    if (!r.started) { toast(r.error || "An import is already running"); return; }
+    toast("Importing claude.ai chats…", 5000);
+    watchJob("import");
+  } });
+  const importBtn = h("button", { class: "btn primary", type: "button", onclick: () => picker.click() }, "Import export…");
+  const importsCard = h("section", { class: "card src-card", style: { marginTop: "16px" } },
+    cardHead("Claude.ai chats", { iconName: "history", hint: "imported from a data export" }),
+    h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
+      "Chats on claude.ai are not stored on your Mac. Export them at claude.ai › Settings › Privacy › Export data; the email's link downloads a .zip. ",
+      "Import it here, or with ", h("code", null, "chronicle import <zip>"), ". Import newer exports any time: only new and changed chats are added. ",
+      "Imported chats are not analyzed automatically; open one and choose Analyze now."),
+    h("div", { class: "src-stats" },
+      h("span", null, h("b", null, fmtNum(ai.sessions)), " chats"),
+      h("span", null, h("b", null, fmtNum(ai.analyzed)), " analyzed"),
+      h("span", null, "last import ", h("b", null, last ? ago(last.at) : "never"))),
+    h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, last ? `${last.file}: ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated` : ""),
+      h("div", { style: { display: "flex", gap: "8px" } },
+        ai.sessions ? h("a", { class: "btn", href: "#/sessions?agent=claude-ai" }, "Chats") : null, importBtn, picker)));
   const clientRow = (c) => {
     const btn = h("button", { class: `btn small${c.registered ? "" : " primary"}`, type: "button", disabled: !c.registered && !c.detected,
       onclick: async () => {
@@ -2425,7 +2451,7 @@ route(/^\/sources$/, async () => {
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, "Sources"),
       h("div", { class: "sub" }, "The coding agents Chronicle records. Connecting starts archiving and analyzing their sessions and gives the agent Chronicle's MCP tools."))),
-    h("div", { class: "src-grid" }, sources.map(card)), clientsCard);
+    h("div", { class: "src-grid" }, sources.map(card)), importsCard, clientsCard);
 });
 
 // =====================================================================================
@@ -2894,7 +2920,7 @@ async function pollStatus() {
       if (j && j.state !== "running") {
         watched.delete(name);
         toast(j.state === "done" ? `Done: ${String(j.result || name).slice(0, 160)}` : `Failed: ${String(j.result).slice(0, 200)}`, 6000);
-        if (name === "sync" || name.startsWith("glossary")) { shellSection = null; projectsCache = null; } // the sidebar's lists and counts may have changed
+        if (name === "sync" || name === "import" || name.startsWith("glossary")) { shellSection = null; projectsCache = null; } // the sidebar's lists and counts may have changed
         render();
       }
     }

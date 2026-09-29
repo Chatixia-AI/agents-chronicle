@@ -47,4 +47,15 @@ GPT-5 の料金で見積もります。
 Bob IDE は会話ファイルをローカルに保存しないため、記録されるのはこのデータベース内のタスクだけです。接続すると
 `~/.bob/settings/mcp_settings.json` に MCP サーバーが登録されます。
 
+**Claude.ai のチャット**は Mac に保存されないため、データのエクスポートから取り込みます。claude.ai の **設定 › プライバシー › データをエクスポート**
+を開くと、届いたメールのリンクから `.zip` をダウンロードできます。Sources ページの **Import export…**、または `chronicle import <zip>` で取り込みます
+（展開したフォルダーや `conversations.json` も使えます）。各チャットはセッション（エージェント `claude-ai`、`source = claude-ai-export`）になり、
+プロンプト、応答、思考、アーティファクトなどのツール呼び出し、添付ファイルの注記が入ります。claude.ai のプロジェクト内のチャットは
+`claude.ai/<プロジェクト>`、それ以外は `claude.ai` にまとまります。新しいエクスポートはいつでも取り込めます。新しいチャットと変更されたチャットだけが
+追加されます。読み込んでアーカイブするのは `conversations.json` と `projects.json` だけで、`users.json`（名前とメールアドレス）は開きません。
+ダッシュボードからアップロードした zip は取り込み後に削除します。取り込んだチャットは**自動では分析しません**（何年分ものチャットを分析すると
+Claude プランの上限を一度に使い切るため）。チャットを開いて **Analyze now** を選ぶか、`--analyze` を付けて取り込むとすべて分析待ちに入ります。
+エクスポートにはトークン数がないため、費用は表示されません。Claude Code on the web のセッションはこのエクスポートに含まれません。
+`claude --teleport <id>` で Mac に通常の Claude Code のトランスクリプトとして取り込めます。
+
 Claude Desktop、Cursor、Windsurf、Gemini CLI は記録しませんが、MCP サーバーは使えます。[MCP サーバー](mcp.md)を参照してください。

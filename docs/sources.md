@@ -50,5 +50,18 @@ and archives a SQLite snapshot of that database; nothing else in `~/.bob` (e.g. 
 keeps no conversation files locally, so only the tasks in that database are recorded. Connecting registers the MCP
 server in `~/.bob/settings/mcp_settings.json`.
 
+**Claude.ai chats** are not stored on your Mac, so they come in from a data export instead: on claude.ai, open
+**Settings › Privacy › Export data**; the email's link downloads a `.zip`. Import it with **Import export…** on the
+Sources page, or `chronicle import <zip>` (the unpacked folder or `conversations.json` work too). Each chat becomes
+a session (agent `claude-ai`, `source = claude-ai-export`) with its prompts, replies, thinking, tool calls such as
+artifacts, and notes of attached files; chats in a claude.ai project are grouped under `claude.ai/<project>`, the
+rest under `claude.ai`. Import a newer export any time: new and changed chats are added, unchanged ones skipped.
+Only `conversations.json` and `projects.json` are read and archived; `users.json` (your name and email) is never
+opened, and a zip uploaded from the dashboard is deleted once imported. Imported chats are **not analyzed
+automatically**, since years of chats would use up your Claude plan's limits at once: open a chat and choose
+**Analyze now**, or import with `--analyze` to queue them all. The export has no token counts, so chats show no
+cost. Claude Code on the web sessions are not in this export; `claude --teleport <id>` brings one onto your Mac as
+an ordinary Claude Code transcript.
+
 Claude Desktop, Cursor, Windsurf and Gemini CLI aren't recorded, but they can use the MCP server too. See
 [MCP server](mcp.md).

@@ -648,6 +648,25 @@ def cmd_sources(args) -> int:
     return 0
 
 
+def cmd_import(args) -> int:
+    from pathlib import Path
+
+    from .claude_export import ExportError, import_export, summary
+
+    cfg = _cfg()
+    conn = _conn(cfg)
+    try:
+        counts = import_export(cfg, conn, Path(args.path), analyze=args.analyze, progress=lambda m: print(m, file=sys.stderr))
+    except ExportError as exc:
+        print(f"error: {exc}", file=sys.stderr)
+        return 1
+    print(summary(counts))
+    if counts["new"] + counts["updated"]:
+        print("queued for analysis (`chronicle work` runs it now)" if args.analyze
+              else "not analyzed: open a chat and choose Analyze now, or re-run with --analyze to queue them all")
+    return 0
+
+
 def cmd_connect(args) -> int:
     from .connectors import MCP_CLIENTS, connect, disconnect
     from .install import executable
@@ -830,6 +849,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("disconnect", help="stop recording an agent, or remove the MCP server from a client (recorded sessions are kept)")
     s.add_argument("name", choices=agents + clients)
     s.set_defaults(fn=cmd_connect, disconnect=True, exe=None, no_sync=True)
+
+    s = sub.add_parser("import", help="import chats from a claude.ai data export (the .zip, its folder, or conversations.json)")
+    s.add_argument("path")
+    s.add_argument("--analyze", action="store_true", help="queue the imported chats for analysis (uses your Claude plan)")
+    s.set_defaults(fn=cmd_import)
 
     s = sub.add_parser("context", help="print the knowledge digest a new session in this directory would get")
     s.add_argument("--cwd")

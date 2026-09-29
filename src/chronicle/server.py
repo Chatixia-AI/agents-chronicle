@@ -567,6 +567,24 @@ class App:
 
         return check(remote)
 
+    def imports(self) -> dict:
+        from .claude_export import import_status
+
+        return {"claude_ai": import_status(self.conn)}
+
+    def action_import(self, upload: Path) -> bool:
+        from .claude_export import import_export, summary
+
+        def job(progress):
+            conn = connect(self.cfg.db_path)
+            try:
+                return summary(import_export(self.cfg, conn, upload, progress=progress))
+            finally:
+                conn.close()
+                upload.unlink(missing_ok=True)  # the zip also holds users.json (name, email): not kept
+
+        return self.jobs.start("import", job)
+
     def action_update(self) -> dict:
         from .update import run_update
 
@@ -757,6 +775,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.status_small())
                 if p == "/api/update":
                     return self._json(app.update_info(remote=False))
+                if p == "/api/imports":
+                    return self._json(app.imports())
                 if p.startswith("/api/"):
                     return self._json({"error": "not found"}, 404)
                 return self._static(p)
@@ -766,9 +786,34 @@ def make_handler(app: App, port: int):
                 log.exception("GET %s failed", p)
                 return self._json({"error": str(exc)}, 500)
 
+        def _import_upload(self):
+            """The claude.ai export .zip, streamed to disk (it can be hundreds of MB), then imported in the background."""
+            length = int(self.headers.get("Content-Length") or 0)
+            if not length:
+                return self._json({"error": "empty upload"}, 400)
+            dest = app.cfg.home / "imports" / f"claude-export-{int(time.time())}.zip"
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            left = length
+            with open(dest, "wb") as f:
+                while left:
+                    chunk = self.rfile.read(min(left, 1 << 20))
+                    if not chunk:
+                        break
+                    f.write(chunk)
+                    left -= len(chunk)
+            if left:
+                dest.unlink(missing_ok=True)
+                return self._json({"error": "upload cut off"}, 400)
+            started = app.action_import(dest)
+            if not started:
+                dest.unlink(missing_ok=True)
+            return self._json({"started": started})
+
         def _post(self):
             if not self._host_ok() or self.headers.get("X-Chronicle") != "1":
                 return self._json({"error": "forbidden"}, 403)
+            if urlparse(self.path).path == "/api/import/claude-export":
+                return self._import_upload()
             length = int(self.headers.get("Content-Length") or 0)
             body = {}
             if length:

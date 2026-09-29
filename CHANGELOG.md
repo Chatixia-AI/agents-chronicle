@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Claude.ai chats:** import a claude.ai data export (Settings › Privacy › Export data) with **Settings › Sources ›
+  Claude.ai chats › Import export…** or `chronicle import <zip>`. Chats become sessions you can search, browse and
+  analyze on demand; re-importing a newer export adds only new and changed chats. `users.json` is never read.
 - **Codex Cloud tasks:** `chronicle connect codex-cloud` (or **Settings › Sources › Codex Cloud**) records the tasks
   you ran at chatgpt.com/codex, through the `codex cloud` CLI: title, repository, changed files, the diff and a link,
   archived for good. Opt-in, since it goes online. The CLI has no task conversations, so these are not analyzed.
