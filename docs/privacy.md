@@ -30,6 +30,9 @@ Importing a claude.ai or ChatGPT export reads only the chats, never the account 
 - **The dashboard** binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding) and requires a custom header
   on state-changing requests (CSRF). In the app window, the page can call only three window actions (theme, drag,
   zoom).
+- **Exports** (Export on a session, or on a selection in the Sessions list) are redacted like everything the
+  dashboard shows, in Markdown and JSON. **Original transcript** is the agent's own file as archived, unredacted:
+  check it before sharing.
 - **MCP tools** read the database and answer on stdio; nothing listens on the network. Their results join the
   client's conversation and so reach that client's model, with secrets redacted as in the digests. Give the server
   only to clients whose model provider you trust with your sessions. See [MCP server](mcp.md#privacy).

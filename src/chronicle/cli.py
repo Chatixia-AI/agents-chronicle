@@ -484,11 +484,40 @@ def cmd_export(args) -> int:
     from .export_md import export_markdown
 
     cfg = _cfg()
+    if args.sessions:
+        return _export_sessions(cfg, args)
     if args.out:
         cfg.notes_dir = Path(args.out).expanduser()
     conn = _conn(cfg)
     n = export_markdown(conn, cfg, full=args.full)
     print(f"{n} notes written to {cfg.notes_dir}")
+    return 0
+
+
+def _export_sessions(cfg, args) -> int:
+    """`chronicle export ID...`: the sessions as one file (or a .zip of several) instead of the vault."""
+    from pathlib import Path
+
+    from .session_export import ExportError, export_sessions
+    from .views import resolve_session_id
+
+    conn = _conn(cfg)
+    ids = []
+    for ref in args.sessions:
+        sid = resolve_session_id(conn, ref)
+        if not sid:
+            print(f"no unique session matches {ref!r}", file=sys.stderr)
+            return 2
+        ids.append(sid)
+    try:
+        name, _, data = export_sessions(conn, ids, args.format)
+    except ExportError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    out = Path(args.out or ".").expanduser()
+    path = out / name if out.is_dir() else out
+    path.write_bytes(data)
+    print(f"wrote {path} ({len(data):,} bytes)")
     return 0
 
 
@@ -808,8 +837,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("app", help="open the desktop app (macOS; needs the `app` extra)")
     s.set_defaults(fn=cmd_app)
 
-    s = sub.add_parser("export", help="write the Markdown (Obsidian) vault")
-    s.add_argument("--out")
+    s = sub.add_parser("export", help="write the Markdown (Obsidian) vault, or export sessions as files")
+    s.add_argument("sessions", nargs="*", help="session ids or prefixes: export these (one file, or a .zip of several)")
+    s.add_argument("--format", choices=["md", "json", "raw"], default="md",
+                   help="with sessions: md (overview + conversation), json (every event) or raw (the original transcript)")
+    s.add_argument("--out", help="the vault folder; with sessions, a file or folder to write the export to")
     s.add_argument("--full", action="store_true", help="rewrite every note")
     s.set_defaults(fn=cmd_export)
 

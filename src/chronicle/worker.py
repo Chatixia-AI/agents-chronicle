@@ -134,6 +134,7 @@ def _analyze_many(cfg: Config, ids: list[str], runner: ClaudeRunner, report: Wor
 
     stop = threading.Event()
     lock = threading.Lock()
+    finished = 0
 
     def task(sid: str):
         if stop.is_set():
@@ -141,7 +142,7 @@ def _analyze_many(cfg: Config, ids: list[str], runner: ClaudeRunner, report: Wor
         conn = connect(cfg.db_path)
         try:
             if progress:
-                progress(f"analyzing {sid[:8]}…")
+                progress(f"analyzing {sid[:8]}…" if len(ids) == 1 else f"analyzing sessions: {finished} of {len(ids)} done")
             analyze_session(conn, cfg, sid, runner, model=model)
             cost = conn.execute(
                 "SELECT cost_usd FROM analyses WHERE target = ? AND kind = 'session' ORDER BY id DESC LIMIT 1", (sid,)
@@ -171,6 +172,7 @@ def _analyze_many(cfg: Config, ids: list[str], runner: ClaudeRunner, report: Wor
         for fut in as_completed(futures):
             sid, status, info = fut.result()
             with lock:
+                finished += 1
                 if status == "done":
                     report.analyzed.append(sid)
                     report.cost_usd += info or 0.0
@@ -182,7 +184,7 @@ def _analyze_many(cfg: Config, ids: list[str], runner: ClaudeRunner, report: Wor
                 elif status == "failed":
                     report.failed.append((sid, info))
             if progress:
-                progress(f"{sid[:8]}: {status}")
+                progress(f"{sid[:8]}: {status}" if len(ids) == 1 else f"analyzing sessions: {finished} of {len(ids)} done")
 
 
 def _synthesize(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, *, force=False, progress=None):

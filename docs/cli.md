@@ -14,6 +14,7 @@
 | `chronicle analyze <id> \| --pending [--limit N] [--dry-run]` | Analyze now (`--dry-run` shows digest sizes, no tokens spent) |
 | `chronicle synthesize [--project P] [--global] [--all]` | Rebuild knowledge bases |
 | `chronicle export [--full]` | Rewrite the Markdown vault |
+| `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | Export sessions: one file, or a .zip of several (`raw`: the original transcript) |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage; `--themes` groups big categories into themes for the Map |
 | `chronicle review [2026-W39\|current]` | Weekly engineering review written by Claude (automatic for each completed week) |
 | `chronicle import <zip> [--analyze]` | Import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or `conversations.json`); repeatable. See [Sources](sources.md) |

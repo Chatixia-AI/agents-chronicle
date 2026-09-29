@@ -24,7 +24,13 @@ from .util import loads, to_iso, utcnow
 from .views import project_labels, resolve_session_id, session_record
 
 log = logging.getLogger("chronicle.server")
+MAX_SELECTION = 1000  # sessions one "analyze selected" may cover
 WEB_DIR = Path(__file__).parent / "web"
+
+
+# The page is served from the files as they were when this process started, so it always matches the code
+# answering its API calls: an upgrade (or an edit to an editable install) takes effect with the restart.
+WEB_FILES = {p.name: p.read_bytes() for p in sorted(WEB_DIR.glob("*")) if p.is_file()}
 
 
 def _ui_build() -> str:
@@ -32,13 +38,13 @@ def _ui_build() -> str:
     import hashlib
 
     h = hashlib.sha1()
-    for p in sorted(WEB_DIR.glob("*")):
-        if p.is_file():
-            h.update(p.read_bytes())
+    for body in WEB_FILES.values():
+        h.update(body)
     return h.hexdigest()[:12]
 
 
 UI_BUILD = _ui_build()
+PROGRESS_RE = re.compile(r"(\d[\d,]*)\s*(?:of|/)\s*(\d[\d,]*)")  # "12 of 40", "120/2,000": a job's progress
 
 SESSION_LIST_COLS = (
     "id, source, agent, title, project_name, project_path, started_at, ended_at, duration_s, active_s, n_prompts, "
@@ -66,7 +72,7 @@ class Jobs:
         with self.lock:
             if self.jobs.get(name, {}).get("state") == "running":
                 return False
-            self.jobs[name] = {"state": "running", "started": time.time(), "message": "", "result": None}
+            self.jobs[name] = {"state": "running", "started": time.time(), "message": "", "result": None, "done": None, "total": None}
 
         def run():
             try:
@@ -80,8 +86,10 @@ class Jobs:
         return True
 
     def _msg(self, name, message):
+        m = PROGRESS_RE.search(message or "")
+        done, total = (int(m.group(1).replace(",", "")), int(m.group(2).replace(",", ""))) if m else (None, None)
         with self.lock:
-            self.jobs[name]["message"] = message
+            self.jobs[name].update(message=message, done=done, total=total if total and done <= total else None)
 
     def _finish(self, name, state, result):
         with self.lock:
@@ -308,6 +316,10 @@ class App:
         order = "ASC" if q.get("order") == "asc" else "DESC"
         w = " AND ".join(where)
         total = self.conn.execute(f"SELECT COUNT(*) FROM sessions WHERE {w}", params).fetchone()[0]
+        if q.get("ids_only"):  # "select all matching" in the list: the ids, not the rows
+            rows = self.conn.execute(f"SELECT id FROM sessions WHERE {w} "
+                                     f"ORDER BY {sort} {order} NULLS LAST LIMIT {MAX_SELECTION}", params)
+            return {"total": total, "ids": [r[0] for r in rows]}
         limit = min(int(q.get("limit") or 50), 500)
         offset = int(q.get("offset") or 0)
         items = self._session_rows(w, params, f"{sort} {order} NULLS LAST", limit, offset)
@@ -558,6 +570,7 @@ class App:
         pending = count_pending(self.conn, self.cfg)
         return {
             "pending": pending,
+            "analysis": {"auto": self.cfg.analysis.auto, "max_per_run": self.cfg.analysis.max_per_run},
             "paused_until": kv_get(self.conn, PAUSE_KEY),
             "last_sync": kv_get(self.conn, "last_sync"),
             "jobs": self.jobs.snapshot(),
@@ -687,6 +700,55 @@ class App:
 
         return self.jobs.start(f"analyze:{real}", job)
 
+    def _export_ids(self, ids: str) -> list[str]:
+        from .session_export import MAX_SESSIONS, ExportError
+
+        real = [r for r in (resolve_session_id(self.conn, x.strip()) for x in ids.split(",")[:MAX_SESSIONS] if x.strip()) if r]
+        if not real:
+            raise ExportError("no such sessions")
+        return list(dict.fromkeys(real))
+
+    def export(self, ids: str, fmt: str) -> tuple[str, str, bytes]:
+        from .session_export import export_sessions
+
+        return export_sessions(self.conn, self._export_ids(ids), fmt)
+
+    def export_check(self, ids: str, fmt: str) -> dict:
+        from .session_export import FORMATS, ExportError, has_original
+
+        if fmt not in FORMATS:
+            raise ExportError(f"unknown format {fmt!r}")
+        real = self._export_ids(ids)
+        without = 0 if fmt != "raw" else sum(not has_original(self.conn, sid) for sid in real)
+        if without == len(real):
+            raise ExportError("No original transcript to export: claude.ai chats share one export file and "
+                              "prompt-history sessions have none. Export as Markdown or JSON instead.")
+        return {"ok": True, "count": len(real), "without_original": without}
+
+    def action_analyze_many(self, refs: list) -> dict:
+        """Analyze the sessions picked in the list, in one background job (history-only ones have nothing to send)."""
+        from .worker import run_worker
+
+        ids = []
+        for ref in refs[:MAX_SELECTION]:
+            real = resolve_session_id(self.conn, str(ref))
+            row = self.conn.execute("SELECT source FROM sessions WHERE id = ?", (real,)).fetchone() if real else None
+            if row and row["source"] != "history" and real not in ids:
+                ids.append(real)
+        if not ids:
+            return {"started": False, "error": "Nothing in the selection can be analyzed"}
+
+        def job(progress):
+            report = run_worker(self.cfg, session_ids=ids, synthesize=True, export=True, progress=progress, wait=True)
+            if report.paused_until and report.failed:
+                left = len(ids) - len(report.analyzed) - len(report.skipped)
+                return f"{report.summary()}; hit the Claude usage limit: {left} not analyzed, select them again later"
+            return report.summary()
+
+        started = self.jobs.start("analyze:selection", job)
+        return {"started": started, "count": len(ids), "dropped": len(refs) - len(ids),
+                **({} if started else {"error": "A batch analysis is already running"})}
+
     def action_synthesize(self, path: str) -> bool:
         from .synthesize import synthesize_project
 
@@ -738,13 +800,25 @@ def make_handler(app: App, port: int):
             self.end_headers()
             self.wfile.write(body)
 
+        def _download(self, name: str, ctype: str, body: bytes):
+            from urllib.parse import quote
+
+            ascii_name = name.encode("ascii", "replace").decode().replace("?", "_").replace('"', "'")
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Disposition", f"attachment; filename=\"{ascii_name}\"; filename*=UTF-8''{quote(name)}")
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
         def _static(self, rel: str):
-            rel = rel.lstrip("/") or "index.html"
-            path = (WEB_DIR / rel).resolve()
-            if not path.is_relative_to(WEB_DIR.resolve()) or not path.is_file():
-                path = WEB_DIR / "index.html"
-            body = path.read_bytes()
-            ctype = mimetypes.guess_type(str(path))[0] or "application/octet-stream"
+            name = rel.lstrip("/") or "index.html"
+            if name not in WEB_FILES:
+                name = "index.html"
+            body = WEB_FILES[name]
+            ctype = mimetypes.guess_type(name)[0] or "application/octet-stream"
             if ctype.startswith("text/") or ctype in ("application/javascript",):
                 ctype += "; charset=utf-8"
             self.send_response(200)
@@ -780,6 +854,15 @@ def make_handler(app: App, port: int):
                     return self._json(app.overview(q))
                 if p == "/api/sessions":
                     return self._json(app.sessions(q))
+                if p == "/api/export":  # a download: one session's file, or a .zip of several
+                    from .session_export import ExportError
+
+                    try:
+                        if q.get("check"):  # asked first, so a refusal shows as a message, not a downloaded error
+                            return self._json(app.export_check(q.get("ids", ""), q.get("format", "md")))
+                        return self._download(*app.export(q.get("ids", ""), q.get("format", "md")))
+                    except ExportError as exc:
+                        return self._json({"error": str(exc)}, 400)
                 m = re.fullmatch(r"/api/sessions/([\w-]+)", p)
                 if m:
                     s = app.session(m.group(1))
@@ -871,6 +954,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.action_check_daily(bool(body.get("on"))))
                 if p == "/api/update":
                     return self._json(app.action_update())
+                if p == "/api/sessions/analyze":
+                    return self._json(app.action_analyze_many(list(body.get("ids") or [])))
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/analyze", p)
                 if m:
                     return self._json({"started": app.action_analyze(m.group(1))})

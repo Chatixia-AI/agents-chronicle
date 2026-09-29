@@ -63,8 +63,9 @@ moved away from are left out. Import a newer export any time: new and changed ch
 skipped. Only the chats are read and archived (`conversations.json`, and claude.ai's `projects.json` for project
 names); the account files (`users.json`, `user.json`) and ChatGPT's `chat.html` are never opened, and a zip uploaded
 from the dashboard is deleted once imported. Imported chats are **not analyzed automatically**, since years of chats
-would use up your Claude plan's limits at once: open a chat and choose **Analyze now**, or import with `--analyze`
-to queue them all. The exports have no token counts, so chats show no cost. Claude Code on the web sessions are not
+would use up your Claude plan's limits at once: tick the chats you want in the Sessions list and choose **Analyze**
+(**Select all matching** takes every chat the filters show), open one and choose **Analyze now**, or import with
+`--analyze` to queue them all. The exports have no token counts, so chats show no cost. Claude Code on the web sessions are not
 in the claude.ai export; `claude --teleport <id>` brings one onto your Mac as an ordinary Claude Code transcript.
 Codex Cloud tasks are a separate source (above).
 

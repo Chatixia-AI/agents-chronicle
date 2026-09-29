@@ -82,6 +82,7 @@ const ICONS = {
   sparkles: ["M12 3l1.7 4.6L18.3 9.3l-4.6 1.7L12 15.6l-1.7-4.6L5.7 9.3l4.6-1.7z", "M19 15l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z"],
   pin: ["M12 17v5", "M9 10.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24V16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1v-.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V7a1 1 0 0 1 1-1 2 2 0 0 0 0-4H8a2 2 0 0 0 0 4 1 1 0 0 1 1 1z"],
   x: ["M18 6 6 18", "m6 6 12 12"],
+  download: ["M12 3v12", "m7 10 5 5 5-5", "M5 21h14"],
   arrow: ["M5 12h14", "m12 5 7 7-7 7"],
   branch: ["M6 3v12", ["circle", { cx: 18, cy: 6, r: 3 }], ["circle", { cx: 6, cy: 18, r: 3 }], "M18 9a9 9 0 0 1-9 9"],
   flame: ["M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"],
@@ -107,6 +108,7 @@ const ICONS = {
   unclear: [C10, "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3", "M12 17h.01"],
   history: ["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M12 7v5l4 2"],
   queued: [C10, "M12 6v6l4 2"],
+  pause: ["M9 5v14", "M15 5v14"],
   running: ["M21 12a9 9 0 1 1-6.22-8.56"],
   skipped: [C10, "M8 12h8"],
   // glossary categories
@@ -968,13 +970,73 @@ route(/^\/sessions$/, async (params) => {
     days: params.days || "", sort: params.sort || "started_at", order: params.order || "desc", day: params.day || "",
     agent: params.agent || "" };
   const mode = viewMode("sessions", "list");
-  let offset = 0, scale = null;
+  let offset = 0, scale = null, total = 0;
+  // ---- selection (list view): pick sessions, then analyze them in one go
+  const picked = new Set(), boxes = new Map(); // id -> checkbox of a loaded row
+  let lastPick = null;
+  const selBar = h("div", { class: "sel-bar", hidden: true });
+  const headBox = h("input", { type: "checkbox", "aria-label": "Select all loaded sessions", onclick: (e) => {
+    for (const [id, b] of boxes) if (!b.disabled) { b.checked = e.target.checked; b.closest("tr").classList.toggle("picked", b.checked); e.target.checked ? picked.add(id) : picked.delete(id); }
+    drawSel();
+  } });
+  const setPick = (id, on) => {
+    on ? picked.add(id) : picked.delete(id);
+    const b = boxes.get(id);
+    if (b) { b.checked = on; b.closest("tr")?.classList.toggle("picked", on); }
+  };
+  const pick = (x, tr) => {
+    const b = h("input", { type: "checkbox", "aria-label": `Select ${x.title || "session"}`, checked: picked.has(x.id),
+      onclick: (e) => {
+        e.stopPropagation();
+        if (e.shiftKey && lastPick) { // shift-click: the range from the last box clicked
+          const ids = [...boxes.keys()], a = ids.indexOf(lastPick), z = ids.indexOf(x.id);
+          if (a >= 0 && z >= 0) ids.slice(Math.min(a, z), Math.max(a, z) + 1).forEach((id) => { if (!boxes.get(id).disabled) setPick(id, e.target.checked); });
+        }
+        setPick(x.id, e.target.checked);
+        lastPick = x.id;
+        drawSel();
+      } });
+    tr.classList.toggle("picked", picked.has(x.id));
+    boxes.set(x.id, b);
+    return b;
+  };
+  async function pickAllMatching() {
+    const r = await api("/api/sessions", { ...state, ids_only: 1 });
+    r.ids.forEach((id) => setPick(id, true));
+    drawSel();
+  }
+  function drawSel() {
+    const n = picked.size;
+    const loaded = [...boxes.values()].filter((b) => !b.disabled);
+    headBox.checked = n > 0 && loaded.every((b) => b.checked);
+    headBox.indeterminate = n > 0 && !headBox.checked;
+    selBar.hidden = !n;
+    if (!n) return;
+    const analyze = h("button", { class: "btn primary small", type: "button", onclick: async () => {
+      if (n > 25 && !confirm(`Analyze ${n} sessions now? Each one is a Claude call on your Claude Code login.`)) return;
+      analyze.disabled = true; analyze.textContent = "Starting…";
+      const r = await post("/api/sessions/analyze", { ids: [...picked] });
+      if (!r.started) { toast(r.error || "Could not start"); analyze.disabled = false; drawSel(); return; }
+      toast(`Analyzing ${fmtNum(r.count)} session${r.count === 1 ? "" : "s"}; the status bar shows progress` +
+        (r.dropped ? ` (${fmtNum(r.dropped)} history-only left out: nothing to analyze)` : ""), 7000);
+      [...picked].forEach((id) => setPick(id, false));
+      drawSel();
+      watchJob("analyze:selection");
+    } }, `Analyze ${fmtNum(n)}`);
+    selBar.replaceChildren(...[ // replaceChildren would print a null as the text "null"
+      h("span", { class: "sel-count" }, `${fmtNum(n)} selected`),
+      total > n ? h("button", { class: "text-link", type: "button", onclick: pickAllMatching }, `Select all ${fmtNum(total)} matching`) : null,
+      h("span", { class: "sel-spacer" }),
+      h("button", { class: "btn small", type: "button", onclick: () => { [...picked].forEach((id) => setPick(id, false)); drawSel(); } }, "Clear"),
+      exportMenu(() => [...picked], { small: true, up: true }),
+      analyze].filter(Boolean));
+  }
   const tbody = h("tbody");
   const cards = h("div", { class: "scard-grid" });
   const countEl = h("span", { class: "sub" });
   const moreBtn = h("button", { class: "btn", type: "button", onclick: () => load(true) }, "Load more");
   async function load(more) {
-    if (!more) { offset = 0; tbody.replaceChildren(); cards.replaceChildren(); }
+    if (!more) { offset = 0; tbody.replaceChildren(); cards.replaceChildren(); boxes.clear(); picked.clear(); lastPick = null; drawSel(); }
     const q = { ...state, limit: 60, offset };
     if (state.day) {
       const start = new Date(state.day + "T00:00:00");
@@ -985,12 +1047,14 @@ route(/^\/sessions$/, async (params) => {
     const data = await api("/api/sessions", q);
     if (!more) scale = { active: Math.max(1, ...data.items.map((x) => x.active_s || 0)), tokens: Math.max(1, ...data.items.map((x) => x.tokens || 0)),
       cost: Math.max(0.01, ...data.items.map((x) => x.est_cost_usd || 0)) }; // bars compare rows within the first page
-    data.items.forEach((x) => (mode === "list" ? tbody.append(sessionRow(x, scale)) : cards.append(sessionCard(x))));
+    data.items.forEach((x) => (mode === "list" ? tbody.append(sessionRow(x, scale, pick)) : cards.append(sessionCard(x))));
     offset += data.items.length;
+    total = data.total;
+    drawSel();
     countEl.textContent = state.day ? `${fmtNum(data.total)} sessions on ${fmtDateY(state.day + "T12:00:00")}` : `${fmtNum(data.total)} sessions`;
     moreBtn.hidden = offset >= data.total;
     if (!data.total) {
-      if (mode === "list") tbody.append(h("tr", null, h("td", { colspan: 9, class: "empty" }, "No sessions match")));
+      if (mode === "list") tbody.append(h("tr", null, h("td", { colspan: 10, class: "empty" }, "No sessions match")));
       else cards.append(h("div", { class: "card empty" }, "No sessions match"));
     }
   }
@@ -1008,7 +1072,7 @@ route(/^\/sessions$/, async (params) => {
     opts.map(([v, l]) => h("option", { value: v, selected: state[key] === v }, l)));
   const cols = [["started_at", "Started"], ["title", "Session"], ["project_name", "Project"], ["n_prompts", "Prompts", 1], ["n_tool_calls", "Tools", 1],
     ["active_s", "Active", 1], ["tokens", "Tokens", 1], ["est_cost_usd", "Est. cost", 1], [null, "Outcome"]];
-  const thead = h("thead", null, h("tr", null, cols.map(([key, label, num]) => {
+  const thead = h("thead", null, h("tr", null, h("th", { class: "pick" }, headBox), cols.map(([key, label, num]) => {
     const th = h("th", { class: `${key ? "sortable" : ""} ${num ? "num" : ""}` }, label, key === state.sort ? h("span", { class: "arrow" }, state.order === "asc" ? " ↑" : " ↓") : null);
     if (key) th.addEventListener("click", () => { state.order = state.sort === key && state.order === "desc" ? "asc" : "desc"; state.sort = key; setParams(state); render(); });
     return th;
@@ -1025,7 +1089,8 @@ route(/^\/sessions$/, async (params) => {
       sortSel,
       state.day ? h("button", { class: "chip on", type: "button", title: "Clear the day filter", onclick: () => { state.day = ""; refresh(); } }, icon("calendar"), state.day, icon("x")) : null),
     mode === "list" ? h("section", { class: "card flush" }, h("div", { class: "table-wrap" }, h("table", { class: "data" }, thead, tbody))) : cards,
-    h("div", { class: "load-more" }, moreBtn));
+    h("div", { class: "load-more" }, moreBtn),
+    mode === "list" ? selBar : null);
 });
 
 function sessionCard(x) {
@@ -1049,8 +1114,32 @@ function sessionCard(x) {
 function barCell(text, v, max) { // a number with a small magnitude bar under it
   return h("td", { class: "num" }, text, max ? h("div", { class: "cellbar", "aria-hidden": "true" }, h("i", { style: { width: `${Math.min(100, ((v || 0) / max) * 100)}%` } })) : null);
 }
-function sessionRow(x, scale = null) {
-  const tr = h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a")) go(`#/session/${x.id}`); } },
+// ------------------------------------------------------------------ export: one session or a selection, as files
+const RAW_SOURCES = ["transcript", "codex-import", "codex-cloud"]; // sessions with an original transcript of their own
+const EXPORT_FORMATS = [["md", "Markdown", "Summary, knowledge and the conversation"], ["json", "JSON", "The full record, every event included"],
+  ["raw", "Original transcript", "The agent's own file, as archived (not redacted)"]];
+async function downloadExport(ids, fmt) {
+  const qs = new URLSearchParams({ ids: ids.join(","), format: fmt }).toString();
+  let r;
+  try { r = await api(`/api/export?${qs}&check=1`); } catch (e) { toast(e.message, 7000); return; }
+  const a = h("a", { href: `/api/export?${qs}`, download: "" });
+  document.body.append(a); a.click(); a.remove();
+  toast(r.count === 1 ? "Exporting the session…" : `Exporting ${fmtNum(r.count)} sessions as a .zip…` +
+    (r.without_original ? ` ${fmtNum(r.without_original)} without an original transcript are listed in its index.md.` : ""), 6000);
+}
+function exportMenu(getIds, { raw = true, small = false, up = false } = {}) {
+  const menu = h("details", { class: `menu${up ? " up" : ""}` },
+    h("summary", { class: `btn${small ? " small" : ""}`, title: "Download as files" }, icon("download"), "Export"),
+    h("div", { class: "menu-list", role: "menu" }, EXPORT_FORMATS.map(([fmt, label, hint]) => h("button", { type: "button", role: "menuitem",
+      disabled: fmt === "raw" && !raw, title: fmt === "raw" && !raw ? "claude.ai chats share one export file; prompt-history sessions have none" : "",
+      onclick: () => { menu.open = false; downloadExport(getIds(), fmt); } }, h("b", null, label), h("span", null, hint)))));
+  return menu;
+}
+document.addEventListener("mousedown", (e) => { document.querySelectorAll("details.menu[open]").forEach((d) => { if (!d.contains(e.target)) d.open = false; }); });
+
+function sessionRow(x, scale = null, pick = null) {
+  const tr = h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a, .pick")) go(`#/session/${x.id}`); } },
+    pick ? h("td", { class: "pick" }) : null,
     h("td", { class: "nowrap" }, h("div", null, fmtDT(x.started_at)), h("div", { class: "muted small" }, ago(x.started_at))),
     h("td", { class: "title-cell" }, h("div", { class: "t" }, x.title || "(untitled)", agentTag(x.agent),
       x.source === "codex-import" ? h("span", { class: "agent-tag", title: "Claude Code deleted this transcript; recovered from Codex's copy" }, "recovered") : null),
@@ -1063,6 +1152,7 @@ function sessionRow(x, scale = null) {
     barCell(fmtCompact(x.tokens), x.tokens, scale?.tokens),
     barCell(fmtCost(x.est_cost_usd), x.est_cost_usd, scale?.cost),
     h("td", null, outcomeBadge(x.outcome, x.analysis_status, x.source)));
+  if (pick) tr.firstChild.append(pick(x, tr));
   return tr;
 }
 
@@ -1092,7 +1182,8 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
         sx.cc_version ? h("span", { class: "muted" }, `${agentName(sx.agent)} ${sx.cc_version}`) : null,
         sx.source_present === 0 && sx.source !== "history" ? h("span", { class: "badge", title: "The agent deleted the original; Chronicle's archive keeps it" }, "original deleted · archived") : null,
         sx.source === "codex-import" ? h("span", { class: "badge accent", title: "Claude Code deleted this transcript; Chronicle recovered it from the copy Codex Desktop imported" }, h("span", { class: "sdot" }), "recovered via Codex") : null)),
-    h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source), analyzing));
+    h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source),
+      exportMenu(() => [sx.id], { raw: RAW_SOURCES.includes(sx.source) }), analyzing));
   setCrumbs([["Sessions", "#/sessions"], [sx.project_name || "–", `#/project?path=${encodeURIComponent(sx.project_path || "")}`], [sx.title || "(untitled session)"]], token);
   const sfact = (label, value, note, bad) => h("div", { class: "sfact" }, h("b", null, value), h("span", null, label, note ? h("small", { class: bad ? "bad" : "" }, ` · ${note}`) : null));
   const tiles = h("div", { class: "sfacts" },
@@ -2450,8 +2541,9 @@ route(/^\/sources$/, async () => {
         last ? h("span", { class: "muted" }, `last: ${last.file}, ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated`) : null),
       h("div", { class: "src-note" }, "Export from ", h("b", null, HOW[f.agent] || f.label), "; the email's link downloads a .zip to import here or with ",
         h("code", null, "chronicle import <zip>"), ". Import newer exports any time: only new and changed chats are added."),
-      h("div", { class: "src-foot" }, h("span", { class: "muted" }, "Not analyzed automatically: open a chat and choose Analyze now."),
-        h("div", { class: "src-actions" }, f.sessions ? h("a", { class: "btn small", href: `#/sessions?agent=${f.agent}` }, "Sessions") : null))];
+      h("div", { class: "src-foot" }, h("span", { class: "muted" }, "Not analyzed automatically: tick the chats to analyze in the Sessions list and choose Analyze."),
+        h("div", { class: "src-actions" }, f.sessions ? h("a", { class: "btn small", href: `#/sessions?agent=${f.agent}` }, "Sessions") : null,
+          f.sessions > f.analyzed ? h("a", { class: "btn small primary", href: `#/sessions?agent=${f.agent}&status=skipped` }, "Pick chats to analyze") : null))];
     return srcRow(`chat:${f.key}`, summary, body);
   };
 
@@ -2990,7 +3082,72 @@ async function pollStatus() {
       }
     }
   } catch (e) { /* server restarting */ }
-  pollTimer = setTimeout(pollStatus, busy || watched.size ? 2500 : 20000);
+  pollTimer = setTimeout(pollStatus, busy || watched.size || !$("#activity").hidden ? 2500 : 20000);
+}
+
+// ------------------------------------------------------------------ activity panel (click the status bar)
+let lastStatus = null;
+function jobLabel(name) {
+  const [kind, arg] = name.split(/:(.*)/);
+  const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
+  return {
+    sync: "Sync", import: "Importing chats", update: "Updating Chronicle", themes: "Grouping glossary themes",
+    analyze: arg === "selection" ? "Analyzing selected sessions" : `Analyzing session ${(arg || "").slice(0, 8)}`,
+    glossary: arg ? `Glossary: ${tail(arg)}` : "Glossary", review: "Weekly review",
+    synthesize: arg === "__global__" ? "Global playbook" : `Knowledge base: ${tail(arg)}`,
+  }[kind] || name;
+}
+function fmtSecs(s) {
+  s = Math.max(0, Math.round(s));
+  return s < 60 ? `${s}s` : s < 3600 ? `${Math.floor(s / 60)}m ${String(s % 60).padStart(2, "0")}s` : `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
+}
+function toggleActivity(force) {
+  const box = $("#activity");
+  const open = force ?? box.hidden;
+  box.hidden = !open;
+  $("#status-pill").setAttribute("aria-expanded", String(open));
+  if (open) { if (lastStatus) drawActivity(lastStatus); pollStatus(); }
+}
+function drawActivity(st) {
+  const box = $("#activity");
+  const now = Date.now() / 1000;
+  const jobs = Object.entries(st.jobs || {});
+  const running = jobs.filter(([, j]) => j.state === "running").sort((a, b) => a[1].started - b[1].started);
+  const recent = jobs.filter(([, j]) => j.state !== "running" && now - (j.finished || 0) < 6 * 3600)
+    .sort((a, b) => b[1].finished - a[1].finished).slice(0, 6);
+  const runRow = ([name, j]) => {
+    const elapsed = now - j.started;
+    const frac = j.total ? j.done / j.total : null;
+    const left = frac && j.done ? (elapsed / j.done) * (j.total - j.done) : null;
+    return h("div", { class: "act-job" },
+      h("div", { class: "act-top" }, h("b", null, jobLabel(name)),
+        h("span", { class: "muted" }, j.total ? `${fmtNum(j.done)} of ${fmtNum(j.total)}` : fmtSecs(elapsed))),
+      h("div", { class: `act-bar${frac == null ? " indeterminate" : ""}`, role: "progressbar", "aria-label": jobLabel(name),
+        ...(frac == null ? {} : { "aria-valuemin": "0", "aria-valuemax": String(j.total), "aria-valuenow": String(j.done) }) },
+        h("i", { style: frac == null ? {} : { width: `${Math.max(2, frac * 100)}%` } })),
+      h("div", { class: "act-msg muted" }, [j.message || "starting…", j.total ? fmtSecs(elapsed) + " so far" : null,
+        left && j.done >= 2 ? `about ${fmtSecs(left)} left` : null].filter(Boolean).join(" · ")));
+  };
+  const doneRow = ([name, j]) => h("div", { class: "act-done" },
+    h("span", { class: `act-mark ${j.state === "done" ? "ok" : "no"}` }, j.state === "done" ? "✓" : "✗"),
+    h("div", null, h("div", null, h("b", null, jobLabel(name)), h("span", { class: "muted" }, ` · ${ago(new Date(j.finished * 1000).toISOString())}`)),
+      h("div", { class: "act-msg muted" }, String(j.result || (j.state === "done" ? "done" : "failed")).slice(0, 220))));
+  const waiting = (st.pending?.ready || 0) + (st.pending?.queued || 0);
+  const paused = st.paused_until && st.paused_until > new Date().toISOString();
+  const queue = paused ? `Analysis paused until ${fmtTime(st.paused_until)} (Claude usage limit); it resumes by itself.`
+    : !waiting ? "Nothing waiting for analysis."
+    : `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} waiting for analysis` + (st.analysis?.auto ? `; the background agent analyzes up to ${st.analysis.max_per_run} every 15 minutes.` : "; automatic analysis is off.");
+  box.replaceChildren(...[
+    h("div", { class: "act-head" }, h("b", null, "Activity"),
+      h("button", { class: "un-close", type: "button", "aria-label": "Close", onclick: () => toggleActivity(false) }, "×")),
+    h("div", { class: "act-section" }, running.length ? running.map(runRow) : h("div", { class: "muted act-idle" }, "Nothing running right now.")),
+    h("div", { class: `act-queue${paused ? " warn" : ""}` }, icon(paused ? "pause" : "queued"), h("span", null, queue)),
+    recent.length ? h("div", { class: "act-section" }, h("div", { class: "subhead" }, "Recent"), recent.map(doneRow)) : null,
+    h("div", { class: "act-foot" },
+      h("span", { class: "muted" }, st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet"),
+      h("span", null, h("button", { class: "btn small", type: "button", onclick: () => { toggleActivity(false); go("#/status"); } }, "Status"), " ",
+        h("button", { class: "btn small primary", type: "button", disabled: running.some(([n]) => n === "sync"), onclick: syncNow }, "Sync now"))),
+  ].filter(Boolean));
 }
 // an update on offer: a chip in the status bar, a dot on Settings, and once per update a notification card
 function showUpdate(u, version) {
@@ -3060,10 +3217,17 @@ $("#back-btn").addEventListener("click", () => history.back());
 $("#fwd-btn").addEventListener("click", () => history.forward());
 $("#search-pill").addEventListener("click", openPalette);
 $("#sync-btn").addEventListener("click", syncNow);
-$("#status-pill").addEventListener("click", () => go("#/status"));
+$("#status-pill").addEventListener("click", () => toggleActivity());
+$("#status-pill").setAttribute("aria-haspopup", "dialog");
+$("#status-pill").setAttribute("aria-expanded", "false");
+$("#status-pill").title = "Background work: click for progress";
+document.addEventListener("mousedown", (e) => { if (!$("#activity").hidden && !e.target.closest("#activity, #status-pill")) toggleActivity(false); });
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && !$("#activity").hidden) toggleActivity(false); });
 $("#status-update").addEventListener("click", () => go("#/status?focus=updates"));
 $("#theme-btn").addEventListener("click", flipTheme);
 themeChanged();
+    lastStatus = st;
+    if (!$("#activity").hidden) drawActivity(st);
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeChanged);
 window.addEventListener("pywebviewready", themeChanged);
 document.addEventListener("mousedown", (e) => { // the narrow-window sidebar floats over the page; a click elsewhere closes it

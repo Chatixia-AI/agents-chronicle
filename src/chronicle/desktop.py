@@ -248,6 +248,7 @@ class DesktopApp:
         log.info("app started (%s), dashboard at %s", sys.executable, self.url)
 
         self._install_app_delegate()
+        webview.settings["ALLOW_DOWNLOADS"] = True  # session exports: the window asks where to save them
         # a transparent page over native vibrancy; the page asks to drag the window from its toolbar (start_drag)
         self.window = webview.create_window("Chronicle", app_url(self.url, reduce_transparency()), width=1440, height=920,
                                             min_size=(900, 600), text_select=True, zoomable=True,

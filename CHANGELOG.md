@@ -17,6 +17,15 @@
   **Check for updates daily** (off by default, `[updates] check_daily`) asks PyPI once a day while the dashboard
   is open; the last answer survives a restart. See [Updating](docs/install.md#updating).
 - The Sessions sidebar sorts and groups by last activity, so a long-running session stays under Today.
+- **Export sessions:** **Export** on a session page, or on a selection in the Sessions list, downloads Markdown
+  (overview and conversation), JSON (every event) or the original transcript; several sessions come as a .zip with
+  an index. `chronicle export <id>… --format md|json|raw` does the same from a terminal. Secrets are redacted except
+  in the original transcript.
+- **Analyze a selection:** tick sessions in the Sessions list (shift-click for a range, or **Select all matching**)
+  and choose **Analyze** to run them in one background job, skipped ones such as imported chats included.
+- **Activity:** clicking the status bar opens what is running, with a progress bar, time so far and an estimate of
+  time left, plus the analysis queue and recent results. The dashboard serves the page it started with, so an
+  upgrade (or an edit to a checkout) never pairs a new page with old code before the restart.
 - **Sources** is a list: a row per coding agent, chat export and MCP client that opens to its checks and actions.
   A connected agent with a failing check opens on its own.
 - **New dashboard design:** a simpler VS Code layout in Apple's Liquid Glass style. An icon rail and per-section

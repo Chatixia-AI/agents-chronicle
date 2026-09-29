@@ -14,6 +14,7 @@
 | `chronicle analyze <id> \| --pending [--limit N] [--dry-run]` | 今すぐ分析（`--dry-run` は要約のサイズを表示するだけで、トークンを使いません） |
 | `chronicle synthesize [--project P] [--global] [--all]` | ナレッジベースを再構築 |
 | `chronicle export [--full]` | Markdown 保管庫を書き直す |
+| `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | セッションを書き出す：1 件なら 1 ファイル、複数なら .zip（`raw` は元のトランスクリプト） |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | あなたの語彙：社内名称、略語、業務用語と、その定義と使われ方。`--themes` で大きいカテゴリをマップ用のテーマに分けます |
 | `chronicle review [2026-W39\|current]` | Claude が書く週次の振り返り（週が終わるたびに自動作成） |
 | `chronicle import <zip> [--analyze]` | claude.ai または ChatGPT のデータエクスポート（.zip、展開したフォルダー、`conversations.json`）からチャットを取り込み（繰り返し可）。[ソース](sources.md)を参照 |

@@ -184,3 +184,106 @@ def test_dashboard_picks_up_config_changes(synced):
     set_config_value(app.cfg, "sources", "codex_dirs", '["~/.codex"]')
     app.refresh_config()
     assert app.cfg.codex_dirs and app.cfg.codex_dirs[0].name == ".codex"
+
+
+def test_analyze_selected_sessions(synced):
+    """The Sessions list's "Analyze N": picked sessions, skipped ones included, analyzed in one background job."""
+    from chronicle.server import App
+
+    conn = synced["conn"]
+    conn.execute("UPDATE sessions SET analysis_status = 'skipped', analysis_reason = 'imported'")
+    conn.execute("INSERT INTO sessions(id, source, project_path, analysis_status) VALUES ('hist-1', 'history', '/p', 'skipped')")
+    conn.commit()
+    app = App(synced["cfg"])
+    matching = app.sessions({"status": "skipped", "ids_only": "1"})
+    assert matching["total"] == 3 and "hist-1" in matching["ids"] and len(matching["ids"]) == 3
+
+    r = app.action_analyze_many([SID[:8], "hist-1", "no-such-session"])
+    assert r["started"] and r["count"] == 1 and r["dropped"] == 2
+    for _ in range(200):
+        if app.jobs.snapshot()["analyze:selection"]["state"] != "running":
+            break
+        time.sleep(0.05)
+    job = app.jobs.snapshot()["analyze:selection"]
+    assert job["state"] == "done", job
+    status = dict(conn.execute("SELECT id, analysis_status FROM sessions").fetchall())
+    assert status[SID] == "done" and status["hist-1"] == "skipped"
+    assert all(v == "skipped" for k, v in status.items() if k != SID)  # the ones not picked stay as they were
+
+    assert not app.action_analyze_many(["hist-1"])["started"]
+
+
+def test_job_progress_counts():
+    """The Activity panel draws a bar from "N of M" / "N/M" in a job's message."""
+    from chronicle.server import Jobs
+
+    jobs = Jobs()
+    gate = threading.Event()
+
+    def job(progress):
+        for msg in ("analyzing sessions: 3 of 40 done", "importing ChatGPT chats… 1,200/2,000", "synthesizing…"):
+            progress(msg)
+            seen.append({k: jobs.snapshot()["j"][k] for k in ("done", "total")})
+        gate.wait(5)
+        return "ok"
+
+    seen = []
+    assert jobs.start("j", job)
+    for _ in range(100):
+        if len(seen) == 3:
+            break
+        time.sleep(0.01)
+    gate.set()
+    assert seen == [{"done": 3, "total": 40}, {"done": 1200, "total": 2000}, {"done": None, "total": None}]
+
+
+
+def test_export_sessions(synced):
+    """One session downloads as its own file, several as a .zip with an index; secrets stay redacted."""
+    import io
+    import zipfile
+
+    from chronicle.server import App
+    from chronicle.session_export import ExportError
+
+    conn = synced["conn"]
+    app = App(synced["cfg"])
+    other = conn.execute("SELECT id FROM sessions WHERE id != ?", (SID,)).fetchone()[0]
+
+    name, ctype, body = app.export(SID[:8], "md")
+    text = body.decode()
+    assert name.endswith(f"{SID[:8]}.md") and ctype.startswith("text/markdown")
+    assert text.startswith("---\nsession_id: " + SID) and "## Conversation" in text and "### You" in text
+    assert SECRET not in text
+
+    data = json.loads(app.export(SID, "json")[2])
+    assert data["session"]["id"] == SID and data["events"] and SECRET not in json.dumps(data)
+
+    name, ctype, body = app.export(f"{SID},{other}", "md")
+    z = zipfile.ZipFile(io.BytesIO(body))
+    assert name.endswith(".zip") and ctype == "application/zip"
+    assert sum(n.endswith(".md") for n in z.namelist()) == 3  # two sessions and the index
+    assert SID[:8] in z.read(next(n for n in z.namelist() if n.endswith("index.md"))).decode()
+
+    raw_name, _, raw = app.export(SID, "raw")  # the archived transcript, decompressed
+    assert raw_name.endswith(".jsonl") and raw.startswith(b"{")
+    check = app.export_check(f"{SID},{other}", "raw")
+    assert check["count"] == 2
+    history = conn.execute("SELECT id FROM sessions WHERE source = 'history'").fetchone()
+    if history:
+        try:
+            app.export_check(history[0], "raw")
+            raise AssertionError("a history-only session has no original transcript")
+        except ExportError:
+            pass
+
+
+def test_export_from_the_command_line(synced, tmp_path):
+    out = tmp_path / "out"
+    out.mkdir()
+    r = subprocess.run([sys.executable, "-m", "chronicle", "export", SID[:8], "--format", "json", "--out", str(out)],
+                       capture_output=True, text=True, env={**os.environ})
+    assert r.returncode == 0, r.stderr
+    [written] = out.iterdir()
+    assert written.suffix == ".json" and json.loads(written.read_text())["session"]["id"] == SID
+

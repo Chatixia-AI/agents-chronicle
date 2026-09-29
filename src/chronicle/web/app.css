@@ -1164,8 +1164,76 @@ table.data a.proj { overflow-wrap: normal; word-break: normal; white-space: nowr
 #update-note .un-body { display: grid; gap: 3px; }
 #update-note .un-body > div { color: var(--ink-2); }
 #update-note .un-actions { display: flex; gap: 6px; margin-top: 8px; }
-#update-note .un-close { align-self: start; border: 0; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 2px 5px; border-radius: 6px; cursor: pointer; }
-#update-note .un-close:hover { background: var(--hover); color: var(--ink); }
+:is(#update-note, #activity) .un-close { align-self: start; border: 0; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 2px 5px; border-radius: 6px; cursor: pointer; }
+:is(#update-note, #activity) .un-close:hover { background: var(--hover); color: var(--ink); }
 :is(.solid, .os-solid) #update-note { -webkit-backdrop-filter: none; backdrop-filter: none; }
 @keyframes upd-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { #update-note, .card.flash, .statusbar #status-update .dot { animation: none; } }
+
+/* Sessions list: pick rows, then act on them from a floating bar */
+table.data :is(th, td).pick { width: 1%; padding-right: 0; }
+table.data td.pick { cursor: default; }
+table.data .pick input { width: 15px; height: 15px; margin: 2px 0 0; accent-color: var(--accent); cursor: pointer; }
+table.data .pick input:disabled { cursor: not-allowed; opacity: 0.4; }
+table.data tr.picked td { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+table.data tr.picked:hover td { background: color-mix(in srgb, var(--accent) 11%, transparent); }
+.sel-bar {
+  position: sticky; bottom: 12px; z-index: 5; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  width: fit-content; max-width: 100%; margin: 12px auto 0; padding: 8px 8px 8px 16px; border-radius: 999px;
+  background: var(--glass-strong); -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: var(--glass-shadow), 0 8px 24px rgba(0, 0, 0, 0.12), inset 0 0 0 0.5px var(--glass-rim); font-size: 13px;
+}
+.sel-bar .sel-count { font-weight: 600; font-variant-numeric: tabular-nums; }
+.sel-bar .sel-spacer { width: 8px; }
+.sel-bar .btn { border-radius: 999px; }
+.text-link { border: 0; background: transparent; padding: 0; color: var(--accent-ink); cursor: pointer; font: inherit; }
+.text-link:hover { text-decoration: underline; }
+:is(.solid, .os-solid) .sel-bar { -webkit-backdrop-filter: none; backdrop-filter: none; }
+
+/* Activity: what the status bar's pill opens: running jobs with progress, the queue, recent results */
+#activity {
+  position: fixed; left: 12px; bottom: 38px; z-index: 62; width: min(400px, calc(100vw - 24px)); max-height: min(70vh, 560px); overflow-y: auto;
+  padding: 12px 14px; border-radius: 16px; background: var(--glass-strong); color: var(--ink); font-size: 13px;
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: var(--glass-shadow), 0 10px 32px rgba(0, 0, 0, 0.16), inset 0 0 0 0.5px var(--glass-rim);
+  animation: upd-in 0.18s ease-out;
+}
+:is(.solid, .os-solid) #activity { -webkit-backdrop-filter: none; backdrop-filter: none; }
+#activity .act-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; font-size: 14px; }
+#activity .act-section { display: grid; gap: 12px; padding: 4px 0 10px; }
+#activity .act-section .subhead { margin: 2px 0 -4px; }
+#activity .act-idle { padding: 2px 0; }
+#activity .act-top { display: flex; justify-content: space-between; gap: 10px; font-variant-numeric: tabular-nums; }
+#activity .act-msg { font-size: 12px; margin-top: 4px; overflow-wrap: anywhere; }
+#activity .act-bar { position: relative; height: 6px; margin-top: 6px; border-radius: 3px; background: var(--surface-3); overflow: hidden; }
+#activity .act-bar i { position: absolute; inset: 0 auto 0 0; border-radius: 3px; background: var(--accent); transition: width 0.4s ease; }
+#activity .act-bar.indeterminate i { width: 30%; animation: act-slide 1.3s ease-in-out infinite; }
+@keyframes act-slide { from { left: -30%; } to { left: 100%; } }
+#activity .act-queue { display: flex; gap: 8px; align-items: flex-start; padding: 10px 0; border-top: 1px solid var(--grid); border-bottom: 1px solid var(--grid); color: var(--ink-2); font-size: 12.5px; }
+#activity .act-queue .icon { width: 15px; height: 15px; flex: none; margin-top: 1px; color: var(--muted); }
+#activity .act-queue.warn .icon { color: var(--warning); }
+#activity .act-section + .act-queue { margin-top: 0; }
+#activity .act-queue + .act-section { padding-top: 10px; }
+#activity .act-done { display: grid; grid-template-columns: 16px 1fr; gap: 6px; }
+#activity .act-mark { font-weight: 700; text-align: center; }
+#activity .act-mark.ok { color: var(--good-ink); }
+#activity .act-mark.no { color: var(--critical-ink); }
+#activity .act-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--grid); font-size: 12px; }
+@media (prefers-reduced-motion: reduce) { #activity, #activity .act-bar i { animation: none; transition: none; } #activity .act-bar.indeterminate i { left: 0; width: 100%; opacity: 0.4; } }
+
+/* Export: a small menu of formats under (or, in the selection bar, above) its button */
+details.menu { position: relative; }
+details.menu > summary { list-style: none; display: inline-flex; align-items: center; gap: 6px; }
+details.menu > summary::-webkit-details-marker { display: none; }
+details.menu > summary .icon { width: 14px; height: 14px; }
+details.menu[open] > summary { background: var(--surface-2); }
+details.menu .menu-list {
+  position: absolute; right: 0; top: calc(100% + 6px); z-index: 30; display: grid; width: 280px; padding: 5px;
+  border-radius: 12px; background: var(--surface); border: 1px solid var(--border-strong); box-shadow: 0 10px 28px rgba(0, 0, 0, 0.14);
+}
+details.menu.up .menu-list { top: auto; bottom: calc(100% + 8px); }
+details.menu .menu-list button { display: grid; gap: 1px; text-align: left; border: 0; background: transparent; color: var(--ink); padding: 7px 10px; border-radius: 8px; cursor: pointer; font: inherit; }
+details.menu .menu-list button:hover:not(:disabled) { background: var(--hover); }
+details.menu .menu-list button:disabled { opacity: 0.45; cursor: not-allowed; }
+details.menu .menu-list b { font-weight: 600; font-size: 13px; }
+details.menu .menu-list span { color: var(--muted); font-size: 12px; }

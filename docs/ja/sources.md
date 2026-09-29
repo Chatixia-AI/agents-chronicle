@@ -58,7 +58,7 @@ Bob IDE は会話ファイルをローカルに保存しないため、記録さ
 変更されたチャットだけが追加されます。読み込んでアーカイブするのはチャット（`conversations.json` と、プロジェクト名のための claude.ai の
 `projects.json`）だけで、アカウントのファイル（`users.json`、`user.json`）と ChatGPT の `chat.html` は開きません。
 ダッシュボードからアップロードした zip は取り込み後に削除します。取り込んだチャットは**自動では分析しません**（何年分ものチャットを分析すると
-Claude プランの上限を一度に使い切るため）。チャットを開いて **Analyze now** を選ぶか、`--analyze` を付けて取り込むとすべて分析待ちに入ります。
+Claude プランの上限を一度に使い切るため）。Sessions の一覧で分析したいチャットにチェックを入れて **Analyze** を選ぶ（**Select all matching** でフィルターに合うチャットをすべて選べます）か、チャットを開いて **Analyze now** を選びます。`--analyze` を付けて取り込むとすべて分析待ちに入ります。
 エクスポートにはトークン数がないため、費用は表示されません。Claude Code on the web のセッションは claude.ai のエクスポートに含まれません。
 `claude --teleport <id>` で Mac に通常の Claude Code のトランスクリプトとして取り込めます。
 
