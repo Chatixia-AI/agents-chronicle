@@ -7,6 +7,7 @@ import json
 import logging
 import mimetypes
 import re
+import shlex
 import threading
 import time
 import webbrowser
@@ -53,7 +54,7 @@ SESSION_LIST_COLS = (
     "git_branch, outcome, sentiment, analysis_status, analysis_reason, tags_json, summary, source_present, peak_context"
 )
 SORTABLE = {"started_at", "ended_at", "active_s", "duration_s", "n_prompts", "n_tool_calls", "tokens", "est_cost_usd",
-            "title", "project_name", "lines_added", "n_tool_errors"}
+            "title", "project_name", "agent", "lines_added", "n_tool_errors"}
 
 
 def _local_offset_modifier() -> str:
@@ -411,8 +412,17 @@ class App:
         c = self.conn
         if path == GLOBAL:
             kb = c.execute("SELECT * FROM project_kb WHERE project_path = ?", (GLOBAL,)).fetchone()
+            cited = sorted({i for sec in (loads(kb["kb_json"], {}) or {}).get("sections", []) if isinstance(sec, dict)
+                            for it in sec.get("items") or [] if isinstance(it, dict)
+                            for i in it.get("sources") or [] if isinstance(i, int)}) if kb else []
+            knowledge = []
+            for i in range(0, len(cited), 500):  # the sources the playbook cites, so each bullet links to them
+                chunk = cited[i:i + 500]
+                knowledge += [dict(r) for r in c.execute(
+                    f"SELECT id, kind, title, project_name, session_id, agent FROM knowledge WHERE id IN ({','.join('?' * len(chunk))})",
+                    chunk)]
             return {"project_path": GLOBAL, "label": "Global playbook", "kb": dict(kb) if kb else None,
-                    "sessions": [], "knowledge": [], "stats": {}}
+                    "sessions": [], "knowledge": knowledge, "stats": {}}
         stats = c.execute(
             "SELECT project_name, COUNT(*) sessions, SUM(n_prompts) prompts, SUM(active_s) active_s, SUM(est_cost_usd) cost, "
             "SUM(input_tokens+output_tokens+cache_read_tokens+cache_write_tokens) tokens, SUM(lines_added) lines_added, "
@@ -510,6 +520,30 @@ class App:
 
         return all_status(self.cfg, self.conn)
 
+    def mcp_info(self) -> dict:
+        """What the MCP page shows: the command that starts the server, its tools, and config to paste."""
+        from .connectors import mcp_server_entry
+        from .install import executable
+        from .mcp_server import INSTRUCTIONS, TOOLS
+
+        entry = mcp_server_entry(executable())
+        cmd, args = entry["command"], entry["args"]
+        toml_args = ", ".join(json.dumps(a) for a in args)
+        shell = " ".join(shlex.quote(x) for x in [cmd, *args])
+        return {
+            "command": cmd, "args": args, "instructions": INSTRUCTIONS,
+            "tools": [{"name": t["name"], "description": t["description"],
+                       "params": sorted(t["inputSchema"].get("properties", {}),  # required first, then as declared
+                                        key=lambda k: k not in t["inputSchema"].get("required", [])),
+                       "required": t["inputSchema"].get("required", [])} for t in TOOLS],
+            "snippets": {
+                "json": json.dumps({"mcpServers": {"chronicle": entry}}, indent=2),
+                "vscode": json.dumps({"servers": {"chronicle": {"type": "stdio", **entry}}}, indent=2),
+                "codex": f'[mcp_servers.chronicle]\ncommand = {json.dumps(cmd)}\nargs = [{toml_args}]\n',
+                "claude": f"claude mcp add --scope user chronicle -- {shell}",
+            },
+        }
+
     def mcp_clients(self) -> list[dict]:
         from .connectors import mcp_clients_status
 
@@ -535,15 +569,54 @@ class App:
         return {"actions": actions, "sync_started": started}
 
     def reviews(self) -> dict:
-        from .reviews import review_ready, week_bounds
+        from .reviews import _stats, normalize_review, review_ready, week_bounds, week_glance
 
         items = [dict(r) for r in self.conn.execute(
-            "SELECT period, start, end, created_at, model, n_sessions, markdown, stats_json FROM reviews ORDER BY period DESC")]
+            "SELECT period, start, end, created_at, model, n_sessions, markdown, review_json, stats_json FROM reviews "
+            "ORDER BY period DESC")]
         for r in items:
             r["stats"] = loads(r.pop("stats_json", None), {}) or {}
+            r["review"] = normalize_review(loads(r.pop("review_json", None), {}) or {})
+            if r["start"] and r["end"]:  # the charts come from the sessions table, so they follow later analysis
+                r["glance"] = week_glance(self.conn, r["start"], r["end"])
+                r["stats"] = _stats(self.conn, r["start"], r["end"])
+                prev_start = to_iso(datetime.fromisoformat(r["start"].replace("Z", "+00:00")) - timedelta(days=7))
+                r["previous"] = _stats(self.conn, prev_start, r["start"])
         ready, why = review_ready(self.conn)
         return {"items": items, "last_week": week_bounds(None)[0], "current_week": week_bounds("current")[0],
                 "auto_ready": ready, "auto_note": why}
+
+    def knowledge_hub(self) -> dict:
+        """The Knowledge section's landing page: a glance at each of its tools."""
+        from .reviews import _stats, normalize_review, week_glance
+
+        counts = {r["kind"]: r["n"] for r in self.conn.execute(
+            "SELECT kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY kind")}
+        week_ago = to_iso(utcnow() - timedelta(days=7))
+        recent = [dict(r) for r in self.conn.execute(
+            "SELECT id, kind, title, project_name FROM knowledge WHERE status = 'active' ORDER BY created_at DESC, id DESC LIMIT 4")]
+        new_week = self.conn.execute(  # by when the session ran: a backfill imports old sessions' knowledge today
+            "SELECT COUNT(*) FROM knowledge k JOIN sessions s ON s.id = k.session_id WHERE k.status = 'active' "
+            "AND s.started_at >= ?", (week_ago,)).fetchone()[0]
+        cats = {r[0] or "other": r[1] for r in self.conn.execute("SELECT category, COUNT(*) FROM glossary GROUP BY category")}
+        top_terms = [dict(r) for r in self.conn.execute(
+            "SELECT term, category, n_sessions FROM glossary ORDER BY n_sessions DESC, n_mentions DESC LIMIT 16")]
+        map_projects = self.conn.execute("SELECT COUNT(DISTINCT project_path) FROM glossary_usage WHERE project_path != ?",
+                                         (GLOBAL,)).fetchone()[0]
+        themes = self.conn.execute("SELECT COUNT(*) FROM glossary_themes").fetchone()[0]
+        row = self.conn.execute("SELECT period, start, end, n_sessions, review_json, stats_json FROM reviews "
+                                "ORDER BY period DESC LIMIT 1").fetchone()
+        review = None
+        if row:
+            data = normalize_review(loads(row["review_json"], {}) or {})
+            review = {"period": row["period"], "start": row["start"], "end": row["end"], "headline": data["headline"],
+                      "tldr": data["tldr"],
+                      "stats": _stats(self.conn, row["start"], row["end"]) if row["start"] else loads(row["stats_json"], {}) or {},
+                      "daily": week_glance(self.conn, row["start"], row["end"])["daily"] if row["start"] else []}
+        return {"knowledge": {"total": sum(counts.values()), "counts": counts, "new_week": new_week, "recent": recent},
+                "glossary": {"total": sum(cats.values()), "categories": cats, "top": top_terms},
+                "map": {"projects": map_projects, "themes": themes},
+                "review": review, "reviews": self.conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]}
 
     def action_review(self, week: str | None) -> bool:
         from .reviews import generate_review
@@ -877,6 +950,8 @@ def make_handler(app: App, port: int):
                     return self._json(proj) if proj else self._json({"error": "not found"}, 404)
                 if p == "/api/knowledge":
                     return self._json(app.knowledge(q))
+                if p == "/api/knowledge/hub":
+                    return self._json(app.knowledge_hub())
                 if p == "/api/search":
                     return self._json(app.search(q))
                 if p == "/api/status":
@@ -887,6 +962,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.glossary(q))
                 if p == "/api/connectors":
                     return self._json(app.connectors())
+                if p == "/api/mcp":
+                    return self._json(app.mcp_info())
                 if p == "/api/mcp-clients":
                     return self._json(app.mcp_clients())
                 if p == "/api/glossary/terms":

@@ -4,6 +4,7 @@
 
 | コマンド | |
 | --- | --- |
+| `chronicle install [--yes] [--dry-run]` | セットアップ：見つかったエージェントを一覧にし、記録するものを尋ね、取り込み、ダッシュボードを起動（[インストール](install.md#コマンドライン)） |
 | `chronicle app` | デスクトップアプリ（ウインドウ＋メニューバー）。`app` エクストラが必要 |
 | `chronicle ui [--open]` | ダッシュボード（インストール後は :8765 で常時稼働。稼働中なら `chronicle ui` がそう表示し、`--open` でそれを開きます）。Sessions、Knowledge、Projects、Glossary は Cards と List（並べ替え可能な表。行をクリックで詳細）を切り替えられ、ページごとに記憶されます |
 | `chronicle sessions [-p project] [--since 7d]` | セッションの一覧 |

@@ -3,7 +3,8 @@
 <h1 align="center">Chronicle</h1>
 
 <p align="center"><b>A searchable memory of every coding-agent session you run.</b><br>
-Claude Code, Codex, GitHub Copilot and IBM Bob sessions, archived and turned into knowledge on your own machine.</p>
+Claude Code, Codex, GitHub Copilot and IBM Bob sessions and your claude.ai and ChatGPT chats, kept and turned into
+knowledge on your own machine.</p>
 
 <p align="center">
   <a href="https://pypi.org/project/agents-chronicle/"><img src="https://img.shields.io/pypi/v/agents-chronicle?label=PyPI" alt="PyPI version"></a>
@@ -38,52 +39,55 @@ from the [demo data](docs/development.md#demo-data):
   we hit this error before?"*, *"why did we put idempotency in Postgres?"* Claude Desktop, Cursor, Windsurf and
   Gemini CLI can connect too.
 - **A dashboard to browse it all.** Sessions with their full transcripts, statistics, a glossary of your own
-  vocabulary drawn as a mindmap, and a weekly review Claude writes for you. ⌘K jumps anywhere.
+  vocabulary drawn as a mindmap, and a weekly review you can take in at a glance. ⌘K jumps anywhere.
 - **Plain files too.** An Obsidian-compatible Markdown vault and a `chronicle` CLI.
 
 ## Quick start
 
 You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/claude-code), which does the analysis.
 
-1. **Install.** Either download the desktop app from the
-   [latest release](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest) (Apple silicon), open it
-   and choose **Connect**, or use the command line:
+1. **Install.**
 
    ```bash
-   uv tool install --python 3.13 agents-chronicle
-   chronicle install        # session-end hook, background sync, dashboard, MCP server
+   uv tool install --python 3.13 agents-chronicle   # or: pipx install agents-chronicle
+   chronicle install
    ```
+
+   `chronicle install` finds the coding agents on your Mac, asks which to record, imports their past sessions and
+   asks whether to run Chronicle from login. For the app instead, download it from the
+   [latest release](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest) (Apple silicon) and
+   choose **Connect**.
 
 2. **Use your agents as usual.** Each session is recorded when it ends and analyzed in the background.
 
-3. **Explore.** Open the app, or the dashboard at <http://127.0.0.1:8765/>, and press **⌘K**. Or ask your agent
-   what it learned last week.
+3. **Explore.** Open the dashboard at <http://127.0.0.1:8765/> (or `chronicle ui --open`) and press **⌘K**, or ask
+   your agent what it learned last week.
 
-To record Codex, GitHub Copilot or IBM Bob too, connect them from **Settings › Sources** or with
-`chronicle connect codex`. [Install](docs/install.md) covers everything each option sets up, and how to remove it.
+Connect more agents later from **Settings › Sources**, `chronicle connect <agent>`, or by re-running
+`chronicle install`. [Install](docs/install.md) covers what each step sets up and how to remove it.
 
 ## Supported agents
 
 | Agent | Recorded from | Picked up | Search from the agent (MCP) |
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/projects` transcripts | as each session ends, plus every 15 min | ✅ |
-| Codex (opt-in) | `~/.codex/sessions` rollouts | every 15 min, once idle | ✅ |
-| GitHub Copilot (opt-in) | Copilot CLI and agent sessions; Copilot Chat logs in VS Code | every 15 min | ✅ VS Code and Copilot CLI |
-| IBM Bob (opt-in) | `~/.bob/db/bob.db`, read-only | every 15 min | ✅ |
+| Codex | `~/.codex/sessions` rollouts | every 15 min, once idle | ✅ |
+| Codex Cloud | tasks at chatgpt.com/codex (via the `codex` CLI: title, repo, diff) | every 15 min | via Codex |
+| GitHub Copilot | Copilot CLI and agent sessions; Copilot Chat logs in VS Code | every 15 min | ✅ VS Code and Copilot CLI |
+| IBM Bob | `~/.bob/db/bob.db`, read-only | every 15 min | ✅ |
+| claude.ai, ChatGPT | data export: `chronicle import <zip>` | when you import it | – |
 
-Every agent's sessions share the same dashboard, knowledge, glossary and MCP tools; the analysis always runs through
-Claude Code. Codex also brings back Claude Code sessions that Codex Desktop imported after Claude Code deleted them.
-[Sources](docs/sources.md) has the details for each.
+All of them share one dashboard, knowledge base, glossary and set of MCP tools; analysis always runs through Claude
+Code. [Sources](docs/sources.md) has the details for each.
 
 ## A closer look
 
 | | | |
 | --- | --- | --- |
-| ![Home: active time, sessions, tokens and cost over 30 days, with a daily chart and outcomes](docs/images/home.png) | ![The Map: the glossary as a mindmap, opened to a term with its definition, uses and sources](docs/images/map-dark.png) | ![The ⌘K palette searching sessions, knowledge and glossary terms](docs/images/palette-dark.png) |
+| ![Home: active time, sessions, tokens and cost over 30 days, with a daily chart and outcomes](docs/images/home.png) | ![The Map: the glossary as a mindmap, opened to a term with its definition, uses and sources](docs/images/map.png) | ![The ⌘K palette searching sessions, knowledge and glossary terms](docs/images/palette.png) |
 | **Home.** Active time, sessions, tokens and estimated cost, day by day. | **Map.** Your glossary as a mindmap; each term opens into the knowledge and sessions behind it. | **⌘K.** One search over sessions, knowledge, projects, terms and commands. |
 
-The screenshots come from made-up demo data, and you can build it yourself:
-`uv run python docs/demo/make_demo.py /tmp/chronicle-demo`.
+Screenshots use made-up [demo data](docs/development.md#demo-data).
 
 ## How it works
 

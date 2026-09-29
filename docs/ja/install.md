@@ -42,14 +42,33 @@ Chronicle を削除するには、`~/.claude-chronicle/bin/chronicle uninstall` 
 
 ```bash
 uv tool install --python 3.13 agents-chronicle   # puts `chronicle` on PATH (~/.local/bin)
-chronicle sync                                   # archive + ingest everything now
-chronicle install                                # hooks, background agents, MCP server
-chronicle connect codex                          # optional: codex, copilot, bob (see Sources)
+chronicle install                                # pick the agents to record, import, start the dashboard
 ```
 
 [uv](https://docs.astral.sh/uv/) が必要です（`pipx install agents-chronicle` でも可）。リポジトリのチェックアウトから
-インストールする場合は、その中で `uv tool install --python 3.13 .` を実行します。`chronicle install` は次の 4 つを行います
-（それぞれ `--no-hooks`、`--no-launchd`、`--no-ui`、`--no-mcp` で省略でき、`--dry-run` で事前確認できます）：
+インストールする場合は、その中で `uv tool install --python 3.13 .` を実行します。
+
+`chronicle install`（`chronicle setup` でも可）は次の順にセットアップします：
+
+1. Claude Code（`claude`）が見つからなければ警告します。その場合、セッションは記録されますが、インストールするまで分析されません。
+2. この Mac にあるコーディングエージェント（Claude Code、Codex、GitHub Copilot、IBM Bob）と、MCP のみのクライアント
+   （Claude Desktop、Cursor、Windsurf、Gemini CLI）を、ディスク上のセッション数とともに一覧にします。
+3. 見つかってまだ接続していないものごとに、記録するか（既定は「はい」）、MCP クライアントには Chronicle のツールを
+   渡すかを尋ねます。Codex Cloud はオンラインにアクセスするため、Codex の後に尋ね、既定は「いいえ」です。
+   Claude Code を断ると `~/.claude` もスキャンしません。
+4. 選んだものを `chronicle connect <name>` と同じ方法で接続し（[ソース](sources.md)）、過去のセッションを取り込みます
+   （`--no-sync` で省略可。その場合はバックグラウンド同期が取り込みます）。
+5. Chronicle をバックグラウンドで、ログイン時から動かすかを尋ねます（既定は「はい」）：下の 15 分ごとの同期と常時稼働の
+   ダッシュボードです。「いいえ」の場合も Claude Code のセッションは終了時に記録・分析されます。それ以外は
+   `chronicle sync --work`、ダッシュボードは `chronicle ui --open` で。エージェントが動いていれば以後は尋ねません（`--no-launchd --no-ui` でオフ）。
+6. ダッシュボードのアドレスを表示します。初回は開くかどうか尋ねます。
+
+端末がない場合や `--yes` を付けた場合は、尋ねずに既定値を使います。何度実行しても安全です：接続済みのエージェントは
+質問なしで更新されるので、尋ねるのはその後にインストールされたエージェントだけです。`--dry-run` は何をするかを表示し、何も変更しません。
+
+Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ `--no-hooks`、`--no-launchd`、`--no-ui`、`--no-mcp` で省略できます）。
+`--no-launchd` と `--no-ui` は、そのエージェントがインストール済みなら削除もするので、`chronicle install --no-launchd --no-ui`
+でバックグラウンド実行だけをオフにできます：
 
 | 構成要素 | 役割 |
 | --- | --- |

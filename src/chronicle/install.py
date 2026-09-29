@@ -238,11 +238,11 @@ def install_launchd(cfg: Config, exe: str, *, interval: int = 900, dry_run: bool
     return [f"launchd agent {LAUNCHD_LABEL} runs `{' '.join(program)}` every {interval // 60} min"]
 
 
-def uninstall_launchd() -> list[str]:
+def uninstall_launchd(labels=(LAUNCHD_LABEL, UI_LABEL)) -> list[str]:
     out = []
     if platform.system() != "Darwin":
         return out
-    for label in (LAUNCHD_LABEL, UI_LABEL):
+    for label in labels:
         path = plist_path(label)
         if not path.exists():
             continue

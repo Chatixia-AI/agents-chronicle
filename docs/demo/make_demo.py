@@ -438,6 +438,7 @@ elif "glossary" in system:
     data = {"terms": terms}
 elif "weekly engineering review" in system:
     data = {"headline": "Payments got safer and the storefront faster",
+            "tldr": ["Webhook retries no longer double-charge", "CI deploys use short-lived OIDC credentials", "Refunds for past double charges still pending"],
             "summary": "Most of the week went into billing reliability: webhook retries and duplicate task runs both came down to missing idempotency. The storefront shed a hydration error and a flaky test, and CI deploys moved to short-lived credentials.",
             "themes": [{"title": "Idempotency everywhere", "detail": "Stripe webhooks, Celery tasks and emails all needed a dedupe key.", "projects": ["billing-api"]},
                        {"title": "Test reliability", "detail": "Web-first assertions and console-error checks in Playwright.", "projects": ["storefront"]}],
@@ -453,7 +454,8 @@ elif "knowledge base" in system or "playbook" in system:
     project = next((k.get("project") for k in ks if k.get("project")), None)
     overview = SCENARIO["projects"].get(project) or "Habits and rules that hold across projects."
     data = {"overview": overview, "superseded_ids": [],
-            "sections": [{"title": title, "items": [{"text": k["title"] + ": " + (k.get("body") or "").split(". ")[0].rstrip(".") + ".", "sources": [k["id"]]}
+            "tldr": [k["title"] for k in ks[:3]],
+            "sections": [{"title": title, "items": [{"title": k["title"], "text": (k.get("body") or "").split(". ")[0].rstrip(".") + ".", "sources": [k["id"]]}
                                                     for k in ks if k["kind"] in kinds]} for title, kinds in groups]}
     data["sections"] = [s for s in data["sections"] if s["items"]]
 else:

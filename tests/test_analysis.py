@@ -141,9 +141,14 @@ def test_weekly_review(synced):
     key = week_bounds("2026-W38")[0]
     assert key == "2026-W38"
     data = generate_review(conn, cfg, key)
-    assert data["headline"] == "Fixed login"
+    assert data["headline"] == "Fixed login" and data["tldr"] == ["Login fixed", "TTL units learned", "Logout next"]
     row = conn.execute("SELECT * FROM reviews WHERE period=?", (key,)).fetchone()
     assert row["n_sessions"] == 1 and "## Suggestions" in row["markdown"] and "- [ ] logout" in row["markdown"]
+    assert "- Login fixed" in row["markdown"]
+    from chronicle.reviews import week_glance
+
+    glance = week_glance(conn, row["start"], row["end"])
+    assert len(glance["daily"]) == 7 and sum(glance["daily"]) > 0 and glance["projects"][0]["sessions"] == 1
     assert review_ready(conn, key) == (False, "exists")
     from chronicle.export_md import export_markdown
 
@@ -194,3 +199,17 @@ def test_synthesis_waits_for_queued_sessions(synced):
     conn.execute("UPDATE sessions SET analysis_status = 'done' WHERE id = 'q1'")
     conn.commit()
     assert CWD in projects_needing_synthesis(conn, cfg)
+
+
+def test_kb_titles_and_tldr_survive_normalizing_and_rendering():
+    from chronicle.synthesize import normalize_kb, render_kb_markdown
+
+    data = normalize_kb({"tldr": ["Branch first", " ", "Verify in a browser", "Keep tests green", "dropped"],
+                         "overview": "o", "superseded_ids": [],
+                         "sections": [{"title": "Prefs", "items": [{"title": "Never commit to main", "text": "Use a branch.", "sources": [3]},
+                                                                  {"text": "Untitled bullet", "sources": []}]}]})
+    assert data["tldr"] == ["Branch first", "Verify in a browser", "Keep tests green"]
+    assert data["sections"][0]["items"][0]["title"] == "Never commit to main" and "title" not in data["sections"][0]["items"][1]
+    md = render_kb_markdown("P", data, n_items=2, model=None)
+    assert "- **Never commit to main**: Use a branch. <sub>[k3]</sub>" in md and "- Untitled bullet" in md and "- Branch first" in md
+    assert "tldr" not in normalize_kb({"overview": "o", "sections": []})  # older knowledge bases have none

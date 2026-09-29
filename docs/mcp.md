@@ -39,8 +39,8 @@ All tools are marked read-only (`readOnlyHint`), so clients that honour the hint
 | GitHub Copilot | VS Code `User/mcp.json` and `~/.copilot/mcp-config.json` (`chronicle connect copilot`) |
 | IBM Bob | `~/.bob/settings/mcp_settings.json` (`chronicle connect bob`) |
 
-**Other clients** only get the server. Chronicle doesn't record their sessions. Add one from **Settings › Sources ›
-Other MCP clients**, or from the command line:
+**Other clients** only get the server. Chronicle doesn't record their sessions. Add one from **Settings › MCP › Other MCP
+clients**, or from the command line:
 
 | Client | Command | Config file it edits |
 | --- | --- | --- |
@@ -56,7 +56,9 @@ Restart the client to load the server. `chronicle disconnect <client>` removes t
 
 ## Any other client
 
-Print an entry with the right path for your install:
+**Settings › MCP** in the dashboard shows which agents have the server, the tools it offers, and ready-to-copy
+config for most clients (an `mcpServers` entry), VS Code, Codex and Claude Code, with the right path for your
+install. From a terminal, print an entry:
 
 ```bash
 chronicle mcp --print-config

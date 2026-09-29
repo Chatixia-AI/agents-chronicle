@@ -79,7 +79,7 @@ def test_http_api(synced):
     try:
         for path in ("/api/overview?days=all", "/api/sessions", f"/api/sessions/{SID}", f"/api/sessions/{SID[:8]}/events",
                      "/api/projects", "/api/knowledge", "/api/search?q=login", "/api/status", "/api/glossary",
-                     "/api/glossary/terms", "/api/reviews", "/"):
+                     "/api/glossary/terms", "/api/reviews", "/api/knowledge/hub", "/"):
             status, body = get(path)
             assert status == 200, path
         data = json.loads(get(f"/api/sessions/{SID}")[1])
@@ -309,3 +309,22 @@ def test_mcp_agent_filter_and_speaker(synced):
     assert SID[:8] in text(4) and "Claude.ai" in text(4)
     assert text(5).startswith("No Bob sessions matched")
     assert "CLAUDE:" in text(6) and "USER" in text(6)
+
+
+def test_mcp_page_info(env):
+    """Settings › MCP: the command that starts the server, its tools, and config to paste for each kind of client."""
+    import tomllib
+
+    from chronicle.mcp_server import TOOLS
+    from chronicle.server import App
+
+    info = App(env["cfg"]).mcp_info()
+    assert info["args"][-1] == "mcp" and info["command"]
+    assert [t["name"] for t in info["tools"]] == [t["name"] for t in TOOLS]
+    search = next(t for t in info["tools"] if t["name"] == "search_sessions")
+    assert search["params"][0] == "query" and "agent" in search["params"]  # required first
+    snip = info["snippets"]
+    assert json.loads(snip["json"])["mcpServers"]["chronicle"]["command"] == info["command"]
+    assert json.loads(snip["vscode"])["servers"]["chronicle"]["type"] == "stdio"
+    assert tomllib.loads(snip["codex"])["mcp_servers"]["chronicle"]["args"] == info["args"]
+    assert snip["claude"].startswith("claude mcp add --scope user chronicle -- ") and snip["claude"].endswith(" mcp")

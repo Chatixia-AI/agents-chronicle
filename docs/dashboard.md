@@ -35,8 +35,13 @@ session list, project cards with 12 weeks of activity, session pages (headline f
 it produced up top, then **Transcript**: the conversation with one-line tool calls that expand to their input and
 output, and subagent threads; or **Details**: goal, highlights, open threads, the knowledge items, context-window
 chart with compactions, tools, files, subagents, PRs; on wide windows an **Outline** of the prompts and changed files
-sits beside the transcript and follows your scroll), knowledge browser (pin/dismiss), project knowledge bases, global
-playbook, glossary, a mindmap of the glossary (see Map below), weekly reviews, search with jump-to-message. Glossary
+sits beside the transcript and follows your scroll), a Knowledge overview (one card each for the Map, All knowledge,
+the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss), project knowledge
+bases and the global playbook (a TL;DR, section chips, a filter, and sections as cards of short bullets that
+open to their detail and sources), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a
+three-line TL;DR, the week's numbers against the week before, active time per day, where the time went, outcomes and
+knowledge captured, then themes and short lists of what shipped, what was learned, what is still open, what slowed
+you down and what to try next; the full write-up is folded away), search with jump-to-message. Glossary
 terms are underlined wherever they appear (transcripts, knowledge, summaries): hover for the definition, click for
 the entry. Every chart has a table view; light and dark themes.
 
@@ -49,7 +54,7 @@ note, related terms, and full-text statistics: how many sessions mention it, fir
 
 ## Map
 
-![The Map in dark mode: glossary categories opened to a term, with its definition, uses and sources](images/map-dark.png)
+![The Map in dark mode: glossary categories opened to a term, with its definition, uses and sources](images/map.png)
 
 The dashboard's **Map** page draws the glossary as a collapsible mindmap. **Group by** (top left of the
 map) stacks any of four levels in any order: **Category**, **Theme**, **Project** and **Agent** (the agents whose
@@ -57,13 +62,18 @@ sessions taught the term), with terms last. The side panel's **Views** offer com
 Project › Category › Theme, Category › Project, Agent › Category › Theme). Terms open into the knowledge items they
 were distilled from and the sessions that mention them most. Click a node to open or close it and see its details:
 a term's definition, where each project uses it, related terms (click to jump there), its knowledge and sessions;
-a category's themes; a theme's description. Drag or scroll to move, pinch or ⌘-scroll to zoom; **Find a term** opens
-the path to it, and the view glides to keep an opened branch on screen. Colour marks the category (the eight largest
+a category's themes; a theme's description. Drag or scroll to move, pinch or ⌘-scroll to zoom; the view glides to
+keep an opened branch on screen. **Find terms** (Enter) opens every match at once: terms whose name or alias has
+all the words, terms whose definition mentions them, and themes, categories, projects or agents named that way.
+Branches along the way show only the path to a match (the rest stay under *+N more*), matches are highlighted, and
+the side panel lists them grouped (Groups, Named, Mentioned in the definition), each a click away; a single match
+opens straight to its details. The search stays in the link (`q=`), so a reload or a change of **Group by** keeps
+it; clear the box or close the panel to leave it. Colour marks the category (the eight largest
 have their own hue, the rest share grey; project and agent levels are neutral); a term's dot grows with the number
 of sessions that mention it (1, 2–4, 5+). File names and commands are hidden until you turn on **Files & commands**.
 No branch draws more than 10 children (12 at the top; a term shows up to 6 knowledge items and 4 sessions): the
 most-discussed come first, and *+N more* lists the rest in the side panel, filterable as you type, where picking one
-adds just that node to the map (search and related-term links do the same). Every glossary entry links to its place
+adds just that node to the map (related-term links do the same). Every glossary entry links to its place
 on the map (*on the map →*).
 
 ## Themes

@@ -47,8 +47,10 @@ instance, have no cache split (so no cost estimate), and Bob tasks have no per-c
 4. The JSON reply is validated leniently (with one repair pass) and stored. When a project gains
    `min_new_items` new items, its knowledge base is re-synthesized; items that are outdated or
    duplicated get marked *superseded* (pinned and memory items are never superseded). Once every session of
-   a finished week is analyzed, Claude writes that week's review (themes, accomplishments, learnings, open
-   threads, recurring friction, concrete workflow suggestions).
+   a finished week is analyzed, Claude writes that week's review (a three-line TL;DR, themes, accomplishments,
+   learnings, open threads, recurring friction, concrete workflow suggestions). Knowledge bases, the playbook and
+   reviews are written to be skimmed: a TL;DR, a short overview, a title per knowledge-base bullet, and word
+   limits on every field. The review's numbers and charts come from the database, not from Claude.
 5. Usage-limit or auth errors pause analysis for an hour; other failures back off 30 min → 2 h → 8 h.
    Calls have a wall-clock deadline, and a call frozen by the Mac going to sleep is killed right after wake and
    re-queued without counting as a failure. Sessions that continue after being analyzed are re-analyzed.

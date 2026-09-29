@@ -2,6 +2,24 @@
 
 ## Unreleased
 
+- **Knowledge overview:** the Knowledge section opens on a page with a card each for the Map, All knowledge, the
+  Glossary and Weekly reviews, each with a glance at what is inside; the full list moved to **All knowledge**
+  (`#/knowledge/all`; older `#/knowledge?kind=…` links still work).
+- **Weekly reviews you can skim:** one week at a time, picked from a strip of weeks: a three-line TL;DR, the week's
+  numbers against the week before, active time per day, where the time went, outcomes and the knowledge captured,
+  then themes and short lists (shipped, learned, still open, slowed you down, try next) whose items open to their
+  full text. The long write-up is folded away. New reviews are written to word limits and include the TL;DR.
+- **Knowledge bases and the global playbook you can skim:** a TL;DR, a few figures, chips that jump to each
+  section, a filter, and each section as a card of short bullets that open to their detail and the sessions they
+  came from; the overview is folded away. Synthesis now writes a TL;DR, a short overview and a title per bullet,
+  within word limits; existing knowledge bases pick this up the next time they are synthesized.
+- **Guided setup:** `chronicle install` (or `chronicle setup`) lists the coding agents and MCP clients it finds,
+  asks which to record, imports their past sessions, asks whether to run in the background from login (the
+  15-minute sync and the always-on dashboard; previously always installed) and ends with the dashboard address,
+  offering to open it. `--no-launchd` / `--no-ui` now also remove those agents if installed, so
+  `chronicle install --no-launchd --no-ui` turns background running off.
+  `--yes` (or no terminal) takes the defaults; re-running asks only about newly installed agents. Running
+  `chronicle` on its own now shows help and, before setup, points to `chronicle install`.
 - **Claude.ai and ChatGPT chats:** import a claude.ai or ChatGPT data export with **Settings › Sources › Chat
   exports › Import export…** or `chronicle import <zip>`; the format is recognized. Chats become sessions you can
   search, browse and analyze on demand; re-importing a newer export adds only new and changed chats. The account
@@ -16,7 +34,15 @@
   Settings and a chip in the status bar; a checkout's Updates card lists the commits and files it would bring in.
   **Check for updates daily** (off by default, `[updates] check_daily`) asks PyPI once a day while the dashboard
   is open; the last answer survives a restart. See [Updating](docs/install.md#updating).
+- **Map search finds everything:** **Find terms** opens every match on the map at once (terms by name, alias or
+  definition, plus themes, categories, projects and agents by name), highlights them, trims the branches on the way
+  to just the path, and lists the matches in the side panel. The search is kept in the link.
+- The Sessions list and a project's session table have an **Agent** column (sortable), with the same colour per agent as
+  the Sources page; Codex Cloud tasks show as Codex · Cloud.
 - The Sessions sidebar sorts and groups by last activity, so a long-running session stays under Today.
+- **MCP page:** Settings › MCP shows which agents and clients have Chronicle's MCP server (adding or removing
+  the other clients moved here from Sources), ready-to-copy config for most clients, VS Code, Codex and Claude
+  Code, the tools and what to ask.
 - **Export sessions:** **Export** on a session page, or on a selection in the Sessions list, downloads Markdown
   (overview and conversation), JSON (every event) or the original transcript; several sessions come as a .zip with
   an index. `chronicle export <id>… --format md|json|raw` does the same from a terminal. Secrets are redacted except
@@ -39,7 +65,7 @@
   zooms the window; the window follows the page's theme and the macOS Reduce transparency setting.
 - New app icon, favicon and per-page titles.
 - **MCP for more clients:** `chronicle connect claude-desktop`, `cursor`, `windsurf` or `gemini` (or **Settings ›
-  Sources › Other MCP clients**) gives them Chronicle's MCP server; `chronicle mcp --print-config` prints an entry
+  MCP › Other MCP clients**) gives them Chronicle's MCP server; `chronicle mcp --print-config` prints an entry
   for any other client. Tool results are now redacted like analysis digests, and the tools are marked read-only.
   New [MCP server](docs/mcp.md) docs page.
 - MIT license. Documentation split into a short README and pages under `docs/` (English and Japanese), with

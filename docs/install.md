@@ -42,14 +42,35 @@ servers; data is kept), turn off **Open at Login**, and delete the app.
 
 ```bash
 uv tool install --python 3.13 agents-chronicle   # puts `chronicle` on PATH (~/.local/bin)
-chronicle sync                                   # archive + ingest everything now
-chronicle install                                # hooks, background agents, MCP server
-chronicle connect codex                          # optional: codex, copilot, bob (see Sources)
+chronicle install                                # pick the agents to record, import, start the dashboard
 ```
 
 Needs [uv](https://docs.astral.sh/uv/) (or `pipx install agents-chronicle`). To install from a checkout instead,
-run `uv tool install --python 3.13 .` in it. `chronicle install` does four things (each can be skipped with
-`--no-hooks`, `--no-launchd`, `--no-ui`, `--no-mcp`; preview with `--dry-run`):
+run `uv tool install --python 3.13 .` in it.
+
+`chronicle install` (also `chronicle setup`) walks through setup:
+
+1. Warns if Claude Code (`claude`) is missing: sessions are then recorded but not analyzed until you install it.
+2. Lists the coding agents on this Mac (Claude Code, Codex, GitHub Copilot, IBM Bob) and the MCP-only clients it
+   finds (Claude Desktop, Cursor, Windsurf, Gemini CLI), with how many sessions each has on disk.
+3. Asks, for each one found and not yet connected, whether to record it (default yes), and whether to give each
+   MCP client Chronicle's tools. Codex Cloud is offered after Codex and defaults to no, since it goes online.
+   Declining Claude Code stops Chronicle scanning `~/.claude`.
+4. Connects the chosen ones, exactly as `chronicle connect <name>` does ([Sources](sources.md)), and imports their
+   past sessions (skip with `--no-sync`; the background sync does it then).
+5. Asks whether to run Chronicle in the background, starting at login (default yes): the 15-minute sync and the
+   always-on dashboard below. If you say no, Claude Code sessions are still recorded and analyzed as they end;
+   run `chronicle sync --work` for the rest and `chronicle ui --open` for the dashboard. Not asked again once the
+   agents run; `--no-launchd --no-ui` turns them off.
+6. Prints the dashboard address; on a first install it offers to open it.
+
+Without a terminal, or with `--yes`, it takes the defaults without asking. Re-running it is safe: connected
+agents are refreshed without a question, so it asks only about agents installed since. `--dry-run` shows what it
+would do and changes nothing.
+
+For Claude Code, and for the Mac itself, it sets up four things (each can be skipped with `--no-hooks`,
+`--no-launchd`, `--no-ui`, `--no-mcp`). `--no-launchd` and `--no-ui` also remove their agent if it is installed, so
+`chronicle install --no-launchd --no-ui` turns background running off and keeps everything else:
 
 | Piece | What it does |
 | --- | --- |

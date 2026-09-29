@@ -403,35 +403,178 @@ def cmd_status(args) -> int:
     return 0
 
 
+def _ask(question: str, default: bool) -> bool:
+    try:
+        answer = input(f"{question} [{'Y/n' if default else 'y/N'}] ").strip().lower()
+    except EOFError:
+        return default
+    return default if not answer else answer.startswith("y")
+
+
+def _setup_choices(cfg, conn, console, *, ask) -> tuple[list[str], list[str]]:
+    """Show the agents found on this machine; return (sources to connect, MCP-only clients to register)."""
+    from .connectors import all_status, mcp_clients_status
+    from .install import hooks_installed
+
+    statuses = all_status(cfg, conn)
+    sources = [s for s in statuses if s["name"] != "codex-cloud"]
+    cloud = next(s for s in statuses if s["name"] == "codex-cloud")
+    clients = mcp_clients_status()
+    claude_hooked = bool(hooks_installed(cfg).get("SessionEnd"))
+    connected = lambda s: claude_hooked if s["name"] == "claude" else s["connected"]  # noqa: E731
+
+    console.print("[bold]Coding agents on this machine[/]")
+    for s in sources:
+        state = ("[green]connected[/]" if connected(s) else "[yellow]found[/]" if s["detected"] else "[dim]not installed[/]")
+        count = f" · {s['on_disk']} session{'s' * (s['on_disk'] != 1)} on disk" if s["detected"] else ""
+        console.print(f"  {s['label']:<16} {state}{count}", highlight=False)
+    for c in clients:
+        if c["detected"]:
+            state = "[green]MCP server added[/]" if c["registered"] else "[yellow]found[/] [dim](MCP tools only, not recorded)[/]"
+            console.print(f"  {c['label']:<16} {state}", highlight=False)
+    console.print()
+
+    picked = []
+    for s in sources:
+        if connected(s):
+            picked.append(s["name"])  # re-run connect so paths stay current
+        elif s["detected"] and ask(f"Record {s['label']} sessions?", True):
+            picked.append(s["name"])
+    if "codex" in picked and not cloud["connected"] and cloud["detected"]:
+        if ask("Also record Codex Cloud tasks? (lists them online through the codex CLI on every sync)", False):
+            picked.append("codex-cloud")
+    elif cloud["connected"]:
+        picked.append("codex-cloud")
+    mcp = [c["name"] for c in clients if c["detected"] and not c["registered"]
+           and ask(f"Give {c['label']} Chronicle's MCP tools (search your past sessions)?", True)]
+    return picked, mcp
+
+
+def _wait_for_port(port: int, seconds: float = 8.0) -> bool:
+    import socket
+    import time
+
+    deadline = time.monotonic() + seconds
+    while time.monotonic() < deadline:
+        with socket.socket() as s:
+            s.settimeout(0.5)
+            if s.connect_ex(("127.0.0.1", port)) == 0:
+                return True
+        time.sleep(0.3)
+    return False
+
+
 def cmd_install(args) -> int:
+    import platform
+
+    from .connectors import connect, disconnect
     from .db import kv_get, kv_set
-    from .install import executable, install_hooks, install_launchd, install_mcp, install_ui_agent
+    from .ingest import sync
+    from .install import (LAUNCHD_LABEL, UI_LABEL, executable, install_hooks, install_launchd, install_mcp, install_ui_agent,
+                          launchd_status, plist_path, uninstall_launchd)
     from .util import utcnow_iso
 
     cfg = _cfg()
+    conn = _conn(cfg)
+    console = _console()
     exe = args.exe or executable()
-    actions = []
+    interactive = not args.yes and not args.dry_run and sys.stdin.isatty()
+    ask = _ask if interactive else (lambda _q, default: default)
+
+    console.print("[bold]Chronicle setup[/]\n")
+    claude_bin = cfg.claude_bin()
+    if not claude_bin:
+        console.print("[yellow]Claude Code (`claude`) was not found.[/] Chronicle uses your Claude Code login to analyze "
+                      "sessions; until you install it (https://claude.com/claude-code) and sign in, sessions are recorded "
+                      "but not analyzed.\n", highlight=False)
     if " -m " in exe:
-        print(f"note: `chronicle` is not on PATH; hooks will run `{exe}`. Install with `uv tool install` for a stable path.")
-    if not args.no_hooks:
-        actions += install_hooks(cfg, exe, inject=args.inject_context, dry_run=args.dry_run)
-    if args.inject_context and not args.dry_run:
-        _set_config_value(cfg, "inject", "session_start", "true")
-    if not args.no_launchd:
-        actions += install_launchd(cfg, exe, interval=args.interval * 60, dry_run=args.dry_run)
-    if not args.no_ui:
-        actions += install_ui_agent(cfg, exe, dry_run=args.dry_run)
-    if not args.no_mcp:
-        actions += install_mcp(cfg, exe, dry_run=args.dry_run)
+        console.print(f"[yellow]`chronicle` is not on PATH[/]; hooks will run `{exe}`. "
+                      "`uv tool install agents-chronicle` gives it a stable path.\n", highlight=False)
+
+    picked, mcp_clients = _setup_choices(cfg, conn, console, ask=ask)
+    background_on = True  # elsewhere install_launchd/install_ui_agent only say what to do instead
+    turned_off = [label for label, off in ((LAUNCHD_LABEL, args.no_launchd), (UI_LABEL, args.no_ui)) if off]
+    if platform.system() == "Darwin" and not (args.no_launchd and args.no_ui):
+        background_on = (any(launchd_status(label).get("loaded") for label in (LAUNCHD_LABEL, UI_LABEL))
+                         or ask("Run Chronicle in the background, starting at login? (syncs every 15 minutes and "
+                                "keeps the dashboard up)", True))
+    if args.dry_run:
+        console.print("Would record: " + (", ".join(picked) or "nothing") +
+                      (f"; would add the MCP server to: {', '.join(mcp_clients)}" if mcp_clients else ""))
+
+    actions = []
+    if "claude" in picked:
+        if not args.dry_run and not cfg.claude_dirs:
+            _set_config_value(cfg, "sources", "claude_dirs", '["~/.claude"]')
+        if not args.no_hooks:
+            actions += install_hooks(cfg, exe, inject=args.inject_context or cfg.inject_session_start, dry_run=args.dry_run)
+        if args.inject_context and not args.dry_run:
+            _set_config_value(cfg, "inject", "session_start", "true")
+        if not args.no_mcp:
+            actions += install_mcp(cfg, exe, dry_run=args.dry_run)
+    elif cfg.claude_dirs and not args.dry_run:
+        actions += disconnect(cfg, "claude")  # declined (or not installed): don't scan ~/.claude either
+    if args.dry_run:
+        if not background_on:
+            actions.append("background agents: not installed")
+        if background_on and not args.no_launchd:
+            actions += install_launchd(cfg, exe, interval=args.interval * 60, dry_run=True)
+        if background_on and not args.no_ui:
+            actions += install_ui_agent(cfg, exe, dry_run=True)
+        actions += [f"would remove launchd agent {label}" for label in turned_off if plist_path(label).exists()]
+        for a in actions:
+            console.print(f"• {a}", highlight=False, soft_wrap=True)
+        return 0
+    for name in [n for n in picked if n != "claude"] + mcp_clients:
+        actions += connect(cfg, name, exe)
     for a in actions:
-        print(f"• {a}")
-    if not args.dry_run:
-        conn = _conn(cfg)
-        if not kv_get(conn, "installed_at"):
-            kv_set(conn, "installed_at", utcnow_iso())
-            conn.commit()
-        conn.close()
-        print(f"\nConfig: {cfg.config_path}\nData:   {cfg.home}\nNext:   chronicle sync --work   ·   chronicle ui")
+        console.print(f"• {a}", highlight=False, soft_wrap=True)
+
+    from .config import load_config
+
+    cfg = load_config(cfg.home)  # pick up the sources just connected
+    if picked and not args.no_sync:
+        with console.status("Importing past sessions…"):
+            report = sync(cfg, conn)
+        console.print(f"• imported: {report.summary()}", highlight=False, soft_wrap=True)
+    first_install = not kv_get(conn, "installed_at")
+    if first_install:
+        kv_set(conn, "installed_at", utcnow_iso())
+        conn.commit()
+    conn.close()
+
+    background = []
+    if background_on and not args.no_launchd:
+        background += install_launchd(cfg, exe, interval=args.interval * 60)
+    if background_on and not args.no_ui:
+        background += install_ui_agent(cfg, exe)
+    background += uninstall_launchd(turned_off)
+    for a in background:
+        console.print(f"• {a}", highlight=False, soft_wrap=True)
+
+    url = f"http://127.0.0.1:{cfg.server_port}/"
+    ui_running = any(a.startswith("dashboard always available") for a in background)
+    console.print("\n[bold green]Done.[/]" + (" Nothing is recorded yet: connect an agent any time with "
+                                              "`chronicle connect <name>`." if not picked else ""))
+    if picked and claude_bin and cfg.analysis.auto and background_on:
+        console.print("Past sessions are analyzed in the background, a few at a time, through your Claude Code "
+                      "login (this counts toward your plan's usage).", highlight=False)
+    if not background_on:
+        hooked = "claude" in picked and not args.no_hooks
+        console.print("Not running in the background"
+                      + (": Claude Code sessions are still recorded and analyzed as they end." if hooked else ".")
+                      + " Run `chronicle sync --work` now and then to import new sessions and analyze the queue; "
+                      "re-run `chronicle install` to turn background running on.", highlight=False)
+    if ui_running:
+        console.print(f"Dashboard: [bold]{url}[/] (kept running in the background; `chronicle ui --open` opens it)",
+                      highlight=False)
+        if interactive and first_install and ask("Open it now?", True) and _wait_for_port(cfg.server_port):
+            import webbrowser
+
+            webbrowser.open(url)
+    else:
+        console.print(f"Dashboard: run [bold]chronicle ui --open[/] (serves {url} while it runs)", highlight=False)
+    console.print(f"[dim]More: chronicle sources · chronicle status · config {cfg.config_path}[/]", highlight=False, soft_wrap=True)
     return 0
 
 
@@ -735,13 +878,16 @@ def build_parser() -> argparse.ArgumentParser:
         description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob); "
                     "extract reusable knowledge.",
     )
-    sub = p.add_subparsers(dest="command", required=True, metavar="<command>")
+    sub = p.add_subparsers(dest="command", metavar="<command>")
 
-    s = sub.add_parser("install", help="install hooks, the background agent and the MCP server")
+    s = sub.add_parser("install", aliases=["setup"],
+                       help="set up: pick which coding agents to record, import past sessions, start the dashboard")
+    s.add_argument("-y", "--yes", action="store_true", help="don't ask: record every agent found (the default without a terminal)")
+    s.add_argument("--no-sync", action="store_true", help="don't import past sessions now (the background sync will)")
     s.add_argument("--no-hooks", action="store_true")
-    s.add_argument("--no-launchd", action="store_true")
+    s.add_argument("--no-launchd", action="store_true", help="no 15-minute background sync (removes it if installed)")
     s.add_argument("--no-mcp", action="store_true")
-    s.add_argument("--no-ui", action="store_true", help="don't keep the dashboard running in the background")
+    s.add_argument("--no-ui", action="store_true", help="don't keep the dashboard running in the background (removes it if installed)")
     s.add_argument("--inject-context", action="store_true", help="also add a SessionStart hook that injects project knowledge")
     s.add_argument("--interval", type=int, default=15, help="background sync interval in minutes (default 15)")
     s.add_argument("--exe", help="command used by hooks/launchd (default: the installed `chronicle`)")
@@ -917,7 +1063,15 @@ def main(argv: list[str] | None = None) -> int:
         from .hooks import hook_main
 
         return hook_main(argv[1])
-    args = build_parser().parse_args(argv)
+    parser = build_parser()
+    args = parser.parse_args(argv)
+    if not args.command:
+        from .config import chronicle_home
+
+        parser.print_help()
+        if not (chronicle_home() / "config.toml").exists():
+            print("\nNew here? Run `chronicle install` to pick which coding agents to record and start the dashboard.")
+        return 0
     try:
         return args.fn(args) or 0
     except KeyboardInterrupt:

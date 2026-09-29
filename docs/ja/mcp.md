@@ -39,7 +39,7 @@ Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) の�
 | GitHub Copilot | VS Code の `User/mcp.json` と `~/.copilot/mcp-config.json`（`chronicle connect copilot`） |
 | IBM Bob | `~/.bob/settings/mcp_settings.json`（`chronicle connect bob`） |
 
-**ほかのクライアント**にはサーバーだけを追加します。Chronicle はそのセッションを記録しません。**Settings › Sources ›
+**ほかのクライアント**にはサーバーだけを追加します。Chronicle はそのセッションを記録しません。**Settings › MCP ›
 Other MCP clients** から、またはコマンドラインで追加します：
 
 | クライアント | コマンド | 編集する設定ファイル |
@@ -56,7 +56,8 @@ Chronicle は `chronicle` の項目を追加するだけで、ファイルのほ
 
 ## そのほかのクライアント
 
-インストール方法に合ったパスで項目を出力します：
+ダッシュボードの **Settings › MCP** では、サーバーを使えるエージェント、提供するツール、そしてほとんどのクライアント（`mcpServers` の項目）・
+VS Code・Codex・Claude Code 向けのコピーできる設定を、インストールに合ったパスで表示します。ターミナルでは次のコマンドで項目を出力します：
 
 ```bash
 chronicle mcp --print-config

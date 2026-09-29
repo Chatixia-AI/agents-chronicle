@@ -16,20 +16,26 @@ log = logging.getLogger("chronicle.reviews")
 REVIEW_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["headline", "summary", "themes", "accomplishments", "learnings", "open_threads", "friction", "suggestions"],
+    "required": ["headline", "tldr", "summary", "themes", "accomplishments", "learnings", "open_threads", "friction", "suggestions"],
     "properties": {
-        "headline": {"type": "string", "description": "One line capturing the week"},
-        "summary": {"type": "string", "description": "2-4 short paragraphs of markdown"},
-        "themes": {"type": "array", "items": {
+        "headline": {"type": "string", "description": "The week in at most 12 words"},
+        "tldr": {"type": "array", "items": {"type": "string"},
+                 "description": "Exactly 3 bullets, at most 14 words each: what someone skimming must know"},
+        "summary": {"type": "string", "description": "At most 3 plain sentences for anyone who wants more than the TL;DR"},
+        "themes": {"type": "array", "description": "2-4 themes", "items": {
             "type": "object", "additionalProperties": False, "required": ["title", "detail"],
-            "properties": {"title": {"type": "string"}, "detail": {"type": "string"},
+            "properties": {"title": {"type": "string", "description": "2-5 words"},
+                           "detail": {"type": "string", "description": "One sentence, at most 25 words"},
                            "projects": {"type": "array", "items": {"type": "string"}}}}},
-        "accomplishments": {"type": "array", "items": {"type": "string"}},
-        "learnings": {"type": "array", "items": {"type": "string"}, "description": "The most valuable things learned"},
-        "open_threads": {"type": "array", "items": {"type": "string"}},
-        "friction": {"type": "array", "items": {"type": "string"}, "description": "Recurring slowdowns worth fixing"},
+        "accomplishments": {"type": "array", "items": {"type": "string"}, "description": "At most 5, each at most 15 words"},
+        "learnings": {"type": "array", "items": {"type": "string"},
+                      "description": "The most valuable things learned; at most 4, each at most 15 words"},
+        "open_threads": {"type": "array", "items": {"type": "string"}, "description": "At most 5, each at most 12 words"},
+        "friction": {"type": "array", "items": {"type": "string"},
+                     "description": "Recurring slowdowns worth fixing; at most 3, each at most 15 words"},
         "suggestions": {"type": "array", "items": {"type": "string"},
-                        "description": "Concrete workflow improvements, e.g. a CLAUDE.md rule, a script, a skill"},
+                        "description": "Concrete workflow improvements, e.g. a CLAUDE.md rule, a script, a skill; "
+                                       "at most 3, each at most 20 words"},
     },
 }
 
@@ -37,11 +43,13 @@ SYSTEM = """\
 You write a developer's weekly engineering review from the Claude Code sessions they ran that week.
 
 You receive the week's usage statistics, a digest of every session (title, project, outcome, summary, \
-highlights, open threads, friction) and the knowledge extracted that week. Write a review the developer \
-would actually want to read on Monday morning: what they worked on and achieved, the recurring themes, the \
-most valuable learnings, what is left open, what kept slowing them down, and a few concrete, specific \
-suggestions to work better with Claude Code (a CLAUDE.md rule, a script, a skill, a habit). Be specific and \
-grounded in the sessions; no generic productivity advice. Write in English; keep project names and identifiers verbatim."""
+highlights, open threads, friction) and the knowledge extracted that week. The developer skims this on \
+Monday morning next to charts of the same numbers, so never restate the statistics and keep every line \
+short: fragments are fine, lead with the concrete thing (project, feature, bug), no filler or hedging, and \
+respect the word limits. Cover what they worked on and achieved, the recurring themes, the most valuable \
+learnings, what is left open, what kept slowing them down, and a few concrete, specific suggestions to work \
+better with Claude Code (a CLAUDE.md rule, a script, a skill, a habit). Be specific and grounded in the \
+sessions; no generic productivity advice. Write in English; keep project names and identifiers verbatim."""
 
 
 def week_bounds(key: str | None = None) -> tuple[str, datetime, datetime]:
@@ -68,6 +76,34 @@ def _stats(conn, since: str, until: str) -> dict:
         "COALESCE(SUM(est_cost_usd),0) cost, COALESCE(SUM(lines_added),0) lines_added, COUNT(DISTINCT project_path) projects "
         "FROM sessions WHERE source != 'history' AND started_at >= ? AND started_at < ?", (since, until)).fetchone()
     return dict(r)
+
+
+def week_glance(conn, since: str, until: str) -> dict:
+    """The numbers a review is drawn with: active time per local day, top projects, outcomes and new knowledge."""
+    from .views import project_labels
+
+    start = datetime.fromisoformat(since.replace("Z", "+00:00")).astimezone()
+    daily = [0.0] * 7
+    projects: dict[str, dict] = {}
+    outcomes: dict[str, int] = {}
+    labels = project_labels(conn)
+    for r in conn.execute(
+            "SELECT started_at, project_path, project_name, active_s, outcome FROM sessions "
+            "WHERE source != 'history' AND started_at >= ? AND started_at < ?", (since, until)):
+        day = (datetime.fromisoformat(r["started_at"].replace("Z", "+00:00")).astimezone().date() - start.date()).days
+        daily[min(max(day, 0), 6)] += r["active_s"] or 0
+        p = projects.setdefault(r["project_path"] or "", {
+            "path": r["project_path"] or "", "label": labels.get(r["project_path"], r["project_name"] or "(no project)"),
+            "active_s": 0.0, "sessions": 0})
+        p["active_s"] += r["active_s"] or 0
+        p["sessions"] += 1
+        outcomes[r["outcome"] or "not analyzed"] = outcomes.get(r["outcome"] or "not analyzed", 0) + 1
+    knowledge = {r["kind"]: r["n"] for r in conn.execute(
+        "SELECT k.kind, COUNT(*) n FROM knowledge k JOIN sessions s ON s.id = k.session_id "
+        "WHERE k.status = 'active' AND s.started_at >= ? AND s.started_at < ? GROUP BY k.kind", (since, until))}
+    return {"daily": [round(v) for v in daily],
+            "projects": sorted(projects.values(), key=lambda p: -p["active_s"])[:6],
+            "outcomes": outcomes, "knowledge": knowledge}
 
 
 def review_ready(conn, key: str | None = None) -> tuple[bool, str]:
@@ -166,8 +202,8 @@ def normalize_review(data: dict) -> dict:
         elif isinstance(t, dict) and (t.get("title") or t.get("detail")):
             themes.append({"title": str(t.get("title") or ""), "detail": str(t.get("detail") or ""),
                            "projects": strings(t.get("projects"))})
-    out = {"headline": str(data.get("headline") or "").strip(), "summary": str(data.get("summary") or "").strip(),
-           "themes": themes}
+    out = {"headline": str(data.get("headline") or "").strip(), "tldr": strings(data.get("tldr"))[:3],
+           "summary": str(data.get("summary") or "").strip(), "themes": themes}
     for key in ("accomplishments", "learnings", "open_threads", "friction", "suggestions"):
         out[key] = strings(data.get(key))
     return out
@@ -177,6 +213,8 @@ def render_review(key: str, start: datetime, end: datetime, data: dict, stats: d
     out = [f"# Week {key}: {data.get('headline') or ''}".rstrip(": "), "",
            f"_{start:%b %d} – {(end - timedelta(days=1)):%b %d, %Y} · {stats['sessions']} sessions · "
            f"{human_duration(stats['active_s'])} active · {stats['prompts']} prompts · est. {human_cost(stats['cost'])}_", ""]
+    if data.get("tldr"):
+        out += ["**TL;DR**", ""] + [f"- {x}" for x in data["tldr"]] + [""]
     if data.get("summary"):
         out += [data["summary"].strip(), ""]
     if data.get("themes"):

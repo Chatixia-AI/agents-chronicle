@@ -3,7 +3,7 @@
 <h1 align="center">Chronicle</h1>
 
 <p align="center"><b>実行したすべてのコーディングエージェントのセッションを、検索できる記憶に。</b><br>
-Claude Code、Codex、GitHub Copilot、IBM Bob のセッションを、自分のマシンの中で保存し、ナレッジに変えます。</p>
+Claude Code、Codex、GitHub Copilot、IBM Bob のセッションと claude.ai・ChatGPT のチャットを、自分のマシンの中で保存し、ナレッジに変えます。</p>
 
 <p align="center">
   <a href="https://pypi.org/project/agents-chronicle/"><img src="https://img.shields.io/pypi/v/agents-chronicle?label=PyPI" alt="PyPI のバージョン"></a>
@@ -38,51 +38,54 @@ Chronicle は終わったセッションを読み、残す価値のあること�
   「このエラー、前にも出た？」「なぜ冪等性を Postgres でやることにしたんだっけ？」Claude Desktop、Cursor、Windsurf、
   Gemini CLI からも接続できます。
 - **すべてを眺めるダッシュボード。** トランスクリプト全体を含むセッション、統計、自分の用語をマインドマップにした用語集、
-  Claude が書く週次の振り返り。⌘K でどこへでも移動できます。
+  ひと目でわかる週次の振り返り。⌘K でどこへでも移動できます。
 - **ただのファイルとしても。** Obsidian 互換の Markdown 保管庫と `chronicle` CLI。
 
 ## クイックスタート
 
 macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/claude-code)（分析を担当）が必要です。
 
-1. **インストール。** デスクトップアプリを[最新リリース](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest)
-   （Apple シリコン）からダウンロードして開き、**Connect** を選ぶか、コマンドラインで：
+1. **インストール。**
 
    ```bash
-   uv tool install --python 3.13 agents-chronicle
-   chronicle install        # セッション終了フック、バックグラウンド同期、ダッシュボード、MCP サーバー
+   uv tool install --python 3.13 agents-chronicle   # または: pipx install agents-chronicle
+   chronicle install
    ```
+
+   `chronicle install` は Mac にあるコーディングエージェントを見つけ、どれを記録するか尋ね、過去のセッションを取り込み、
+   ログイン時から Chronicle を動かすかを尋ねます。アプリがよければ[最新リリース](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest)
+   （Apple シリコン）からダウンロードして **Connect** を選びます。
 
 2. **いつも通りエージェントを使う。** 各セッションは終了時に記録され、バックグラウンドで分析されます。
 
-3. **眺める。** アプリか、ダッシュボード <http://127.0.0.1:8765/> を開いて **⌘K** を押します。エージェントに
-   「先週何を学んだ？」と聞いてもかまいません。
+3. **眺める。** ダッシュボード <http://127.0.0.1:8765/>（または `chronicle ui --open`）を開いて **⌘K** を押すか、
+   エージェントに「先週何を学んだ？」と聞きます。
 
-Codex、GitHub Copilot、IBM Bob も記録するには、**Settings › Sources** か `chronicle connect codex` などで接続します。
-各方法が何を設定するか、削除の仕方は[インストール](docs/ja/install.md)にあります。
+エージェントはあとから **Settings › Sources**、`chronicle connect <agent>`、または `chronicle install` の再実行で追加できます。
+各ステップが何を設定するか、削除の仕方は[インストール](docs/ja/install.md)にあります。
 
 ## 対応エージェント
 
 | エージェント | 記録元 | 取り込み | エージェントからの検索（MCP） |
 | --- | --- | --- | --- |
 | Claude Code | `~/.claude/projects` のトランスクリプト | セッション終了ごと、および 15 分ごと | ✅ |
-| Codex（オプトイン） | `~/.codex/sessions` のロールアウト | 15 分ごと（アイドルになってから） | ✅ |
-| GitHub Copilot（オプトイン） | Copilot CLI とエージェントのセッション、VS Code の Copilot Chat ログ | 15 分ごと | ✅ VS Code と Copilot CLI |
-| IBM Bob（オプトイン） | `~/.bob/db/bob.db`（読み取り専用） | 15 分ごと | ✅ |
+| Codex | `~/.codex/sessions` のロールアウト | 15 分ごと（アイドルになってから） | ✅ |
+| Codex Cloud | chatgpt.com/codex のタスク（`codex` CLI 経由。タイトル、リポジトリ、差分） | 15 分ごと | Codex 経由 |
+| GitHub Copilot | Copilot CLI とエージェントのセッション、VS Code の Copilot Chat ログ | 15 分ごと | ✅ VS Code と Copilot CLI |
+| IBM Bob | `~/.bob/db/bob.db`（読み取り専用） | 15 分ごと | ✅ |
+| claude.ai、ChatGPT | データエクスポート：`chronicle import <zip>` | 取り込んだとき | – |
 
-どのエージェントのセッションも、同じダッシュボード、ナレッジ、用語集、MCP ツールを共有します。分析は常に Claude Code で
-行います。Codex を接続すると、Claude Code が削除した後に Codex Desktop が取り込んでいた Claude Code のセッションも
-復元されます。詳しくは[ソース](docs/ja/sources.md)を参照してください。
+すべて同じダッシュボード、ナレッジ、用語集、MCP ツールを共有します。分析は常に Claude Code で行います。
+詳しくは[ソース](docs/ja/sources.md)を参照してください。
 
 ## もう少し詳しく
 
 | | | |
 | --- | --- | --- |
-| ![ホーム：30 日間の稼働時間、セッション、トークン、推定コスト、日次グラフと結果](docs/images/home.png) | ![マップ：用語集のマインドマップ。用語を開くと定義、使われ方、出どころが出る](docs/images/map-dark.png) | ![⌘K パレット：セッション、ナレッジ、用語をまとめて検索](docs/images/palette-dark.png) |
+| ![ホーム：30 日間の稼働時間、セッション、トークン、推定コスト、日次グラフと結果](docs/images/home.png) | ![マップ：用語集のマインドマップ。用語を開くと定義、使われ方、出どころが出る](docs/images/map.png) | ![⌘K パレット：セッション、ナレッジ、用語をまとめて検索](docs/images/palette.png) |
 | **ホーム。** 稼働時間、セッション、トークン、推定コストを日ごとに。 | **マップ。** 用語集をマインドマップに。各用語から、その背後のナレッジとセッションへ。 | **⌘K。** セッション、ナレッジ、プロジェクト、用語、コマンドをひとつの検索で。 |
 
-スクリーンショットは架空のデモデータから作ったもので、自分でも作れます：
-`uv run python docs/demo/make_demo.py /tmp/chronicle-demo`。
+スクリーンショットは架空の[デモデータ](docs/ja/development.md#デモデータ)です。
 
 ## 仕組み
 

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import copy
 import json
 import logging
 import sqlite3
@@ -18,11 +19,13 @@ MAX_ITEMS = 250
 KB_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["overview", "sections", "superseded_ids"],
+    "required": ["tldr", "overview", "sections", "superseded_ids"],
     "properties": {
+        "tldr": {"type": "array", "items": {"type": "string"},
+                 "description": "Exactly 3 bullets, at most 14 words each: what matters most"},
         "overview": {
             "type": "string",
-            "description": "2-4 short paragraphs of markdown: what this is, how it is built, and its current state",
+            "description": "At most 3 plain sentences: what this is, how it is built, and its current state",
         },
         "sections": {
             "type": "array",
@@ -37,9 +40,11 @@ KB_SCHEMA = {
                         "items": {
                             "type": "object",
                             "additionalProperties": False,
-                            "required": ["text", "sources"],
+                            "required": ["title", "text", "sources"],
                             "properties": {
-                                "text": {"type": "string", "description": "One self-contained markdown bullet"},
+                                "title": {"type": "string", "description": "3-8 words stating the rule or fact"},
+                                "text": {"type": "string",
+                                         "description": "The detail as markdown, at most 35 words; keep concrete identifiers"},
                                 "sources": {"type": "array", "items": {"type": "integer"},
                                             "description": "ids of the knowledge items this bullet is based on"},
                             },
@@ -63,9 +68,11 @@ You receive the project's recent sessions and its knowledge items (each with an 
 source; "memory" items were written by Claude Code's own memory feature and are usually reliable). You may also \
 receive the previous version of the knowledge base.
 
-Write the current knowledge base:
-- An overview of what the project is, how it is built, and where it stands now.
-- Sections of concise, self-contained bullets. Suggested sections (use only those that have content, add others if \
+People skim the knowledge base and agents read it before they work, so keep it short: fragments are fine, no \
+filler or hedging, and respect the word limits. Write the current knowledge base:
+- A three-bullet TL;DR of what matters most, and a short overview of what the project is, how it is built, and \
+where it stands now.
+- Sections of concise, self-contained bullets, each with a short title that states the rule or fact. Suggested sections (use only those that have content, add others if \
 needed): "Architecture & key facts", "Run, test & deploy", "Gotchas & fixes", "Decisions & rationale", \
 "Conventions & preferences", "Useful commands", "Open threads".
 - Merge duplicates into one bullet, prefer newer and higher-confidence items when they conflict, and keep concrete \
@@ -78,14 +85,20 @@ You maintain a developer's personal engineering playbook, distilled from knowled
 Claude Code sessions and projects.
 
 You receive cross-project knowledge items (each with an id, kind, project, date and confidence) and possibly the \
-previous playbook. Write the current playbook:
-- An overview of how this developer works and what they work on.
-- Sections of concise, self-contained bullets. Suggested sections (use only those with content): \
-"Working preferences for Claude", "Tooling & platform gotchas", "Reusable patterns & commands", "Learnings", \
-"Recurring problems".
+previous playbook. The developer skims the playbook, and agents read it before they work, so keep it short: \
+fragments are fine, no filler or hedging, and respect the word limits. Write the current playbook:
+- A three-bullet TL;DR of the rules that matter most, and a short overview of how this developer works and what \
+they work on (no names, emails or long project lists).
+- Sections of concise, self-contained bullets, each with a short title that states the rule or fact. Suggested \
+sections (use only those with content): "Working preferences for Claude", "Tooling & platform gotchas", \
+"Reusable patterns & commands", "Learnings", "Recurring problems".
 - Merge duplicates, prefer newer items on conflict, keep concrete identifiers, and cite source ids per bullet.
 - List in superseded_ids the items that are outdated, contradicted or fully duplicated.
 Do not invent anything that the items do not support."""
+
+# The playbook differs from a project's knowledge base only in what its overview describes
+GLOBAL_SCHEMA = copy.deepcopy(KB_SCHEMA)
+GLOBAL_SCHEMA["properties"]["overview"]["description"] = "At most 3 plain sentences: how this developer works and on what"
 
 
 def _item_line(k: dict) -> dict:
@@ -176,7 +189,7 @@ def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str,
     if prev and prev["markdown"]:
         parts.append(f"<previous_version>\n{truncate(prev['markdown'], 20000)}\n</previous_version>")
     parts.append("Write the updated knowledge base." if not is_global else "Write the updated playbook.")
-    res = runner.run("\n\n".join(parts), KB_SCHEMA, system=GLOBAL_SYSTEM if is_global else PROJECT_SYSTEM,
+    res = runner.run("\n\n".join(parts), GLOBAL_SCHEMA if is_global else KB_SCHEMA, system=GLOBAL_SYSTEM if is_global else PROJECT_SYSTEM,
                      model=cfg.synthesis.model)
     data = normalize_kb(res.data)
     valid_ids = {k["id"] for k in items}
@@ -236,17 +249,27 @@ def normalize_kb(data: dict) -> dict:
             if isinstance(it, str) and it.strip():
                 items.append({"text": it.strip(), "sources": []})
             elif isinstance(it, dict) and str(it.get("text") or "").strip():
-                items.append({"text": str(it["text"]).strip(), "sources": ids(it.get("sources"))})
+                item = {"text": str(it["text"]).strip(), "sources": ids(it.get("sources"))}
+                if str(it.get("title") or "").strip():
+                    item["title"] = str(it["title"]).strip()
+                items.append(item)
         if items:
             sections.append({"title": str(sec.get("title") or "Notes"), "items": items})
-    return {"overview": str(data.get("overview") or "").strip(), "sections": sections,
-            "superseded_ids": ids(data.get("superseded_ids"))}
+    out = {"overview": str(data.get("overview") or "").strip(), "sections": sections,
+           "superseded_ids": ids(data.get("superseded_ids"))}
+    tldr = data.get("tldr")
+    tldr = [tldr] if isinstance(tldr, str) else tldr if isinstance(tldr, list) else []
+    if any(str(x).strip() for x in tldr):
+        out["tldr"] = [str(x).strip() for x in tldr if str(x).strip()][:3]
+    return out
 
 
 def render_kb_markdown(name: str, data: dict, *, n_items: int, model: str | None, link=None) -> str:
     """Render a KB as Markdown. `link(id) -> str` can turn source ids into links (defaults to [k12])."""
     link = link or (lambda i: f"k{i}")
     lines = [f"# {name}", "", f"_Synthesized from {n_items} knowledge items · {local_str(utcnow_iso())} · {model or ''}_", ""]
+    if data.get("tldr"):
+        lines += ["**TL;DR**", ""] + [f"- {x}" for x in data["tldr"]] + [""]
     if data.get("overview"):
         lines += ["## Overview", "", data["overview"].strip(), ""]
     for section in data.get("sections") or []:
@@ -256,7 +279,8 @@ def render_kb_markdown(name: str, data: dict, *, n_items: int, model: str | None
         lines += [f"## {section.get('title') or 'Notes'}", ""]
         for it in items:
             src = ", ".join(link(i) for i in it.get("sources") or [] if isinstance(i, int))
-            lines.append(f"- {str(it.get('text') or '').strip()}" + (f" <sub>[{src}]</sub>" if src else ""))
+            title = f"**{str(it['title']).strip()}**: " if it.get("title") else ""
+            lines.append(f"- {title}{str(it.get('text') or '').strip()}" + (f" <sub>[{src}]</sub>" if src else ""))
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 

@@ -171,7 +171,7 @@ elif "glossary" in system:
         {"term": "pytest", "category": "tool", "definition": "duplicate in the same reply is dropped"},
     ][: (1 if everywhere else 4)]}
 elif "weekly engineering review" in system:
-    data = {"headline": "Fixed login", "summary": "A good week.", "themes": [{"title": "Auth", "detail": "Token work", "projects": ["demo-app"]}],
+    data = {"headline": "Fixed login", "tldr": ["Login fixed", "TTL units learned", "Logout next", "dropped: only 3 kept"], "summary": "A good week.", "themes": [{"title": "Auth", "detail": "Token work", "projects": ["demo-app"]}],
             "accomplishments": ["Fixed TTL bug"], "learnings": ["TTL units"], "open_threads": ["logout"], "friction": [], "suggestions": ["Add a CLAUDE.md rule"]}
 elif "knowledge base" in system or "playbook" in system:
     ids = [int(x) for x in __import__("re").findall(r'"id": (\d+)', prompt)]
