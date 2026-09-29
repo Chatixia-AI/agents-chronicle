@@ -11,6 +11,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | --- | --- | --- |
 | `claude_dirs` | `["~/.claude"]` | Claude Code config directories to scan; several are supported |
 | `codex_dirs` | `[]` | `["~/.codex"]` once Codex is connected |
+| `codex_cloud` | `false` | `true` once Codex Cloud is connected: list its tasks through the codex CLI every sync |
 | `copilot_dirs` | `[]` | `~/.copilot` and VS Code `User` directories once Copilot is connected |
 | `bob_dirs` | `[]` | `["~/.bob"]` once Bob is connected |
 | `import_history` | `true` | recover prompts of sessions Claude Code already deleted, from `history.jsonl` |

@@ -5,7 +5,7 @@
 `chronicle sources` (or the dashboard's **Sources** tab) shows each coding agent: detected or not, version,
 sessions on disk vs. recorded and analyzed, how it is recorded, and whether its hook and MCP server are in
 place. Connect or disconnect from the dashboard or with `chronicle connect <agent>` / `chronicle disconnect <agent>`
-(`claude`, `codex`, `copilot`, `bob`; recorded sessions are always kept). Every source maps onto the same session
+(`claude`, `codex`, `codex-cloud`, `copilot`, `bob`; recorded sessions are always kept). Every source maps onto the same session
 model, so sessions from all agents share the dashboard, analysis, knowledge bases, glossary and MCP tools.
 
 **Codex** (`~/.codex`) is opt-in. Connecting it:
@@ -23,6 +23,15 @@ model, so sessions from all agents share the dashboard, analysis, knowledge base
 Codex has no session-end hook (and its single `notify` slot may be taken by another app), so Codex sessions
 are picked up by the 15-minute background sync once idle. GPT token costs use OpenAI list prices; newer GPT
 models without a published price are estimated at GPT-5 rates.
+
+**Codex Cloud** (tasks at chatgpt.com/codex) is a separate opt-in (`chronicle connect codex-cloud`), because it
+goes online: every sync runs `codex cloud list` with your Codex login (`codex login`), then `codex cloud diff` for
+each new or changed task. Each task becomes a Codex session (`source = codex-cloud`) with its title, repository,
+status, changed files with line counts, the diff and a link to the task; it joins your local project when the
+repository name matches one. The Codex CLI does not give a cloud task's conversation, so these sessions have no
+prompts and are not analyzed. The task and its diff are archived in `~/.claude-chronicle/archive/codex-cloud/` and
+stay after the task expires in the cloud. If listing fails (not logged in, offline), the Sources card says why and
+the next sync tries again.
 
 **GitHub Copilot** is opt-in (`chronicle connect copilot`). It records two stores:
 

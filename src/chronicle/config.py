@@ -19,6 +19,9 @@ claude_dirs = ["~/.claude"]
 # OpenAI Codex homes to scan (sessions, memories, and the Claude sessions Codex Desktop imported).
 # Empty = not connected; `chronicle connect codex` (or the dashboard's Sources page) fills it in.
 codex_dirs = []
+# Codex Cloud tasks (chatgpt.com/codex), listed through the codex CLI on every sync: title, repository, diff.
+# Off by default because it goes online; `chronicle connect codex-cloud`.
+codex_cloud = false
 # GitHub Copilot: Copilot agent homes (~/.copilot) and VS Code User directories (Copilot Chat). `chronicle connect copilot`.
 copilot_dirs = []
 # IBM Bob homes (~/.bob). `chronicle connect bob`.
@@ -108,6 +111,7 @@ class Config:
     home: Path
     claude_dirs: list[Path] = field(default_factory=list)
     codex_dirs: list[Path] = field(default_factory=list)
+    codex_cloud: bool = False
     copilot_dirs: list[Path] = field(default_factory=list)
     bob_dirs: list[Path] = field(default_factory=list)
     import_history: bool = True
@@ -211,6 +215,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         home=home,
         claude_dirs=[Path(d).expanduser() for d in raw_dirs],
         codex_dirs=[Path(d).expanduser() for d in sources.get("codex_dirs", [])],
+        codex_cloud=bool(sources.get("codex_cloud", False)),
         copilot_dirs=[Path(d).expanduser() for d in sources.get("copilot_dirs", [])],
         bob_dirs=[Path(d).expanduser() for d in sources.get("bob_dirs", [])],
         import_history=bool(sources.get("import_history", True)),

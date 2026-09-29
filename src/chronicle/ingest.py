@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import gzip
 import hashlib
+import json
 import logging
 import os
 import re
@@ -492,6 +493,13 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                     conn.rollback()
                     log.exception("codex sync failed: %s", codex_dir)
                     report.errors.append(f"codex {codex_dir}: {exc}")
+            if cfg.codex_cloud:
+                try:
+                    _sync_codex_cloud(cfg, conn, report, skip, force=force)
+                except Exception as exc:
+                    conn.rollback()
+                    log.exception("codex cloud sync failed")
+                    report.errors.append(f"codex cloud: {exc}")
             for name, dirs, fn in (("copilot", cfg.copilot_dirs, _sync_copilot), ("bob", cfg.bob_dirs, _sync_bob)):
                 for d in dirs:
                     try:
@@ -629,13 +637,13 @@ def snapshot_sqlite(conn, src: Path, dst: Path) -> bool:
 
 
 def _store_other(conn, cfg, ps: ParsedSession, report: SyncReport, *, root: Path, transcript: Path, archive: Path,
-                 sig: str, agent: str) -> None:
-    """Store a parsed Copilot/Bob session (the tail every non-Claude source shares)."""
+                 sig: str, agent: str, source: str = "transcript") -> None:
+    """Store a parsed Copilot/Bob/Codex Cloud session (the tail every non-Claude source shares)."""
     if cfg.is_excluded(ps.project_path) or kv_get(conn, f"forget:{ps.id}"):
         return
     try:
         result = store_parsed(conn, cfg, ps, claude_dir=root, project_dir=None, transcript_path=transcript,
-                              archive_path=archive, files_sig=sig, agent=agent)
+                              archive_path=archive, files_sig=sig, agent=agent, source=source)
         conn.commit()
     except Exception as exc:
         conn.rollback()
@@ -719,6 +727,53 @@ def _sync_bob(cfg: Config, conn, archiver: Archiver, root: Path, report: SyncRep
         if ps is None:
             continue  # a task that never got a prompt
         _store_other(conn, cfg, ps, report, root=root, transcript=db, archive=snap, sig=sig, agent="bob")
+
+
+def _cloud_project(conn, label: str | None) -> str | None:
+    """A Codex Cloud environment is named after its repository: use the local project of that name when there is one."""
+    if not label:
+        return None
+    name = label.rstrip("/").rsplit("/", 1)[-1]
+    row = conn.execute("SELECT project_path FROM sessions WHERE project_name = ? AND source != 'codex-cloud' "
+                       "AND project_path IS NOT NULL ORDER BY ended_at DESC LIMIT 1", (name,)).fetchone()
+    return row[0] if row else name
+
+
+def _sync_codex_cloud(cfg: Config, conn, report: SyncReport, skip: set[str], *, force=False):
+    """Codex Cloud tasks through `codex cloud list/diff`; each new or changed task is archived with its diff."""
+    from .codex_cloud import CloudError, list_tasks, parse_cloud_task, save_status, task_diff
+    from .codex_cloud import task_signature as cloud_signature
+
+    binary = cfg.codex_bin()
+    if not binary:
+        save_status(conn, ok=False, error="codex CLI not found")
+        return
+    try:
+        tasks = list_tasks(binary)
+    except CloudError as exc:  # not logged in or offline: shown on the Sources page, retried next sync
+        log.warning("codex cloud: %s", exc)
+        save_status(conn, ok=False, error=str(exc))
+        conn.commit()
+        return
+    save_status(conn, ok=True, tasks=len(tasks))
+    conn.commit()
+    dst = cfg.archive_dir / "codex-cloud"
+    for task in tasks:
+        sid, sig = task["id"], cloud_signature(task)
+        if sid in skip or _unchanged(conn, sid, sig, force):
+            report.sessions_unchanged += 1
+            continue
+        diff = task_diff(binary, sid)
+        archive = dst / f"{sid}.json.gz"
+        archive.parent.mkdir(parents=True, exist_ok=True)
+        tmp = archive.with_name(archive.name + f".tmp{os.getpid()}")
+        with gzip.open(tmp, "wt", encoding="utf-8") as f:  # kept even after the task expires in the cloud
+            json.dump({"task": task, "diff": diff}, f, ensure_ascii=False)
+        os.replace(tmp, archive)
+        ps = parse_cloud_task(task, diff, _cloud_project(conn, task.get("environment_label")))
+        # no prompts, so analysis skips it ("too few prompts")
+        _store_other(conn, cfg, ps, report, root=dst, transcript=archive, archive=archive, sig=sig, agent="codex",
+                     source="codex-cloud")
 
 
 _APPLIES_RE = re.compile(r"applies_to:.*?cwd=(\S+?)(?:;|\s|$)")

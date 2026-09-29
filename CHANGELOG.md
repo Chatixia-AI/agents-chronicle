@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Codex Cloud tasks:** `chronicle connect codex-cloud` (or **Settings › Sources › Codex Cloud**) records the tasks
+  you ran at chatgpt.com/codex, through the `codex cloud` CLI: title, repository, changed files, the diff and a link,
+  archived for good. Opt-in, since it goes online. The CLI has no task conversations, so these are not analyzed.
 - **Update from the dashboard:** Settings › Status › Updates upgrades Chronicle with whatever installed it (uv
   tool, pipx, pip; a checkout install is reinstalled when its files changed) and restarts the dashboard; the
   desktop app links to the latest release. Checking PyPI happens only when you click **Check for updates**. See

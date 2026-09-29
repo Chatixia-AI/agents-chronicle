@@ -5,7 +5,7 @@
 | ページ | 内容 |
 | --- | --- |
 | [インストール](install.md) | デスクトップアプリとコマンドラインでのインストール、それぞれが設定するもの、アップデート、アンインストール |
-| [ソース](sources.md) | Claude Code、Codex、GitHub Copilot、IBM Bob：何を読み込むか、それぞれの接続方法 |
+| [ソース](sources.md) | Claude Code、Codex、Codex Cloud、GitHub Copilot、IBM Bob：何を読み込むか、それぞれの接続方法 |
 | [ダッシュボード、用語集、マップ](dashboard.md) | レイアウト、キーボードショートカット、各ページ、用語集、マップ、テーマ |
 | [コマンドライン](cli.md) | すべての `chronicle` コマンドと Markdown 保管庫 |
 | [MCP サーバー](mcp.md) | エージェントが使えるツール、Claude Desktop・Cursor・Windsurf・Gemini CLI などの MCP クライアントの接続 |

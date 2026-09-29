@@ -133,7 +133,7 @@ def codex_status(cfg: Config, conn: sqlite3.Connection) -> dict:
     files = rollout_files(home)
     imports = load_imports(home)
     connected = bool(cfg.codex_dirs)
-    rec = _recorded(conn, "agent = 'codex'")
+    rec = _recorded(conn, "agent = 'codex' AND source != 'codex-cloud'")
     recovered = _recorded(conn, "source = 'codex-import'")
     notify = _codex_notify(home)
     notify_owner = Path(notify[0]).name if isinstance(notify, list) and notify else None
@@ -193,6 +193,57 @@ def disconnect_codex(cfg: Config) -> list[str]:
         actions.append("removed MCP server 'chronicle' from Codex" if proc.returncode == 0
                        else f"Codex MCP removal failed: {(proc.stderr or proc.stdout).strip()[:200]}")
     return actions
+
+
+# ------------------------------------------------------------------ Codex Cloud
+def codex_cloud_status(cfg: Config, conn: sqlite3.Connection) -> dict:
+    from .codex_cloud import load_status
+
+    binary = cfg.codex_bin()
+    connected = cfg.codex_cloud
+    last = load_status(conn)
+    rec = _recorded(conn, "source = 'codex-cloud'")
+    checked = time.strftime("%b %d %H:%M", time.localtime(last["checked_at"])) if last.get("checked_at") else None
+    listing = (f"{last.get('tasks', 0)} tasks at the last sync ({checked})" if last.get("ok")
+               else f"failed at the last sync ({checked}): {last.get('error')}" if checked else "not listed yet")
+    return {
+        "name": "codex-cloud",
+        "agent": "codex",
+        "label": "Codex Cloud",
+        "vendor": "OpenAI",
+        "detected": bool(binary),
+        "connected": connected,
+        "version": _version(binary),
+        "binary": binary,
+        "dirs": [],
+        "on_disk": last.get("tasks", 0) if last.get("ok") else 0,
+        "on_disk_label": "in the cloud",
+        "recorded": rec,
+        "recovered": 0,
+        "recording": "task list and diffs every sync, through the codex CLI" if connected else "not recording",
+        "checks": [
+            {"label": "Codex CLI", "ok": bool(binary), "detail": "lists tasks with your Codex login (`codex login`)" if binary
+             else "not found: install Codex and run `codex login`"},
+            {"label": "Recording", "ok": connected, "detail": "checked every sync" if connected else "not checked (connect to start)"},
+            {"label": "Task list", "ok": bool(last.get("ok")) if checked else None, "optional": not connected, "detail": listing},
+            {"label": "Conversation", "ok": None, "optional": True,
+             "detail": "not available from the CLI: each task is recorded with its title, repository, changed files and diff"},
+        ],
+        "notes": [],
+    }
+
+
+def connect_codex_cloud(cfg: Config, exe: str) -> list[str]:
+    set_config_value(cfg, "sources", "codex_cloud", "true")
+    actions = ["recording Codex Cloud tasks"]
+    if not cfg.codex_bin():
+        actions.append("codex CLI not found: install Codex and run `codex login`")
+    return actions
+
+
+def disconnect_codex_cloud(cfg: Config) -> list[str]:
+    set_config_value(cfg, "sources", "codex_cloud", "false")
+    return ["stopped recording Codex Cloud (recorded tasks are kept)"]
 
 
 # ------------------------------------------------------------------ MCP entries in other tools' JSON configs
@@ -433,6 +484,7 @@ def remove_mcp_client(cfg: Config, name: str) -> list[str]:
 CONNECTORS = {
     "claude": (claude_status, connect_claude, disconnect_claude),
     "codex": (codex_status, connect_codex, disconnect_codex),
+    "codex-cloud": (codex_cloud_status, connect_codex_cloud, disconnect_codex_cloud),
     "copilot": (copilot_status, connect_copilot, disconnect_copilot),
     "bob": (bob_status, connect_bob, disconnect_bob),
 }

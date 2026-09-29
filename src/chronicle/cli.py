@@ -635,7 +635,7 @@ def cmd_sources(args) -> int:
         state = "[green]connected[/]" if c["connected"] else ("[yellow]detected, not connected[/]" if c["detected"] else "[dim]not installed[/]")
         console.print(f"[bold]{c['label']}[/] ({c['vendor']}) · {state} · {c['version'] or 'version unknown'}", highlight=False)
         rec = c["recorded"]
-        console.print(f"  {c['on_disk']} sessions on disk · {rec['sessions']} recorded ({rec['analyzed']} analyzed) · "
+        console.print(f"  {c['on_disk']} sessions {c.get('on_disk_label', 'on disk')} · {rec['sessions']} recorded ({rec['analyzed']} analyzed) · "
                       f"last {local_str(rec['last_session'])} · {c['recording']}", highlight=False)
         for chk in c["checks"]:
             mark = "[green]✓[/]" if chk["ok"] else ("[dim]–[/]" if chk["ok"] is None or chk.get("optional") else "[red]✗[/]")
@@ -818,9 +818,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sources", aliases=["connectors"], help="which coding agents are connected and how")
     s.set_defaults(fn=cmd_sources)
 
-    agents = ["claude", "codex", "copilot", "bob"]
+    agents = ["claude", "codex", "codex-cloud", "copilot", "bob"]
     clients = ["claude-desktop", "cursor", "windsurf", "gemini"]
-    s = sub.add_parser("connect", help="start recording an agent (claude, codex, copilot, bob), or give an MCP client "
+    s = sub.add_parser("connect", help="start recording an agent (claude, codex, codex-cloud, copilot, bob), or give an MCP client "
                                        "(claude-desktop, cursor, windsurf, gemini) Chronicle's MCP server")
     s.add_argument("name", choices=agents + clients)
     s.add_argument("--exe", help="command the agent should run for Chronicle's MCP server")

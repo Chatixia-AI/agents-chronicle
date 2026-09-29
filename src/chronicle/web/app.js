@@ -1154,7 +1154,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   // outline: the prompts as they load, and the files that changed
   const promptList = h("ol", { class: "ol-prompts" });
   const outline = h("aside", { class: "s-outline", "aria-label": "Session outline" },
-    h("h4", null, "Prompts"), promptList,
+    sx.n_prompts ? [h("h4", null, "Prompts"), promptList] : null, // none: a Codex Cloud task, say; the list would say "Loading…" forever
     changed.length ? [h("h4", null, "Files changed"), h("div", { class: "ol-files" }, changed.slice(0, 12).map((f) =>
       h("div", { title: f.path }, h("span", null, f.path.split("/").pop()), f.lines_added || f.lines_removed ? h("em", null, `+${fmtCompact(f.lines_added)}`) : null)),
       changed.length > 12 ? h("div", { class: "muted" }, `and ${changed.length - 12} more`) : null)] : null);
@@ -2409,7 +2409,7 @@ route(/^\/sources$/, async () => {
         h("div", null, h("div", { class: "src-name" }, c.label), h("div", { class: "src-vendor" }, [c.vendor, c.version, c.binary ? shortPath(c.binary) : null].filter(Boolean).join(" · "))),
         h("span", { class: `badge ${state[0]}` }, h("span", { class: "sdot" }), state[1])),
       h("div", { class: "src-stats" },
-        h("span", null, h("b", null, fmtNum(c.on_disk)), " on disk"),
+        h("span", null, h("b", null, fmtNum(c.on_disk)), ` ${c.on_disk_label || "on disk"}`),
         h("span", null, h("b", null, fmtNum(c.recorded.sessions)), " recorded"),
         h("span", null, h("b", null, fmtNum(c.recorded.analyzed)), " analyzed"),
         c.recovered ? h("span", null, h("b", null, fmtNum(c.recovered)), c.name === "codex" ? " Claude sessions recovered" : " recovered") : null,
@@ -2420,7 +2420,7 @@ route(/^\/sources$/, async () => {
       c.notes.length ? h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } }, c.notes.join(" · ")) : null,
       h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, `Recording: ${c.recording}`),
         h("div", { style: { display: "flex", gap: "8px" } },
-          c.recorded.sessions ? h("a", { class: "btn", href: `#/sessions?agent=${c.name}` }, "Sessions") : null, action)));
+          c.recorded.sessions ? h("a", { class: "btn", href: `#/sessions?agent=${c.agent || c.name}` }, "Sessions") : null, action)));
   };
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, "Sources"),

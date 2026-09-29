@@ -11,6 +11,7 @@
 | --- | --- | --- |
 | `claude_dirs` | `["~/.claude"]` | 読み込む Claude Code の設定ディレクトリ。複数指定できます |
 | `codex_dirs` | `[]` | Codex を接続すると `["~/.codex"]` |
+| `codex_cloud` | `false` | Codex Cloud を接続すると `true`。同期のたびに codex CLI でタスクを一覧します |
 | `copilot_dirs` | `[]` | Copilot を接続すると `~/.copilot` と VS Code の `User` ディレクトリ |
 | `bob_dirs` | `[]` | Bob を接続すると `["~/.bob"]` |
 | `import_history` | `true` | Claude Code がすでに削除したセッションのプロンプトを `history.jsonl` から復元する |

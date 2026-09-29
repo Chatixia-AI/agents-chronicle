@@ -6,7 +6,8 @@
 first) goes to Claude through your own Claude Code login, with `claude -p`: the same service that produced the
 transcript. Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. The one other
 connection is the update check, only when you click **Check for updates** on the Status page: it asks pypi.org
-for the latest version number and sends nothing about you.
+for the latest version number and sends nothing about you. If you connect Codex Cloud, each sync also runs the
+`codex cloud` CLI, which fetches your own tasks from OpenAI with your Codex login; nothing is sent the other way.
 
 | Stored locally | Where |
 | --- | --- |
