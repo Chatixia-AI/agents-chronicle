@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.2.1 (2026-09-30)
 
 - Chronicle moved to the [Chatixia-AI](https://github.com/Chatixia-AI) organization, and the documentation to
   <https://chronicle.chatixia.net/>. Old GitHub links redirect.
