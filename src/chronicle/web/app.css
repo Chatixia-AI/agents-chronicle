@@ -600,7 +600,7 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .src-link { font-size: 11px; color: var(--muted); margin-left: 4px; }
 .src-link a { color: var(--muted); }
 
-.proj-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 12px; }
+.proj-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 12px; }
 .proj-card { color: var(--ink); display: flex; flex-direction: column; transition: transform 0.15s, box-shadow 0.15s, border-color 0.15s; }
 .proj-card:hover { text-decoration: none; border-color: var(--border-strong); transform: translateY(-1px); box-shadow: 0 8px 24px rgba(0, 0, 0, 0.07); }
 .proj-card .pc-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
@@ -664,21 +664,53 @@ mark { background: var(--accent-wash-2); color: inherit; border-radius: 3px; pad
 .agent-tag.a-bob { --c: var(--series-1); }
 .agent-tag.a-claude-ai { --c: var(--series-2); }
 .agent-tag.a-chatgpt { --c: var(--series-5); }
-.src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 16px; }
-@media (max-width: 760px) { .src-grid { grid-template-columns: 1fr; } }
-.src-card .src-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
-.src-card .src-name { font-size: 17px; font-weight: 650; }
-.src-card .src-vendor { color: var(--muted); font-size: 12.5px; }
-.src-card .src-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 12px 0; font-size: 13px; color: var(--ink-2); }
-.src-card .src-stats b { color: var(--ink); font-weight: 600; font-size: 15px; }
-.src-card .checks { display: grid; gap: 7px; margin: 10px 0 14px; }
-.src-card .check { display: grid; grid-template-columns: 20px 1fr; gap: 6px; font-size: 13px; }
-.src-card .check .mark { font-weight: 700; text-align: center; }
-.src-card .check .mark.ok { color: var(--good-ink); }
-.src-card .check .mark.no { color: var(--critical-ink); }
-.src-card .check .mark.na { color: var(--muted); }
-.src-card .check .d { color: var(--muted); font-size: 12px; }
-.src-card .src-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; border-top: 1px solid var(--grid); padding-top: 12px; }
+/* Sources: one list per kind of source; each row opens to its checks and actions */
+.narrow-page.wide { max-width: 980px !important; }
+.card.src-list { padding: 0; margin-bottom: 18px; overflow: hidden; }
+.src-list-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 14px 18px 12px; border-bottom: 1px solid var(--grid); }
+.src-list-head h2 { margin: 0; }
+.src-list-head .muted { font-size: 12.5px; margin-top: 3px; }
+.src-row + .src-row { border-top: 1px solid var(--grid); }
+.src-row > summary, .src-line { display: grid; grid-template-columns: 14px 10px minmax(0, 1fr) auto auto; align-items: center; gap: 12px; padding: 11px 18px; }
+.src-row > summary { cursor: pointer; list-style: none; }
+.src-row > summary::-webkit-details-marker { display: none; }
+.src-row > summary:hover { background: var(--hover); }
+.src-row > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.src-row .chev { color: var(--muted); font-size: 15px; line-height: 1; transition: transform 0.15s; justify-self: center; }
+.src-row[open] > summary .chev { transform: rotate(90deg); }
+.src-row[open] > summary { background: var(--surface-2); }
+.src-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--c, var(--muted)); }
+.src-dot.a-claude { --c: var(--series-4); }
+.src-dot.a-codex, .src-dot.a-codex-cloud { --c: var(--series-3); }
+.src-dot.a-copilot { --c: var(--series-7); }
+.src-dot.a-bob { --c: var(--series-1); }
+.src-dot.a-claude-ai { --c: var(--series-2); }
+.src-dot.a-chatgpt { --c: var(--series-5); }
+.src-title { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+.src-title b { font-weight: 600; font-size: 14px; white-space: nowrap; }
+.src-title small { color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.src-sum { display: flex; gap: 14px; color: var(--ink-2); font-size: 12.5px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+.src-sum b { color: var(--ink); font-weight: 600; }
+.src-body { padding: 4px 18px 16px 62px; background: var(--surface-2); }
+.src-stats { display: flex; flex-wrap: wrap; gap: 6px 18px; margin: 4px 0 12px; font-size: 13px; color: var(--ink-2); }
+.src-stats b { color: var(--ink); font-weight: 600; }
+.src-body .checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(300px, 100%), 1fr)); gap: 10px 20px; margin-bottom: 12px; }
+.src-body .check { display: grid; grid-template-columns: 18px 1fr; gap: 6px; font-size: 13px; }
+.src-body .check .mark { font-weight: 700; text-align: center; }
+.src-body .check .mark.ok { color: var(--good-ink); }
+.src-body .check .mark.no { color: var(--critical-ink); }
+.src-body .check .mark.na { color: var(--muted); }
+.src-body .check .d { color: var(--muted); font-size: 12px; }
+.src-note { color: var(--ink-2); font-size: 12.5px; margin-bottom: 12px; }
+.src-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; border-top: 1px solid var(--grid); padding-top: 12px; font-size: 12.5px; }
+.src-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+@media (max-width: 760px) {
+  .src-sum { display: none; }
+  .src-title { flex-direction: column; align-items: stretch; gap: 1px; }
+  .src-body { padding-left: 18px; }
+  .src-list-head { flex-direction: column; }
+}
+@media (prefers-reduced-motion: reduce) { .src-row .chev { transition: none; } }
 .btn.danger { color: var(--critical-ink); }
 
 /* ------------------------------------------------------------------ cards / list layouts */

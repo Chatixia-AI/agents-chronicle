@@ -16,6 +16,8 @@
   Settings and a chip in the status bar; a checkout's Updates card lists the commits and files it would bring in.
   See [Updating](docs/install.md#updating).
 - The Sessions sidebar sorts and groups by last activity, so a long-running session stays under Today.
+- **Sources** is a list: a row per coding agent, chat export and MCP client that opens to its checks and actions.
+  A connected agent with a failing check opens on its own.
 - **New dashboard design:** a simpler VS Code layout in Apple's Liquid Glass style. An icon rail and per-section
   sidebar replace the top navigation, with a glass toolbar and breadcrumbs, a status bar, and a ⌘K palette that
   searches sessions, knowledge, projects and glossary terms and runs commands. New **Appearance** settings (theme,

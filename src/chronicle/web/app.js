@@ -2364,10 +2364,20 @@ route(/^\/map$/, async (params) => {
 // =====================================================================================
 // Sources: which agents are connected
 // =====================================================================================
+const srcOpen = new Set(); // rows the user opened; kept across re-renders (connect, disconnect, import)
+let srcTouched = false;
+function srcRow(key, summary, body, { open = false } = {}) { // one expandable row of a Sources list
+  const d = h("details", { class: "src-row", open: srcTouched ? srcOpen.has(key) : open },
+    h("summary", null, h("span", { class: "chev", "aria-hidden": "true" }, "›"), summary), h("div", { class: "src-body" }, body));
+  if (!srcTouched && open) srcOpen.add(key);
+  d.addEventListener("toggle", () => { srcTouched = true; if (d.open) srcOpen.add(key); else srcOpen.delete(key); });
+  return d;
+}
+const inSummary = (fn) => (e) => { e.preventDefault(); e.stopPropagation(); fn(e); }; // a button in a row's summary does not toggle it
 route(/^\/sources$/, async () => {
   const [sources, clients, imports] = await Promise.all([api("/api/connectors"), api("/api/mcp-clients"), api("/api/imports")]);
-  const formats = Object.values(imports);
-  const last = formats.filter((f) => f.last_import).map((f) => ({ ...f.last_import, label: f.label })).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
+  const formats = Object.entries(imports).map(([key, f]) => ({ key, ...f }));
+  const lastOf = (f) => f.last_import;
   const picker = h("input", { type: "file", accept: ".zip,.json,application/zip", hidden: true, onchange: async () => {
     const file = picker.files[0];
     if (!file) return;
@@ -2379,20 +2389,73 @@ route(/^\/sources$/, async () => {
     toast("Importing chats…", 5000);
     watchJob("import");
   } });
-  const importBtn = h("button", { class: "btn primary", type: "button", onclick: () => picker.click() }, "Import export…");
-  const importsCard = h("section", { class: "card src-card", style: { marginTop: "16px" } },
-    cardHead("Chat exports", { iconName: "history", hint: "claude.ai and ChatGPT" }),
-    h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
-      "Chats on claude.ai and chatgpt.com are not stored on your Mac, so they come in from a data export: claude.ai › Settings › Privacy › Export data, ",
-      "or ChatGPT › Settings › Data controls › Export data. The email's link downloads a .zip; import it here or with ", h("code", null, "chronicle import <zip>"),
-      ". Import newer exports any time: only new and changed chats are added. Imported chats are not analyzed automatically; open one and choose Analyze now."),
-    h("div", { class: "src-stats" },
-      formats.map((f) => h("span", null, h("b", null, fmtNum(f.sessions)), ` ${f.label} chats`)),
-      h("span", null, h("b", null, fmtNum(formats.reduce((n, f) => n + f.analyzed, 0))), " analyzed"),
-      h("span", null, "last import ", h("b", null, last ? ago(last.at) : "never"))),
-    h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, last ? `${last.file} (${last.label}): ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated` : ""),
-      h("div", { style: { display: "flex", gap: "8px" } },
-        formats.filter((f) => f.sessions).map((f) => h("a", { class: "btn", href: `#/sessions?agent=${f.agent}` }, f.label)), importBtn, picker)));
+  const importBtn = h("button", { class: "btn primary small", type: "button", onclick: () => picker.click() }, "Import export…");
+  const stat = (n, label) => h("span", null, h("b", null, typeof n === "number" ? fmtNum(n) : n), ` ${label}`);
+  const badge = (cls, text) => h("span", { class: `badge ${cls}` }, h("span", { class: "sdot" }), text);
+
+  // ---- coding agents
+  const agentRow = (c) => {
+    const issues = c.checks.filter((k) => k.ok === false && !k.optional);
+    const state = c.connected ? (issues.length ? ["warning", `${issues.length} issue${issues.length === 1 ? "" : "s"}`] : ["good", "Connected"])
+      : c.detected ? ["warning", "Not connected"] : ["", "Not installed"];
+    const connect = async (e) => {
+      e.target.disabled = true; e.target.textContent = "Connecting…";
+      const r = await post(`/api/connectors/${c.name}/connect`);
+      toast((r.actions || [r.error]).join(" · ") + (r.sync_started ? " · syncing now" : ""), 7000);
+      if (r.sync_started) watchJob("sync");
+      render();
+    };
+    const action = c.connected
+      ? h("button", { class: "btn small danger", type: "button", onclick: async (e) => {
+          if (!confirm(`Stop recording ${c.label}? Recorded sessions stay in the vault.`)) return;
+          e.target.disabled = true;
+          const r = await post(`/api/connectors/${c.name}/disconnect`);
+          toast((r.actions || [r.error]).join(" · "), 6000);
+          render();
+        } }, "Disconnect")
+      : h("button", { class: "btn small primary", type: "button", disabled: !c.detected, onclick: connect }, `Connect ${c.label}`);
+    const summary = [
+      h("span", { class: `src-dot a-${c.name}`, "aria-hidden": "true" }),
+      h("span", { class: "src-title" }, h("b", null, c.label), h("small", null, [c.vendor, c.version].filter(Boolean).join(" · "))),
+      h("span", { class: "src-sum" }, c.connected || c.recorded.sessions
+        ? [stat(c.recorded.sessions, "recorded"), h("span", null, "last ", h("b", null, c.recorded.last_session ? ago(c.recorded.last_session) : "never"))]
+        : h("span", null, c.detected ? "found on this Mac" : "")),
+      !c.connected && c.detected ? h("button", { class: "btn small primary", type: "button", onclick: inSummary(connect) }, "Connect") : badge(state[0], state[1])];
+    const body = [
+      h("div", { class: "src-stats" },
+        stat(c.on_disk, c.on_disk_label || "on disk"), stat(c.recorded.sessions, "recorded"), stat(c.recorded.analyzed, "analyzed"),
+        c.recovered ? stat(c.recovered, c.name === "codex" ? "Claude sessions recovered" : "recovered") : null,
+        c.binary ? h("span", { class: "muted" }, shortPath(c.binary)) : null),
+      h("div", { class: "checks" }, c.checks.map((k) => h("div", { class: "check" },
+        h("span", { class: `mark ${k.ok ? "ok" : k.ok === null || k.optional ? "na" : "no"}` }, k.ok ? "✓" : k.ok === null || k.optional ? "–" : "✗"),
+        h("div", null, h("div", null, k.label), h("div", { class: "d" }, k.detail))))),
+      c.notes.length ? h("div", { class: "src-note" }, c.notes.join(" · ")) : null,
+      h("div", { class: "src-foot" }, h("span", { class: "muted" }, `Recording: ${c.recording}`),
+        h("div", { class: "src-actions" }, c.recorded.sessions ? h("a", { class: "btn small", href: `#/sessions?agent=${c.agent || c.name}` }, "Sessions") : null, action))];
+    return srcRow(`agent:${c.name}`, summary, body, { open: issues.length > 0 && c.connected });
+  };
+  const connected = sources.filter((c) => c.connected).length;
+
+  // ---- chat exports
+  const HOW = { "claude-ai": "claude.ai › Settings › Privacy › Export data", chatgpt: "ChatGPT › Settings › Data controls › Export data" };
+  const formatRow = (f) => {
+    const last = lastOf(f);
+    const summary = [
+      h("span", { class: `src-dot a-${f.agent}`, "aria-hidden": "true" }),
+      h("span", { class: "src-title" }, h("b", null, f.label), h("small", null, "from a data export")),
+      h("span", { class: "src-sum" }, f.sessions ? [stat(f.sessions, "chats"), h("span", null, "imported ", h("b", null, last ? ago(last.at) : "never"))] : h("span", null, "nothing imported yet")),
+      f.sessions ? badge("good", "Imported") : badge("", "Not imported")];
+    const body = [
+      h("div", { class: "src-stats" }, stat(f.sessions, "chats"), stat(f.analyzed, "analyzed"),
+        last ? h("span", { class: "muted" }, `last: ${last.file}, ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated`) : null),
+      h("div", { class: "src-note" }, "Export from ", h("b", null, HOW[f.agent] || f.label), "; the email's link downloads a .zip to import here or with ",
+        h("code", null, "chronicle import <zip>"), ". Import newer exports any time: only new and changed chats are added."),
+      h("div", { class: "src-foot" }, h("span", { class: "muted" }, "Not analyzed automatically: open a chat and choose Analyze now."),
+        h("div", { class: "src-actions" }, f.sessions ? h("a", { class: "btn small", href: `#/sessions?agent=${f.agent}` }, "Sessions") : null))];
+    return srcRow(`chat:${f.key}`, summary, body);
+  };
+
+  // ---- other MCP clients: nothing to expand, one line each
   const clientRow = (c) => {
     const btn = h("button", { class: `btn small${c.registered ? "" : " primary"}`, type: "button", disabled: !c.registered && !c.detected,
       onclick: async () => {
@@ -2401,58 +2464,23 @@ route(/^\/sources$/, async () => {
         toast((r.actions || [r.error]).join(" · "), 7000);
         render();
       } }, c.registered ? "Remove" : "Add");
-    const state = c.registered ? ["good", "MCP server added"] : c.detected ? ["", "Detected"] : ["", "Not installed"];
-    return h("div", { class: "set-row" },
-      h("div", null, h("b", null, c.label), h("div", { class: "muted" }, `${c.vendor} · ${shortPath(c.config)}`)),
-      h("div", { style: { display: "flex", gap: "10px", alignItems: "center" } },
-        h("span", { class: `badge ${state[0]}` }, h("span", { class: "sdot" }), state[1]), btn));
+    const state = c.registered ? ["good", "Added"] : c.detected ? ["", "Detected"] : ["", "Not installed"];
+    return h("div", { class: "src-row flat" }, h("div", { class: "src-line" },
+      h("span", { class: "chev", "aria-hidden": "true" }), h("span", { "aria-hidden": "true" }),
+      h("span", { class: "src-title" }, h("b", null, c.label), h("small", null, `${c.vendor} · ${shortPath(c.config)}`)),
+      badge(state[0], state[1]), btn));
   };
-  const clientsCard = h("section", { class: "card", style: { marginTop: "16px" } },
-    cardHead("Other MCP clients", { iconName: "sources", hint: "not recorded · search only" }),
-    h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "4px" } },
-      "Give these tools Chronicle's MCP server so they can search your sessions and knowledge. For any other client, ",
-      h("code", { style: { whiteSpace: "nowrap" } }, "chronicle mcp --print-config"), " prints an entry to paste into its settings."),
-    clients.map(clientRow));
-  const card = (c) => {
-    const state = c.connected ? ["good", "Connected"] : c.detected ? ["warning", "Detected · not connected"] : ["", "Not installed"];
-    const action = c.connected
-      ? h("button", { class: "btn danger", type: "button", onclick: async (e) => {
-          if (!confirm(`Stop recording ${c.label}? Recorded sessions stay in the vault.`)) return;
-          e.target.disabled = true;
-          const r = await post(`/api/connectors/${c.name}/disconnect`);
-          toast((r.actions || [r.error]).join(" · "), 6000);
-          render();
-        } }, "Disconnect")
-      : h("button", { class: "btn primary", type: "button", disabled: !c.detected, onclick: async (e) => {
-          e.target.disabled = true;
-          e.target.textContent = "Connecting…";
-          const r = await post(`/api/connectors/${c.name}/connect`);
-          toast((r.actions || [r.error]).join(" · ") + (r.sync_started ? " · syncing now" : ""), 7000);
-          if (r.sync_started) watchJob("sync");
-          render();
-        } }, `Connect ${c.label}`);
-    return h("section", { class: "card src-card" },
-      h("div", { class: "src-head" },
-        h("div", null, h("div", { class: "src-name" }, c.label), h("div", { class: "src-vendor" }, [c.vendor, c.version, c.binary ? shortPath(c.binary) : null].filter(Boolean).join(" · "))),
-        h("span", { class: `badge ${state[0]}` }, h("span", { class: "sdot" }), state[1])),
-      h("div", { class: "src-stats" },
-        h("span", null, h("b", null, fmtNum(c.on_disk)), ` ${c.on_disk_label || "on disk"}`),
-        h("span", null, h("b", null, fmtNum(c.recorded.sessions)), " recorded"),
-        h("span", null, h("b", null, fmtNum(c.recorded.analyzed)), " analyzed"),
-        c.recovered ? h("span", null, h("b", null, fmtNum(c.recovered)), c.name === "codex" ? " Claude sessions recovered" : " recovered") : null,
-        h("span", null, "last ", h("b", null, c.recorded.last_session ? ago(c.recorded.last_session) : "never"))),
-      h("div", { class: "checks" }, c.checks.map((k) => h("div", { class: "check" },
-        h("span", { class: `mark ${k.ok ? "ok" : k.ok === null || k.optional ? "na" : "no"}` }, k.ok ? "✓" : k.ok === null || k.optional ? "–" : "✗"),
-        h("div", null, h("div", null, k.label), h("div", { class: "d" }, k.detail))))),
-      c.notes.length ? h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } }, c.notes.join(" · ")) : null,
-      h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, `Recording: ${c.recording}`),
-        h("div", { style: { display: "flex", gap: "8px" } },
-          c.recorded.sessions ? h("a", { class: "btn", href: `#/sessions?agent=${c.agent || c.name}` }, "Sessions") : null, action)));
-  };
-  return h("div", null,
+
+  const section = (title, hint, tools, rows) => h("section", { class: "card src-list" },
+    h("div", { class: "src-list-head" }, h("div", null, h("h2", null, title), hint ? h("div", { class: "muted" }, hint) : null), tools), rows);
+  return h("div", { class: "narrow-page wide" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, "Sources"),
       h("div", { class: "sub" }, "The coding agents Chronicle records. Connecting starts archiving and analyzing their sessions and gives the agent Chronicle's MCP tools."))),
-    h("div", { class: "src-grid" }, sources.map(card)), importsCard, clientsCard);
+    section("Coding agents", `${connected} of ${sources.length} connected · click a row for its checks`, null, sources.map(agentRow)),
+    section("Chat exports", "Chats on claude.ai and chatgpt.com are not stored on your Mac, so they come in from a data export.",
+      h("div", { class: "src-actions" }, importBtn, picker), formats.map(formatRow)),
+    section("Other MCP clients", ["Not recorded; they get Chronicle's MCP server to search your sessions and knowledge. For any other client, ",
+      h("code", null, "chronicle mcp --print-config"), " prints an entry to paste."], null, clients.map(clientRow)));
 });
 
 // =====================================================================================
