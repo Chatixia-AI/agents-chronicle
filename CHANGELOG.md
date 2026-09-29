@@ -11,8 +11,10 @@
   archived for good. Opt-in, since it goes online. The CLI has no task conversations, so these are not analyzed.
 - **Update from the dashboard:** Settings › Status › Updates upgrades Chronicle with whatever installed it (uv
   tool, pipx, pip; a checkout install is reinstalled when its files changed) and restarts the dashboard; the
-  desktop app links to the latest release. Checking PyPI happens only when you click **Check for updates**. See
-  [Updating](docs/install.md#updating).
+  desktop app links to the latest release. Checking PyPI happens only when you click **Check for updates**. An
+  update on offer shows a notification (once per release, or per new commit for a checkout install), a dot on
+  Settings and a chip in the status bar; a checkout's Updates card lists the commits and files it would bring in.
+  See [Updating](docs/install.md#updating).
 - The Sessions sidebar sorts and groups by last activity, so a long-running session stays under Today.
 - **New dashboard design:** a simpler VS Code layout in Apple's Liquid Glass style. An icon rail and per-section
   sidebar replace the top navigation, with a glass toolbar and breadcrumbs, a status bar, and a ⌘K palette that

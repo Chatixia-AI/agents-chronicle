@@ -88,11 +88,36 @@ def _install_method() -> dict:
             "command": [sys.executable, "-m", "pip", "install", "--upgrade", DIST] if has_pip else None}
 
 
+def _checkout_files(source: str) -> list[Path]:
+    root = Path(source).expanduser()
+    return [root / "pyproject.toml", *(p for p in (root / "src").rglob("*") if p.is_file() and "__pycache__" not in p.parts)]
+
+
 def _checkout_changed(source: str, since: float) -> bool:
     """True when the checkout has files newer than the install, i.e. reinstalling would change something."""
+    return any(p.stat().st_mtime > since for p in _checkout_files(source) if p.exists())
+
+
+def _git(source: str, *args: str) -> str | None:
+    git = _which("git")
+    if not git:
+        return None
+    try:
+        r = subprocess.run([git, "-C", str(Path(source).expanduser()), *args], capture_output=True, text=True, timeout=5,
+                           stdin=subprocess.DEVNULL)
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return r.stdout if r.returncode == 0 else None
+
+
+def checkout_changes(source: str, since: float) -> dict:
+    """What reinstalling would bring in: the files changed since the install and the commits made after it."""
     root = Path(source).expanduser()
-    files = [root / "pyproject.toml", *(p for p in (root / "src").rglob("*") if p.is_file() and "__pycache__" not in p.parts)]
-    return any(p.stat().st_mtime > since for p in files if p.exists())
+    files = sorted((p for p in _checkout_files(source) if p.exists() and p.stat().st_mtime > since),
+                   key=lambda p: p.stat().st_mtime, reverse=True)
+    log = _git(source, "log", f"--since=@{int(since)}", "--format=%h%x09%ct%x09%s", "-n", "30") or ""
+    commits = [dict(zip(("sha", "at", "subject"), line.split("\t", 2))) for line in log.splitlines() if line.count("\t") >= 2]
+    return {"files": [str(p.relative_to(root)) for p in files], "commits": [{**c, "at": int(c["at"])} for c in commits]}
 
 
 def _checkout_version(source: str) -> str | None:
@@ -102,8 +127,9 @@ def _checkout_version(source: str) -> str | None:
         return None
 
 
-def check(remote: bool = False) -> dict:
-    """What the Status page shows. remote=True asks PyPI for the latest release; otherwise the last answer is reused."""
+def check(remote: bool = False, detail: bool = False) -> dict:
+    """What the Status page shows. remote=True asks PyPI for the latest release; otherwise the last answer is reused.
+    detail=True also lists what a checkout reinstall would bring in (the status bar's poll leaves it out)."""
     m = install_method()
     info = {"current": __version__, "kind": m["kind"], "method": m["label"], "source": m.get("source"),
             "local": m.get("local", False), "latest": None, "available": False,
@@ -115,7 +141,10 @@ def check(remote: bool = False) -> dict:
     if m.get("local"):  # checked locally, no network
         info["latest"] = _checkout_version(m["source"])
         info["available"] = _checkout_changed(m["source"], m["installed_at"])
+        info["installed_at"] = m["installed_at"]
         info["note"] = None if info["available"] else "Matches the checkout."
+        if detail and info["available"]:
+            info["changes"] = checkout_changes(m["source"], m["installed_at"])
         return info
     if m.get("source"):  # git or URL: nothing to compare against, reinstalling fetches it again
         info["note"] = f"Installed from {m['source']}; updating reinstalls from there."
@@ -129,20 +158,35 @@ def check(remote: bool = False) -> dict:
             _remote.update(checked_at=time.time(), error=f"Could not reach PyPI ({exc.__class__.__name__})")
     info.update(latest=_remote.get("latest"), checked_at=_remote.get("checked_at"), error=_remote.get("error"))
     info["available"] = bool(info["latest"]) and _vkey(info["latest"]) > _vkey(__version__)
+    if info["available"]:
+        info["notes_url"] = f"https://github.com/kayeungadrian-tam/agents-chronicle/releases/tag/v{info['latest']}"
     if m["kind"] == "app":
         info["note"] = "Download the new version and drag it into Applications."
     return info
 
 
-def available_version() -> str | None:
-    """For the status bar: the version to update to, from checks already made (never touches the network)."""
+def available() -> dict | None:
+    """For the status bar: the update on offer, from checks already made (never touches the network).
+
+    {"to": a version, or "build" for a changed checkout of the same version, "key": what the dashboard's
+    notification remembers a dismissal by}. A checkout's key is its commit, so editing files does not notify
+    again and again; a new commit does."""
     try:
         info = check()
     except Exception:
         return None
     if not info["available"]:
         return None
-    return info["latest"] if _vkey(info["latest"]) > _vkey(__version__) else "build"  # a changed checkout, same version
+    if _vkey(info["latest"]) > _vkey(__version__):
+        return {"to": info["latest"], "key": info["latest"]}
+    head = (_git(info["source"], "rev-parse", "--short", "HEAD") or "").strip() if info["source"] else ""
+    return {"to": "build", "key": f"build:{head or int(install_method().get('installed_at') or 0)}"}
+
+
+def available_version() -> str | None:
+    """The version to update to ("build" for a changed checkout of the same version), or None."""
+    a = available()
+    return a["to"] if a else None
 
 
 def run_update(progress) -> str:

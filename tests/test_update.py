@@ -46,6 +46,8 @@ def test_pypi_install_checks_only_when_asked(method, monkeypatch):
     assert info["available"] and info["latest"] == "99.0.0" and info["can_update"]
     assert info["command"] == "uv tool upgrade agents-chronicle"
     assert update.available_version() == "99.0.0"  # remembered from the check
+    assert update.available() == {"to": "99.0.0", "key": "99.0.0"}
+    assert info["notes_url"].endswith("/releases/tag/v99.0.0")
     assert len(calls) == 1
 
 
@@ -73,6 +75,31 @@ def test_checkout_install_compares_file_times(method, tmp_path):
     info = update.check()
     assert info["available"] and info["can_update"]
     assert update.available_version() == "build"  # same version number, newer files
+    assert "changes" not in info  # the status bar's poll does not list them
+    info = update.check(detail=True)
+    assert info["changes"]["files"] == ["src/chronicle/server.py"] and info["changes"]["commits"] == []
+
+
+def test_checkout_notification_key_follows_commits(method, tmp_path):
+    """Editing files keeps one notification; a new commit brings it back."""
+    import subprocess
+
+    (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "agents-chronicle"\nversion = "{__version__}"\n')
+    git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    installed = time.time() - 60
+    method(kind="uv", source=str(tmp_path), local=True, installed_at=installed, command=["uv"])
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-qm", "First change"], check=True)
+    first = update.available()
+    assert first["to"] == "build" and first["key"].startswith("build:")
+    info = update.check(detail=True)
+    assert [c["subject"] for c in info["changes"]["commits"]] == ["First change"]
+
+    (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "agents-chronicle"\nversion = "{__version__}"\n# edit\n')
+    assert update.available()["key"] == first["key"]
+    subprocess.run([*git, "commit", "-qam", "Second change"], check=True)
+    assert update.available()["key"] != first["key"]
 
 
 def test_app_and_source_installs_do_not_run_commands(method, monkeypatch):

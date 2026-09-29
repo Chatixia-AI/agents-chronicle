@@ -2492,36 +2492,59 @@ route(/^\/reviews$/, async () => {
 // Status
 // =====================================================================================
 function updatesCard() {
-  const box = h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Updates")), h("div", { class: "muted" }, "Loading…"));
+  const box = h("section", { class: "card", id: "updates" }, h("div", { class: "card-head" }, h("h2", null, "Updates")), h("div", { class: "muted" }, "Loading…"));
   const draw = (u) => {
     const online = !u.source && u.kind !== "source"; // PyPI installs and the app compare against the latest release
+    box.classList.toggle("update-ready", !!u.available);
     const state = u.error ? h("div", { style: { color: "var(--critical-ink)" } }, u.error)
-      : u.available ? h("div", null, h("b", null, u.local ? `Your checkout has changed since this install${u.latest ? ` (${u.latest})` : ""}` : `Chronicle ${u.latest} is available`))
+      : u.available ? h("div", { class: "upd-headline" }, icon("sync"), h("b", null, u.local ? `Your checkout has changed since this install${u.latest ? ` (${u.latest})` : ""}` : `Chronicle ${u.latest} is available`),
+        u.notes_url ? h("a", { href: u.notes_url, target: "_blank", rel: "noopener" }, "What's new") : null)
       : online && !u.checked_at ? h("div", { class: "muted" }, "Not checked yet. Checking asks pypi.org for the latest version.")
       : online ? h("div", null, `You're on the latest version (checked ${ago(new Date(u.checked_at * 1000).toISOString())})`) : null;
     const check = online ? h("button", { class: "btn", type: "button", onclick: async () => {
       check.disabled = true; check.textContent = "Checking…";
-      draw(await post("/api/update/check"));
+      const r = await post("/api/update/check");
+      draw(r);
+      pollStatus(); // the status bar and the notification pick up what the check found
     } }, "Check for updates") : null;
     const label = u.local ? "Reinstall from checkout" : u.source ? "Reinstall" : `Update to ${u.latest}`;
     const run = u.can_update && (u.available || u.source) ? h("button", { class: `btn${u.available ? " primary" : ""}`, type: "button", onclick: async () => {
       run.disabled = true; run.textContent = "Updating…";
       const r = await post("/api/update");
       if (!r.started) { toast(r.error || "An update is already running"); run.disabled = false; run.textContent = label; return; }
+      try { sessionStorage.setItem("chronicle-updating", u.current); } catch (e) { /* private mode */ }
       toast(u.restartable ? "Updating Chronicle; the dashboard restarts when it is done" : "Updating Chronicle…", 6000);
       watchJob("update");
     } }, label) : null;
     const download = u.kind === "app" && u.available ? h("a", { class: "btn primary", href: u.releases_url, target: "_blank", rel: "noopener" }, `Download ${u.latest}`) : null;
     box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates"), h("div", { class: "tools" }, check, run, download)),
       h("div", { class: "status-list" },
-        h("div", null, `Chronicle ${u.current} · ${u.method}`),
+        h("div", null, `Chronicle ${u.current} · ${u.method}`, u.installed_at ? h("span", { class: "muted" }, ` · installed ${ago(new Date(u.installed_at * 1000).toISOString())}`) : null),
         state,
+        u.changes ? changesList(u.changes) : null,
         u.note ? h("div", { class: "muted" }, u.note) : null,
         u.command && (u.available || u.source) ? h("div", { class: "muted" }, "Runs ", h("span", { class: "codeline" }, u.command),
           u.restartable ? ", then restarts the dashboard." : ". Quit and reopen Chronicle afterwards.") : null));
+    if (parseHash().params.focus === "updates") { // from the notification or the status bar: show this card, once
+      setParams({});
+      requestAnimationFrame(() => box.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+      box.classList.add("flash");
+    }
   };
   api("/api/update").then(draw).catch((e) => box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates")), h("div", { style: { color: "var(--critical-ink)" } }, e.message)));
   return box;
+}
+const commitRow = (x) => h("li", null, h("code", null, x.sha), h("span", { title: x.subject }, x.subject), h("span", { class: "muted" }, ago(new Date(x.at * 1000).toISOString())));
+function changesList(c) { // what a checkout reinstall brings in: commits since the install, then the changed files
+  const files = c.files || [], commits = c.commits || [];
+  const shown = files.slice(0, 12);
+  return h("div", { class: "upd-changes" },
+    commits.length ? [h("div", { class: "subhead" }, `${commits.length}${commits.length >= 30 ? "+" : ""} new commit${commits.length === 1 ? "" : "s"}`),
+      h("ul", { class: "upd-commits" }, commits.slice(0, 8).map(commitRow)),
+      commits.length > 8 ? h("details", null, h("summary", null, `Show ${commits.length - 8} more`), h("ul", { class: "upd-commits" }, commits.slice(8).map(commitRow))) : null] : null,
+    files.length ? h("details", { open: !commits.length }, h("summary", null, `${files.length} changed file${files.length === 1 ? "" : "s"}${commits.length ? "" : " (not committed yet)"}`),
+      h("ul", { class: "upd-files" }, shown.map((f) => h("li", null, h("span", { class: "codeline" }, f))),
+        files.length > shown.length ? h("li", { class: "muted" }, `and ${files.length - shown.length} more`) : null)) : null);
 }
 route(/^\/status$/, async () => {
   const st = await api("/api/status");
@@ -2913,9 +2936,7 @@ async function pollStatus() {
     $("#status-queue").textContent = waiting ? `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} queued for analysis` : "";
     $("#status-sync").textContent = st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
-    const upd = $("#status-update");
-    upd.hidden = !st.update;
-    if (st.update) { upd.replaceChildren(icon("sync"), st.update === "build" ? "Update available" : `Update to ${st.update}`); upd.title = "Open Status to update Chronicle"; }
+    showUpdate(st.update, st.version);
     for (const name of [...watched]) {
       const j = jobs[name];
       if (j && j.state !== "running") {
@@ -2927,6 +2948,36 @@ async function pollStatus() {
     }
   } catch (e) { /* server restarting */ }
   pollTimer = setTimeout(pollStatus, busy || watched.size ? 2500 : 20000);
+}
+// an update on offer: a chip in the status bar, a dot on Settings, and once per update a notification card
+function showUpdate(u, version) {
+  const upd = $("#status-update");
+  upd.hidden = !u;
+  document.documentElement.classList.toggle("has-update", !!u);
+  if (u) { upd.replaceChildren(h("span", { class: "dot" }), u.to === "build" ? "Update available" : `Update to ${u.to}`); upd.title = "Open Status to update Chronicle"; }
+  let from = null;
+  try { from = sessionStorage.getItem("chronicle-updating"); } catch (e) { /* private mode */ }
+  if (from && !u) { // back after an update ran: say so once
+    try { sessionStorage.removeItem("chronicle-updating"); } catch (e) { /* private mode */ }
+    toast(version && version !== from ? `Chronicle updated to ${version}` : "Chronicle updated", 6000);
+  }
+  let seen = null;
+  try { seen = localStorage.getItem("chronicle-update-seen"); } catch (e) { /* private mode */ }
+  const card = $("#update-note");
+  if (!u || seen === u.key || from) { card.hidden = true; return; }
+  if (!card.hidden && card.dataset.key === u.key) return;
+  const dismiss = () => { try { localStorage.setItem("chronicle-update-seen", u.key); } catch (e) { /* private mode */ } card.hidden = true; };
+  card.dataset.key = u.key;
+  card.replaceChildren(
+    h("div", { class: "un-icon" }, icon("sync")),
+    h("div", { class: "un-body" },
+      h("b", null, u.to === "build" ? "Your checkout has new changes" : `Chronicle ${u.to} is available`),
+      h("div", null, u.to === "build" ? "Reinstall to run them in the dashboard." : `You're on ${version}. Update from Settings › Status.`),
+      h("div", { class: "un-actions" },
+        h("button", { class: "btn primary small", type: "button", onclick: () => { dismiss(); go("#/status?focus=updates"); } }, "View update"),
+        h("button", { class: "btn small", type: "button", onclick: dismiss }, "Later"))),
+    h("button", { class: "un-close", type: "button", "aria-label": "Dismiss", onclick: dismiss }, "×"));
+  card.hidden = false;
 }
 async function syncNow() {
   const r = await post("/api/sync");
@@ -2967,7 +3018,7 @@ $("#fwd-btn").addEventListener("click", () => history.forward());
 $("#search-pill").addEventListener("click", openPalette);
 $("#sync-btn").addEventListener("click", syncNow);
 $("#status-pill").addEventListener("click", () => go("#/status"));
-$("#status-update").addEventListener("click", () => go("#/status"));
+$("#status-update").addEventListener("click", () => go("#/status?focus=updates"));
 $("#theme-btn").addEventListener("click", flipTheme);
 themeChanged();
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeChanged);

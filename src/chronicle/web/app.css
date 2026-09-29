@@ -1097,5 +1097,42 @@ button.mm-theme:hover { background: var(--surface-2); }
 main#app:has(> .mm-page) { padding-bottom: 16px; }
 .mm-page .page-head { flex: none; }
 table.data a.proj { overflow-wrap: normal; word-break: normal; white-space: nowrap; }
-.narrow-page { margin-inline: 0 !important; }
 .load-more.earlier { margin: 0 0 12px; }
+
+/* an update on offer: a dot on Settings, a highlighted Updates card, and a notification card */
+.has-update .rail a[data-section="settings"]::after,
+.has-update .sb-row[href="#/status"]::after { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); box-shadow: 0 0 0 2px var(--page); }
+.has-update .rail a[data-section="settings"]::after { position: absolute; top: 7px; right: 7px; }
+.statusbar #status-update { background: color-mix(in srgb, var(--accent) 12%, transparent); padding: 2px 8px; margin: 0; border-radius: 999px; }
+.statusbar #status-update:hover { background: color-mix(in srgb, var(--accent) 20%, transparent); color: var(--accent); }
+.statusbar #status-update .dot { background: var(--accent); animation: pulse 2s infinite; }
+.card.update-ready { box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent) 45%, transparent); }
+.card.flash { animation: upd-flash 1.6s ease-out; }
+@keyframes upd-flash { 0%, 30% { box-shadow: 0 0 0 4px color-mix(in srgb, var(--accent) 35%, transparent); } }
+.upd-headline { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.upd-headline .icon { width: 15px; height: 15px; color: var(--accent); }
+.upd-changes .subhead { margin-top: 4px; }
+.upd-commits, .upd-files { list-style: none; margin: 6px 0 0; padding: 0; display: grid; gap: 5px; font-size: 13px; }
+.upd-commits li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: baseline; }
+.upd-commits li span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upd-commits code { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); }
+.upd-commits .muted { font-size: 12px; }
+.upd-changes details { margin-top: 8px; }
+.upd-changes summary { cursor: pointer; color: var(--ink-2); font-size: 13px; }
+#update-note {
+  position: fixed; right: 18px; bottom: 44px; z-index: 61; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 12px;
+  width: min(340px, calc(100vw - 32px)); padding: 14px 12px 14px 14px; border-radius: 16px; background: var(--glass-strong); color: var(--ink); font-size: 13px;
+  -webkit-backdrop-filter: blur(20px) saturate(170%); backdrop-filter: blur(20px) saturate(170%);
+  box-shadow: var(--glass-shadow), 0 8px 28px rgba(0, 0, 0, 0.14), inset 0 0 0 0.5px var(--glass-rim);
+  animation: upd-in 0.25s ease-out;
+}
+#update-note .un-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: var(--accent); color: #fff; }
+#update-note .un-icon .icon { width: 16px; height: 16px; }
+#update-note .un-body { display: grid; gap: 3px; }
+#update-note .un-body > div { color: var(--ink-2); }
+#update-note .un-actions { display: flex; gap: 6px; margin-top: 8px; }
+#update-note .un-close { align-self: start; border: 0; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 2px 5px; border-radius: 6px; cursor: pointer; }
+#update-note .un-close:hover { background: var(--hover); color: var(--ink); }
+:is(.solid, .os-solid) #update-note { -webkit-backdrop-filter: none; backdrop-filter: none; }
+@keyframes upd-in { from { opacity: 0; transform: translateY(8px); } }
+@media (prefers-reduced-motion: reduce) { #update-note, .card.flash, .statusbar #status-update .dot { animation: none; } }

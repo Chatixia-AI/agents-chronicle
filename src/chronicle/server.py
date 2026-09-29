@@ -548,7 +548,7 @@ class App:
         return self.jobs.start(f"review:{week or 'last'}", job)
 
     def status_small(self) -> dict:
-        from .update import available_version
+        from .update import available
         from .worker import PAUSE_KEY, count_pending
 
         pending = count_pending(self.conn, self.cfg)
@@ -558,14 +558,14 @@ class App:
             "last_sync": kv_get(self.conn, "last_sync"),
             "jobs": self.jobs.snapshot(),
             "version": __version__,
-            "update": available_version(),
+            "update": available(),
             "ui_build": UI_BUILD,
         }
 
     def update_info(self, remote: bool) -> dict:
         from .update import check
 
-        return check(remote)
+        return check(remote, detail=True)
 
     def imports(self) -> dict:
         from .chat_import import import_status
