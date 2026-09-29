@@ -14,7 +14,8 @@
   desktop app links to the latest release. Checking PyPI happens only when you click **Check for updates**. An
   update on offer shows a notification (once per release, or per new commit for a checkout install), a dot on
   Settings and a chip in the status bar; a checkout's Updates card lists the commits and files it would bring in.
-  See [Updating](docs/install.md#updating).
+  **Check for updates daily** (off by default, `[updates] check_daily`) asks PyPI once a day while the dashboard
+  is open; the last answer survives a restart. See [Updating](docs/install.md#updating).
 - The Sessions sidebar sorts and groups by last activity, so a long-running session stays under Today.
 - **Sources** is a list: a row per coding agent, chat export and MCP client that opens to its checks and actions.
   A connected agent with a failing check opens on its own.

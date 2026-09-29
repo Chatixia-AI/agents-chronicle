@@ -76,6 +76,11 @@ port = 8765
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
 session_start = false
 max_chars = 3000
+
+[updates]
+# Ask pypi.org for the latest version once a day while the dashboard is open (off: only when you click
+# Check for updates). Sends nothing about you.
+check_daily = false
 """
 
 
@@ -125,6 +130,7 @@ class Config:
     server_port: int = 8765
     inject_session_start: bool = False
     inject_max_chars: int = 3000
+    update_check_daily: bool = False
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -229,6 +235,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         server_port=int(server.get("port", 8765)),
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
+        update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
     )
     return cfg
 

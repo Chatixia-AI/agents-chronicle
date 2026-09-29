@@ -5,8 +5,9 @@
 **What leaves your machine:** one thing. When a session is analyzed, a condensed digest of it (secrets redacted
 first) goes to Claude through your own Claude Code login, with `claude -p`: the same service that produced the
 transcript. Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. The one other
-connection is the update check, only when you click **Check for updates** on the Status page: it asks pypi.org
-for the latest version number and sends nothing about you. If you connect Codex Cloud, each sync also runs the
+connection is the update check: it asks pypi.org for the latest version number and sends nothing about you. It
+runs when you click **Check for updates** on the Status page, and once a day only if you turn on **Check for
+updates daily** there (off by default). If you connect Codex Cloud, each sync also runs the
 `codex cloud` CLI, which fetches your own tasks from OpenAI with your Codex login; nothing is sent the other way.
 Importing a claude.ai or ChatGPT export reads only the chats, never the account files (`users.json`, `user.json`).
 

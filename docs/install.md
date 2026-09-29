@@ -78,7 +78,8 @@ first and let the app connect Claude Code, so the launchd agents do not run alon
 | `pipx` or `pip` | `pipx upgrade agents-chronicle` or `pip install --upgrade agents-chronicle` |
 | The desktop app | Nothing: **Download** opens the latest release to drag into Applications |
 
-Only **Check for updates** goes online (to pypi.org). Once an update is known, a notification says so (once per release, or per new commit in a checkout; **Later**
+Only **Check for updates** goes online (to pypi.org), or, if you turn on **Check for updates daily** on the same
+card, a check once a day while the dashboard is open. The last answer is kept across restarts. Once an update is known, a notification says so (once per release, or per new commit in a checkout; **Later**
 dismisses it), Settings gets a dot and the status bar shows **Update to …**. A checkout's Updates card lists the
 commits and changed files a reinstall would bring in.
 A dashboard run by `chronicle ui` (or its launchd agent) restarts itself afterwards and open tabs reload; a

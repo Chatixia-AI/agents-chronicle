@@ -2525,9 +2525,9 @@ function updatesCard() {
     const online = !u.source && u.kind !== "source"; // PyPI installs and the app compare against the latest release
     box.classList.toggle("update-ready", !!u.available);
     const state = u.error ? h("div", { style: { color: "var(--critical-ink)" } }, u.error)
-      : u.available ? h("div", { class: "upd-headline" }, icon("sync"), h("b", null, u.local ? `Your checkout has changed since this install${u.latest ? ` (${u.latest})` : ""}` : `Chronicle ${u.latest} is available`),
+      : u.available ? h("div", { class: "upd-headline" }, icon("sync"), h("b", null, u.local ? checkoutHeadline(u) : `Chronicle ${u.latest} is available`),
         u.notes_url ? h("a", { href: u.notes_url, target: "_blank", rel: "noopener" }, "What's new") : null)
-      : online && !u.checked_at ? h("div", { class: "muted" }, "Not checked yet. Checking asks pypi.org for the latest version.")
+      : online && !u.checked_at ? h("div", { class: "muted" }, u.check_daily ? "Checking pypi.org for the latest version…" : "Not checked yet. Checking asks pypi.org for the latest version.")
       : online ? h("div", null, `You're on the latest version (checked ${ago(new Date(u.checked_at * 1000).toISOString())})`) : null;
     const check = online ? h("button", { class: "btn", type: "button", onclick: async () => {
       check.disabled = true; check.textContent = "Checking…";
@@ -2544,6 +2544,14 @@ function updatesCard() {
       toast(u.restartable ? "Updating Chronicle; the dashboard restarts when it is done" : "Updating Chronicle…", 6000);
       watchJob("update");
     } }, label) : null;
+    const daily = online ? h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(!!u.check_daily),
+      "aria-label": "Check for updates daily", onclick: async () => {
+        daily.disabled = true;
+        const r = await post("/api/update/daily", { on: !u.check_daily });
+        if (r.error) { toast(r.error); daily.disabled = false; return; }
+        draw(r);
+        if (r.check_daily && !r.checked_at) setTimeout(async () => { draw(await api("/api/update")); pollStatus(); }, 4000); // the first check runs now
+      } }) : null;
     const download = u.kind === "app" && u.available ? h("a", { class: "btn primary", href: u.releases_url, target: "_blank", rel: "noopener" }, `Download ${u.latest}`) : null;
     box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates"), h("div", { class: "tools" }, check, run, download)),
       h("div", { class: "status-list" },
@@ -2551,6 +2559,8 @@ function updatesCard() {
         state,
         u.changes ? changesList(u.changes) : null,
         u.note ? h("div", { class: "muted" }, u.note) : null,
+        daily ? h("div", { class: "set-row upd-daily" }, h("div", null, h("b", null, "Check for updates daily"),
+          h("div", { class: "muted" }, "Asks pypi.org for the latest version number once a day while Chronicle is open. Sends nothing about you.")), daily) : null,
         u.command && (u.available || u.source) ? h("div", { class: "muted" }, "Runs ", h("span", { class: "codeline" }, u.command),
           u.restartable ? ", then restarts the dashboard." : ". Quit and reopen Chronicle afterwards.") : null));
     if (parseHash().params.focus === "updates") { // from the notification or the status bar: show this card, once
@@ -2562,12 +2572,17 @@ function updatesCard() {
   api("/api/update").then(draw).catch((e) => box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates")), h("div", { style: { color: "var(--critical-ink)" } }, e.message)));
   return box;
 }
+function checkoutHeadline(u) { // a checkout's version number often stays put while its code moves on
+  const n = u.changes?.commits?.length || 0;
+  if (u.latest && u.latest !== u.current) return `Your checkout is at ${u.latest}; this install is ${u.current}`;
+  return n ? `Your checkout has ${n}${n >= 30 ? "+" : ""} new commit${n === 1 ? "" : "s"} since this install` : "Your checkout's files have changed since this install";
+}
 const commitRow = (x) => h("li", null, h("code", null, x.sha), h("span", { title: x.subject }, x.subject), h("span", { class: "muted" }, ago(new Date(x.at * 1000).toISOString())));
 function changesList(c) { // what a checkout reinstall brings in: commits since the install, then the changed files
   const files = c.files || [], commits = c.commits || [];
   const shown = files.slice(0, 12);
   return h("div", { class: "upd-changes" },
-    commits.length ? [h("div", { class: "subhead" }, `${commits.length}${commits.length >= 30 ? "+" : ""} new commit${commits.length === 1 ? "" : "s"}`),
+    commits.length ? [h("div", { class: "subhead" }, "Commits"),
       h("ul", { class: "upd-commits" }, commits.slice(0, 8).map(commitRow)),
       commits.length > 8 ? h("details", null, h("summary", null, `Show ${commits.length - 8} more`), h("ul", { class: "upd-commits" }, commits.slice(8).map(commitRow))) : null] : null,
     files.length ? h("details", { open: !commits.length }, h("summary", null, `${files.length} changed file${files.length === 1 ? "" : "s"}${commits.length ? "" : " (not committed yet)"}`),

@@ -1,6 +1,7 @@
 """Self-update for the dashboard's Update button: find how Chronicle was installed and upgrade it the same way.
 
-Checking PyPI is the only network call, and it runs only when the user asks (Status › Check for updates).
+Checking PyPI is the only network call. It runs when the user asks (Status › Check for updates) or, with
+`[updates] check_daily` on, once a day while the dashboard is open; the last answer is kept in the database.
 An install from a local checkout is checked without the network: it is out of date when the checkout's
 files changed after the install.
 """
@@ -31,6 +32,8 @@ RELEASES_URL = "https://github.com/kayeungadrian-tam/agents-chronicle/releases/l
 # server.serve() sets this: a plain `chronicle ui` (by hand or launchd) can re-exec itself after an update;
 # the desktop app serves the dashboard from its own process and is restarted by the user instead.
 RESTARTABLE = False
+REMOTE_KEY = "update_check"  # kv: the last PyPI check, so it outlives a restart
+DAY = 86400
 _remote: dict = {}  # the last PyPI check: {"latest": ..., "checked_at": ...} or {"error": ...}
 _method: dict = {}  # install_method() is polled with the status bar; it only changes when an update runs
 
@@ -150,12 +153,7 @@ def check(remote: bool = False, detail: bool = False) -> dict:
         info["note"] = f"Installed from {m['source']}; updating reinstalls from there."
         return info
     if remote:
-        try:
-            req = Request(PYPI_JSON, headers={"User-Agent": f"chronicle/{__version__}", "Accept": "application/json"})
-            with urlopen(req, timeout=8) as r:
-                _remote.update(latest=json.load(r)["info"]["version"], checked_at=time.time(), error=None)
-        except Exception as exc:  # offline, proxy, PyPI down: shown on the page
-            _remote.update(checked_at=time.time(), error=f"Could not reach PyPI ({exc.__class__.__name__})")
+        fetch_latest()
     info.update(latest=_remote.get("latest"), checked_at=_remote.get("checked_at"), error=_remote.get("error"))
     info["available"] = bool(info["latest"]) and _vkey(info["latest"]) > _vkey(__version__)
     if info["available"]:
@@ -163,6 +161,50 @@ def check(remote: bool = False, detail: bool = False) -> dict:
     if m["kind"] == "app":
         info["note"] = "Download the new version and drag it into Applications."
     return info
+
+
+def fetch_latest() -> None:
+    """Ask PyPI for the latest release (the network call)."""
+    try:
+        req = Request(PYPI_JSON, headers={"User-Agent": f"chronicle/{__version__}", "Accept": "application/json"})
+        with urlopen(req, timeout=8) as r:
+            _remote.update(latest=json.load(r)["info"]["version"], checked_at=time.time(), error=None)
+    except Exception as exc:  # offline, proxy, PyPI down: shown on the page
+        _remote.update(checked_at=time.time(), error=f"Could not reach PyPI ({exc.__class__.__name__})")
+
+
+def compares_online() -> bool:
+    """This install learns about updates from PyPI (not a checkout, a git URL or a source tree)."""
+    m = install_method()
+    return m["kind"] != "source" and not m.get("source")
+
+
+def recall(conn) -> None:
+    """Load the last PyPI check from the database, when it is newer than the one in memory."""
+    from .db import kv_get
+
+    try:
+        saved = json.loads(kv_get(conn, REMOTE_KEY) or "null")
+    except ValueError:
+        return
+    if isinstance(saved, dict) and (saved.get("checked_at") or 0) > (_remote.get("checked_at") or 0):
+        _remote.clear()
+        _remote.update(saved)
+
+
+def remember(conn) -> None:
+    from .db import kv_set
+
+    kv_set(conn, REMOTE_KEY, json.dumps(_remote))
+    conn.commit()
+
+
+def check_due(now: float | None = None) -> bool:
+    """A daily check is due: a day after the last answer, or an hour after a failed one."""
+    if not compares_online():
+        return False
+    last = _remote.get("checked_at") or 0
+    return (now or time.time()) - last >= (3600 if _remote.get("error") else DAY)
 
 
 def available() -> dict | None:

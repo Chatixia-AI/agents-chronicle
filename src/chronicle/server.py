@@ -98,6 +98,7 @@ class App:
         self.local = threading.local()
         self.jobs = Jobs()
         self._cfg_sig = self._config_sig()
+        self._update_check = threading.Lock()  # one daily update check at a time
 
     def _config_sig(self):
         try:
@@ -548,8 +549,11 @@ class App:
         return self.jobs.start(f"review:{week or 'last'}", job)
 
     def status_small(self) -> dict:
-        from .update import available
+        from .update import available, recall
         from .worker import PAUSE_KEY, count_pending
+
+        recall(self.conn)  # a check made by another dashboard process, or before a restart
+        self._maybe_check_daily()
 
         pending = count_pending(self.conn, self.cfg)
         return {
@@ -563,9 +567,44 @@ class App:
         }
 
     def update_info(self, remote: bool) -> dict:
-        from .update import check
+        from .update import check, recall, remember
 
-        return check(remote, detail=True)
+        recall(self.conn)
+        info = check(remote, detail=True)
+        if remote:
+            remember(self.conn)
+        return {**info, "check_daily": self.cfg.update_check_daily}
+
+    def _maybe_check_daily(self) -> None:
+        """With [updates] check_daily on, ask PyPI once a day, in the background, while a dashboard polls."""
+        from .update import check_due, fetch_latest, remember
+
+        if not self.cfg.update_check_daily or not check_due() or not self._update_check.acquire(blocking=False):
+            return
+
+        def run():
+            conn = None
+            try:
+                fetch_latest()
+                conn = connect(self.cfg.db_path)
+                remember(conn)
+            except Exception:
+                log.exception("daily update check failed")
+            finally:
+                if conn is not None:
+                    conn.close()
+                self._update_check.release()
+
+        threading.Thread(target=run, name="update-check", daemon=True).start()
+
+    def action_check_daily(self, on: bool) -> dict:
+        from .config import load_config, set_config_value
+
+        set_config_value(self.cfg, "updates", "check_daily", "true" if on else "false")
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        self._maybe_check_daily()
+        return self.update_info(remote=False)
 
     def imports(self) -> dict:
         from .chat_import import import_status
@@ -826,8 +865,10 @@ def make_handler(app: App, port: int):
             try:
                 if p == "/api/sync":
                     return self._json({"started": app.action_sync()})
-                if p == "/api/update/check":  # a POST: it is the dashboard's only call to the internet (PyPI)
+                if p == "/api/update/check":  # a POST: with the daily check off, the dashboard's only call to PyPI
                     return self._json(app.update_info(remote=True))
+                if p == "/api/update/daily":
+                    return self._json(app.action_check_daily(bool(body.get("on"))))
                 if p == "/api/update":
                     return self._json(app.action_update())
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/analyze", p)

@@ -112,3 +112,51 @@ def test_app_and_source_installs_do_not_run_commands(method, monkeypatch):
 
     method(kind="source")
     assert update.check(remote=True)["note"].startswith("Running from a source checkout")
+
+
+def test_pypi_check_is_kept_in_the_database(method, env, monkeypatch):
+    """The last answer outlives a restart (the in-memory copy is gone; the database still has it)."""
+    from chronicle.db import connect
+
+    method(kind="uv", command=["uv", "tool", "upgrade", "agents-chronicle"])
+    monkeypatch.setattr(update, "urlopen", lambda req, timeout: io.BytesIO(b'{"info": {"version": "99.0.0"}}'))
+    conn = connect(env["cfg"].db_path)
+    update.check(remote=True)
+    update.remember(conn)
+    update._remote.clear()  # a restart
+    assert update.available_version() is None
+    update.recall(conn)
+    assert update.available_version() == "99.0.0"
+
+
+def test_daily_check_is_opt_in_and_runs_once_a_day(method, env, monkeypatch):
+    from chronicle.server import App
+
+    method(kind="uv", command=["uv", "tool", "upgrade", "agents-chronicle"])
+    calls = []
+
+    def fake_urlopen(req, timeout):
+        calls.append(req.full_url)
+        return io.BytesIO(b'{"info": {"version": "99.0.0"}}')
+
+    monkeypatch.setattr(update, "urlopen", fake_urlopen)
+    app = App(env["cfg"])
+    assert app.status_small()["update"] is None and not calls  # off by default: never online on its own
+
+    info = app.action_check_daily(True)
+    assert info["check_daily"] and "check_daily = true" in env["cfg"].config_path.read_text()
+    for _ in range(50):  # the first check runs in the background
+        if not app._update_check.locked() and calls:
+            break
+        time.sleep(0.05)
+    assert calls == [update.PYPI_JSON]
+    assert app.status_small()["update"]["to"] == "99.0.0"
+    assert len(calls) == 1  # the next one is due a day later
+    assert update.check_due(now=time.time() + update.DAY + 1)
+
+    assert not app.action_check_daily(False)["check_daily"]
+
+
+def test_checkouts_never_check_pypi_daily(method, tmp_path):
+    method(kind="uv", source=str(tmp_path), local=True, installed_at=time.time(), command=["uv"])
+    assert not update.check_due()

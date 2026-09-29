@@ -33,7 +33,7 @@
 | `timeout_seconds` | `900` | 呼び出し 1 回あたりの実時間の上限 |
 | `claude_bin` | `""` | `claude` のパス（空の場合は自動で検出） |
 
-## `[synthesis]`、`[export]`、`[server]`、`[inject]`
+## `[synthesis]`、`[export]`、`[server]`、`[inject]`、`[updates]`
 
 | キー | 既定値 | |
 | --- | --- | --- |
@@ -42,3 +42,4 @@
 | `export.notes_dir` | `""` | 保管庫の場所（空の場合：`~/.claude-chronicle/notes`） |
 | `server.host` / `port` | `127.0.0.1` / `8765` | ダッシュボード。このポートが使用中の場合、アプリは空いているポートを使います |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
+| `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |

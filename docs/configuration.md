@@ -33,7 +33,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `timeout_seconds` | `900` | wall-clock limit per call |
 | `claude_bin` | `""` | path to `claude` (found automatically when empty) |
 
-## `[synthesis]`, `[export]`, `[server]`, `[inject]`
+## `[synthesis]`, `[export]`, `[server]`, `[inject]`, `[updates]`
 
 | Key | Default | |
 | --- | --- | --- |
@@ -42,3 +42,4 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `export.notes_dir` | `""` | where the vault lives (empty: `~/.claude-chronicle/notes`) |
 | `server.host` / `port` | `127.0.0.1` / `8765` | the dashboard; the app uses a free port when this one is taken |
 | `inject.session_start` / `max_chars` | `false` / `3000` | give new sessions a digest of the project's knowledge base (SessionStart hook) |
+| `updates.check_daily` | `false` | ask pypi.org for the latest version once a day while the dashboard is open (Status › Updates) |
