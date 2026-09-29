@@ -287,3 +287,25 @@ def test_export_from_the_command_line(synced, tmp_path):
     [written] = out.iterdir()
     assert written.suffix == ".json" and json.loads(written.read_text())["session"]["id"] == SID
 
+
+def test_mcp_agent_filter_and_speaker(synced):
+    """recent_sessions and search_sessions take an agent; transcripts name the agent that replied."""
+    synced["conn"].execute("UPDATE sessions SET agent = 'claude-ai' WHERE id = ?", (SID,))
+    synced["conn"].commit()
+    out = _run_mcp(synced, [
+        {"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+        {"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "recent_sessions", "arguments": {"days": 100000, "agent": "claude-ai"}}},
+        {"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "recent_sessions", "arguments": {"days": 100000, "agent": "codex"}}},
+        {"jsonrpc": "2.0", "id": 4, "method": "tools/call", "params": {"name": "search_sessions", "arguments": {"query": "logout", "agent": "claude-ai"}}},
+        {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": {"name": "search_sessions", "arguments": {"query": "logout", "agent": "bob"}}},
+        {"jsonrpc": "2.0", "id": 6, "method": "tools/call", "params": {"name": "get_transcript", "arguments": {"session_id": SID, "limit": 5}}},
+    ])
+    by_id = {m["id"]: m for m in out}
+    text = lambda i: by_id[i]["result"]["content"][0]["text"]  # noqa: E731
+    schema = {t["name"]: t["inputSchema"]["properties"] for t in by_id[1]["result"]["tools"]}
+    assert "chatgpt" in schema["recent_sessions"]["agent"]["enum"] and "agent" in schema["search_sessions"]
+    assert SID[:8] in text(2) and "Claude.ai" in text(2)
+    assert text(3) == "No sessions in that window."
+    assert SID[:8] in text(4) and "Claude.ai" in text(4)
+    assert text(5).startswith("No Bob sessions matched")
+    assert "CLAUDE:" in text(6) and "USER" in text(6)

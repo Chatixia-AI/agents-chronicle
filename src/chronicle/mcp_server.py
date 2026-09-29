@@ -1,4 +1,4 @@
-"""MCP server (stdio, JSON-RPC 2.0) that lets coding agents (Claude Code, Codex, Copilot, Bob) query the Chronicle vault."""
+"""MCP server (stdio, JSON-RPC 2.0) that lets coding agents and other MCP clients query the Chronicle vault."""
 
 from __future__ import annotations
 
@@ -9,7 +9,7 @@ from datetime import timedelta
 
 from . import __version__
 from .config import Config
-from .agents import short_name
+from .agents import AGENTS, short_name, speaker
 from .db import connect
 from .redact import redact
 from .search import search_knowledge, search_sessions
@@ -20,13 +20,17 @@ from .views import project_labels, resolve_session_id, session_markdown, session
 SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
 INSTRUCTIONS = (
-    "Chronicle is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob), with AI-extracted knowledge "
+    "Chronicle is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob), "
+    "plus chats imported from claude.ai and ChatGPT and tasks run in Codex Cloud, with AI-extracted knowledge "
     "(fixes, gotchas, decisions, project facts, commands, preferences) and per-project knowledge bases. "
     "Use it to recall how something was solved before, why a decision was made, how a project is run or "
     "deployed, or what the user prefers, before re-deriving it."
 )
 
 _PROJECT_PROP = {"type": "string", "description": "Project path or name. Defaults to all projects."}
+_AGENT_PROP = {"type": "string", "enum": list(AGENTS),
+               "description": "Only sessions from this agent: " + ", ".join(f"{k} ({v[0]})" for k, v in AGENTS.items())
+               + ". Defaults to all."}
 TOOLS = [
     {
         "name": "search_knowledge",
@@ -46,13 +50,15 @@ TOOLS = [
     },
     {
         "name": "search_sessions",
-        "description": "Full-text search across past session transcripts (prompts, Claude's replies, tool calls) "
-                       "and session summaries. Returns matching sessions with snippets.",
+        "description": "Full-text search across past session transcripts (prompts, the agent's replies, tool calls) "
+                       "and session summaries, imported claude.ai and ChatGPT chats included. Returns matching "
+                       "sessions with snippets.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "query": {"type": "string"},
                 "project": _PROJECT_PROP,
+                "agent": _AGENT_PROP,
                 "limit": {"type": "integer", "default": 10},
             },
             "required": ["query"],
@@ -69,7 +75,7 @@ TOOLS = [
     },
     {
         "name": "get_transcript",
-        "description": "Read part of a past session's conversation (user prompts and Claude's replies, optionally tool calls).",
+        "description": "Read part of a past session's conversation (user prompts and the agent's replies, optionally tool calls).",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -100,11 +106,12 @@ TOOLS = [
     },
     {
         "name": "recent_sessions",
-        "description": "List recent sessions, optionally for one project.",
+        "description": "List recent sessions, optionally for one project or one agent.",
         "inputSchema": {
             "type": "object",
             "properties": {
                 "project": _PROJECT_PROP,
+                "agent": _AGENT_PROP,
                 "days": {"type": "integer", "default": 14},
                 "limit": {"type": "integer", "default": 15},
             },
@@ -149,13 +156,17 @@ class Tools:
                        f"{truncate(k.get('body') or '', 1500)}\n")
         return "\n".join(out)
 
-    def search_sessions(self, query: str, project: str | None = None, limit: int = 10) -> str:
-        rows = search_sessions(self.conn, query, project=self._resolve_project(project), limit=limit)
+    def search_sessions(self, query: str, project: str | None = None, agent: str | None = None, limit: int = 10) -> str:
+        rows = search_sessions(self.conn, query, project=self._resolve_project(project), limit=limit * 5 if agent else limit)
+        ids = [s["session_id"] for s in rows]
+        agents = dict(self.conn.execute(f"SELECT id, agent FROM sessions WHERE id IN ({','.join('?' * len(ids))})", ids)) if ids else {}
+        if agent:
+            rows = [s for s in rows if (agents.get(s["session_id"]) or "claude") == agent][:limit]
         if not rows:
-            return f"No sessions matched {query!r}."
+            return f"No {short_name(agent) + ' ' if agent else ''}sessions matched {query!r}."
         out = [f"{len(rows)} session(s) matching {query!r}:\n"]
         for s in rows:
-            out.append(f"- **{s['title']}** — `{s['session_id'][:8]}` · {s.get('project_name')} · "
+            out.append(f"- **{s['title']}** — `{s['session_id'][:8]}` · {short_name(agents.get(s['session_id']))} · {s.get('project_name')} · "
                        f"{local_str(s.get('started_at'), '%Y-%m-%d')} · {s.get('outcome') or 'not analyzed'} · {s['hits']} hit(s)")
             for sn in s["snippets"]:
                 out.append(f"  - ({sn['kind']}) {sn['text']}")
@@ -182,7 +193,8 @@ class Tools:
             f"SELECT COUNT(*) FROM events WHERE session_id = ? AND agent_id = '' AND kind IN ({','.join('?' * len(kinds))})",
             [sid, *kinds],
         ).fetchone()[0]
-        label = {"prompt": "USER", "text": "CLAUDE", "command": "COMMAND", "interrupt": "INTERRUPT",
+        agent = self.conn.execute("SELECT agent FROM sessions WHERE id = ?", (sid,)).fetchone()[0]
+        label = {"prompt": "USER", "text": speaker(agent), "command": "COMMAND", "interrupt": "INTERRUPT",
                  "compact": "COMPACTION", "tool_use": "TOOL", "tool_result": "RESULT"}
         out = [f"Messages {offset}–{offset + len(rows) - 1} of {total} (session {sid[:8]}):\n"]
         for r in rows:
@@ -239,7 +251,7 @@ class Tools:
             return "No glossary yet."
         return "\n".join(f"- **{e['term']}** ({e['category']}): {one_line(e['definition'] or '', 200)}" for e in entries[:120])
 
-    def recent_sessions(self, project: str | None = None, days: int = 14, limit: int = 15) -> str:
+    def recent_sessions(self, project: str | None = None, agent: str | None = None, days: int = 14, limit: int = 15) -> str:
         since = to_iso(utcnow() - timedelta(days=days))
         params: list = [since]
         sql = ("SELECT id, started_at, title, project_name, outcome, n_prompts, active_s, agent FROM sessions "
@@ -248,6 +260,9 @@ class Tools:
         if path:
             sql += " AND project_path = ?"
             params.append(path)
+        if agent:
+            sql += " AND COALESCE(agent, 'claude') = ?"
+            params.append(agent)
         rows = self.conn.execute(sql + " ORDER BY started_at DESC LIMIT ?", [*params, limit]).fetchall()
         if not rows:
             return "No sessions in that window."
