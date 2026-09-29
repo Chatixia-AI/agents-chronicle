@@ -2581,12 +2581,12 @@ async function sessionsSidebar(box, title) {
   async function load(append) {
     const mine = ++loadSeq; // a newer filter or page wins; older responses are dropped
     const offset = append ? sbState.offset : 0;
-    const data = await api("/api/sessions", { q: sbState.q, agent: sbState.agent, limit: 60, offset });
+    const data = await api("/api/sessions", { q: sbState.q, agent: sbState.agent, sort: "ended_at", limit: 60, offset });
     if (mine !== loadSeq) return;
     if (!append) { list.replaceChildren(); lastGroup = null; sbState.offset = 0; }
     more.remove();
     for (const x of data.items) {
-      const g = dayGroup(x.started_at);
+      const g = dayGroup(x.ended_at || x.started_at); // by last activity, so a long-running live session stays under Today
       if (g !== lastGroup) { lastGroup = g; list.append(h("div", { class: "sb-group" }, g)); }
       const [cls, , label] = outcomeOf(x);
       list.append(h("a", { class: `sb-item s-${cls || "none"}`, href: `#/session/${x.id}`, "data-route": `/session/${x.id}`, title: x.title || "(untitled session)" },
