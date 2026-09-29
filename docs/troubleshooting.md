@@ -29,6 +29,12 @@ the DMG build always shows Chronicle.
 **The dashboard isn't at :8765.** The app uses a free port when 8765 is taken (for example by the command-line
 install's dashboard agent). **Open in Browser** in the menu-bar menu opens the right one.
 
+**`chronicle ui` fails with "Address already in use", or the dashboard still shows the old version after
+reinstalling.** The command-line install's launchd agent already serves the dashboard at :8765 and keeps running
+the code it started with. Restart it with `launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`, or update
+from **Settings › Status › Updates**, which restarts it for you ([Updating](install.md#updating)). Use
+`chronicle ui --port <n>` for a second dashboard.
+
 ## Recording
 
 **New sessions don't show up.** Claude Code sessions arrive through the `SessionEnd` hook within seconds, and

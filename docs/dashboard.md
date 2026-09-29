@@ -6,7 +6,7 @@
 
 **Dashboard:** a simplified VS Code layout in Apple's Liquid Glass style. An icon rail on the left switches between
 **Home**, **Sessions**, **Knowledge**, **Projects** and **Settings**, and the sidebar beside it lists that section:
-recent sessions grouped by day with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
+recent sessions grouped by the day they were last active, with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
 and Weekly reviews, projects, or Status, Sources and Appearance. **⌘K** (also ⌘P or `/`) opens a palette that jumps
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
 themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the

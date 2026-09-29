@@ -5,7 +5,7 @@
 | コマンド | |
 | --- | --- |
 | `chronicle app` | デスクトップアプリ（ウインドウ＋メニューバー）。`app` エクストラが必要 |
-| `chronicle ui [--open]` | ダッシュボード（インストール後は :8765 で常時稼働）。Sessions、Knowledge、Projects、Glossary は Cards と List（並べ替え可能な表。行をクリックで詳細）を切り替えられ、ページごとに記憶されます |
+| `chronicle ui [--open]` | ダッシュボード（インストール後は :8765 で常時稼働。稼働中なら `chronicle ui` がそう表示し、`--open` でそれを開きます）。Sessions、Knowledge、Projects、Glossary は Cards と List（並べ替え可能な表。行をクリックで詳細）を切り替えられ、ページごとに記憶されます |
 | `chronicle sessions [-p project] [--since 7d]` | セッションの一覧 |
 | `chronicle show <id-prefix> [--transcript\|--markdown\|--json]` | セッションの概要、または会話全体 |
 | `chronicle search <words>` | トランスクリプトとナレッジの全文検索（言語を問わず、3 文字以上） |

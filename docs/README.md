@@ -4,7 +4,7 @@
 
 | Page | What's in it |
 | --- | --- |
-| [Install](install.md) | The desktop app and the command-line install, what each sets up, uninstalling |
+| [Install](install.md) | The desktop app and the command-line install, what each sets up, updating, uninstalling |
 | [Sources](sources.md) | Claude Code, Codex, GitHub Copilot and IBM Bob: what is read, how each is connected |
 | [Dashboard, glossary and Map](dashboard.md) | The layout, keyboard shortcuts, every page, the glossary, the Map and themes |
 | [Command line](cli.md) | Every `chronicle` command and the Markdown vault |

@@ -5,7 +5,7 @@
 | Command | |
 | --- | --- |
 | `chronicle app` | The desktop app (window + menu bar); needs the `app` extra |
-| `chronicle ui [--open]` | Dashboard (also always running at :8765 after install). Sessions, Knowledge, Projects and Glossary switch between Cards and List (a sortable table; click a row for details), remembered per page |
+| `chronicle ui [--open]` | Dashboard (also always running at :8765 after install; if it is, `chronicle ui` says so and `--open` opens it). Sessions, Knowledge, Projects and Glossary switch between Cards and List (a sortable table; click a row for details), remembered per page |
 | `chronicle sessions [-p project] [--since 7d]` | List sessions |
 | `chronicle show <id-prefix> [--transcript\|--markdown\|--json]` | Session overview or full conversation |
 | `chronicle search <words>` | Full-text search over transcripts + knowledge (any language, 3+ chars) |
