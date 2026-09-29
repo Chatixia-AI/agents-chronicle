@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- `chronicle --version` works; 0.1.2 announced it but never shipped the flag.
+
 ## 0.2.0 (2026-09-30)
 
 - **Knowledge overview:** the Knowledge section opens on a page with a card each for the Map, All knowledge, the

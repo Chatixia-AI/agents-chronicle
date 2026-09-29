@@ -164,3 +164,11 @@ def test_uninstall_launchd_removes_only_the_given_agents(tmp_path, monkeypatch):
     assert install.uninstall_launchd([install.UI_LABEL]) == [f"removed launchd agent {install.UI_LABEL}"]
     assert not install.plist_path(install.UI_LABEL).exists() and install.plist_path(install.LAUNCHD_LABEL).exists()
     assert booted_out == [f"gui/{os.getuid()}/{install.UI_LABEL}"]
+
+
+def test_version_flag_reports_the_installed_version(capsys):
+    from chronicle import __version__
+
+    with pytest.raises(SystemExit) as exit_:
+        main(["--version"])
+    assert exit_.value.code == 0 and capsys.readouterr().out.strip() == f"chronicle {__version__}"

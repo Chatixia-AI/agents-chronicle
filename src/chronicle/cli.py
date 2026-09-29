@@ -6,6 +6,8 @@ import argparse
 import json
 import sys
 
+from . import __version__
+
 
 def _cfg():
     from .config import load_config
@@ -878,6 +880,7 @@ def build_parser() -> argparse.ArgumentParser:
         description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob); "
                     "extract reusable knowledge.",
     )
+    p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command", metavar="<command>")
 
     s = sub.add_parser("install", aliases=["setup"],
