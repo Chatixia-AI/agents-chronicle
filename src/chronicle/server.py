@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import errno
 import json
 import logging
 import mimetypes
@@ -547,6 +548,7 @@ class App:
         return self.jobs.start(f"review:{week or 'last'}", job)
 
     def status_small(self) -> dict:
+        from .update import available_version
         from .worker import PAUSE_KEY, count_pending
 
         pending = count_pending(self.conn, self.cfg)
@@ -556,8 +558,22 @@ class App:
             "last_sync": kv_get(self.conn, "last_sync"),
             "jobs": self.jobs.snapshot(),
             "version": __version__,
+            "update": available_version(),
             "ui_build": UI_BUILD,
         }
+
+    def update_info(self, remote: bool) -> dict:
+        from .update import check
+
+        return check(remote)
+
+    def action_update(self) -> dict:
+        from .update import run_update
+
+        busy = [k for k, j in self.jobs.snapshot().items() if j["state"] == "running" and k != "update"]
+        if busy:  # updating restarts the dashboard, which would cut the running job off
+            return {"started": False, "error": f"Wait for {busy[0]} to finish first"}
+        return {"started": self.jobs.start("update", run_update)}
 
     def status(self) -> dict:
         from .install import hooks_installed, launchd_status, mcp_registered
@@ -739,6 +755,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.map())
                 if p == "/api/jobs":
                     return self._json(app.status_small())
+                if p == "/api/update":
+                    return self._json(app.update_info(remote=False))
                 if p.startswith("/api/"):
                     return self._json({"error": "not found"}, 404)
                 return self._static(p)
@@ -762,6 +780,10 @@ def make_handler(app: App, port: int):
             try:
                 if p == "/api/sync":
                     return self._json({"started": app.action_sync()})
+                if p == "/api/update/check":  # a POST: it is the dashboard's only call to the internet (PyPI)
+                    return self._json(app.update_info(remote=True))
+                if p == "/api/update":
+                    return self._json(app.action_update())
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/analyze", p)
                 if m:
                     return self._json({"started": app.action_analyze(m.group(1))})
@@ -807,8 +829,47 @@ def make_server(cfg: Config, host: str | None = None, port: int | None = None, *
     return httpd
 
 
+def _already_running(cfg: Config, port: int, open_browser: bool) -> None:
+    """The port is taken: say by what (usually Chronicle's own launchd agent) and how to get the new code served."""
+    import os
+    import sys
+    from urllib.request import urlopen
+
+    from .install import launchd_status
+
+    url = f"http://127.0.0.1:{port}/"
+    try:
+        with urlopen(url + "api/jobs", timeout=3) as r:
+            running = json.load(r).get("version")
+    except Exception:
+        running = None
+    if not running:
+        print(f"Port {port} is in use by another program. Use --port to pick another one.", file=sys.stderr)
+        raise SystemExit(1)
+    if open_browser:
+        webbrowser.open(url)
+    agent = launchd_status("com.claude-chronicle.ui").get("loaded")
+    print(f"Chronicle {running} is already running at {url}" + (" (the background agent from `chronicle install`)." if agent else "."),
+          file=sys.stderr)
+    if running != __version__ or agent:
+        restart = (f"launchctl kickstart -k gui/{os.getuid()}/com.claude-chronicle.ui" if agent
+                   else "stop that one (Ctrl+C where it runs)")
+        print(f"If it still runs older code (after an update), restart it to load this install ({__version__}): {restart}",
+              file=sys.stderr)
+    print("Or run a second dashboard with --port <n>.", file=sys.stderr)
+    raise SystemExit(0 if open_browser else 1)
+
+
 def serve(cfg: Config, host: str | None = None, port: int | None = None, open_browser: bool = False) -> None:
-    httpd = make_server(cfg, host, port)
+    from . import update
+
+    update.RESTARTABLE = True  # this process is only the dashboard, so an update can re-exec it
+    try:
+        httpd = make_server(cfg, host, port)
+    except OSError as exc:
+        if exc.errno != errno.EADDRINUSE:
+            raise
+        _already_running(cfg, port or cfg.server_port, open_browser)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
     print(f"Chronicle dashboard: {url}  (Ctrl+C to stop)")
     if open_browser:

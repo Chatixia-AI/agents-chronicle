@@ -2464,6 +2464,38 @@ route(/^\/reviews$/, async () => {
 // =====================================================================================
 // Status
 // =====================================================================================
+function updatesCard() {
+  const box = h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Updates")), h("div", { class: "muted" }, "Loading…"));
+  const draw = (u) => {
+    const online = !u.source && u.kind !== "source"; // PyPI installs and the app compare against the latest release
+    const state = u.error ? h("div", { style: { color: "var(--critical-ink)" } }, u.error)
+      : u.available ? h("div", null, h("b", null, u.local ? `Your checkout has changed since this install${u.latest ? ` (${u.latest})` : ""}` : `Chronicle ${u.latest} is available`))
+      : online && !u.checked_at ? h("div", { class: "muted" }, "Not checked yet. Checking asks pypi.org for the latest version.")
+      : online ? h("div", null, `You're on the latest version (checked ${ago(new Date(u.checked_at * 1000).toISOString())})`) : null;
+    const check = online ? h("button", { class: "btn", type: "button", onclick: async () => {
+      check.disabled = true; check.textContent = "Checking…";
+      draw(await post("/api/update/check"));
+    } }, "Check for updates") : null;
+    const label = u.local ? "Reinstall from checkout" : u.source ? "Reinstall" : `Update to ${u.latest}`;
+    const run = u.can_update && (u.available || u.source) ? h("button", { class: `btn${u.available ? " primary" : ""}`, type: "button", onclick: async () => {
+      run.disabled = true; run.textContent = "Updating…";
+      const r = await post("/api/update");
+      if (!r.started) { toast(r.error || "An update is already running"); run.disabled = false; run.textContent = label; return; }
+      toast(u.restartable ? "Updating Chronicle; the dashboard restarts when it is done" : "Updating Chronicle…", 6000);
+      watchJob("update");
+    } }, label) : null;
+    const download = u.kind === "app" && u.available ? h("a", { class: "btn primary", href: u.releases_url, target: "_blank", rel: "noopener" }, `Download ${u.latest}`) : null;
+    box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates"), h("div", { class: "tools" }, check, run, download)),
+      h("div", { class: "status-list" },
+        h("div", null, `Chronicle ${u.current} · ${u.method}`),
+        state,
+        u.note ? h("div", { class: "muted" }, u.note) : null,
+        u.command && (u.available || u.source) ? h("div", { class: "muted" }, "Runs ", h("span", { class: "codeline" }, u.command),
+          u.restartable ? ", then restarts the dashboard." : ". Quit and reopen Chronicle afterwards.") : null));
+  };
+  api("/api/update").then(draw).catch((e) => box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates")), h("div", { style: { color: "var(--critical-ink)" } }, e.message)));
+  return box;
+}
 route(/^\/status$/, async () => {
   const st = await api("/api/status");
   const row = (ok, label, detail) => h("div", { class: "status-row" }, h("span", { class: ok ? "ok" : "no" }, ok ? "✓" : "✗"), h("span", null, label), detail ? h("span", { class: "muted" }, detail) : null);
@@ -2487,7 +2519,8 @@ route(/^\/status$/, async () => {
           h("div", null, `${fmtNum(st.pending.ready)} ready now · ${fmtNum(st.pending.queued)} queued/stale · spent ${fmtCost(st.analysis_cost)} (API-equivalent)`),
           st.paused_until ? h("div", null, `Paused until ${fmtDT(st.paused_until)} (usage limit)`) : null,
           h("div", null, Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}: ${v}`)))),
-        st.errors.length ? [h("div", { class: "subhead" }, "Recent failures"), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null)));
+        st.errors.length ? [h("div", { class: "subhead" }, "Recent failures"), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null),
+      updatesCard()));
 });
 
 // =====================================================================================
@@ -2853,6 +2886,9 @@ async function pollStatus() {
     $("#status-queue").textContent = waiting ? `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} queued for analysis` : "";
     $("#status-sync").textContent = st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
+    const upd = $("#status-update");
+    upd.hidden = !st.update;
+    if (st.update) { upd.replaceChildren(icon("sync"), st.update === "build" ? "Update available" : `Update to ${st.update}`); upd.title = "Open Status to update Chronicle"; }
     for (const name of [...watched]) {
       const j = jobs[name];
       if (j && j.state !== "running") {
@@ -2904,6 +2940,7 @@ $("#fwd-btn").addEventListener("click", () => history.forward());
 $("#search-pill").addEventListener("click", openPalette);
 $("#sync-btn").addEventListener("click", syncNow);
 $("#status-pill").addEventListener("click", () => go("#/status"));
+$("#status-update").addEventListener("click", () => go("#/status"));
 $("#theme-btn").addEventListener("click", flipTheme);
 themeChanged();
 matchMedia("(prefers-color-scheme: dark)").addEventListener?.("change", themeChanged);

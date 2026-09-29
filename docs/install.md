@@ -67,4 +67,20 @@ To use the desktop app from a command-line install, add the `app` extra and run 
 `uv tool install --python 3.13 'agents-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`
 first and let the app connect Claude Code, so the launchd agents do not run alongside it (harmless, but redundant).
 
+## Updating
+
+**Settings › Status › Updates** shows how Chronicle was installed and updates it the same way:
+
+| Installed with | Update button runs |
+| --- | --- |
+| `uv tool install agents-chronicle` | `uv tool upgrade agents-chronicle`, after **Check for updates** finds a newer release |
+| `uv tool install .` (a checkout) | `uv tool upgrade --reinstall agents-chronicle`, offered when the checkout's files changed after the install; no network check |
+| `pipx` or `pip` | `pipx upgrade agents-chronicle` or `pip install --upgrade agents-chronicle` |
+| The desktop app | Nothing: **Download** opens the latest release to drag into Applications |
+
+Only **Check for updates** goes online (to pypi.org). Once an update is known, the status bar shows **Update to …**.
+A dashboard run by `chronicle ui` (or its launchd agent) restarts itself afterwards and open tabs reload; a
+`chronicle app` from the command line needs quitting and reopening. The button waits while a sync or analysis runs.
+From a terminal, run the same command yourself.
+
 Something not working? See [Troubleshooting](troubleshooting.md).

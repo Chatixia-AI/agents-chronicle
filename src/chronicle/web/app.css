@@ -253,6 +253,7 @@ h3 { font-size: 14px; }
 .statusbar .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--good); }
 .statusbar .busy .dot { background: var(--accent); animation: pulse 1.2s infinite; }
 .statusbar .warn .dot { background: var(--warning); }
+#status-update { color: var(--accent); font-weight: 600; }
 @keyframes pulse { 50% { opacity: 0.3; } }
 
 /* the stage: a solid surface. Content never sits on glass. */

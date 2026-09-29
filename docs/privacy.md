@@ -4,7 +4,9 @@
 
 **What leaves your machine:** one thing. When a session is analyzed, a condensed digest of it (secrets redacted
 first) goes to Claude through your own Claude Code login, with `claude -p`: the same service that produced the
-transcript. Nothing is sent to Chronicle's authors or any other service, and there is no telemetry.
+transcript. Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. The one other
+connection is the update check, only when you click **Check for updates** on the Status page: it asks pypi.org
+for the latest version number and sends nothing about you.
 
 | Stored locally | Where |
 | --- | --- |

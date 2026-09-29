@@ -67,4 +67,20 @@ chronicle connect codex                          # optional: codex, copilot, bob
 `uv tool install --python 3.13 'agents-chronicle[app]'`。今後アプリだけを使う場合は、先に `chronicle uninstall` を実行してから
 アプリで Claude Code を接続してください。launchd エージェントとアプリが並行して動くのを避けるためです（害はありませんが無駄です）。
 
+## アップデート
+
+**設定 › Status › Updates** に Chronicle のインストール方法が表示され、同じ方法でアップデートできます。
+
+| インストール方法 | アップデートボタンが実行するもの |
+| --- | --- |
+| `uv tool install agents-chronicle` | **Check for updates** で新しいリリースが見つかったあと、`uv tool upgrade agents-chronicle` |
+| `uv tool install .`（チェックアウトから） | インストール後にチェックアウトのファイルが変わったとき、`uv tool upgrade --reinstall agents-chronicle`（ネットワーク確認なし） |
+| `pipx` または `pip` | `pipx upgrade agents-chronicle` または `pip install --upgrade agents-chronicle` |
+| デスクトップアプリ | 実行しません。**Download** で最新リリースを開き、アプリケーションフォルダにドラッグします |
+
+ネットワークに接続するのは **Check for updates**（pypi.org）だけです。アップデートが見つかると、ステータスバーに **Update to …** が出ます。
+`chronicle ui`（またはその launchd エージェント）で動くダッシュボードはアップデート後に自動で再起動し、開いているタブも再読み込みされます。
+コマンドラインの `chronicle app` は終了して開き直してください。同期や分析の実行中は、終わるまでボタンは待ちます。
+ターミナルからは同じコマンドを直接実行できます。
+
 うまく動かない場合は、[トラブルシューティング](troubleshooting.md)を参照してください。

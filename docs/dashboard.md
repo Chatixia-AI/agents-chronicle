@@ -9,8 +9,9 @@
 recent sessions grouped by day with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
 and Weekly reviews, projects, or Status, Sources and Appearance. **⌘K** (also ⌘P or `/`) opens a palette that jumps
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
-themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue and the
-last sync. Glass is kept to the navigation layer (rail, sidebar, toolbar, palette, the Map's floating controls);
+themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
+last sync and, once one is found, an available update ([Updating](install.md#updating)).
+Glass is kept to the navigation layer (rail, sidebar, toolbar, palette, the Map's floating controls);
 pages sit on a solid surface. **Settings › Appearance** picks the theme and turns on *Reduce transparency*; the app
 also follows the macOS setting of that name.
 
