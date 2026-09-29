@@ -19,6 +19,8 @@
 | `chronicle forget <id> [--delete-transcript]` | セッションを保管庫から完全に削除（再取り込みされません） |
 | `chronicle sources` | 接続中のエージェントと、その記録方法 |
 | `chronicle connect <agent>` / `disconnect <agent>` | `claude`、`codex`、`copilot`、`bob` の記録を開始／停止（データは残ります） |
+| `chronicle connect <client>` / `disconnect <client>` | `claude-desktop`、`cursor`、`windsurf`、`gemini` に MCP サーバーを追加／削除 |
+| `chronicle mcp [--print-config]` | MCP サーバーを実行（クライアントが起動します）、またはほかの MCP クライアント用の設定項目を出力 |
 | `chronicle status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |
 
@@ -32,4 +34,5 @@
 `get_session`、`get_transcript`、`project_knowledge`、`glossary`、`recent_sessions`。たとえば *「このエラー、前にも出た？」* や
 *「deployer_ip のルールって何だっけ？」* のように尋ねられます。
 
-MCP サーバーは、エージェントを接続したときに登録されます（[ソース](sources.md)を参照）。
+MCP サーバーは、エージェントを接続したときに登録されます（[ソース](sources.md)を参照）。各ツールの説明と、ほかのクライアントの
+接続方法は [MCP サーバー](mcp.md)にあります。

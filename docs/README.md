@@ -7,7 +7,8 @@
 | [Install](install.md) | The desktop app and the command-line install, what each sets up, uninstalling |
 | [Sources](sources.md) | Claude Code, Codex, GitHub Copilot and IBM Bob: what is read, how each is connected |
 | [Dashboard, glossary and Map](dashboard.md) | The layout, keyboard shortcuts, every page, the glossary, the Map and themes |
-| [Command line](cli.md) | Every `chronicle` command, the Markdown vault and the MCP tools |
+| [Command line](cli.md) | Every `chronicle` command and the Markdown vault |
+| [MCP server](mcp.md) | The tools your agents get, connecting Claude Desktop, Cursor, Windsurf, Gemini CLI or any other MCP client |
 | [What gets recorded and how analysis works](analysis.md) | Session data, knowledge kinds, the analysis pipeline and its cost |
 | [Configuration](configuration.md) | Every `config.toml` setting |
 | [Data and privacy](privacy.md) | What is stored where, and what leaves your machine |

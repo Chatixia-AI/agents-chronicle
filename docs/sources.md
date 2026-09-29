@@ -40,3 +40,6 @@ Both files are backed up to `~/.claude-chronicle/backups/` first, and other serv
 and archives a SQLite snapshot of that database; nothing else in `~/.bob` (e.g. login state) is read. The Bob IDE
 keeps no conversation files locally, so only the tasks in that database are recorded. Connecting registers the MCP
 server in `~/.bob/settings/mcp_settings.json`.
+
+Claude Desktop, Cursor, Windsurf and Gemini CLI aren't recorded, but they can use the MCP server too. See
+[MCP server](mcp.md).

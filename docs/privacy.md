@@ -25,6 +25,9 @@ transcript. Nothing is sent to Chronicle's authors or any other service, and the
 - **The dashboard** binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding) and requires a custom header
   on state-changing requests (CSRF). In the app window, the page can call only three window actions (theme, drag,
   zoom).
+- **MCP tools** read the database and answer on stdio; nothing listens on the network. Their results join the
+  client's conversation and so reach that client's model, with secrets redacted as in the digests. Give the server
+  only to clients whose model provider you trust with your sessions. See [MCP server](mcp.md#privacy).
 - **Other agents' stores are only read.** SQLite databases are opened read-only and archived as snapshots; Bob's
   login state is never read. Connecting an agent edits its MCP config, backed up to `~/.claude-chronicle/backups/`
   first.

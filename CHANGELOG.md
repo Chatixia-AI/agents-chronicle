@@ -12,6 +12,10 @@
 - **macOS app:** no title bar. The sidebar is native glass with the traffic lights on it; the toolbar drags and
   zooms the window; the window follows the page's theme and the macOS Reduce transparency setting.
 - New app icon, favicon and per-page titles.
+- **MCP for more clients:** `chronicle connect claude-desktop`, `cursor`, `windsurf` or `gemini` (or **Settings ›
+  Sources › Other MCP clients**) gives them Chronicle's MCP server; `chronicle mcp --print-config` prints an entry
+  for any other client. Tool results are now redacted like analysis digests, and the tools are marked read-only.
+  New [MCP server](docs/mcp.md) docs page.
 - MIT license. Documentation split into a short README and pages under `docs/` (English and Japanese), with
   screenshots made from demo data (`docs/demo/make_demo.py`).
 

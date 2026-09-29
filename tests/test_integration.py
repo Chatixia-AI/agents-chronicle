@@ -13,7 +13,7 @@ from http.server import ThreadingHTTPServer
 from chronicle.db import connect
 from chronicle.install import hooks_installed, install_hooks, uninstall_hooks
 
-from conftest import CWD, SID
+from conftest import CWD, SECRET, SID
 
 
 def _run_mcp(env, messages):
@@ -47,11 +47,13 @@ def test_mcp_server_protocol(synced):
     assert by_id[1]["result"]["protocolVersion"] == "2025-06-18"
     assert by_id[1]["result"]["serverInfo"]["name"] == "chronicle"
     assert {t["name"] for t in by_id[2]["result"]["tools"]} >= {"search_knowledge", "search_sessions", "get_session", "project_knowledge"}
+    assert all(t["annotations"]["readOnlyHint"] and not t["annotations"]["openWorldHint"] for t in by_id[2]["result"]["tools"])
     text = lambda i: by_id[i]["result"]["content"][0]["text"]  # noqa: E731
     assert "Token TTL compared in seconds vs ms" in text(3)
     assert "Fixed login token expiry bug" in text(4)
     assert "logout" in text(5).lower()
     assert "USER" in text(6) and "more: call again with offset=3" in text(6)
+    assert SECRET not in text(6) and "[REDACTED:anthropic-key]" in text(6)
     assert SID[:8] in text(7)
     assert "Token TTL" in text(8)
     assert by_id[9]["error"]["code"] == -32601

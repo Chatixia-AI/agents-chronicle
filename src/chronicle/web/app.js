@@ -2365,7 +2365,27 @@ route(/^\/map$/, async (params) => {
 // Sources: which agents are connected
 // =====================================================================================
 route(/^\/sources$/, async () => {
-  const sources = await api("/api/connectors");
+  const [sources, clients] = await Promise.all([api("/api/connectors"), api("/api/mcp-clients")]);
+  const clientRow = (c) => {
+    const btn = h("button", { class: `btn small${c.registered ? "" : " primary"}`, type: "button", disabled: !c.registered && !c.detected,
+      onclick: async () => {
+        btn.disabled = true;
+        const r = await post(`/api/connectors/${c.name}/${c.registered ? "disconnect" : "connect"}`);
+        toast((r.actions || [r.error]).join(" · "), 7000);
+        render();
+      } }, c.registered ? "Remove" : "Add");
+    const state = c.registered ? ["good", "MCP server added"] : c.detected ? ["", "Detected"] : ["", "Not installed"];
+    return h("div", { class: "set-row" },
+      h("div", null, h("b", null, c.label), h("div", { class: "muted" }, `${c.vendor} · ${shortPath(c.config)}`)),
+      h("div", { style: { display: "flex", gap: "10px", alignItems: "center" } },
+        h("span", { class: `badge ${state[0]}` }, h("span", { class: "sdot" }), state[1]), btn));
+  };
+  const clientsCard = h("section", { class: "card", style: { marginTop: "16px" } },
+    cardHead("Other MCP clients", { iconName: "sources", hint: "not recorded · search only" }),
+    h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "4px" } },
+      "Give these tools Chronicle's MCP server so they can search your sessions and knowledge. For any other client, ",
+      h("code", { style: { whiteSpace: "nowrap" } }, "chronicle mcp --print-config"), " prints an entry to paste into its settings."),
+    clients.map(clientRow));
   const card = (c) => {
     const state = c.connected ? ["good", "Connected"] : c.detected ? ["warning", "Detected · not connected"] : ["", "Not installed"];
     const action = c.connected
@@ -2405,7 +2425,7 @@ route(/^\/sources$/, async () => {
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, "Sources"),
       h("div", { class: "sub" }, "The coding agents Chronicle records. Connecting starts archiving and analyzing their sessions and gives the agent Chronicle's MCP tools."))),
-    h("div", { class: "src-grid" }, sources.map(card)));
+    h("div", { class: "src-grid" }, sources.map(card)), clientsCard);
 });
 
 // =====================================================================================

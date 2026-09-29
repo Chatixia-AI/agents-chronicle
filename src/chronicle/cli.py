@@ -444,10 +444,14 @@ def _set_config_value(cfg, section: str, key: str, value: str) -> None:
 def cmd_uninstall(args) -> int:
     import shutil
 
+    from .connectors import mcp_clients_status, remove_mcp_client
     from .install import uninstall_hooks, uninstall_launchd, uninstall_mcp
 
     cfg = _cfg()
     actions = uninstall_hooks(cfg) + uninstall_launchd() + uninstall_mcp(cfg)
+    for c in mcp_clients_status():
+        if c["registered"]:
+            actions += remove_mcp_client(cfg, c["name"])
     for a in actions or ["nothing to remove"]:
         print(f"• {a}")
     if args.purge:
@@ -489,6 +493,14 @@ def cmd_export(args) -> int:
 
 
 def cmd_mcp(args) -> int:
+    if args.print_config:
+        import json
+
+        from .connectors import mcp_server_entry
+        from .install import executable
+
+        print(json.dumps({"mcpServers": {"chronicle": mcp_server_entry(executable())}}, indent=2))
+        return 0
     from .mcp_server import serve
 
     return serve(_cfg())
@@ -613,7 +625,7 @@ def cmd_review(args) -> int:
 
 
 def cmd_sources(args) -> int:
-    from .connectors import all_status
+    from .connectors import all_status, mcp_clients_status
     from .util import local_str
 
     cfg = _cfg()
@@ -629,11 +641,15 @@ def cmd_sources(args) -> int:
             mark = "[green]✓[/]" if chk["ok"] else ("[dim]–[/]" if chk["ok"] is None or chk.get("optional") else "[red]✗[/]")
             console.print(f"  {mark} {chk['label']}: [dim]{chk['detail']}[/]", highlight=False)
         console.print()
+    console.print("[bold]Other MCP clients[/] [dim](not recorded; `chronicle connect <name>` gives them Chronicle's MCP tools)[/]", highlight=False)
+    for c in mcp_clients_status():
+        state = "[green]✓ MCP server added[/]" if c["registered"] else ("[yellow]detected[/]" if c["detected"] else "[dim]not installed[/]")
+        console.print(f"  {c['label']} [dim]({c['name']})[/] · {state} · [dim]{c['config']}[/]", highlight=False)
     return 0
 
 
 def cmd_connect(args) -> int:
-    from .connectors import connect, disconnect
+    from .connectors import MCP_CLIENTS, connect, disconnect
     from .install import executable
 
     cfg = _cfg()
@@ -643,7 +659,7 @@ def cmd_connect(args) -> int:
         actions = connect(cfg, args.name, args.exe or executable())
     for a in actions:
         print(f"• {a}")
-    if not args.disconnect and not args.no_sync:
+    if not args.disconnect and not args.no_sync and args.name not in MCP_CLIENTS:
         from .config import load_config
         from .ingest import sync
 
@@ -802,14 +818,17 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sources", aliases=["connectors"], help="which coding agents are connected and how")
     s.set_defaults(fn=cmd_sources)
 
-    s = sub.add_parser("connect", help="start recording an agent: claude, codex, copilot or bob (hooks/MCP where available)")
-    s.add_argument("name", choices=["claude", "codex", "copilot", "bob"])
+    agents = ["claude", "codex", "copilot", "bob"]
+    clients = ["claude-desktop", "cursor", "windsurf", "gemini"]
+    s = sub.add_parser("connect", help="start recording an agent (claude, codex, copilot, bob), or give an MCP client "
+                                       "(claude-desktop, cursor, windsurf, gemini) Chronicle's MCP server")
+    s.add_argument("name", choices=agents + clients)
     s.add_argument("--exe", help="command the agent should run for Chronicle's MCP server")
     s.add_argument("--no-sync", action="store_true")
     s.set_defaults(fn=cmd_connect, disconnect=False)
 
-    s = sub.add_parser("disconnect", help="stop recording an agent (recorded sessions are kept)")
-    s.add_argument("name", choices=["claude", "codex", "copilot", "bob"])
+    s = sub.add_parser("disconnect", help="stop recording an agent, or remove the MCP server from a client (recorded sessions are kept)")
+    s.add_argument("name", choices=agents + clients)
     s.set_defaults(fn=cmd_connect, disconnect=True, exe=None, no_sync=True)
 
     s = sub.add_parser("context", help="print the knowledge digest a new session in this directory would get")
@@ -820,7 +839,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("action", nargs="?", choices=["show", "path", "edit"], default="show")
     s.set_defaults(fn=cmd_config)
 
-    s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install`")
+    s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install` and `connect`")
+    s.add_argument("--print-config", action="store_true", help="print a JSON entry to add Chronicle to any MCP client by hand")
     s.set_defaults(fn=cmd_mcp)
 
     s = sub.add_parser("hook", help=argparse.SUPPRESS)

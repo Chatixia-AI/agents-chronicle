@@ -39,3 +39,5 @@ GPT-5 の料金で見積もります。
 そのデータベースの SQLite スナップショットをアーカイブします。`~/.bob` 内のそれ以外（ログイン状態など）は読みません。
 Bob IDE は会話ファイルをローカルに保存しないため、記録されるのはこのデータベース内のタスクだけです。接続すると
 `~/.bob/settings/mcp_settings.json` に MCP サーバーが登録されます。
+
+Claude Desktop、Cursor、Windsurf、Gemini CLI は記録しませんが、MCP サーバーは使えます。[MCP サーバー](mcp.md)を参照してください。

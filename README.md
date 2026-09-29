@@ -34,8 +34,9 @@ from the [demo data](docs/development.md#demo-data):
 - **Every session, kept for good.** Raw transcripts are archived, so nothing is lost when an agent cleans up.
 - **Knowledge, extracted automatically.** Fixes, gotchas, decisions, commands, project facts and preferences, merged
   into a knowledge base per project and a playbook across all of them.
-- **Your agents can ask.** Through the MCP server, an agent can search your past sessions: *"have we hit this
-  error before?"*, *"why did we put idempotency in Postgres?"*
+- **Your agents can ask.** Through the [MCP server](docs/mcp.md), an agent can search your past sessions: *"have
+  we hit this error before?"*, *"why did we put idempotency in Postgres?"* Claude Desktop, Cursor, Windsurf and
+  Gemini CLI can connect too.
 - **A dashboard to browse it all.** Sessions with their full transcripts, statistics, a glossary of your own
   vocabulary drawn as a mindmap, and a weekly review Claude writes for you. ⌘K jumps anywhere.
 - **Plain files too.** An Obsidian-compatible Markdown vault and a `chronicle` CLI.
@@ -124,7 +125,7 @@ Something not working? See [Troubleshooting](docs/troubleshooting.md).
 ## Documentation
 
 [Install](docs/install.md) · [Sources](docs/sources.md) · [Dashboard, glossary and Map](docs/dashboard.md) ·
-[Command line](docs/cli.md) · [What gets recorded and how analysis works](docs/analysis.md) ·
+[Command line](docs/cli.md) · [MCP server](docs/mcp.md) · [What gets recorded and how analysis works](docs/analysis.md) ·
 [Configuration](docs/configuration.md) · [Data and privacy](docs/privacy.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)
 

@@ -11,6 +11,7 @@ from . import __version__
 from .config import Config
 from .agents import short_name
 from .db import connect
+from .redact import redact
 from .search import search_knowledge, search_sessions
 from .synthesize import GLOBAL, kb_for_path
 from .util import human_duration, local_str, one_line, to_iso, truncate, utcnow
@@ -110,6 +111,12 @@ TOOLS = [
         },
     },
 ]
+
+
+# every tool only reads the local vault: clients may run them without asking, and nothing reaches the network
+for _tool in TOOLS:
+    _tool["annotations"] = {"title": _tool["name"].replace("_", " ").capitalize(), "readOnlyHint": True,
+                            "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 
 
 class Tools:
@@ -307,7 +314,8 @@ def _handle(msg, handlers) -> dict | None:
                 result = {"content": [{"type": "text", "text": f"Unknown tool {name}"}], "isError": True}
             else:
                 try:
-                    text = fn(**(params.get("arguments") or {}))
+                    # results go into the client's conversation, i.e. to its model provider: same redaction as digests
+                    text = redact(fn(**(params.get("arguments") or {})))
                     result = {"content": [{"type": "text", "text": text}], "isError": False}
                 except TypeError as exc:
                     result = {"content": [{"type": "text", "text": f"Bad arguments: {exc}"}], "isError": True}

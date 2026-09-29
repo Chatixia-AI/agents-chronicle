@@ -381,6 +381,54 @@ def disconnect_bob(cfg: Config) -> list[str]:
     return actions
 
 
+# ------------------------------------------------------------------ MCP-only clients
+# Tools Chronicle does not record but can give its MCP server to. Each keeps a JSON config with a server map.
+APPLICATIONS = Path("/Applications")
+
+MCP_CLIENTS = {
+    "claude-desktop": {"label": "Claude Desktop", "vendor": "Anthropic", "app": "Claude.app",
+                       "config": "Library/Application Support/Claude/claude_desktop_config.json", "home": "Library/Application Support/Claude",
+                       "restart": True},
+    "cursor": {"label": "Cursor", "vendor": "Anysphere", "app": "Cursor.app", "config": ".cursor/mcp.json", "home": ".cursor"},
+    "windsurf": {"label": "Windsurf", "vendor": "Windsurf", "app": "Windsurf.app",
+                 "config": ".codeium/windsurf/mcp_config.json", "home": ".codeium/windsurf"},
+    "gemini": {"label": "Gemini CLI", "vendor": "Google", "binary": "gemini", "config": ".gemini/settings.json", "home": ".gemini"},
+}
+
+
+def mcp_client_config(name: str) -> Path:
+    return Path.home() / MCP_CLIENTS[name]["config"]
+
+
+def _mcp_client_detected(name: str) -> bool:
+    c = MCP_CLIENTS[name]
+    return ((Path.home() / c["home"]).is_dir() or ("app" in c and (APPLICATIONS / c["app"]).exists())
+            or ("binary" in c and bool(shutil.which(c["binary"]))))
+
+
+def mcp_clients_status() -> list[dict]:
+    return [{"name": name, "label": c["label"], "vendor": c["vendor"], "detected": _mcp_client_detected(name),
+             "registered": _mcp_json_has(mcp_client_config(name), "mcpServers"), "config": _tilde(mcp_client_config(name))}
+            for name, c in MCP_CLIENTS.items()]
+
+
+def mcp_server_entry(exe: str) -> dict:
+    command, args = _split_exe(exe)
+    return {"command": command, "args": args}
+
+
+def add_mcp_client(cfg: Config, name: str, exe: str) -> list[str]:
+    c = MCP_CLIENTS[name]
+    if not _mcp_client_detected(name):
+        return [f"{c['label']} not found on this Mac; nothing changed"]
+    action = _mcp_json_set(cfg, mcp_client_config(name), "mcpServers", mcp_server_entry(exe), c["label"])
+    return [action + (f"; restart {c['label']} to load it" if c.get("restart") and "registered MCP" in action else "")]
+
+
+def remove_mcp_client(cfg: Config, name: str) -> list[str]:
+    return [_mcp_json_set(cfg, mcp_client_config(name), "mcpServers", None, MCP_CLIENTS[name]["label"])]
+
+
 # ------------------------------------------------------------------ registry
 CONNECTORS = {
     "claude": (claude_status, connect_claude, disconnect_claude),
@@ -395,12 +443,16 @@ def all_status(cfg: Config, conn: sqlite3.Connection) -> list[dict]:
 
 
 def connect(cfg: Config, name: str, exe: str) -> list[str]:
+    if name in MCP_CLIENTS:
+        return add_mcp_client(cfg, name, exe)
     if name not in CONNECTORS:
         raise KeyError(name)
     return CONNECTORS[name][1](cfg, exe)
 
 
 def disconnect(cfg: Config, name: str) -> list[str]:
+    if name in MCP_CLIENTS:
+        return remove_mcp_client(cfg, name)
     if name not in CONNECTORS:
         raise KeyError(name)
     return CONNECTORS[name][2](cfg)

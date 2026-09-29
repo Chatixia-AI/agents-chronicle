@@ -101,3 +101,38 @@ def test_connect_registers_mcp_and_keeps_other_servers(stores):
     disconnect(cfg, "bob")
     assert set(json.loads((stores["copilot"] / "mcp-config.json").read_text())["mcpServers"]) == {"other"}
     assert load_config(cfg.home).copilot_dirs == [] and load_config(cfg.home).bob_dirs == []
+
+
+def test_mcp_clients_get_the_server_and_keep_their_settings(env, monkeypatch):
+    from chronicle import connectors
+    from chronicle.connectors import connect, disconnect, mcp_clients_status
+
+    home = env["tmp"] / "home"
+    monkeypatch.setenv("HOME", str(home))
+    monkeypatch.setattr(connectors, "APPLICATIONS", env["tmp"] / "Applications")
+    monkeypatch.setattr(connectors.shutil, "which", lambda name: None)
+    cfg = env["cfg"]
+    status = {c["name"]: c for c in mcp_clients_status()}
+    assert not status["cursor"]["detected"] and not status["cursor"]["registered"]
+    assert connect(cfg, "cursor", "/opt/bin/chronicle") == ["Cursor not found on this Mac; nothing changed"]
+    assert not (home / ".cursor").exists()
+
+    (home / ".cursor").mkdir(parents=True)
+    gemini = home / ".gemini" / "settings.json"
+    gemini.parent.mkdir()
+    gemini.write_text(json.dumps({"theme": "Dracula", "mcpServers": {"other": {"command": "x"}}}))
+    (env["tmp"] / "Applications" / "Claude.app").mkdir(parents=True)
+    for name in ("cursor", "gemini", "claude-desktop"):
+        connect(cfg, name, "/opt/bin/chronicle")
+    entry = {"command": "/opt/bin/chronicle", "args": ["mcp"]}
+    assert json.loads((home / ".cursor" / "mcp.json").read_text()) == {"mcpServers": {"chronicle": entry}}
+    desktop = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
+    assert json.loads(desktop.read_text())["mcpServers"]["chronicle"] == entry
+    data = json.loads(gemini.read_text())
+    assert data["theme"] == "Dracula" and set(data["mcpServers"]) == {"other", "chronicle"}
+    assert {c["name"] for c in mcp_clients_status() if c["registered"]} == {"cursor", "gemini", "claude-desktop"}
+    assert "already registered" in connect(cfg, "cursor", "/opt/bin/chronicle")[0]
+    assert load_config(cfg.home).claude_dirs == cfg.claude_dirs  # clients are not recording sources
+
+    disconnect(cfg, "gemini")
+    assert json.loads(gemini.read_text()) == {"theme": "Dracula", "mcpServers": {"other": {"command": "x"}}}

@@ -496,11 +496,19 @@ class App:
 
         return all_status(self.cfg, self.conn)
 
+    def mcp_clients(self) -> list[dict]:
+        from .connectors import mcp_clients_status
+
+        return mcp_clients_status()
+
     def action_connector(self, name: str, action: str) -> dict:
         from .config import load_config
-        from .connectors import connect, disconnect
+        from .connectors import MCP_CLIENTS, connect, disconnect
         from .install import executable
 
+        if name in MCP_CLIENTS:  # only another tool's MCP config changes: no config reload, nothing to sync
+            return {"actions": connect(self.cfg, name, executable()) if action == "connect" else disconnect(self.cfg, name),
+                    "sync_started": False}
         if action == "connect":
             actions = connect(self.cfg, name, executable())
         elif action == "disconnect":
@@ -723,6 +731,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.glossary(q))
                 if p == "/api/connectors":
                     return self._json(app.connectors())
+                if p == "/api/mcp-clients":
+                    return self._json(app.mcp_clients())
                 if p == "/api/glossary/terms":
                     return self._json(app.glossary_terms())
                 if p == "/api/map":
@@ -755,7 +765,7 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/analyze", p)
                 if m:
                     return self._json({"started": app.action_analyze(m.group(1))})
-                m = re.fullmatch(r"/api/connectors/(\w+)/(connect|disconnect)", p)
+                m = re.fullmatch(r"/api/connectors/([\w-]+)/(connect|disconnect)", p)
                 if m:
                     try:
                         return self._json(app.action_connector(m.group(1), m.group(2)))

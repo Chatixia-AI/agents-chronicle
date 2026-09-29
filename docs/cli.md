@@ -19,6 +19,8 @@
 | `chronicle forget <id> [--delete-transcript]` | Remove a session from the vault for good (it is never re-ingested) |
 | `chronicle sources` | Which agents are connected, and how |
 | `chronicle connect <agent>` / `disconnect <agent>` | Start/stop recording `claude`, `codex`, `copilot` or `bob` (data is kept) |
+| `chronicle connect <client>` / `disconnect <client>` | Add or remove the MCP server in `claude-desktop`, `cursor`, `windsurf` or `gemini` |
+| `chronicle mcp [--print-config]` | Run the MCP server (clients start it), or print a config entry for any other MCP client |
 | `chronicle status` | Health: hooks, agents, MCP, queue, failures |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
 
@@ -32,4 +34,5 @@
 `get_transcript`, `project_knowledge`, `glossary`, `recent_sessions`. Ask e.g. *"have we hit this error before?"*
 or *"what is the deployer_ip rule?"*.
 
-The MCP server is registered when you connect an agent (see [Sources](sources.md)).
+The MCP server is registered when you connect an agent (see [Sources](sources.md)). [MCP server](mcp.md) covers
+each tool and how to connect other clients.

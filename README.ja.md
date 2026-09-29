@@ -34,8 +34,9 @@ Chronicle は終わったセッションを読み、残す価値のあること�
 - **すべてのセッションを残す。** 元のトランスクリプトを保管するので、エージェントが片付けても何も失われません。
 - **ナレッジを自動で抽出。** 修正、落とし穴、決定、コマンド、プロジェクトの事実、好みを、プロジェクトごとのナレッジベースと、
   全プロジェクト共通のプレイブックにまとめます。
-- **エージェントから質問できる。** MCP サーバー経由で、エージェントが過去のセッションを検索できます。例：
-  「このエラー、前にも出た？」「なぜ冪等性を Postgres でやることにしたんだっけ？」
+- **エージェントから質問できる。** [MCP サーバー](docs/ja/mcp.md)経由で、エージェントが過去のセッションを検索できます。例：
+  「このエラー、前にも出た？」「なぜ冪等性を Postgres でやることにしたんだっけ？」Claude Desktop、Cursor、Windsurf、
+  Gemini CLI からも接続できます。
 - **すべてを眺めるダッシュボード。** トランスクリプト全体を含むセッション、統計、自分の用語をマインドマップにした用語集、
   Claude が書く週次の振り返り。⌘K でどこへでも移動できます。
 - **ただのファイルとしても。** Obsidian 互換の Markdown 保管庫と `chronicle` CLI。
@@ -123,7 +124,7 @@ Codex、GitHub Copilot、IBM Bob も記録するには、**Settings › Sources*
 ## ドキュメント
 
 [インストール](docs/ja/install.md) · [ソース](docs/ja/sources.md) · [ダッシュボード・用語集・マップ](docs/ja/dashboard.md) ·
-[コマンドライン](docs/ja/cli.md) · [記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
+[コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
 [データとプライバシー](docs/ja/privacy.md) · [トラブルシューティング](docs/ja/troubleshooting.md) · [開発](docs/ja/development.md)
 
 ## コントリビュート
