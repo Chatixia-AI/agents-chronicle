@@ -1,78 +1,34 @@
-"""Import a claude.ai data export (claude.ai › Settings › Privacy › Export data) as sessions.
+"""Parse claude.ai data export conversations (claude.ai › Settings › Privacy › Export data).
 
-The export is a .zip with conversations.json (every chat: messages with text, thinking, tool use and attached
-files), projects.json and users.json. Only conversations.json and projects.json are read; users.json (name, email)
-is never opened. Imports are repeatable: a newer export updates the chats that changed and adds new ones.
-
-Imported chats are not analyzed automatically (years of chats would use up the Claude plan's limits in one go):
-analyze one with **Analyze now**, or import with `--analyze` to queue them all.
+Each conversation in conversations.json has `chat_messages` (sender human / assistant) whose `content` blocks
+hold text, thinking, tool use and tool results, plus attached files; projects.json names the claude.ai projects.
+Importing is in chat_import.py, shared with ChatGPT exports.
 """
 
 from __future__ import annotations
 
-import gzip
-import hashlib
 import json
-import logging
-import zipfile
-from pathlib import Path
+from collections import Counter
 
 from .copilot_parser import _Builder, finish_session
 from .parser import ParsedSession
-from .util import parse_ts, safe_text, to_iso, utcnow_iso
+from .util import parse_ts, safe_text, to_iso
 
-log = logging.getLogger("chronicle.claude_export")
-
-CLAUDE_AI_PARSER_VERSION = 1
+CLAUDE_AI_PARSER_VERSION = 2  # 2: only the branch shown, pasted images
 AGENT = "claude-ai"
 SOURCE = "claude-ai-export"
-LAST_IMPORT_KEY = "claude-ai:last-import"
-NOT_ANALYZED = "imported claude.ai chat: not analyzed automatically (Analyze now, or import with --analyze)"
-
-
-class ExportError(Exception):
-    """The file is not a claude.ai export Chronicle can read."""
 
 
 def _iso(value) -> str | None:
     return to_iso(parse_ts(value))
 
 
-def read_export(path: Path) -> tuple[bytes, bytes | None]:
-    """conversations.json and projects.json (raw) from the export .zip, its unpacked folder, or conversations.json."""
-    path = Path(path).expanduser()
-    if path.is_dir():
-        conv, proj = path / "conversations.json", path / "projects.json"
-    elif zipfile.is_zipfile(path):
-        with zipfile.ZipFile(path) as z:
-            names = {Path(n).name: n for n in z.namelist() if not n.startswith("__MACOSX/")}
-            if "conversations.json" not in names:
-                raise ExportError(f"{path.name} has no conversations.json: is it a claude.ai data export?")
-            return z.read(names["conversations.json"]), z.read(names["projects.json"]) if "projects.json" in names else None
-    elif path.suffix == ".json" and path.is_file():
-        conv, proj = path, path.with_name("projects.json")
-    elif path.exists():
-        raise ExportError(f"{path.name} is not a claude.ai export: give the .zip, its unpacked folder, or conversations.json")
-    else:
-        raise ExportError(f"{path} not found")
-    if not conv.is_file():
-        raise ExportError(f"no conversations.json in {path}")
-    return conv.read_bytes(), proj.read_bytes() if proj.is_file() else None
+def is_claude(conversations: list[dict]) -> bool:
+    return any("chat_messages" in c for c in conversations[:5])
 
 
-def load_conversations(raw: bytes) -> list[dict]:
-    try:
-        data = json.loads(raw)
-    except ValueError as exc:
-        raise ExportError("conversations.json is not valid JSON") from exc
-    if isinstance(data, dict):
-        data = data.get("conversations") or []
-    if not isinstance(data, list):
-        raise ExportError("conversations.json is not a list of conversations")
-    first = next((c for c in data if isinstance(c, dict)), {})
-    if "mapping" in first and "chat_messages" not in first:
-        raise ExportError("this is a ChatGPT export, not a claude.ai one")
-    return [c for c in data if isinstance(c, dict) and c.get("uuid")]
+def conversation_id(conv: dict) -> str | None:
+    return conv.get("uuid")
 
 
 def project_names(raw: bytes | None) -> dict[str, str]:
@@ -103,8 +59,23 @@ def _result_text(block: dict) -> str:
     return content if isinstance(content, str) else ""
 
 
+def thread(msgs: list[dict]) -> list[dict]:
+    """The branch claude.ai shows. Editing a prompt or retrying an answer forks the chat (messages point to their
+    parent), and the export has every branch: keep the chain that ends at the newest message."""
+    by_id = {m.get("uuid"): m for m in msgs}
+    children = Counter(m.get("parent_message_uuid") for m in msgs if m.get("parent_message_uuid") in by_id)
+    if not children or max(children.values()) < 2:
+        return msgs  # no forks (or no parent links, as in older exports)
+    node, chain, seen = max(msgs, key=lambda m: m.get("created_at") or ""), [], set()
+    while node is not None and node.get("uuid") not in seen:
+        seen.add(node.get("uuid"))
+        chain.append(node)
+        node = by_id.get(node.get("parent_message_uuid"))
+    return chain[::-1]
+
+
 def parse_conversation(conv: dict, projects: dict[str, str]) -> ParsedSession | None:
-    msgs = [m for m in conv.get("chat_messages") or [] if isinstance(m, dict)]
+    msgs = thread([m for m in conv.get("chat_messages") or [] if isinstance(m, dict)])
     if not any(m.get("sender") == "human" for m in msgs):
         return None  # an empty chat
     ps = ParsedSession(id=conv["uuid"])
@@ -125,6 +96,11 @@ def parse_conversation(conv: dict, projects: dict[str, str]) -> ParsedSession | 
             files = [f for f in m.get("files") or m.get("files_v2") or [] if isinstance(f, dict)]
             ps.n_images += sum(1 for f in files if f.get("file_kind") in (None, "image"))
             notes += [f"[file {f.get('file_name') or 'image'}]" for f in files]
+            known = {f.get("file_uuid") for f in files}
+            pasted = sum(1 for bl in blocks if bl.get("type") == "image" and (not bl.get("file_uuid") or bl["file_uuid"] not in known))
+            if pasted:  # images in the prompt that are not listed as files
+                ps.n_images += pasted
+                notes.append(f"[{pasted} image{'s' if pasted > 1 else ''}]")
             b.prompt(ts, "\n\n".join([text, *notes]).strip())
             continue
         results = [bl for bl in blocks if bl.get("type") == "tool_result"]
@@ -146,73 +122,3 @@ def parse_conversation(conv: dict, projects: dict[str, str]) -> ParsedSession | 
     if conv.get("model"):
         ps.models[conv["model"]] += 1
     return finish_session(ps, b.stamps)
-
-
-def import_export(cfg, conn, path: Path, *, analyze: bool = False, progress=None) -> dict:
-    """Import (or re-import) a claude.ai export. Returns counts for the CLI and the dashboard."""
-    from .db import kv_set
-    from .ingest import _unchanged, forgotten_ids, store_parsed
-    from .util import file_lock
-
-    raw_conv, raw_proj = read_export(Path(path))
-    convs = load_conversations(raw_conv)
-    projects = project_names(raw_proj)
-    dst = cfg.archive_dir / "claude-ai" / hashlib.sha1(raw_conv).hexdigest()[:12]
-    archive = dst / "conversations.json.gz"
-    if not archive.exists():  # the export itself, kept for good (users.json is not copied)
-        dst.mkdir(parents=True, exist_ok=True)
-        for name, raw in (("conversations.json.gz", raw_conv), ("projects.json.gz", raw_proj)):
-            if raw:
-                with gzip.open(dst / name, "wb") as f:
-                    f.write(raw)
-    counts = {"conversations": len(convs), "new": 0, "updated": 0, "unchanged": 0, "empty": 0, "excluded": 0}
-    with file_lock(cfg.locks_dir / "ingest.lock", timeout=900) as got:
-        if not got:
-            raise ExportError("a sync is running; try again when it finishes")
-        skip = forgotten_ids(conn)
-        for i, conv in enumerate(convs):
-            if progress and i % 50 == 0:
-                progress(f"importing claude.ai chats… {i:,}/{len(convs):,}")
-            sid, sig = conv["uuid"], conversation_signature(conv)
-            if sid in skip or _unchanged(conn, sid, sig, False):
-                counts["unchanged"] += 1
-                continue
-            ps = parse_conversation(conv, projects)
-            if ps is None:
-                counts["empty"] += 1
-                continue
-            if cfg.is_excluded(ps.project_path):
-                counts["excluded"] += 1
-                continue
-            result = store_parsed(conn, cfg, ps, claude_dir=dst, project_dir=None, transcript_path=archive,
-                                  archive_path=archive, files_sig=sig, agent=AGENT, source=SOURCE)
-            if not analyze:
-                conn.execute("UPDATE sessions SET analysis_status = 'skipped', analysis_reason = ? "
-                             "WHERE id = ? AND analysis_status = 'pending'", (NOT_ANALYZED, sid))
-            counts["new" if result == "new" else "updated"] += 1
-            conn.commit()
-        kv_set(conn, LAST_IMPORT_KEY, json.dumps({"at": utcnow_iso(), "file": Path(path).name, **counts}))
-        conn.commit()
-    log.info("claude.ai import from %s: %s", path, counts)
-    return counts
-
-
-def summary(counts: dict) -> str:
-    parts = [f"{counts['new']} new", f"{counts['updated']} updated", f"{counts['unchanged']} unchanged"]
-    if counts.get("empty"):
-        parts.append(f"{counts['empty']} empty")
-    if counts.get("excluded"):
-        parts.append(f"{counts['excluded']} excluded")
-    return f"claude.ai export: {counts['conversations']} chats · " + ", ".join(parts)
-
-
-def import_status(conn) -> dict:
-    from .db import kv_get
-
-    r = conn.execute("SELECT COUNT(*), SUM(analysis_status = 'done'), MAX(ended_at) FROM sessions WHERE source = ?",
-                     (SOURCE,)).fetchone()
-    try:
-        last = json.loads(kv_get(conn, LAST_IMPORT_KEY) or "null")
-    except ValueError:
-        last = None
-    return {"sessions": r[0] or 0, "analyzed": r[1] or 0, "last_chat": r[2], "last_import": last}

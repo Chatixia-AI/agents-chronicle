@@ -206,11 +206,11 @@ const STATUS_LABEL = {
 };
 const STATUS_ICON = { pending: "queued", stale: "queued", running: "running", error: "gotcha", skipped: "skipped", done: "completed" };
 
-const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob", "claude-ai": "Claude.ai" };
-const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob", "claude-ai": "Claude.ai" };
+const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
+const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
 function agentShort(a) { return AGENT_SHORT[a] || a || "Claude"; }
 function agentName(a) { return AGENTS[a] || "Claude Code"; }
-function agentTag(a, title) { return a && a !== "claude" ? h("span", { class: "agent-tag", title: title || `${agentName(a)} session` }, agentShort(a)) : null; }
+function agentTag(a, title) { return a && a !== "claude" ? h("span", { class: `agent-tag a-${a}`, title: title || `${agentName(a)} session` }, agentShort(a)) : null; }
 
 function outcomeBadge(outcome, status, source) {
   if (source === "history") return h("span", { class: "badge", title: "Recovered from prompt history; transcript was deleted before Chronicle" }, icon("history"), "history");
@@ -2366,32 +2366,33 @@ route(/^\/map$/, async (params) => {
 // =====================================================================================
 route(/^\/sources$/, async () => {
   const [sources, clients, imports] = await Promise.all([api("/api/connectors"), api("/api/mcp-clients"), api("/api/imports")]);
-  const ai = imports.claude_ai, last = ai.last_import;
+  const formats = Object.values(imports);
+  const last = formats.filter((f) => f.last_import).map((f) => ({ ...f.last_import, label: f.label })).sort((a, b) => (a.at < b.at ? 1 : -1))[0];
   const picker = h("input", { type: "file", accept: ".zip,.json,application/zip", hidden: true, onchange: async () => {
     const file = picker.files[0];
     if (!file) return;
     importBtn.disabled = true; importBtn.textContent = `Uploading ${fmtCompact(file.size)}B…`;
-    const res = await fetch("/api/import/claude-export", { method: "POST", headers: { "X-Chronicle": "1", "Content-Type": "application/octet-stream" }, body: file });
+    const res = await fetch("/api/import", { method: "POST", headers: { "X-Chronicle": "1", "Content-Type": "application/octet-stream", "X-Filename": encodeURIComponent(file.name) }, body: file });
     const r = await res.json().catch(() => ({}));
     importBtn.disabled = false; importBtn.textContent = "Import export…"; picker.value = "";
     if (!r.started) { toast(r.error || "An import is already running"); return; }
-    toast("Importing claude.ai chats…", 5000);
+    toast("Importing chats…", 5000);
     watchJob("import");
   } });
   const importBtn = h("button", { class: "btn primary", type: "button", onclick: () => picker.click() }, "Import export…");
   const importsCard = h("section", { class: "card src-card", style: { marginTop: "16px" } },
-    cardHead("Claude.ai chats", { iconName: "history", hint: "imported from a data export" }),
+    cardHead("Chat exports", { iconName: "history", hint: "claude.ai and ChatGPT" }),
     h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
-      "Chats on claude.ai are not stored on your Mac. Export them at claude.ai › Settings › Privacy › Export data; the email's link downloads a .zip. ",
-      "Import it here, or with ", h("code", null, "chronicle import <zip>"), ". Import newer exports any time: only new and changed chats are added. ",
-      "Imported chats are not analyzed automatically; open one and choose Analyze now."),
+      "Chats on claude.ai and chatgpt.com are not stored on your Mac, so they come in from a data export: claude.ai › Settings › Privacy › Export data, ",
+      "or ChatGPT › Settings › Data controls › Export data. The email's link downloads a .zip; import it here or with ", h("code", null, "chronicle import <zip>"),
+      ". Import newer exports any time: only new and changed chats are added. Imported chats are not analyzed automatically; open one and choose Analyze now."),
     h("div", { class: "src-stats" },
-      h("span", null, h("b", null, fmtNum(ai.sessions)), " chats"),
-      h("span", null, h("b", null, fmtNum(ai.analyzed)), " analyzed"),
+      formats.map((f) => h("span", null, h("b", null, fmtNum(f.sessions)), ` ${f.label} chats`)),
+      h("span", null, h("b", null, fmtNum(formats.reduce((n, f) => n + f.analyzed, 0))), " analyzed"),
       h("span", null, "last import ", h("b", null, last ? ago(last.at) : "never"))),
-    h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, last ? `${last.file}: ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated` : ""),
+    h("div", { class: "src-foot" }, h("span", { class: "muted", style: { fontSize: "12.5px" } }, last ? `${last.file} (${last.label}): ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated` : ""),
       h("div", { style: { display: "flex", gap: "8px" } },
-        ai.sessions ? h("a", { class: "btn", href: "#/sessions?agent=claude-ai" }, "Chats") : null, importBtn, picker)));
+        formats.filter((f) => f.sessions).map((f) => h("a", { class: "btn", href: `#/sessions?agent=${f.agent}` }, f.label)), importBtn, picker)));
   const clientRow = (c) => {
     const btn = h("button", { class: `btn small${c.registered ? "" : " primary"}`, type: "button", disabled: !c.registered && !c.detected,
       onclick: async () => {

@@ -568,20 +568,20 @@ class App:
         return check(remote)
 
     def imports(self) -> dict:
-        from .claude_export import import_status
+        from .chat_import import import_status
 
-        return {"claude_ai": import_status(self.conn)}
+        return import_status(self.conn)
 
-    def action_import(self, upload: Path) -> bool:
-        from .claude_export import import_export, summary
+    def action_import(self, upload: Path, name: str | None = None) -> bool:
+        from .chat_import import import_export, summary
 
         def job(progress):
             conn = connect(self.cfg.db_path)
             try:
-                return summary(import_export(self.cfg, conn, upload, progress=progress))
+                return summary(import_export(self.cfg, conn, upload, progress=progress, name=name))
             finally:
                 conn.close()
-                upload.unlink(missing_ok=True)  # the zip also holds users.json (name, email): not kept
+                upload.unlink(missing_ok=True)  # the zip also holds the account files (name, email): not kept
 
         return self.jobs.start("import", job)
 
@@ -787,11 +787,11 @@ def make_handler(app: App, port: int):
                 return self._json({"error": str(exc)}, 500)
 
         def _import_upload(self):
-            """The claude.ai export .zip, streamed to disk (it can be hundreds of MB), then imported in the background."""
+            """A claude.ai or ChatGPT export .zip, streamed to disk (it can be hundreds of MB), then imported in the background."""
             length = int(self.headers.get("Content-Length") or 0)
             if not length:
                 return self._json({"error": "empty upload"}, 400)
-            dest = app.cfg.home / "imports" / f"claude-export-{int(time.time())}.zip"
+            dest = app.cfg.home / "imports" / f"chat-export-{int(time.time())}.zip"
             dest.parent.mkdir(parents=True, exist_ok=True)
             left = length
             with open(dest, "wb") as f:
@@ -804,7 +804,8 @@ def make_handler(app: App, port: int):
             if left:
                 dest.unlink(missing_ok=True)
                 return self._json({"error": "upload cut off"}, 400)
-            started = app.action_import(dest)
+            name = Path(unquote(self.headers.get("X-Filename") or "")).name or None  # the file's own name, for messages
+            started = app.action_import(dest, name)
             if not started:
                 dest.unlink(missing_ok=True)
             return self._json({"started": started})
@@ -812,7 +813,7 @@ def make_handler(app: App, port: int):
         def _post(self):
             if not self._host_ok() or self.headers.get("X-Chronicle") != "1":
                 return self._json({"error": "forbidden"}, 403)
-            if urlparse(self.path).path == "/api/import/claude-export":
+            if urlparse(self.path).path == "/api/import":
                 return self._import_upload()
             length = int(self.headers.get("Content-Length") or 0)
             body = {}

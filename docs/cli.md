@@ -16,7 +16,7 @@
 | `chronicle export [--full]` | Rewrite the Markdown vault |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage; `--themes` groups big categories into themes for the Map |
 | `chronicle review [2026-W39\|current]` | Weekly engineering review written by Claude (automatic for each completed week) |
-| `chronicle import <zip> [--analyze]` | Import chats from a claude.ai data export (the .zip, its folder, or `conversations.json`); repeatable. See [Sources](sources.md) |
+| `chronicle import <zip> [--analyze]` | Import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or `conversations.json`); repeatable. See [Sources](sources.md) |
 | `chronicle forget <id> [--delete-transcript]` | Remove a session from the vault for good (it is never re-ingested) |
 | `chronicle sources` | Which agents are connected, and how |
 | `chronicle connect <agent>` / `disconnect <agent>` | Start/stop recording `claude`, `codex`, `codex-cloud`, `copilot` or `bob` (data is kept) |

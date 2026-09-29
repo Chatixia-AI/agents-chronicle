@@ -651,7 +651,7 @@ def cmd_sources(args) -> int:
 def cmd_import(args) -> int:
     from pathlib import Path
 
-    from .claude_export import ExportError, import_export, summary
+    from .chat_import import ExportError, import_export, summary
 
     cfg = _cfg()
     conn = _conn(cfg)
@@ -850,7 +850,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("name", choices=agents + clients)
     s.set_defaults(fn=cmd_connect, disconnect=True, exe=None, no_sync=True)
 
-    s = sub.add_parser("import", help="import chats from a claude.ai data export (the .zip, its folder, or conversations.json)")
+    s = sub.add_parser("import", help="import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or conversations.json)")
     s.add_argument("path")
     s.add_argument("--analyze", action="store_true", help="queue the imported chats for analysis (uses your Claude plan)")
     s.set_defaults(fn=cmd_import)

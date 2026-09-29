@@ -8,7 +8,7 @@ transcript. Nothing is sent to Chronicle's authors or any other service, and the
 connection is the update check, only when you click **Check for updates** on the Status page: it asks pypi.org
 for the latest version number and sends nothing about you. If you connect Codex Cloud, each sync also runs the
 `codex cloud` CLI, which fetches your own tasks from OpenAI with your Codex login; nothing is sent the other way.
-Importing a claude.ai export reads only its `conversations.json` and `projects.json`, never `users.json`.
+Importing a claude.ai or ChatGPT export reads only the chats, never the account files (`users.json`, `user.json`).
 
 | Stored locally | Where |
 | --- | --- |

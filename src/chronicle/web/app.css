@@ -654,7 +654,16 @@ mark { background: var(--accent-wash-2); color: inherit; border-radius: 3px; pad
 
 /* ------------------------------------------------------------------ agents & sources */
 .agent-tag { display: inline-block; font-size: 10.5px; font-weight: 600; letter-spacing: 0.03em; text-transform: uppercase;
-  padding: 0 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; border: 1px solid var(--border-strong); color: var(--ink-2); }
+  padding: 0 6px; border-radius: 4px; margin-left: 6px; vertical-align: 1px; border: 1px solid var(--tag-rim, var(--border-strong));
+  color: var(--tag-ink, var(--ink-2)); background: var(--tag-wash, transparent); }
+/* one hue per agent, from the chart palette (so it follows the theme); "recovered" stays neutral */
+.agent-tag[class*=" a-"] { --tag-ink: color-mix(in srgb, var(--c) 78%, var(--ink)); --tag-rim: color-mix(in srgb, var(--c) 45%, transparent);
+  --tag-wash: color-mix(in srgb, var(--c) 10%, transparent); }
+.agent-tag.a-codex { --c: var(--series-3); }
+.agent-tag.a-copilot { --c: var(--series-7); }
+.agent-tag.a-bob { --c: var(--series-1); }
+.agent-tag.a-claude-ai { --c: var(--series-2); }
+.agent-tag.a-chatgpt { --c: var(--series-5); }
 .src-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(460px, 1fr)); gap: 16px; }
 @media (max-width: 760px) { .src-grid { grid-template-columns: 1fr; } }
 .src-card .src-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }

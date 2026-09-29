@@ -1,4 +1,4 @@
-"""Importing a claude.ai data export."""
+"""Importing claude.ai and ChatGPT data exports."""
 
 import copy
 import gzip
@@ -8,11 +8,13 @@ import time
 import urllib.request
 import zipfile
 from http.server import ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
-from chronicle.claude_export import (NOT_ANALYZED, ExportError, import_export, import_status, load_conversations,
-                                     parse_conversation)
+from chronicle.chat_import import CHATGPT, CLAUDE_AI, ExportError, import_export, import_status, read_export
+from chronicle.chatgpt_export import parse_conversation as parse_chatgpt
+from chronicle.claude_export import parse_conversation
 from chronicle.db import connect as db_connect
 
 PROJECT = "11111111-1111-1111-1111-111111111111"
@@ -75,19 +77,24 @@ def test_parse_conversation():
     assert loose.project_path == "claude.ai" and loose.n_prompts == 1 and loose.events[1].text.startswith("It runs")
 
 
-def test_rejects_other_exports():
-    with pytest.raises(ExportError, match="ChatGPT"):
-        load_conversations(json.dumps([{"title": "x", "mapping": {}}]).encode())
+def test_detects_the_format(tmp_path):
+    assert read_export(write_export(tmp_path / "claude.zip")).format is CLAUDE_AI
+    assert read_export(write_chatgpt_export(tmp_path / "chatgpt.zip")).format is CHATGPT
+    (tmp_path / "conversations.json").write_text(json.dumps([{"foo": 1}]))
+    with pytest.raises(ExportError, match="neither"):
+        read_export(tmp_path / "conversations.json")
+    with pytest.raises(ExportError, match="not a chat export"):
+        read_export(Path("/etc/hosts"))
 
 
 def test_import_and_reimport(env):
     cfg = env["cfg"]
     conn = db_connect(cfg.db_path)
     counts = import_export(cfg, conn, write_export(env["tmp"] / "data-2026-05-04.zip"))
-    assert counts == {"conversations": 3, "new": 2, "updated": 0, "unchanged": 0, "empty": 1, "excluded": 0}
+    assert counts == {"format": "claude.ai", "conversations": 3, "new": 2, "updated": 0, "unchanged": 0, "empty": 1, "excluded": 0}
     row = dict(conn.execute("SELECT * FROM sessions WHERE id = ?", (CHAT,)).fetchone())
     assert row["agent"] == "claude-ai" and row["source"] == "claude-ai-export" and row["project_name"] == "Backend"
-    assert row["analysis_status"] == "skipped" and row["analysis_reason"] == NOT_ANALYZED
+    assert row["analysis_status"] == "skipped" and row["analysis_reason"] == CLAUDE_AI.not_analyzed
     archived = list((cfg.archive_dir / "claude-ai").glob("*/*"))
     assert sorted(p.name for p in archived) == ["conversations.json.gz", "projects.json.gz"]  # users.json is not kept
     with gzip.open(archived[0].parent / "conversations.json.gz") as f:
@@ -103,7 +110,7 @@ def test_import_and_reimport(env):
     counts = import_export(cfg, conn, write_export(env["tmp"] / "data-2026-05-06.zip", newer), analyze=True)
     assert counts["updated"] == 1 and counts["unchanged"] == 1
     assert conn.execute("SELECT n_prompts FROM sessions WHERE id = ?", (LOOSE,)).fetchone()[0] == 2
-    status = import_status(conn)
+    status = import_status(conn)["claude-ai"]
     assert status["sessions"] == 2 and status["last_import"]["file"] == "data-2026-05-06.zip"
 
 
@@ -117,7 +124,7 @@ def test_import_from_dashboard_upload(env):
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
     body = write_export(env["tmp"] / "export.zip").read_bytes()
     try:
-        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/import/claude-export", data=body, method="POST",
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/import", data=body, method="POST",
                                      headers={"X-Chronicle": "1", "Content-Type": "application/octet-stream"})
         with urllib.request.urlopen(req, timeout=10) as r:
             assert json.loads(r.read())["started"]
@@ -129,6 +136,92 @@ def test_import_from_dashboard_upload(env):
         assert job["state"] == "done" and "2 new" in job["result"]
         assert not list((env["cfg"].home / "imports").glob("*"))  # the upload is deleted after the import
         with urllib.request.urlopen(f"http://127.0.0.1:{port}/api/imports", timeout=10) as r:
-            assert json.loads(r.read())["claude_ai"]["sessions"] == 2
+            assert json.loads(r.read())["claude-ai"]["sessions"] == 2
     finally:
         httpd.shutdown()
+
+
+# ------------------------------------------------------------------ ChatGPT
+def _node(nid, parent, children, role=None, content=None, t=None, **extra):
+    msg = None if role is None else {"id": nid, "author": {"role": role, **({"name": extra.pop("name")} if "name" in extra else {})},
+                                     "create_time": t, "content": content, "recipient": extra.pop("recipient", "all"),
+                                     "metadata": extra.pop("metadata", {})}
+    return nid, {"id": nid, "message": msg, "parent": parent, "children": children}
+
+
+GPT = {
+    "title": "Plot sine", "create_time": 1746090000.0, "update_time": 1746090100.0, "conversation_id": "gpt-1", "id": "gpt-1",
+    "current_node": "a2", "default_model_slug": "gpt-5",
+    "mapping": dict([
+        _node("root", None, ["sys"]),
+        _node("sys", "root", ["u1"], "system", {"content_type": "text", "parts": [""]},
+              metadata={"is_visually_hidden_from_conversation": True}),
+        _node("u1", "sys", ["a0", "a1"], "user", {"content_type": "multimodal_text", "parts": [
+            {"content_type": "image_asset_pointer", "asset_pointer": "file-service://file-1"}, "Plot sin(x) from this data"]},
+            1746090000.0, metadata={"attachments": [{"name": "data.csv"}]}),
+        _node("a0", "u1", [], "assistant", {"content_type": "text", "parts": ["An answer that was regenerated away"]}, 1746090010.0),
+        _node("a1", "u1", ["c1"], "assistant", {"content_type": "thoughts", "thoughts": [{"summary": "Plan", "content": "Use matplotlib."}]},
+              1746090020.0),
+        _node("c1", "a1", ["t1"], "assistant", {"content_type": "code", "language": "python", "text": "import numpy as np"},
+              1746090030.0, recipient="python"),
+        _node("t1", "c1", ["a2"], "tool", {"content_type": "execution_output", "text": "<Figure size 640x480>"}, 1746090040.0,
+              name="python", metadata={"aggregate_result": {"status": "success"}}),
+        _node("a2", "t1", [], "assistant", {"content_type": "text", "parts": ["Here is the plot."]}, 1746090100.0,
+              metadata={"model_slug": "gpt-5"}),
+    ]),
+}
+
+
+def write_chatgpt_export(path, conversations=None):
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("conversations.json", json.dumps(conversations or [GPT]))
+        z.writestr("user.json", json.dumps({"id": "user-1", "email": "ada@example.com"}))
+        z.writestr("chat.html", "<html></html>")
+    return path
+
+
+def test_parse_chatgpt_follows_the_shown_branch():
+    ps = parse_chatgpt(GPT)
+    assert ps.id == "gpt-1" and ps.custom_title == "Plot sine" and ps.project_path == "chatgpt.com"
+    assert [e.kind for e in ps.events] == ["prompt", "thinking", "tool_use", "tool_result", "text"]
+    assert "regenerated" not in " ".join(e.text for e in ps.events)
+    assert ps.first_prompt.startswith("Plot sin(x) from this data") and "[attached data.csv]" in ps.first_prompt
+    assert "[1 image]" in ps.first_prompt and ps.n_images == 1
+    assert [t.name for t in ps.tool_calls] == ["python"] and not ps.tool_calls[0].is_error
+    assert ps.primary_model == "gpt-5" and ps.started_at.startswith("2025-05-01T09:00:00")
+
+
+def test_import_chatgpt_export(env):
+    cfg = env["cfg"]
+    conn = db_connect(cfg.db_path)
+    counts = import_export(cfg, conn, write_chatgpt_export(env["tmp"] / "chatgpt.zip"))
+    assert counts["format"] == "ChatGPT" and counts["new"] == 1
+    row = dict(conn.execute("SELECT * FROM sessions WHERE id = 'gpt-1'").fetchone())
+    assert row["agent"] == "chatgpt" and row["source"] == "chatgpt-export" and row["project_name"] == "chatgpt.com"
+    assert row["analysis_reason"] == CHATGPT.not_analyzed
+    assert [p.name for p in (cfg.archive_dir / "chatgpt").glob("*/*")] == ["conversations.json.gz"]  # not user.json or chat.html
+    assert import_export(cfg, conn, env["tmp"] / "chatgpt.zip")["unchanged"] == 1
+    assert import_status(conn)["chatgpt"]["sessions"] == 1
+
+
+def test_claude_keeps_the_branch_shown():
+    msg = lambda uid, parent, sender, text, t: {"uuid": uid, "parent_message_uuid": parent, "sender": sender, "text": text,
+                                                 "created_at": f"2026-06-01T10:0{t}:00Z", "content": [{"type": "text", "text": text}]}
+    conv = {"uuid": "fork", "name": "Forked", "created_at": "2026-06-01T10:00:00Z", "updated_at": "2026-06-01T10:05:00Z",
+            "chat_messages": [
+                msg("h1", None, "human", "Name a colour", 0), msg("a1", "h1", "assistant", "Red", 1),
+                msg("h2", "a1", "human", "Another one", 2), msg("a2", "h2", "assistant", "Blue (abandoned retry)", 3),
+                msg("a3", "h2", "assistant", "Green", 4)]}
+    conv["chat_messages"][0]["content"].append({"type": "image", "file_uuid": "img-1"})
+    ps = parse_conversation(conv, {})
+    texts = [e.text for e in ps.events]
+    assert "Green" in texts and not any("abandoned" in t for t in texts) and ps.n_prompts == 2
+    assert ps.n_images == 1 and "[1 image]" in ps.first_prompt
+
+
+def test_projects_zip_is_explained(tmp_path):
+    path = tmp_path / "projects-000.zip"
+    with zipfile.ZipFile(path, "w") as z:
+        z.writestr("projects/0001.json", json.dumps({"uuid": "0001", "name": "Chatixia"}))
+    with pytest.raises(ExportError, match="projects, not chats"):
+        read_export(path, "projects-000.zip")
