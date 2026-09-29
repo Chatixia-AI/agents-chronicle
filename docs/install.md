@@ -1,0 +1,70 @@
+# Install
+
+[← Chronicle](../README.md) · [Docs index](README.md)
+
+Chronicle runs on macOS and needs a logged-in [Claude Code](https://claude.com/claude-code) (`claude`), which does the analysis. There are two ways to run it; both use the same data in `~/.claude-chronicle` and can coexist.
+
+## Desktop app
+
+1. Download `Chronicle-<version>-arm64.dmg` from the
+   [latest release](https://github.com/kayeungadrian-tam/agents-chronicle/releases/latest) (Apple silicon, macOS 13+).
+2. Open it and drag **Chronicle** into **Applications**, then open it from there.
+3. On first launch, choose **Connect** to record Claude Code sessions. This adds the `SessionEnd` hook and the MCP
+   server (as `chronicle connect claude` does) and makes Chronicle open at login.
+
+If macOS says Chronicle "cannot be opened" or "cannot verify the developer", that release was not notarized:
+open **System Settings → Privacy & Security**, click **Open Anyway** next to the Chronicle message, and confirm.
+There is no Intel build yet; on an Intel Mac use the command line install.
+
+Chronicle then lives in the menu bar. It serves the dashboard in its own window and does the 15-minute
+background sync itself, so it needs no launchd agents; closing the window keeps it running. The window has no
+title bar: the sidebar is native macOS glass (it blurs whatever is behind the window) with the traffic lights on
+top of it, and the window moves by its toolbar or the strip above the sidebar. The menu-bar icon has:
+
+| Menu item | |
+| --- | --- |
+| Open Chronicle / Open in Browser | The dashboard, in the app window or your browser |
+| Sync Now | Archive, ingest and analyze now instead of at the next 15-minute run; the line above it shows the last sync |
+| Connect Claude Code… | Shown until Claude Code is connected (if you chose *Not Now* at first launch) |
+| Open at Login | On after connecting; turn it off to run Chronicle only when you open it |
+| Install Command-Line Tool | Links the app's own `chronicle` command into `~/.local/bin` (skipped if one exists) |
+| Open Data Folder | `~/.claude-chronicle` |
+
+Codex, Copilot and Bob are connected from the dashboard's **Sources** page. Hooks and MCP registrations point
+at `~/.claude-chronicle/bin/chronicle`, a small script the app rewrites on every launch, so moving or updating the
+app does not break them. Quitting stops the sync until the next launch; an analysis cut off by quitting runs
+again at the next sync.
+
+To remove Chronicle, run `~/.claude-chronicle/bin/chronicle uninstall` (hooks and MCP
+servers; data is kept), turn off **Open at Login**, and delete the app.
+
+## Command line
+
+```bash
+uv tool install --python 3.13 agents-chronicle   # puts `chronicle` on PATH (~/.local/bin)
+chronicle sync                                   # archive + ingest everything now
+chronicle install                                # hooks, background agents, MCP server
+chronicle connect codex                          # optional: codex, copilot, bob (see Sources)
+```
+
+Needs [uv](https://docs.astral.sh/uv/) (or `pipx install agents-chronicle`). To install from a checkout instead,
+run `uv tool install --python 3.13 .` in it. `chronicle install` does four things (each can be skipped with
+`--no-hooks`, `--no-launchd`, `--no-ui`, `--no-mcp`; preview with `--dry-run`):
+
+| Piece | What it does |
+| --- | --- |
+| `SessionEnd` hook in `~/.claude/settings.json` | Hands the ended transcript to a detached process that archives, ingests and analyzes it. Returns in milliseconds; a backup of `settings.json` is kept in `~/.claude-chronicle/backups/`. |
+| launchd `com.claude-chronicle.sync` | `chronicle sync --work` every 15 minutes: catches anything the hook missed, processes the analysis queue, synthesizes knowledge bases, exports notes. |
+| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:8765/>. |
+| MCP server `chronicle` (user scope) | Lets Claude Code search your past sessions and knowledge. |
+
+Optional: `chronicle install --inject-context` also adds a `SessionStart` hook that gives each new
+session a short digest of the project's knowledge base (off by default; preview it with `chronicle context`).
+
+Remove everything with `chronicle uninstall` (data is kept; `--purge` deletes it too).
+
+To use the desktop app from a command-line install, add the `app` extra and run `chronicle app`:
+`uv tool install --python 3.13 'agents-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`
+first and let the app connect Claude Code, so the launchd agents do not run alongside it (harmless, but redundant).
+
+Something not working? See [Troubleshooting](troubleshooting.md).

@@ -1,0 +1,60 @@
+# Troubleshooting
+
+[← Chronicle](../README.md) · [Docs index](README.md)
+
+Start with `chronicle status` (or **Settings › Status** in the dashboard). It checks the hook, the background
+agents, the MCP server and the `claude` CLI, and lists recent analysis failures. Logs are in
+`~/.claude-chronicle/logs/` (`chronicle.log` for everything, `hooks.log` for session-end hooks).
+
+## Install and the app
+
+**macOS says Chronicle "cannot be opened" or "cannot verify the developer".** That release was not notarized. Open
+**System Settings → Privacy & Security**, click **Open Anyway** next to the Chronicle message, and confirm.
+
+**Status and Sources say *Background sync* is not running, but I use the app.** They only check the launchd agent
+that the command-line install sets up. The app runs its own 15-minute sync; the menu-bar menu shows when it last ran.
+
+**`analysis.backfill = false` does nothing with the app.** The app's Connect step does not record the install date
+that `chronicle install` records, so sessions from before connecting are analyzed too. Run
+`~/.claude-chronicle/bin/chronicle install --no-launchd --no-ui` once: it records the date and reinstalls the hook
+and MCP server.
+
+**The app window can't be dragged.** Drag by the toolbar's empty space or the strip beside the traffic lights;
+buttons and links in the toolbar only click. From source, run `uv run --extra app chronicle app` with a current
+checkout.
+
+**The menu bar says "python3" instead of Chronicle.** Only when running the app from source with an old checkout;
+the DMG build always shows Chronicle.
+
+**The dashboard isn't at :8765.** The app uses a free port when 8765 is taken (for example by the command-line
+install's dashboard agent). **Open in Browser** in the menu-bar menu opens the right one.
+
+## Recording
+
+**New sessions don't show up.** Claude Code sessions arrive through the `SessionEnd` hook within seconds, and
+everything else with the 15-minute sync. Check `chronicle status` for the hook, then run `chronicle sync` to pick
+things up now. Codex has no session-end hook, so its sessions appear once they have been idle for a while.
+
+**Old Claude Code sessions are missing.** Claude Code deletes transcripts after 30 days. Chronicle keeps everything
+it has seen, and recovers prompts (only) of older sessions from `~/.claude/history.jsonl`, marked *history*.
+
+**A project I don't want recorded.** Add a glob to `sources.exclude_projects` in the config, or remove a session for
+good with `chronicle forget <id>`.
+
+## Analysis
+
+**Nothing gets analyzed.** Analysis needs the `claude` CLI to be logged in. `chronicle status` shows where it found
+`claude`; the app reads your login shell's PATH, so a `claude` installed with npm or Homebrew is found too. A
+session is analyzed once it ends or has been idle for `analysis.idle_minutes`.
+
+**Analysis stopped with "usage limit".** Chronicle pauses analysis for an hour when Claude reports a usage limit or
+an auth error, and resumes by itself. Other failures back off (30 min, 2 h, 8 h). **Analyze now** on a session
+page retries at once.
+
+**I want to see what a backlog would cost first.** `chronicle analyze --pending --dry-run` sizes the queue without
+spending tokens; `analysis.max_budget_usd` caps each call, and `analysis.auto = false` stops automatic analysis.
+
+## Starting over
+
+`chronicle uninstall` removes the hooks, background agents and MCP registrations and keeps your data;
+`chronicle uninstall --purge` deletes the data too. With the app, also turn off **Open at Login** and delete it.
