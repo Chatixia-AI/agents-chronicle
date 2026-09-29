@@ -12,12 +12,12 @@
 | `chronicle search <words>` | トランスクリプトとナレッジの全文検索（言語を問わず、3 文字以上） |
 | `chronicle knowledge [query] [-k gotcha] [-p project]` | 抽出されたナレッジの閲覧 |
 | `chronicle projects` / `chronicle stats [--since 30d]` | プロジェクト別と全体の統計 |
-| `chronicle analyze <id> \| --pending [--limit N] [--dry-run]` | 今すぐ分析（`--dry-run` は要約のサイズを表示するだけで、トークンを使いません） |
+| `chronicle analyze <id> \| --pending [--limit N] [--dry-run] [--backend codex]` | 今すぐ分析（`--dry-run` は要約のサイズを表示するだけで、トークンを使いません。`--backend` はこの実行だけで使うエージェントを選びます） |
 | `chronicle synthesize [--project P] [--global] [--all]` | ナレッジベースを再構築 |
 | `chronicle export [--full]` | Markdown 保管庫を書き直す |
 | `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | セッションを書き出す：1 件なら 1 ファイル、複数なら .zip（`raw` は元のトランスクリプト） |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | あなたの語彙：社内名称、略語、業務用語と、その定義と使われ方。`--themes` で大きいカテゴリをマップ用のテーマに分けます |
-| `chronicle review [2026-W39\|current]` | Claude が書く週次の振り返り（週が終わるたびに自動作成） |
+| `chronicle review [2026-W39\|current]` | 分析モデルが書く週次の振り返り（週が終わるたびに自動作成） |
 | `chronicle import <zip> [--analyze]` | claude.ai または ChatGPT のデータエクスポート（.zip、展開したフォルダー、`conversations.json`）からチャットを取り込み（繰り返し可）。[ソース](sources.md)を参照 |
 | `chronicle forget <id> [--delete-transcript]` | セッションを保管庫から完全に削除（再取り込みされません） |
 | `chronicle sources` | 接続中のエージェントと、その記録方法 |
@@ -26,6 +26,7 @@
 | `chronicle mcp [--print-config]` | MCP サーバーを実行（クライアントが起動します）、またはほかの MCP クライアント用の設定項目を出力 |
 | `chronicle status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |
+| `chronicle config set <section.key> <value>` | 設定を 1 つ変更。例：`chronicle config set analysis.backend codex`（[設定](configuration.md)） |
 
 ## その他の使い方
 

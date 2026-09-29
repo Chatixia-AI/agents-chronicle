@@ -1,4 +1,4 @@
-"""Per-session analysis: overview + knowledge extraction with Claude (map-reduce for long sessions)."""
+"""Per-session analysis: overview + knowledge extraction by the analysis model (map-reduce for long sessions)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from datetime import timedelta
 from .config import Config
 from .digest import build_digest
 from .ingest import best_title
-from .llm import BudgetExceededError, ClaudeRunner, LLMError, LLMResult, SleepInterruptedError, UsageLimitError
+from .llm import BudgetExceededError, LLMError, LLMResult, Runner, SleepInterruptedError, UsageLimitError, make_runner
 from .redact import redact
 from .util import dumps, fingerprint, to_iso, utcnow, utcnow_iso
 
@@ -223,10 +223,10 @@ def _log_run(conn, kind: str, target: str, res: LLMResult | None, *, status: str
     conn.commit()  # never hold a write transaction open across the next (minutes-long) Claude call
 
 
-def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runner: ClaudeRunner | None = None,
+def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runner: Runner | None = None,
                     *, model: str | None = None) -> dict:
     """Analyze one session and store the overview + knowledge. Raises LLM errors after recording them."""
-    runner = runner or ClaudeRunner(cfg)
+    runner = runner or make_runner(cfg)
     s = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
     if s is None:
         raise KeyError(session_id)

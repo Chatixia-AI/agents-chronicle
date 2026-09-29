@@ -1,4 +1,4 @@
-"""Periodic (weekly) reviews: Claude writes an engineering review of a week's sessions."""
+"""Periodic (weekly) reviews: the analysis model writes an engineering review of a week's sessions."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ import sqlite3
 from datetime import date, datetime, time, timedelta
 
 from .config import Config
-from .llm import ClaudeRunner
+from .llm import Runner, make_runner
 from .util import dumps, human_cost, human_count, human_duration, loads, one_line, to_iso, utcnow_iso
 
 log = logging.getLogger("chronicle.reviews")
@@ -124,8 +124,8 @@ def review_ready(conn, key: str | None = None) -> tuple[bool, str]:
     return True, key
 
 
-def generate_review(conn: sqlite3.Connection, cfg: Config, key: str | None = None, runner: ClaudeRunner | None = None) -> dict:
-    runner = runner or ClaudeRunner(cfg)
+def generate_review(conn: sqlite3.Connection, cfg: Config, key: str | None = None, runner: Runner | None = None) -> dict:
+    runner = runner or make_runner(cfg)
     key, start, end = week_bounds(key)
     since, until = to_iso(start), to_iso(end)
     stats = _stats(conn, since, until)

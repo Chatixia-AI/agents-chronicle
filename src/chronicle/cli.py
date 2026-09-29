@@ -138,6 +138,11 @@ def cmd_analyze(args) -> int:
     if not ids:
         print("nothing to analyze (use SESSION ids, --pending or --all)")
         return 0
+    from .llm import make_runner
+
+    if args.backend:
+        cfg.analysis.backend = args.backend
+    runner = make_runner(cfg)
     if args.dry_run:
         from .digest import build_digest
 
@@ -146,12 +151,13 @@ def cmd_analyze(args) -> int:
             header, d = build_digest(conn, sid, cfg.analysis.chunk_chars)
             total += d.chars
             print(f"{sid[:8]}  level {d.level}  {d.chars:>9,} chars  {len(d.chunks)} chunk(s)")
-        print(f"{len(ids)} session(s), {total:,} chars (~{total // 4:,} input tokens) with model {args.model or cfg.analysis.model}")
+        print(f"{len(ids)} session(s), {total:,} chars (~{total // 4:,} input tokens) with {runner.label} "
+              f"({runner.model_label(args.model)})")
         return 0
     conn.close()
     if args.concurrency:
         cfg.analysis.concurrency = args.concurrency
-    print(f"analyzing {len(ids)} session(s) with {args.model or cfg.analysis.model}…")
+    print(f"analyzing {len(ids)} session(s) with {runner.label} ({runner.model_label(args.model)})…")
     report = run_worker(cfg, session_ids=ids, model=args.model, synthesize=not args.no_synthesize, force=True, wait=True,
                         progress=lambda m: print(f"  {m}"))
     print(f"{report.summary()} · analysis cost {human_cost(report.cost_usd)}")
@@ -376,6 +382,7 @@ def cmd_stats(args) -> int:
 def cmd_status(args) -> int:
     from .db import kv_get
     from .install import UI_LABEL, hooks_installed, launchd_status, mcp_registered
+    from .llm import make_runner
     from .util import human_cost, local_str
     from .worker import PAUSE_KEY, count_pending
 
@@ -394,10 +401,12 @@ def cmd_status(args) -> int:
     ui = launchd_status(UI_LABEL)
     console.print(f"  {ok(ld.get('loaded'))} background sync agent (runs: {ld.get('runs', '-')}, last exit: {ld.get('last_exit', '-')})")
     console.print(f"  {ok(ui.get('loaded'))} dashboard agent: http://127.0.0.1:{cfg.server_port}/")
-    console.print(f"  {ok(mcp_registered())} MCP server registered   {ok(cfg.claude_bin())} claude CLI: {cfg.claude_bin() or 'not found'}")
+    runner = make_runner(cfg)
+    console.print(f"  {ok(mcp_registered())} MCP server registered   {ok(runner.available())} analysis by {runner.label}: "
+                  f"{runner.bin or f'`{runner.cli.split()[0]}` not found'}")
     console.print(f"  sessions: {sum(counts.values())} · " + " · ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
     console.print(f"  analysis queue: {pending['ready']} ready now, {pending['queued']} pending/stale · "
-                  f"model {cfg.analysis.model} · auto={'on' if cfg.analysis.auto else 'off'} · spent {human_cost(spent)}")
+                  f"model {runner.model_label()} · auto={'on' if cfg.analysis.auto else 'off'} · spent {human_cost(spent)}")
     paused = kv_get(conn, PAUSE_KEY)
     if paused:
         console.print(f"  analysis paused until {local_str(paused)}")
@@ -486,11 +495,7 @@ def cmd_install(args) -> int:
     ask = _ask if interactive else (lambda _q, default: default)
 
     console.print("[bold]Chronicle setup[/]\n")
-    claude_bin = cfg.claude_bin()
-    if not claude_bin:
-        console.print("[yellow]Claude Code (`claude`) was not found.[/] Chronicle uses your Claude Code login to analyze "
-                      "sessions; until you install it (https://claude.com/claude-code) and sign in, sessions are recorded "
-                      "but not analyzed.\n", highlight=False)
+    analyzer = _choose_analyzer(cfg, console, ask=ask, dry_run=args.dry_run)
     if " -m " in exe:
         console.print(f"[yellow]`chronicle` is not on PATH[/]; hooks will run `{exe}`. "
                       "`uv tool install agents-chronicle` gives it a stable path.\n", highlight=False)
@@ -560,8 +565,8 @@ def cmd_install(args) -> int:
     ui_running = any(a.startswith("dashboard always available") for a in background)
     console.print("\n[bold green]Done.[/]" + (" Nothing is recorded yet: connect an agent any time with "
                                               "`chronicle connect <name>`." if not picked else ""))
-    if picked and claude_bin and cfg.analysis.auto and background_on:
-        console.print("Past sessions are analyzed in the background, a few at a time, through your Claude Code "
+    if picked and analyzer and cfg.analysis.auto and background_on:
+        console.print(f"Past sessions are analyzed in the background, a few at a time, through your {analyzer.label} "
                       "login (this counts toward your plan's usage).", highlight=False)
     if not background_on:
         hooked = "claude" in picked and not args.no_hooks
@@ -580,6 +585,38 @@ def cmd_install(args) -> int:
         console.print(f"Dashboard: run [bold]chronicle ui --open[/] (serves {url} while it runs)", highlight=False)
     console.print(f"[dim]More: chronicle sources · chronicle status · config {cfg.config_path}[/]", highlight=False, soft_wrap=True)
     return 0
+
+
+def _analyzer(cfg) -> str:
+    from .llm import make_runner
+
+    return make_runner(cfg).label
+
+
+def _choose_analyzer(cfg, console, *, ask, dry_run: bool):
+    """Settle which agent analyzes sessions; return its runner, or None when it is not installed."""
+    from .llm import BACKENDS, make_runner
+
+    runner = make_runner(cfg)
+    other = "codex" if runner.name == "claude" else "claude"
+    other_found = bool(cfg.codex_bin() if other == "codex" else cfg.claude_bin())
+    if runner.available():
+        if other_found:
+            console.print(f"Sessions are analyzed with {runner.label}. To use {BACKENDS[other]} instead: Status › "
+                          f"Analysis in the dashboard, or `chronicle config set analysis.backend {other}`.\n",
+                          highlight=False)
+        return runner
+    missing = f"{runner.label} (`{runner.cli.split()[0]}`) was not found."
+    if other_found and ask(f"{missing} Analyze sessions with {BACKENDS[other]} instead, through your "
+                           f"{BACKENDS[other]} login?", True):
+        if not dry_run:
+            _set_config_value(cfg, "analysis", "backend", json.dumps(other))
+        cfg.analysis.backend = other
+        return make_runner(cfg)
+    console.print(f"[yellow]{missing}[/] Chronicle analyzes sessions through your own Claude Code or Codex login; "
+                  "until one is installed and signed in (and chosen as analysis.backend), sessions are recorded but "
+                  "not analyzed.\n", highlight=False)
+    return None
 
 
 def _set_config_value(cfg, section: str, key: str, value: str) -> None:
@@ -687,6 +724,8 @@ def cmd_config(args) -> int:
     import subprocess
 
     cfg = _cfg()
+    if args.action == "set":
+        return _config_set(cfg, args.key, args.value)
     if args.action == "path":
         print(cfg.config_path)
     elif args.action == "edit":
@@ -694,6 +733,41 @@ def cmd_config(args) -> int:
         subprocess.call([*editor.split(), str(cfg.config_path)])
     else:
         print(cfg.config_path.read_text())
+    return 0
+
+
+def _config_set(cfg, key: str | None, value: str | None) -> int:
+    """`chronicle config set section.key value`: the value is TOML, or a bare word taken as a string."""
+    import tomllib
+
+    from .config import load_config, set_config_value
+    from .llm import BACKENDS
+
+    if not key or value is None or "." not in key:
+        print("usage: chronicle config set SECTION.KEY VALUE   (e.g. chronicle config set analysis.backend codex)",
+              file=sys.stderr)
+        return 2
+    section, name = key.split(".", 1)
+    try:
+        tomllib.loads(f"v = {value}")
+        literal = value
+    except tomllib.TOMLDecodeError:
+        literal = json.dumps(value)  # a bare word: a TOML basic string
+    if key == "analysis.backend" and tomllib.loads(f"v = {literal}")["v"] not in BACKENDS:
+        print(f"analysis.backend must be one of: {', '.join(BACKENDS)}", file=sys.stderr)
+        return 2
+    try:
+        set_config_value(cfg, section, name, literal)
+    except tomllib.TOMLDecodeError as exc:
+        print(f"not changed: {exc}", file=sys.stderr)
+        return 2
+    print(f"[{section}] {name} = {literal}")
+    if key == "analysis.backend":
+        from .llm import make_runner
+
+        runner = make_runner(load_config(cfg.home))
+        if not runner.available():
+            print(f"note: `{runner.cli.split()[0]}` was not found; analysis waits until it is installed and signed in")
     return 0
 
 
@@ -739,7 +813,7 @@ def cmd_glossary(args) -> int:
         if not due:
             print("themes are up to date (use --force to regroup anyway)")
             return 0
-        print(f"grouping {len(due)} categor{'y' if len(due) == 1 else 'ies'} into themes with Claude…")
+        print(f"grouping {len(due)} categor{'y' if len(due) == 1 else 'ies'} into themes with {_analyzer(cfg)}…")
         results = build_themes(cfg, due, concurrency=cfg.analysis.concurrency + 1, progress=lambda m: print(f"  {m}"))
         print(f"done: {sum(1 for v in results.values() if isinstance(v, int))}/{len(due)} categories grouped")
         return 0 if all(isinstance(v, int) for v in results.values()) else 1
@@ -751,7 +825,7 @@ def cmd_glossary(args) -> int:
             print("use --rebuild with -p PROJECT or --all")
             return 2
         conn.close()
-        print(f"building {len(targets)} glossar{'y' if len(targets) == 1 else 'ies'} with Claude…")
+        print(f"building {len(targets)} glossar{'y' if len(targets) == 1 else 'ies'} with {_analyzer(cfg)}…")
         results = build_glossaries(cfg, targets, concurrency=cfg.analysis.concurrency + 1, progress=lambda m: print(f"  {m}"))
         ok = sum(1 for v in results.values() if isinstance(v, int))
         print(f"done: {ok}/{len(targets)} built, {sum(v for v in results.values() if isinstance(v, int))} terms")
@@ -790,7 +864,7 @@ def cmd_review(args) -> int:
     if row and not args.regenerate:
         _console().print(Markdown(row[0]))
         return 0
-    print(f"writing review for {key} with Claude…")
+    print(f"writing review for {key} with {_analyzer(cfg)}…")
     try:
         generate_review(conn, cfg, key)
     except ValueError as exc:
@@ -930,8 +1004,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--model")
     s.add_argument("--force", action="store_true")
     s.add_argument("--no-synthesize", action="store_true")
-    s.add_argument("--dry-run", action="store_true", help="show digest sizes instead of calling Claude")
-    s.add_argument("--concurrency", type=int, help="parallel claude processes for this run")
+    s.add_argument("--backend", choices=["claude", "codex"], help="analyze with this agent for this run only")
+    s.add_argument("--dry-run", action="store_true", help="show digest sizes instead of calling the model")
+    s.add_argument("--concurrency", type=int, help="parallel analysis processes for this run")
     s.set_defaults(fn=cmd_analyze)
 
     s = sub.add_parser("synthesize", help="rebuild project knowledge bases")
@@ -1000,13 +1075,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("term", nargs="?")
     s.add_argument("-p", "--project")
     s.add_argument("-c", "--category")
-    s.add_argument("--rebuild", action="store_true", help="rebuild with Claude (-p PROJECT or --all)")
+    s.add_argument("--rebuild", action="store_true", help="rebuild with the analysis model (-p PROJECT or --all)")
     s.add_argument("--all", action="store_true")
-    s.add_argument("--themes", action="store_true", help="group big categories into themes with Claude (the Map's Theme level)")
+    s.add_argument("--themes", action="store_true", help="group big categories into themes with the analysis model (the Map's Theme level)")
     s.add_argument("--force", action="store_true", help="with --themes: regroup categories that have not changed")
     s.set_defaults(fn=cmd_glossary)
 
-    s = sub.add_parser("review", help="weekly engineering review written by Claude (default: last completed week)")
+    s = sub.add_parser("review", help="weekly engineering review written by the analysis model (default: last completed week)")
     s.add_argument("week", nargs="?", help="ISO week like 2026-W39, 'current' or 'last'")
     s.add_argument("--regenerate", action="store_true")
     s.set_defaults(fn=cmd_review)
@@ -1043,7 +1118,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_context)
 
     s = sub.add_parser("config", help="show or edit config.toml")
-    s.add_argument("action", nargs="?", choices=["show", "path", "edit"], default="show")
+    s.add_argument("action", nargs="?", choices=["show", "path", "edit", "set"], default="show")
+    s.add_argument("key", nargs="?", help="with set: SECTION.KEY, e.g. analysis.backend")
+    s.add_argument("value", nargs="?", help="with set: the value (TOML, or a bare word)")
     s.set_defaults(fn=cmd_config)
 
     s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install` and `connect`")

@@ -8,7 +8,7 @@ import re
 import sqlite3
 
 from .config import Config
-from .llm import ClaudeRunner
+from .llm import Runner, make_runner
 from .synthesize import GLOBAL, kb_sections
 from .util import dumps, loads, one_line, safe_text, truncate, utcnow_iso
 
@@ -142,10 +142,10 @@ def _material(conn: sqlite3.Connection, project_path: str) -> tuple[str, list[in
     return "\n\n".join(parts), [k["id"] for k in items]
 
 
-def build_glossary(conn: sqlite3.Connection, cfg: Config, project_path: str, runner: ClaudeRunner | None = None) -> int:
+def build_glossary(conn: sqlite3.Connection, cfg: Config, project_path: str, runner: Runner | None = None) -> int:
     """(Re)build one project's glossary contribution (or the cross-project one for GLOBAL). Returns #terms."""
     material, ids = _material(conn, project_path)
-    return _store(conn, project_path, *_generate(cfg, project_path, material, ids, runner or ClaudeRunner(cfg)))
+    return _store(conn, project_path, *_generate(cfg, project_path, material, ids, runner or make_runner(cfg)))
 
 
 def build_glossaries(cfg: Config, paths: list[str], *, concurrency: int = 3, progress=None) -> dict[str, int | str]:
@@ -155,7 +155,7 @@ def build_glossaries(cfg: Config, paths: list[str], *, concurrency: int = 3, pro
     from .db import connect
 
     conn = connect(cfg.db_path)
-    runner = ClaudeRunner(cfg)
+    runner = make_runner(cfg)
     results: dict[str, int | str] = {}
     try:
         inputs = {}
@@ -182,7 +182,7 @@ def build_glossaries(cfg: Config, paths: list[str], *, concurrency: int = 3, pro
     return results
 
 
-def _generate(cfg: Config, project_path: str, material: str, ids: list[int], runner: ClaudeRunner):
+def _generate(cfg: Config, project_path: str, material: str, ids: list[int], runner: Runner):
     if not ids:
         raise ValueError(f"no knowledge to build a glossary from for {project_path}")
     is_global = project_path == GLOBAL
@@ -378,7 +378,7 @@ def _theme_material(rows) -> str:
         "definition": truncate(r["definition"] or "", 200)}, ensure_ascii=False) for r in rows) + "\n</terms>"
 
 
-def _generate_themes(cfg: Config, category: str, rows, runner: ClaudeRunner):
+def _generate_themes(cfg: Config, category: str, rows, runner: Runner):
     prompt = f"<category>{category}</category>\n\n{_theme_material(rows)}\n\nGroup the terms into themes."
     return runner.run(prompt, THEMES_SCHEMA, system=THEMES_SYSTEM, model=cfg.synthesis.model)
 
@@ -434,7 +434,7 @@ def build_themes(cfg: Config, categories: list[str] | None = None, *, force: boo
     from .db import connect
 
     conn = connect(cfg.db_path)
-    runner = ClaudeRunner(cfg)
+    runner = make_runner(cfg)
     results: dict[str, int | str] = {}
     try:
         due = categories if categories is not None else themes_due(conn, force=force)

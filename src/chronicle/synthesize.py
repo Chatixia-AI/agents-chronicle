@@ -8,7 +8,7 @@ import logging
 import sqlite3
 
 from .config import Config
-from .llm import ClaudeRunner
+from .llm import Runner, make_runner
 from .util import dumps, local_str, loads, one_line, truncate, utcnow_iso
 
 log = logging.getLogger("chronicle.synthesize")
@@ -150,8 +150,8 @@ def global_needs_synthesis(conn: sqlite3.Connection, cfg: Config) -> bool:
     return n >= max(cfg.synthesis.min_new_items, 5)
 
 
-def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str, runner: ClaudeRunner | None = None) -> dict:
-    runner = runner or ClaudeRunner(cfg)
+def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str, runner: Runner | None = None) -> dict:
+    runner = runner or make_runner(cfg)
     is_global = project_path == GLOBAL
     if is_global:
         items = [dict(r) for r in conn.execute(

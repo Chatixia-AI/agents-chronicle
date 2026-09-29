@@ -47,7 +47,7 @@ the entry. Every chart has a table view; light and dark themes.
 
 ## Glossary
 
-built by Claude from each project's distilled knowledge (not the raw transcripts), one call per
+built by the analysis model from each project's distilled knowledge (not the raw transcripts), one call per
 project plus a cross-project pass, refreshed whenever a project's knowledge base is re-synthesized. Each term has
 a category, aliases (abbreviations, translations of Japanese business terms), a definition, a per-project usage
 note, related terms, and full-text statistics: how many sessions mention it, first and last seen, top sessions.
@@ -78,9 +78,9 @@ on the map (*on the map →*).
 
 ## Themes
 
-Claude splits each glossary category with 25 or more terms into 4–10 named themes (for example concept →
-"Cloud infra, auth & integrations", "Agent dev workflow & tooling"), one `claude -p` call per category, so no level of
+The analysis model splits each glossary category with 25 or more terms into 4–10 named themes (for example concept →
+"Cloud infra, auth & integrations", "Agent dev workflow & tooling"), one call per category, so no level of
 the map is a long list. Themes are rebuilt after glossary rebuilds, only for categories whose terms changed; terms
 added since then show as *Not grouped yet*. Run it by hand with `chronicle glossary --themes [--force]` or the
-**Group with Claude** button in the map's side panel. On a 1,360-term glossary, the ten big categories cost about
+**Group into themes** button in the map's side panel. On a 1,360-term glossary, the ten big categories cost about
 $1.40 API-equivalent in total.

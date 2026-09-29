@@ -12,12 +12,12 @@
 | `chronicle search <words>` | Full-text search over transcripts + knowledge (any language, 3+ chars) |
 | `chronicle knowledge [query] [-k gotcha] [-p project]` | Browse extracted knowledge |
 | `chronicle projects` / `chronicle stats [--since 30d]` | Per-project and overall statistics |
-| `chronicle analyze <id> \| --pending [--limit N] [--dry-run]` | Analyze now (`--dry-run` shows digest sizes, no tokens spent) |
+| `chronicle analyze <id> \| --pending [--limit N] [--dry-run] [--backend codex]` | Analyze now (`--dry-run` shows digest sizes, no tokens spent; `--backend` picks the agent for this run only) |
 | `chronicle synthesize [--project P] [--global] [--all]` | Rebuild knowledge bases |
 | `chronicle export [--full]` | Rewrite the Markdown vault |
 | `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | Export sessions: one file, or a .zip of several (`raw`: the original transcript) |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage; `--themes` groups big categories into themes for the Map |
-| `chronicle review [2026-W39\|current]` | Weekly engineering review written by Claude (automatic for each completed week) |
+| `chronicle review [2026-W39\|current]` | Weekly engineering review written by the analysis model (automatic for each completed week) |
 | `chronicle import <zip> [--analyze]` | Import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or `conversations.json`); repeatable. See [Sources](sources.md) |
 | `chronicle forget <id> [--delete-transcript]` | Remove a session from the vault for good (it is never re-ingested) |
 | `chronicle sources` | Which agents are connected, and how |
@@ -26,6 +26,7 @@
 | `chronicle mcp [--print-config]` | Run the MCP server (clients start it), or print a config entry for any other MCP client |
 | `chronicle status` | Health: hooks, agents, MCP, queue, failures |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
+| `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` ([Configuration](configuration.md)) |
 
 ## Other ways in
 

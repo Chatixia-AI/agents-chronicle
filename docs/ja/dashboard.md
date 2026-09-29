@@ -43,7 +43,7 @@ macOS 以外では ⌘ の代わりに Ctrl を使います。macOS アプリで
 
 ## 用語集
 
-生のトランスクリプトではなく、各プロジェクトから抽出されたナレッジをもとに Claude が作成します。プロジェクトごとに 1 回の
+生のトランスクリプトではなく、各プロジェクトから抽出されたナレッジをもとに分析モデルが作成します。プロジェクトごとに 1 回の
 呼び出しと、プロジェクト横断の 1 回の処理で作られ、プロジェクトのナレッジベースが再統合されるたびに更新されます。各用語には、
 カテゴリ、別名（略語や日本語の業務用語の訳など）、定義、プロジェクトごとの使われ方、関連用語、全文検索による統計（言及したセッション数、
 最初と最後に見た日、言及の多いセッション）があります。
@@ -71,8 +71,8 @@ Project › Category › Theme、Category › Project、Agent › Category › T
 
 ## テーマ
 
-用語が 25 以上あるカテゴリは、Claude が 4〜10 個の名前付きテーマに分けます（例：concept →
-「Cloud infra, auth & integrations」「Agent dev workflow & tooling」）。カテゴリごとに `claude -p` を 1 回呼び出すので、マップのどの階層も
+用語が 25 以上あるカテゴリは、分析モデルが 4〜10 個の名前付きテーマに分けます（例：concept →
+「Cloud infra, auth & integrations」「Agent dev workflow & tooling」）。カテゴリごとに 1 回呼び出すので、マップのどの階層も
 長い一覧になりません。テーマは用語集の再構築後に、用語が変わったカテゴリだけ作り直されます。それまでに追加された用語は
-*Not grouped yet* と表示されます。手動では `chronicle glossary --themes [--force]`、またはマップのサイドパネルの **Group with Claude**
+*Not grouped yet* と表示されます。手動では `chronicle glossary --themes [--force]`、またはマップのサイドパネルの **Group into themes**
 ボタンで実行できます。用語数 1,360 の用語集では、大きい 10 カテゴリの合計が API 定価換算で約 $1.40 でした。

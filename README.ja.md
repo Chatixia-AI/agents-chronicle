@@ -16,7 +16,7 @@ Claude Code、Codex、GitHub Copilot、IBM Bob のセッションと claude.ai�
 
 コーディングエージェントは一日中問題を解決しますが、その教訓はすぐに消えてしまいます。Claude Code はトランスクリプトを
 30 日で削除し、あるセッションで見つけた修正が次のセッションに引き継がれることもありません。Chronicle はすべてのセッションを
-保存し、Claude Code 自身を使って学んだことを取り出し、ダッシュボードであなたに、MCP サーバー経由でエージェントに返します。
+保存し、Claude Code または Codex を使って学んだことを取り出し、ダッシュボードであなたに、MCP サーバー経由でエージェントに返します。
 
 ![Chronicle のセッションページ：1 行にまとまったツール呼び出しを含む会話、そこから抽出したナレッジ、プロンプトのアウトライン](docs/images/session.png)
 
@@ -43,7 +43,8 @@ Chronicle は終わったセッションを読み、残す価値のあること�
 
 ## クイックスタート
 
-macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/claude-code)（分析を担当）が必要です。
+macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/claude-code) または [Codex](https://github.com/openai/codex)
+（分析を担当）が必要です。
 
 1. **インストール。**
 
@@ -75,7 +76,7 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
 | IBM Bob | `~/.bob/db/bob.db`（読み取り専用） | 15 分ごと | ✅ |
 | claude.ai、ChatGPT | データエクスポート：`chronicle import <zip>` | 取り込んだとき | – |
 
-すべて同じダッシュボード、ナレッジ、用語集、MCP ツールを共有します。分析は常に Claude Code で行います。
+すべて同じダッシュボード、ナレッジ、用語集、MCP ツールを共有します。分析は Claude Code と Codex のうち、選んだほうで行います。
 詳しくは[ソース](docs/ja/sources.md)を参照してください。
 
 ## もう少し詳しく
@@ -89,21 +90,22 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
 
 ## 仕組み
 
-![Chronicle の仕組み：ソース、アーカイブ、解析、SQLite、claude -p による分析、ナレッジ、そしてダッシュボード・保管庫・CLI・MCP サーバー](docs/diagrams/architecture.excalidraw.svg)
+![Chronicle の仕組み：ソース、アーカイブ、解析、SQLite、claude -p または codex exec による分析、ナレッジ、そしてダッシュボード・保管庫・CLI・MCP サーバー](docs/diagrams/architecture.excalidraw.svg)
 
 1. フック（または 15 分ごとの同期）が終わったセッションを Chronicle に渡し、Chronicle は元のトランスクリプトを保管して
    解析します：プロンプト、応答、ツール呼び出し、ファイル、トークン、コスト。
-2. セッションがアイドルになると、秘密情報を伏せた要約版のダイジェストが `claude -p` に送られ、要約とナレッジ項目が
-   返ってきます。この呼び出しはサンドボックス内で動き、ツール、フック、MCP サーバーは使いません。
+2. セッションがアイドルになると、秘密情報を伏せた要約版のダイジェストが、選んだほうの Claude Code（`claude -p`）または
+   Codex（`codex exec`）に送られ、要約とナレッジ項目が返ってきます。この呼び出しはサンドボックス内で動き、ツール、フック、
+   MCP サーバーは使いません。
 3. 新しいナレッジはプロジェクトのナレッジベースにまとめられ、用語集が更新され、終わった週ごとに振り返りが書かれます。
 4. すべてがあなた（ダッシュボード、アプリ、保管庫、CLI）とエージェント（MCP）に提供されます。
 
-**マシンの外に出るもの：** その伏せ字済みのダイジェストだけで、あなた自身の Claude Code のログインを通じて Claude に
-送られます。テレメトリはなく、ほかの誰にも何も送りません。何がどこに保存されるかは[データとプライバシー](docs/ja/privacy.md)に
+**マシンの外に出るもの：** その伏せ字済みのダイジェストだけで、あなた自身の Claude Code または Codex のログインを通じて
+Anthropic または OpenAI に送られます。テレメトリはなく、ほかの誰にも何も送りません。何がどこに保存されるかは[データとプライバシー](docs/ja/privacy.md)に
 あります。
 
-**費用：** 分析は、ほかの Claude Code の利用と同じように Claude のプランから使われます。API 換算では Sonnet で 1 セッション
-あたり平均約 $0.38 です。`chronicle analyze --pending --dry-run` で、使う前にたまった分の規模を確認できます。
+**費用：** 分析は、そのエージェントのほかの利用と同じように Claude または ChatGPT のプランから使われます。Claude の場合、
+API 換算では Sonnet で 1 セッションあたり平均約 $0.38 です。`chronicle analyze --pending --dry-run` で、使う前にたまった分の規模を確認できます。
 詳しくは[分析の仕組み](docs/ja/analysis.md)を参照してください。
 
 ## よくある質問
@@ -111,8 +113,9 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
 **エージェントが遅くならない？** なりません。セッション終了フックは切り離したプロセスに処理を渡し、数ミリ秒で戻ります。
 分析はあとでバックグラウンドで行います。
 
-**Claude Code がなくても使える？** 記録と閲覧は、接続したすべてのエージェントで使えます。要約とナレッジには、ログイン済みの
-`claude` が必要です。ない場合、セッションは保管され、分析待ちの列で待ちます。
+**Claude Code は必須？** いいえ。分析は Claude Code と Codex のどちらでも行えます。**Status › Analysis** または
+`chronicle config set analysis.backend codex` で選びます。記録と閲覧はどちらでも使えます。どちらにもログインしていない場合、
+セッションは保管され、分析待ちの列で待ちます。
 
 **Windows や Linux は？** まだです。アプリとバックグラウンドのエージェントは macOS 専用です。
 

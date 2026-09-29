@@ -23,15 +23,17 @@
 | キー | 既定値 | |
 | --- | --- | --- |
 | `auto` | `true` | アイドルになったセッションを自動で分析する |
-| `model` / `effort` | `sonnet` / `medium` | `claude --model` の任意のエイリアス |
-| `max_budget_usd` | `3.0` | `claude -p` の呼び出し 1 回あたりの費用上限（API 換算の USD） |
+| `backend` | `claude` | セッションを分析するエージェント（あなた自身のログインを使用）：`claude`（Claude Code）または `codex`（Codex）。**Status › Analysis** でも変更できます |
+| `model` / `effort` | `sonnet` / `medium` | Claude：`claude --model` の任意のエイリアス。`effort` は Codex の推論の強さにも使われます（`max` は `xhigh` になります） |
+| `codex_model` | `""` | Codex のモデル。例：`gpt-5.5`。空の場合は Codex の既定のモデルを使います |
+| `max_budget_usd` | `3.0` | `claude -p` の呼び出し 1 回あたりの費用上限（API 換算の USD。Codex はトークン数だけを報告します） |
 | `idle_minutes` | `20` | 分析されるには、セッションが終了しているか、この時間アイドルである必要があります |
 | `min_prompts` | `1` | 人間のプロンプトがこれより少ないセッションはスキップされます |
-| `max_per_run` / `concurrency` | `6` / `2` | 15 分ごとの実行 1 回あたりの分析数と、並列に動かす `claude -p` のプロセス数 |
+| `max_per_run` / `concurrency` | `6` / `2` | 15 分ごとの実行 1 回あたりの分析数と、並列に動かす分析プロセスの数 |
 | `backfill` | `true` | インストール前に記録されたセッションも分析する（新しい順） |
 | `chunk_chars` | `150000` | 1 回の呼び出しに渡す、まとめたトランスクリプトの文字数。これより長いセッションは map-reduce で処理します |
 | `timeout_seconds` | `900` | 呼び出し 1 回あたりの実時間の上限 |
-| `claude_bin` | `""` | `claude` のパス（空の場合は自動で検出） |
+| `claude_bin` / `codex_bin` | `""` | `claude` / `codex` のパス（空の場合は自動で検出） |
 
 ## `[synthesis]`、`[export]`、`[server]`、`[inject]`、`[updates]`
 

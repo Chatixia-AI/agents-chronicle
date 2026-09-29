@@ -11,6 +11,7 @@ import shlex
 import threading
 import time
 import webbrowser
+from dataclasses import replace
 from datetime import datetime, timedelta
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -19,6 +20,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import __version__
 from .config import Config
 from .db import connect, kv_get
+from .llm import BACKENDS, make_runner
 from .search import search_events, search_knowledge, search_sessions
 from .synthesize import GLOBAL
 from .util import loads, to_iso, utcnow
@@ -643,7 +645,8 @@ class App:
         pending = count_pending(self.conn, self.cfg)
         return {
             "pending": pending,
-            "analysis": {"auto": self.cfg.analysis.auto, "max_per_run": self.cfg.analysis.max_per_run},
+            "analysis": {"auto": self.cfg.analysis.auto, "max_per_run": self.cfg.analysis.max_per_run,
+                         "label": BACKENDS.get(self.cfg.analysis.backend, BACKENDS["claude"])},
             "paused_until": kv_get(self.conn, PAUSE_KEY),
             "last_sync": kv_get(self.conn, "last_sync"),
             "jobs": self.jobs.snapshot(),
@@ -692,6 +695,24 @@ class App:
         self._maybe_check_daily()
         return self.update_info(remote=False)
 
+    def analysis_backends(self) -> dict:
+        """The agent that analyzes sessions, and which of the choices are installed."""
+        runners = {name: make_runner(replace(self.cfg, analysis=replace(self.cfg.analysis, backend=name)))
+                   for name in BACKENDS}
+        return {"backend": make_runner(self.cfg).name,
+                "choices": [{"name": r.name, "label": r.label, "path": r.bin, "model": r.model_label()}
+                            for r in runners.values()]}
+
+    def action_backend(self, backend: str) -> dict:
+        from .config import load_config, set_config_value
+
+        if backend not in BACKENDS:
+            return {"error": f"unknown analysis backend {backend!r}"}
+        set_config_value(self.cfg, "analysis", "backend", json.dumps(backend))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        return self.analysis_backends()
+
     def imports(self) -> dict:
         from .chat_import import import_status
 
@@ -733,8 +754,9 @@ class App:
         st["db_size"] = self.cfg.db_path.stat().st_size if self.cfg.db_path.exists() else 0
         st["archive_dir"] = str(self.cfg.archive_dir)
         st["notes_dir"] = str(self.cfg.notes_dir)
-        st["config"] = {"model": self.cfg.analysis.model, "auto": self.cfg.analysis.auto,
+        st["config"] = {"model": make_runner(self.cfg).model_label(), "auto": self.cfg.analysis.auto,
                         "backfill": self.cfg.analysis.backfill, "max_per_run": self.cfg.analysis.max_per_run}
+        st["analysis"].update(self.analysis_backends())
         st["errors"] = [dict(r) for r in c.execute(
             "SELECT id, title, analysis_reason FROM sessions WHERE analysis_status = 'error' ORDER BY ended_at DESC LIMIT 10")]
         return st
@@ -1027,6 +1049,8 @@ def make_handler(app: App, port: int):
                     return self._json({"started": app.action_sync()})
                 if p == "/api/update/check":  # a POST: with the daily check off, the dashboard's only call to PyPI
                     return self._json(app.update_info(remote=True))
+                if p == "/api/analysis/backend":
+                    return self._json(app.action_backend(str(body.get("backend") or "")))
                 if p == "/api/update/daily":
                     return self._json(app.action_check_daily(bool(body.get("on"))))
                 if p == "/api/update":

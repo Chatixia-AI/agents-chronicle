@@ -35,27 +35,39 @@ instance, have no cache split (so no cost estimate), and Bob tasks have no per-c
 
 ## How analysis works
 
-![How a session becomes knowledge: queue, digest, claude -p, JSON validation, knowledge items, knowledge bases, glossary and weekly review](diagrams/analysis.excalidraw.svg)
+![How a session becomes knowledge: queue, digest, claude -p or codex exec, JSON validation, knowledge items, knowledge bases, glossary and weekly review](diagrams/analysis.excalidraw.svg)
 
 1. A session is queued once it ends (hook) or has been idle for `idle_minutes`.
 2. The transcript is condensed into a digest at the richest detail level that fits `chunk_chars`
    (full prompts and replies, one line per tool call, error excerpts, subagent reports). Very long
    sessions are split at prompt boundaries and map-reduced. Secrets are redacted first.
-3. `claude -p` runs with `--no-session-persistence --safe-mode --tools "" --strict-mcp-config`:
-   no transcript is written for the analysis itself, no hooks/plugins/MCP load, and the model can only answer.
-   `CHRONICLE_INTERNAL=1` makes the hooks inert for these runs.
+3. The digest goes to the agent chosen in `analysis.backend`, through your own login, sandboxed so that no
+   session is written for the analysis itself, none of your hooks, plugins, MCP servers or instruction files load,
+   and the model can only answer:
+   - **Claude Code** (`backend = "claude"`, the default): `claude -p --no-session-persistence --safe-mode
+     --tools "" --strict-mcp-config`.
+   - **Codex** (`backend = "codex"`): `codex exec --ephemeral --ignore-user-config --sandbox read-only`, with
+     every tool feature switched off (shell, code execution, sub-agents, apps, plugins, web search, images),
+     hooks, `AGENTS.md` and skill instructions off, and Chronicle's instructions in place of Codex's own. Codex
+     cannot switch off every tool by flag, so Chronicle also reads its event stream: a reply that follows any tool
+     call is thrown away and the analysis counts as failed.
+
+   `CHRONICLE_INTERNAL=1` makes Chronicle's own hooks inert for these runs. Switch agents in **Status ›
+   Analysis**, with `chronicle config set analysis.backend codex`, or for one run with `chronicle analyze
+   --backend codex`.
 4. The JSON reply is validated leniently (with one repair pass) and stored. When a project gains
    `min_new_items` new items, its knowledge base is re-synthesized; items that are outdated or
    duplicated get marked *superseded* (pinned and memory items are never superseded). Once every session of
-   a finished week is analyzed, Claude writes that week's review (a three-line TL;DR, themes, accomplishments,
+   a finished week is analyzed, the model writes that week's review (a three-line TL;DR, themes, accomplishments,
    learnings, open threads, recurring friction, concrete workflow suggestions). Knowledge bases, the playbook and
    reviews are written to be skimmed: a TL;DR, a short overview, a title per knowledge-base bullet, and word
-   limits on every field. The review's numbers and charts come from the database, not from Claude.
+   limits on every field. The review's numbers and charts come from the database, not from the model.
 5. Usage-limit or auth errors pause analysis for an hour; other failures back off 30 min → 2 h → 8 h.
    Calls have a wall-clock deadline, and a call frozen by the Mac going to sleep is killed right after wake and
    re-queued without counting as a failure. Sessions that continue after being analyzed are re-analyzed.
 
-Cost: analysis runs through your Claude Code login. The reported cost is the API list-price equivalent: sessions
-averaged about $0.38 each with Sonnet (digests average ~150k characters). On a Claude subscription that is drawn
-from the plan's usage allowance rather than billed. `chronicle analyze --pending --dry-run` sizes a backlog, and
-`max_budget_usd` caps each call.
+Cost: analysis runs through your own Claude Code or Codex login. With Claude, the reported cost is the API
+list-price equivalent: sessions averaged about $0.38 each with Sonnet (digests average ~150k characters), and
+`max_budget_usd` caps each call. Codex reports tokens but no price, so Codex analyses show no cost. On a Claude or
+ChatGPT subscription the usage is drawn from the plan's allowance rather than billed. `chronicle analyze --pending
+--dry-run` sizes a backlog before you spend anything.

@@ -213,6 +213,9 @@ const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot
 const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
 function agentShort(a) { return AGENT_SHORT[a] || a || "Claude"; }
 function agentName(a) { return AGENTS[a] || "Claude Code"; }
+// the agent that analyzes sessions (Status › Analysis): full name, and the short one for "… is writing"
+function analyzer() { return lastStatus?.analysis?.label || "Claude Code"; }
+function analyzerShort() { return analyzer() === "Claude Code" ? "Claude" : analyzer(); }
 function agentCell(x) { // the Agent column: the Sources page's colour dot and the short name
   const cloud = x.source === "codex-cloud";
   return h("td", { class: "nowrap", title: cloud ? "Codex Cloud task" : agentName(x.agent) }, h("span", { class: "agent-cell" },
@@ -1021,7 +1024,7 @@ route(/^\/sessions$/, async (params) => {
     selBar.hidden = !n;
     if (!n) return;
     const analyze = h("button", { class: "btn primary small", type: "button", onclick: async () => {
-      if (n > 25 && !confirm(`Analyze ${n} sessions now? Each one is a Claude call on your Claude Code login.`)) return;
+      if (n > 25 && !confirm(`Analyze ${n} sessions now? Each one is a call on your ${analyzer()} login.`)) return;
       analyze.disabled = true; analyze.textContent = "Starting…";
       const r = await post("/api/sessions/analyze", { ids: [...picked] });
       if (!r.started) { toast(r.error || "Could not start"); analyze.disabled = false; drawSel(); return; }
@@ -1175,7 +1178,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     analyzing.disabled = true;
     analyzing.textContent = "Analyzing…";
     const r = await post(`/api/sessions/${sx.id}/analyze`);
-    toast(r.started ? "Analysis started (via headless Claude Code). This page refreshes when it finishes." : "Analysis already running");
+    toast(r.started ? `Analysis started (via ${analyzer()}). This page refreshes when it finishes.` : "Analysis already running");
     watchJob(`analyze:${sx.id}`);
   } }, sx.analysis_status === "done" ? "Re-analyze" : "Analyze now");
   if (sx.source === "history") analyzing.hidden = true;
@@ -1562,7 +1565,7 @@ route(/^\/knowledge$/, async (params) => {
     fmtNum(g.total), `terms in ${fmtNum(cats.length)} categories`,
     g.top.length ? h("div", { class: "hub-terms" }, g.top.slice(0, 16).map((t) =>
       h("span", { class: "hub-term", title: `${fmtNum(t.n_sessions)} sessions` }, icon(ICONS[t.category] ? t.category : "dot"), t.term)))
-      : h("div", { class: "hub-empty" }, "Built by Claude from your knowledge items"));
+      : h("div", { class: "hub-empty" }, "Built from your knowledge items"));
 
   const days = rv ? weekDays(rv.start) : [];
   const reviews = hubCard("#/reviews", "reviews", "Weekly reviews", "Your week at a glance: wins, open threads, what to try next",
@@ -1791,7 +1794,7 @@ route(/^\/project$/, async (params) => {
   const synth = h("button", { class: "btn primary", type: "button", onclick: async () => {
     synth.disabled = true; synth.textContent = "Synthesizing…";
     const r = await post("/api/synthesize", { path });
-    toast(r.started ? "Synthesizing the knowledge base with Claude Code…" : "Already running");
+    toast(r.started ? `Synthesizing the knowledge base with ${analyzer()}…` : "Already running");
     watchJob(`synthesize:${path}`);
   } }, p.kb ? "Re-synthesize" : "Synthesize now");
   const kbCard = kbView(p, isGlobal);
@@ -1936,7 +1939,7 @@ route(/^\/glossary$/, async (params) => {
   const rebuild = h("button", { class: "btn", type: "button", onclick: async () => {
     rebuild.disabled = true;
     const r = await post("/api/glossary/rebuild", { path: state.project || "" });
-    toast(r.started ? "Claude is rebuilding the glossary…" : "Already running");
+    toast(r.started ? `${analyzerShort()} is rebuilding the glossary…` : "Already running");
     watchJob(`glossary:${state.project || "all"}`);
   } }, state.project ? "Rebuild this project's glossary" : "Rebuild glossary");
   let debounce;
@@ -1987,7 +1990,7 @@ route(/^\/glossary$/, async (params) => {
       Object.entries(data.counts).sort((a, b) => b[1] - a[1]).map(([c, n]) =>
         h("button", { type: "button", class: `chip ${state.category === c ? "on" : ""}`, onclick: () => { state.category = c; refresh(); } }, icon(ICONS[c] ? c : "dot"), c, h("span", { class: "count" }, n)))),
     letters.length > 3 ? h("div", { class: "letters" }, letters.map((l) => h("a", { href: "#", onclick: (ev) => { ev.preventDefault(); document.getElementById(`gl-${l}`)?.scrollIntoView({ behavior: "smooth" }); } }, l))) : null,
-    !data.items.length ? h("div", { class: "card empty" }, data.total ? "No terms match." : "The glossary is built by Claude from your knowledge items. Click Rebuild glossary to create it now.")
+    !data.items.length ? h("div", { class: "card empty" }, data.total ? "No terms match." : "The glossary is built from your knowledge items. Click Rebuild glossary to create it now.")
       : mode === "list" ? listView()
       : letters.map((l) => [h("h2", { class: "gletter", id: `gl-${l}` }, l), h("div", { class: "ggrid" }, groups[l].map(card))]));
   if (params.term) {
@@ -2423,7 +2426,7 @@ route(/^\/map$/, async (params) => {
       body = [
         neutralLabel("projects", p.path === "__global__" ? "cross-project" : "project"),
         h("h3", null, n.label),
-        h("p", { class: "mm-def" }, where(n) + (p.path === "__global__" ? "Terms Claude found across all your projects." : "")),
+        h("p", { class: "mm-def" }, where(n) + (p.path === "__global__" ? "Terms found across all your projects." : "")),
         h("div", { class: "hero-facts" }, p.sessions ? [fact("sessions", fmtNum(p.sessions)), fact("active", fmtHours(p.active_s)), fact("last session", fmtDate(p.last))] : null, fact("terms", fmtNum(n.count))),
         kinds.length ? [h("h4", null, "Knowledge"), h("div", { class: "mm-chips" }, kinds.map(([k, c]) => h("span", { class: "kind-chip" }, icon(KIND[k] ? k : "dot"), `${kindLabel(k)} ${c}`)))] : null,
         h("h4", null, "Most discussed here"), chipsOf(n.terms, 12),
@@ -2450,7 +2453,7 @@ route(/^\/map$/, async (params) => {
       body = [
         catLabel(n.cat),
         h("h3", null, n.label),
-        h("p", { class: "mm-def" }, n.value === null ? "Terms added since Claude last grouped this category; they are grouped on the next run." : th?.description || ""),
+        h("p", { class: "mm-def" }, n.value === null ? "Terms added since this category was last grouped; they are grouped on the next run." : th?.description || ""),
         h("p", { class: "mm-def muted" }, `${where(n)}${fmtNum(n.count)} terms, most discussed first.`),
         chipsOf(n.terms, 24),
       ];
@@ -2533,16 +2536,16 @@ route(/^\/map$/, async (params) => {
     const due = (data.themes_due || []).filter((c) => withHidden || !MAP_HIDDEN.has(c));
     const have = Object.keys(data.themes || {}).length > 0;
     if (!due.length) return have && !levels.includes("theme")
-      ? h("p", { class: "mm-tip" }, "Claude has grouped the big categories into themes: add a Theme level to see them.") : null;
+      ? h("p", { class: "mm-tip" }, "The big categories are grouped into themes: add a Theme level to see them.") : null;
     const btn = h("button", { type: "button", class: "btn small primary", onclick: async () => {
       btn.disabled = true;
       const r = await post("/api/map/themes", {});
-      toast(r.started ? "Claude is grouping categories into themes…" : "Already running");
+      toast(r.started ? `${analyzerShort()} is grouping categories into themes…` : "Already running");
       watchJob("themes");
-    } }, have ? "Regroup with Claude" : "Group with Claude");
+    } }, have ? "Regroup into themes" : "Group into themes");
     return h("div", { class: "mm-note" },
       h("b", null, have ? `${due.length} categor${due.length === 1 ? "y has" : "ies have"} changed since grouping` : "Group big categories into themes"),
-      h("p", null, `Claude splits each category with 25+ terms into named themes, so no branch is a long list. One call per category (${due.join(", ")}).`),
+      h("p", null, `${analyzerShort()} splits each category with 25+ terms into named themes, so no branch is a long list. One call per category (${due.join(", ")}).`),
       btn);
   }
   function overview() {
@@ -2888,7 +2891,7 @@ route(/^\/mcp$/, async () => {
 // =====================================================================================
 // Weekly reviews
 // =====================================================================================
-// One week at a time: the numbers as charts, Claude's words as short lists, the long write-up folded away
+// One week at a time: the numbers as charts, the model's words as short lists, the long write-up folded away
 const weekShort = (period) => period.replace(/^\d+-W0?/, "W");
 function weekRange(r) {
   if (!r.start || !r.end) return "";
@@ -2968,7 +2971,7 @@ route(/^\/reviews$/, async (params) => {
     const b = h("button", { class: `btn${primary ? " primary" : ""}`, type: "button", onclick: async () => {
       b.disabled = true;
       const r = await post("/api/review", { week });
-      toast(r.started ? "Claude is writing the review…" : "Already running");
+      toast(r.started ? `${analyzerShort()} is writing the review…` : "Already running");
       watchJob(`review:${week || "last"}`);
     } }, label);
     return b;
@@ -3062,6 +3065,26 @@ function changesList(c) { // what a checkout reinstall brings in: commits since 
       h("ul", { class: "upd-files" }, shown.map((f) => h("li", null, h("span", { class: "codeline" }, f))),
         files.length > shown.length ? h("li", { class: "muted" }, `and ${files.length - shown.length} more`) : null)) : null);
 }
+// Which coding agent analyzes sessions: one of the CLIs installed here, through the user's own login
+function analyzerPicker(a) {
+  const choices = a?.choices || [];
+  const current = choices.find((c) => c.name === a.backend);
+  const pick = async (name) => {
+    if (name === a.backend) return;
+    const r = await post("/api/analysis/backend", { backend: name });
+    if (r.error) { toast(r.error); return; }
+    toast(`Sessions are now analyzed with ${choices.find((c) => c.name === name)?.label}.`);
+    render();
+  };
+  return h("div", { class: "analyzer" },
+    h("div", { class: "seg", role: "radiogroup", "aria-label": "Analyzed by" }, choices.map((c) =>
+      h("button", { type: "button", role: "radio", class: c.name === a.backend ? "on" : "", "aria-checked": String(c.name === a.backend),
+        disabled: !c.path && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : `${c.label} is not installed`,
+        onclick: () => pick(c.name) }, c.label))),
+    h("div", { class: "muted" }, current?.path
+      ? `Analyzed by ${current.label} through your own login; only a redacted digest of each session is sent.`
+      : `${current?.label || "The analysis agent"} was not found: sessions wait in the queue until it is installed and signed in.`));
+}
 route(/^\/status$/, async () => {
   const st = await api("/api/status");
   const row = (ok, label, detail) => h("div", { class: "status-row" }, h("span", { class: ok ? "ok" : "no" }, ok ? "✓" : "✗"), h("span", null, label), detail ? h("span", { class: "muted" }, detail) : null);
@@ -3080,6 +3103,7 @@ route(/^\/status$/, async () => {
         h("div", { style: { marginTop: "6px" } }, h("span", { class: "codeline" }, st.notes_dir), " Markdown vault"),
         h("div", { class: "muted", style: { marginTop: "6px" } }, `Database ${fmtCompact(st.db_size)}B`)),
       h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Analysis")),
+        analyzerPicker(st.analysis),
         h("div", { class: "status-list" },
           h("div", null, `Model `, h("code", null, st.config.model), ` · auto ${st.config.auto ? "on" : "off"} · backfill ${st.config.backfill ? "on" : "off"} · ${st.config.max_per_run} per run`),
           h("div", null, `${fmtNum(st.pending.ready)} ready now · ${fmtNum(st.pending.queued)} queued/stale · spent ${fmtCost(st.analysis_cost)} (API-equivalent)`),
@@ -3337,14 +3361,14 @@ function paletteCommands() {
     { group: "Commands", label: "Sync now", icon: "sync", hint: "", run: syncNow },
     { group: "Commands", label: "Toggle sidebar", icon: "sidebar", hint: "⌘B", run: toggleSidebar },
     { group: "Commands", label: dark ? "Switch to light theme" : "Switch to dark theme", icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
-    { group: "Commands", label: "Group glossary themes with Claude", icon: "sparkles", hint: "uses Claude", run: async () => {
+    { group: "Commands", label: "Group glossary themes", icon: "sparkles", hint: "uses the analysis model", run: async () => {
       const r = await post("/api/map/themes");
-      toast(r.started ? "Claude is grouping the glossary into themes…" : "Already running");
+      toast(r.started ? `${analyzerShort()} is grouping the glossary into themes…` : "Already running");
       watchJob("themes");
     } },
-    { group: "Commands", label: "Rebuild the glossary", icon: "glossary", hint: "uses Claude", run: async () => {
+    { group: "Commands", label: "Rebuild the glossary", icon: "glossary", hint: "uses the analysis model", run: async () => {
       const r = await post("/api/glossary/rebuild", { path: "" });
-      toast(r.started ? "Claude is rebuilding the glossary…" : "Already running");
+      toast(r.started ? `${analyzerShort()} is rebuilding the glossary…` : "Already running");
       watchJob("glossary:all");
     } },
   ];
@@ -3519,7 +3543,7 @@ function drawActivity(st) {
       h("div", { class: "act-msg muted" }, String(j.result || (j.state === "done" ? "done" : "failed")).slice(0, 220))));
   const waiting = (st.pending?.ready || 0) + (st.pending?.queued || 0);
   const paused = st.paused_until && st.paused_until > new Date().toISOString();
-  const queue = paused ? `Analysis paused until ${fmtTime(st.paused_until)} (Claude usage limit); it resumes by itself.`
+  const queue = paused ? `Analysis paused until ${fmtTime(st.paused_until)} (${analyzer()} usage limit or sign-in); it resumes by itself.`
     : !waiting ? "Nothing waiting for analysis."
     : `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} waiting for analysis` + (st.analysis?.auto ? `; the background agent analyzes up to ${st.analysis.max_per_run} every 15 minutes.` : "; automatic analysis is off.");
   box.replaceChildren(...[

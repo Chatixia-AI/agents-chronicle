@@ -34,11 +34,15 @@ import_memory = true
 exclude_projects = []
 
 [analysis]
-# Analyze sessions automatically with headless Claude Code (`claude -p`) once they go idle.
+# Analyze sessions automatically once they go idle.
 auto = true
+# Which coding agent does the analysis, through your own login: "claude" (Claude Code, `claude -p`)
+# or "codex" (OpenAI Codex, `codex exec`).
+backend = "claude"
+# Claude model (backend "claude").
 model = "sonnet"
 effort = "medium"
-# Spend cap per `claude -p` call, in API-equivalent USD.
+# Spend cap per `claude -p` call, in API-equivalent USD (Codex reports tokens only).
 max_budget_usd = 3.0
 # A session must be idle this long (or have ended) before it is analyzed.
 idle_minutes = 20
@@ -46,15 +50,19 @@ idle_minutes = 20
 min_prompts = 1
 # Max session analyses per worker run (the background job runs every 15 minutes).
 max_per_run = 6
-# Parallel `claude -p` processes.
+# Parallel analysis processes.
 concurrency = 2
 # Also analyze sessions recorded before Chronicle was installed (newest first, within max_per_run).
 backfill = true
-# Characters of condensed transcript per Claude call; longer sessions are map-reduced.
+# Characters of condensed transcript per call; longer sessions are map-reduced.
 chunk_chars = 150000
 timeout_seconds = 900
 # Path to the claude executable (auto-detected when empty).
 claude_bin = ""
+# Codex model (backend "codex"); empty uses Codex's default.
+codex_model = ""
+# Path to the codex executable (auto-detected when empty).
+codex_bin = ""
 
 [synthesis]
 # Consolidate per-project knowledge bases once enough new knowledge accumulates.
@@ -101,7 +109,10 @@ class AnalysisConfig:
     backfill: bool = True
     chunk_chars: int = 150_000
     timeout_seconds: int = 900
+    backend: str = "claude"
     claude_bin: str = ""
+    codex_model: str = ""
+    codex_bin: str = ""
 
 
 @dataclass
@@ -175,6 +186,8 @@ class Config:
         return None
 
     def codex_bin(self) -> str | None:
+        if self.analysis.codex_bin:
+            return str(Path(self.analysis.codex_bin).expanduser())
         found = shutil.which("codex")
         if found:
             return found

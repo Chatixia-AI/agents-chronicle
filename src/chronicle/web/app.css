@@ -364,6 +364,9 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 .seg button { border: 0; background: transparent; padding: 5px 11px; cursor: pointer; color: var(--ink-2); font-size: 13px; }
 .seg button + button { border-left: 1px solid var(--border); }
 .seg button.on { background: var(--surface-3); color: var(--ink); font-weight: 500; }
+.seg button:disabled { cursor: not-allowed; opacity: .45; }
+.analyzer { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
+.analyzer .seg { align-self: flex-start; }
 
 /* ------------------------------------------------------------------ layout */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }

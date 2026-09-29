@@ -533,17 +533,21 @@ class DesktopApp:
 
         if not self.cfg.claude_bin():
             self.alert("Claude Code not found",
-                       "Chronicle records your coding-agent sessions and uses your Claude Code login (claude -p) to "
-                       "analyze them. Install Claude Code from claude.com/claude-code and sign in, then choose "
-                       "“Connect Claude Code…” from Chronicle's menu-bar icon.", ["OK"])
+                       "Chronicle records your coding-agent sessions and analyzes them through your own Claude Code or "
+                       "Codex login. To record Claude Code, install it from claude.com/claude-code and sign in, then "
+                       "choose “Connect Claude Code…” from Chronicle's menu-bar icon. Codex and the other agents are "
+                       "under Settings › Sources in the dashboard, and Status › Analysis picks the agent that analyzes.",
+                       ["OK"])
             return
         steps = ["• add a SessionEnd hook to ~/.claude/settings.json (a backup is kept), so each session is "
                  "recorded when it ends",
                  "• register the chronicle MCP server, so Claude can search your past sessions"]
         if self.frozen:
             steps.append("• open Chronicle at login, so sessions are analyzed in the background")
-        text = ("Chronicle will:\n" + "\n".join(steps) + "\n\nAnalysis runs through your own Claude Code login "
-                "and counts toward your plan's usage. Everything else stays on this Mac.")
+        from .llm import make_runner
+
+        text = ("Chronicle will:\n" + "\n".join(steps) + f"\n\nAnalysis runs through your own {make_runner(self.cfg).label} "
+                "login and counts toward your plan's usage. Everything else stays on this Mac.")
         if self.alert("Connect Claude Code?", text, ["Connect", "Not Now"]) != 0:
             return
         for action in connect(self.cfg, "claude", executable()):

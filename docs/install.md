@@ -2,7 +2,7 @@
 
 [← Chronicle](../README.md) · [Docs index](README.md)
 
-Chronicle runs on macOS and needs a logged-in [Claude Code](https://claude.com/claude-code) (`claude`), which does the analysis. There are two ways to run it; both use the same data in `~/.claude-chronicle` and can coexist.
+Chronicle runs on macOS and needs a logged-in [Claude Code](https://claude.com/claude-code) (`claude`) or [Codex](https://github.com/openai/codex) (`codex`), which does the analysis. Setup uses Claude Code when it is installed and offers Codex when it is not; switch any time in **Status › Analysis** or with `chronicle config set analysis.backend codex`. There are two ways to run it; both use the same data in `~/.claude-chronicle` and can coexist.
 
 ## Desktop app
 
@@ -50,7 +50,8 @@ run `uv tool install --python 3.13 .` in it.
 
 `chronicle install` (also `chronicle setup`) walks through setup:
 
-1. Warns if Claude Code (`claude`) is missing: sessions are then recorded but not analyzed until you install it.
+1. Checks the agent that analyzes sessions (Claude Code by default). If it is missing and Codex is installed, offers
+   to analyze with Codex instead; with neither, sessions are recorded but not analyzed until one is installed.
 2. Lists the coding agents on this Mac (Claude Code, Codex, GitHub Copilot, IBM Bob) and the MCP-only clients it
    finds (Claude Desktop, Cursor, Windsurf, Gemini CLI), with how many sessions each has on disk.
 3. Asks, for each one found and not yet connected, whether to record it (default yes), and whether to give each

@@ -23,15 +23,17 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | Key | Default | |
 | --- | --- | --- |
 | `auto` | `true` | analyze sessions automatically once they go idle |
-| `model` / `effort` | `sonnet` / `medium` | any `claude --model` alias |
-| `max_budget_usd` | `3.0` | spend cap per `claude -p` call, API-equivalent USD |
+| `backend` | `claude` | which agent analyzes sessions, through your own login: `claude` (Claude Code) or `codex` (Codex). Also in **Status › Analysis** |
+| `model` / `effort` | `sonnet` / `medium` | Claude: any `claude --model` alias. `effort` also sets Codex's reasoning effort (`max` becomes `xhigh`) |
+| `codex_model` | `""` | Codex model, e.g. `gpt-5.5`; empty uses Codex's default |
+| `max_budget_usd` | `3.0` | spend cap per `claude -p` call, API-equivalent USD (Codex reports tokens only) |
 | `idle_minutes` | `20` | a session must have ended or been idle this long before it is analyzed |
 | `min_prompts` | `1` | sessions with fewer human prompts are skipped |
-| `max_per_run` / `concurrency` | `6` / `2` | analyses per 15-minute run, and parallel `claude -p` processes |
+| `max_per_run` / `concurrency` | `6` / `2` | analyses per 15-minute run, and parallel analysis processes |
 | `backfill` | `true` | also analyze sessions recorded before install (newest first) |
 | `chunk_chars` | `150000` | characters of condensed transcript per call; longer sessions are map-reduced |
 | `timeout_seconds` | `900` | wall-clock limit per call |
-| `claude_bin` | `""` | path to `claude` (found automatically when empty) |
+| `claude_bin` / `codex_bin` | `""` | path to `claude` / `codex` (found automatically when empty) |
 
 ## `[synthesis]`, `[export]`, `[server]`, `[inject]`, `[updates]`
 

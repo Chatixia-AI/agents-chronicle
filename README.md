@@ -16,7 +16,7 @@ knowledge on your own machine.</p>
 <p align="center"><a href="#quick-start">Quick start</a> · <a href="docs/README.md">Docs</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="README.ja.md">日本語</a></p>
 
 Your coding agents solve problems all day, and then the lesson disappears: Claude Code deletes transcripts after 30
-days, and nothing carries a fix from one session to the next. Chronicle keeps every session, uses Claude Code itself
+days, and nothing carries a fix from one session to the next. Chronicle keeps every session, uses Claude Code or Codex
 to pull out what was learned, and gives it back to you in a dashboard and to your agents through an MCP server.
 
 ![Chronicle's session page: the conversation with one-line tool calls, the knowledge extracted from it, and an outline of the prompts](docs/images/session.png)
@@ -44,7 +44,8 @@ from the [demo data](docs/development.md#demo-data):
 
 ## Quick start
 
-You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/claude-code), which does the analysis.
+You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/claude-code) or
+[Codex](https://github.com/openai/codex), which does the analysis.
 
 1. **Install.**
 
@@ -77,8 +78,8 @@ Connect more agents later from **Settings › Sources**, `chronicle connect <age
 | IBM Bob | `~/.bob/db/bob.db`, read-only | every 15 min | ✅ |
 | claude.ai, ChatGPT | data export: `chronicle import <zip>` | when you import it | – |
 
-All of them share one dashboard, knowledge base, glossary and set of MCP tools; analysis always runs through Claude
-Code. [Sources](docs/sources.md) has the details for each.
+All of them share one dashboard, knowledge base, glossary and set of MCP tools; analysis runs through Claude Code
+or Codex, whichever you choose. [Sources](docs/sources.md) has the details for each.
 
 ## A closer look
 
@@ -91,21 +92,22 @@ Screenshots use made-up [demo data](docs/development.md#demo-data).
 
 ## How it works
 
-![How Chronicle works: sources, archive, parse, SQLite, analysis with claude -p, knowledge, and the dashboard, vault, CLI and MCP server](docs/diagrams/architecture.excalidraw.svg)
+![How Chronicle works: sources, archive, parse, SQLite, analysis with claude -p or codex exec, knowledge, and the dashboard, vault, CLI and MCP server](docs/diagrams/architecture.excalidraw.svg)
 
 1. A hook (or the 15-minute sync) hands each finished session to Chronicle, which archives the raw transcript and
    parses it: prompts, replies, tool calls, files, tokens and cost.
-2. Once the session is idle, a condensed digest with secrets redacted goes to `claude -p`, which returns a summary
-   and knowledge items. The call runs sandboxed: no tools, hooks or MCP servers.
+2. Once the session is idle, a condensed digest with secrets redacted goes to Claude Code (`claude -p`) or Codex
+   (`codex exec`), whichever you chose, which returns a summary and knowledge items. The call runs sandboxed: no
+   tools, hooks or MCP servers.
 3. New knowledge is merged into the project's knowledge base, the glossary is refreshed, and each finished week
    gets a written review.
 4. Everything is served to you (dashboard, app, vault, CLI) and to your agents (MCP).
 
-**What leaves your machine:** only that redacted digest, sent to Claude through your own Claude Code login. No
-telemetry, nothing sent to anyone else. [Data and privacy](docs/privacy.md) lists what is stored where.
+**What leaves your machine:** only that redacted digest, sent to Anthropic or OpenAI through your own Claude Code
+or Codex login. No telemetry, nothing sent to anyone else. [Data and privacy](docs/privacy.md) lists what is stored where.
 
-**What it costs:** analysis draws from your Claude plan like any other Claude Code use. In API terms it averages
-about $0.38 per session with Sonnet; `chronicle analyze --pending --dry-run` sizes a backlog before you spend
+**What it costs:** analysis draws from your Claude or ChatGPT plan like any other use of the agent. With Claude, in
+API terms it averages about $0.38 per session with Sonnet; `chronicle analyze --pending --dry-run` sizes a backlog before you spend
 anything. [How analysis works](docs/analysis.md#how-analysis-works) has the details.
 
 ## FAQ
@@ -113,8 +115,9 @@ anything. [How analysis works](docs/analysis.md#how-analysis-works) has the deta
 **Will it slow down my agent?** No. The session-end hook hands off to a detached process and returns in
 milliseconds; analysis runs later in the background.
 
-**Does it work without Claude Code?** Recording and browsing work for every connected agent. Summaries and
-knowledge need a logged-in `claude`; without one, sessions are archived and wait in the analysis queue.
+**Do I need Claude Code?** No. Analysis runs through Claude Code or Codex: pick one in **Status › Analysis** or
+with `chronicle config set analysis.backend codex`. Recording and browsing work either way; with neither signed in,
+sessions are archived and wait in the analysis queue.
 
 **Windows or Linux?** Not yet. The app and the background agents are macOS only.
 

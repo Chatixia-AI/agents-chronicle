@@ -2,7 +2,7 @@
 
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-Chronicle は macOS で動作し、分析を行うためにログイン済みの [Claude Code](https://claude.com/claude-code)（`claude`）が必要です。使い方は 2 通りあり、どちらも `~/.claude-chronicle` の同じデータを使うため、併用できます。
+Chronicle は macOS で動作し、分析を行うためにログイン済みの [Claude Code](https://claude.com/claude-code)（`claude`）または [Codex](https://github.com/openai/codex)（`codex`）が必要です。セットアップは Claude Code がインストールされていればそれを使い、なければ Codex を提案します。**Status › Analysis** または `chronicle config set analysis.backend codex` でいつでも切り替えられます。使い方は 2 通りあり、どちらも `~/.claude-chronicle` の同じデータを使うため、併用できます。
 
 ## デスクトップアプリ
 
@@ -50,7 +50,7 @@ chronicle install                                # pick the agents to record, im
 
 `chronicle install`（`chronicle setup` でも可）は次の順にセットアップします：
 
-1. Claude Code（`claude`）が見つからなければ警告します。その場合、セッションは記録されますが、インストールするまで分析されません。
+1. セッションを分析するエージェント（既定は Claude Code）を確認します。見つからず Codex がインストールされていれば、Codex で分析するか尋ねます。どちらもなければ、セッションは記録されますが、どちらかをインストールするまで分析されません。
 2. この Mac にあるコーディングエージェント（Claude Code、Codex、GitHub Copilot、IBM Bob）と、MCP のみのクライアント
    （Claude Desktop、Cursor、Windsurf、Gemini CLI）を、ディスク上のセッション数とともに一覧にします。
 3. 見つかってまだ接続していないものごとに、記録するか（既定は「はい」）、MCP クライアントには Chronicle のツールを

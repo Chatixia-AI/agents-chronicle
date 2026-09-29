@@ -10,7 +10,7 @@ from datetime import timedelta
 
 from .config import Config
 from .db import connect, kv_get, kv_set
-from .llm import BudgetExceededError, ClaudeRunner, LLMError, UsageLimitError
+from .llm import BudgetExceededError, LLMError, Runner, UsageLimitError, make_runner
 from .util import file_lock, to_iso, utcnow
 
 log = logging.getLogger("chronicle.worker")
@@ -104,13 +104,13 @@ def _run_locked(cfg: Config, conn, report: WorkReport, *, session_ids, max_analy
     # a crashed worker can leave sessions marked running
     conn.execute("UPDATE sessions SET analysis_status = 'pending' WHERE analysis_status = 'running'")
     conn.commit()
-    runner = ClaudeRunner(cfg)
+    runner = make_runner(cfg)
     paused = kv_get(conn, PAUSE_KEY)
     if analyze and (cfg.analysis.auto or session_ids or force):
         if paused and paused > to_iso(utcnow()) and not session_ids:
             report.paused_until = paused
         elif not runner.available():
-            report.note = "claude CLI not found; analysis skipped"
+            report.note = f"{runner.label} ({runner.cli.split()[0]}) not found; analysis skipped"
         else:
             ids = session_ids or pending_sessions(conn, cfg, max_analyses or cfg.analysis.max_per_run)
             _analyze_many(cfg, ids, runner, report, model=model, progress=progress)
@@ -129,7 +129,7 @@ def _run_locked(cfg: Config, conn, report: WorkReport, *, session_ids, max_analy
             log.exception("markdown export failed")
 
 
-def _analyze_many(cfg: Config, ids: list[str], runner: ClaudeRunner, report: WorkReport, *, model=None, progress=None):
+def _analyze_many(cfg: Config, ids: list[str], runner: Runner, report: WorkReport, *, model=None, progress=None):
     from .analyze import AnalysisSkipped, analyze_session
 
     stop = threading.Event()
@@ -187,7 +187,7 @@ def _analyze_many(cfg: Config, ids: list[str], runner: ClaudeRunner, report: Wor
                 progress(f"{sid[:8]}: {status}" if len(ids) == 1 else f"analyzing sessions: {finished} of {len(ids)} done")
 
 
-def _synthesize(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, *, force=False, progress=None):
+def _synthesize(cfg: Config, conn, runner: Runner, report: WorkReport, *, force=False, progress=None):
     from .synthesize import GLOBAL, global_needs_synthesis, projects_needing_synthesis, synthesize_project
 
     targets = projects_needing_synthesis(conn, cfg, force=force)
@@ -214,7 +214,7 @@ def _synthesize(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, *, 
             report.failed.append((path, f"{type(exc).__name__}: {exc}"))
 
 
-def _weekly_review(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, *, progress=None):
+def _weekly_review(cfg: Config, conn, runner: Runner, report: WorkReport, *, progress=None):
     """Write the review of the last completed week once all its sessions are analyzed."""
     from .reviews import generate_review, review_ready
 
@@ -249,7 +249,7 @@ def _themes(cfg: Config, report: WorkReport, *, progress=None):
             report.failed.append((f"themes:{cat}", result))
 
 
-def _glossaries(cfg: Config, conn, runner: ClaudeRunner, report: WorkReport, *, progress=None):
+def _glossaries(cfg: Config, conn, runner: Runner, report: WorkReport, *, progress=None):
     """Refresh the glossary of every project whose knowledge base was just re-synthesized."""
     from .glossary import build_glossaries
 

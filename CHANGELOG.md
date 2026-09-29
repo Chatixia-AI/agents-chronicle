@@ -1,5 +1,18 @@
 # Changelog
 
+## Unreleased
+
+- **Analyze with Codex:** sessions, knowledge bases, the glossary and weekly reviews can now be written by OpenAI
+  Codex instead of Claude Code, through your own Codex login. Pick it in **Status › Analysis**, with `chronicle
+  config set analysis.backend codex`, or for one run with `chronicle analyze --backend codex`; `codex_model` picks
+  the model. `chronicle install` offers Codex when Claude Code is not installed, so Chronicle no longer needs
+  Claude Code at all. Codex runs sandboxed like Claude does: no session is saved for the analysis, none of your
+  hooks, plugins, MCP servers, `AGENTS.md` or skills load, every tool feature is off, and Chronicle discards any
+  reply that follows a tool call. Codex reports tokens but no price, so Codex analyses show no cost.
+- `chronicle config set <section.key> <value>` changes one setting from the command line.
+- A configured `claude_bin` or `codex_bin` that does not exist now fails the analysis cleanly instead of stopping
+  the background run.
+
 ## 0.2.1 (2026-09-30)
 
 - Chronicle moved to the [Chatixia-AI](https://github.com/Chatixia-AI) organization, and the documentation to
