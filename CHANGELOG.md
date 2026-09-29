@@ -5,6 +5,7 @@
 - Chronicle moved to the [Chatixia-AI](https://github.com/Chatixia-AI) organization, and the documentation to
   <https://chronicle.chatixia.net/>. Old GitHub links redirect.
 - `chronicle --version` works; 0.1.2 announced it but never shipped the flag.
+- `chronicle search` shows snippet labels dimmed instead of printing `[dim]` markup literally.
 
 ## 0.2.0 (2026-09-30)
 

@@ -114,3 +114,11 @@ def test_excluded_projects_are_not_archived(env):
     assert report.sessions_new == 0 and report.files_archived <= 1  # only history.jsonl
     assert not [p for p in cfg.archive_dir.rglob("*.jsonl.gz") if "/projects/" in str(p)]
     assert conn.execute("SELECT COUNT(*) FROM sessions WHERE source='transcript'").fetchone()[0] == 0
+
+
+def test_cli_search_prints_snippet_labels_as_styling(synced, capsys):
+    from chronicle.cli import main
+
+    assert main(["search", "logout", "--sessions-only"]) == 0
+    out = capsys.readouterr().out
+    assert "[dim]" not in out and "«logout»" in out

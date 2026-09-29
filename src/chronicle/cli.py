@@ -264,6 +264,8 @@ def cmd_show(args) -> int:
 
 
 def cmd_search(args) -> int:
+    from rich.markup import escape
+
     from .search import search_knowledge, search_sessions
     from .util import local_str
 
@@ -286,7 +288,7 @@ def cmd_search(args) -> int:
             console.print(f"  [green]{s['session_id'][:8]}[/] {local_str(s['started_at'], '%Y-%m-%d')} "
                           f"[bold]{s['title']}[/] [dim]{s['project_name']} · {s['hits']} hits[/]", highlight=False)
             for sn in s["snippets"][:2]:
-                console.print(f"      [dim]{sn['kind']}:[/] {sn['text']}", highlight=False, markup=False)
+                console.print(f"      [dim]{sn['kind']}:[/] {escape(sn['text'])}", highlight=False)
     return 0
 
 
