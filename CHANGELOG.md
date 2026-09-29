@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.0 (2026-09-30)
 
 - **Analyze with Codex:** sessions, knowledge bases, the glossary and weekly reviews can now be written by OpenAI
   Codex instead of Claude Code, through your own Codex login. Pick it in **Status › Analysis**, with `chronicle
