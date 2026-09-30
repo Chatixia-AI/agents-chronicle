@@ -86,6 +86,20 @@ def test_fts_search(synced):
     assert search_events(synced["conn"], "zz") == []  # too short for trigrams: LIKE fallback, no crash
 
 
+def test_search_all_sessions(synced):
+    from chronicle.search import search_all
+
+    found = search_all(synced["conn"], "logout", per_session=1)
+    top = found["sessions"][0]
+    assert found["total"] >= 1 and top["session_id"] == SID and found["mentions"] >= top["hits"] >= 1
+    assert len(top["snippets"]) == 1 and "«logout»" in top["snippets"][0]["text"].lower()
+    everything = search_all(synced["conn"], "logout", per_session=500)["sessions"][0]["snippets"]
+    main = [m["seq"] for m in everything if not m["agent_id"]]
+    assert len(everything) == top["hits"] and main == sorted(main)  # every mention, in transcript order
+    assert search_all(synced["conn"], "logout", offset=found["total"])["sessions"] == []
+    assert search_all(synced["conn"], "   ")["total"] == 0
+
+
 def test_helpers():
     meta, body = parse_frontmatter("---\nname: x\nmetadata:\n  type: user\n---\nhello")
     assert meta == {"name": "x", "metadata": {"type": "user"}} and body == "hello"

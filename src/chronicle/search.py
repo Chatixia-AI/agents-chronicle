@@ -32,25 +32,30 @@ def _like_clause(column: str, terms: list[str]) -> tuple[str, list]:
     return " AND ".join(f"{column} LIKE ?" for _ in terms), [f"%{t}%" for t in terms]
 
 
+def _matching_events(query: str, columns: str, ranked: bool) -> tuple[str, list, list]:
+    """SELECT over the events matching `query` (FTS5 trigram, LIKE for short terms): sql, params, extra where clauses."""
+    fts = fts_query(query)
+    short = short_terms(query)
+    where, params = [], []
+    if fts:
+        sql = (f"SELECT {columns}{', bm25(events_fts) AS rank' if ranked else ''} "
+               "FROM events_fts JOIN events e ON e.id = events_fts.rowid WHERE events_fts MATCH ?")
+        params.append(fts)
+    else:
+        sql = f"SELECT {columns}{', 0 AS rank' if ranked else ''} FROM events e WHERE e.searchable = 1"
+    if short:
+        clause, p = _like_clause("e.text", short)
+        where.append(clause)
+        params += p
+    return sql, params, where
+
+
 def search_events(conn: sqlite3.Connection, query: str, *, project: str | None = None, session_id: str | None = None,
                   kinds: list[str] | None = None, limit: int = 50) -> list[dict]:
     terms = query_terms(query)
     if not terms:
         return []
-    fts = fts_query(query)
-    short = short_terms(query)
-    where, params = [], []
-    if fts:
-        sql = ("SELECT e.id, e.session_id, e.agent_id, e.seq, e.ts, e.kind, e.tool_name, e.text, bm25(events_fts) AS rank "
-               "FROM events_fts JOIN events e ON e.id = events_fts.rowid WHERE events_fts MATCH ?")
-        params.append(fts)
-    else:
-        sql = ("SELECT e.id, e.session_id, e.agent_id, e.seq, e.ts, e.kind, e.tool_name, e.text, 0 AS rank "
-               "FROM events e WHERE e.searchable = 1")
-    if short:
-        clause, p = _like_clause("e.text", short)
-        where.append(clause)
-        params += p
+    sql, params, where = _matching_events(query, "e.id, e.session_id, e.agent_id, e.seq, e.ts, e.kind, e.tool_name, e.text", True)
     if session_id:
         where.append("e.session_id = ?")
         params.append(session_id)
@@ -149,3 +154,64 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
     for r in rows:
         r["tags"] = loads(r.pop("tags_json", None), []) or []
     return rows
+
+
+def search_all(conn: sqlite3.Connection, query: str, *, project: str | None = None, sort: str = "hits",
+               offset: int = 0, limit: int = 25, per_session: int = 5) -> dict:
+    """Every session that mentions the query, with how often, and its first few mentions in transcript order.
+
+    All matching events are counted (ids only); text is read just for the mentions shown."""
+    terms = query_terms(query)
+    if not terms:
+        return {"total": 0, "mentions": 0, "sessions": []}
+    sql, params, where = _matching_events(query, "e.id, e.session_id, e.agent_id, e.seq", False)
+    if project:
+        where.append("e.session_id IN (SELECT id FROM sessions WHERE project_path = ? OR project_name = ?)")
+        params += [project, project]
+    if where:
+        sql += " AND " + " AND ".join(where)
+    hits: dict[str, list[tuple]] = {}
+    try:
+        for r in conn.execute(sql + " LIMIT 200000", params):
+            hits.setdefault(r["session_id"], []).append((r["agent_id"] != "", r["agent_id"], r["seq"], r["id"]))
+    except sqlite3.OperationalError:
+        return {"total": 0, "mentions": 0, "sessions": []}
+    # sessions whose title, summary or tags match count too, even with no transcript mention
+    clause, p = _like_clause("(COALESCE(title,'') || ' ' || COALESCE(summary,'') || ' ' || COALESCE(tags_json,''))", terms)
+    meta_sql = f"SELECT id FROM sessions WHERE {clause}"
+    if project:
+        meta_sql += " AND (project_path = ? OR project_name = ?)"
+        p += [project, project]
+    named = {r[0] for r in conn.execute(meta_sql, p)}
+    ids = list(hits.keys() | named)
+    if not ids:
+        return {"total": 0, "mentions": 0, "sessions": []}
+    meta = {}
+    for i in range(0, len(ids), 900):  # SQLite's parameter limit
+        chunk = ids[i:i + 900]
+        for r in conn.execute("SELECT id, title, project_name, project_path, started_at, outcome, agent, summary FROM sessions "
+                              f"WHERE id IN ({','.join('?' * len(chunk))})", chunk):
+            meta[r["id"]] = dict(r)
+    ids = [i for i in ids if i in meta]
+    if sort == "newest":
+        ids.sort(key=lambda i: meta[i]["started_at"] or "", reverse=True)
+    elif sort == "oldest":
+        ids.sort(key=lambda i: meta[i]["started_at"] or "")
+    else:
+        ids.sort(key=lambda i: (len(hits.get(i, ())), i in named, meta[i]["started_at"] or ""), reverse=True)
+    page = ids[offset:offset + limit]
+    shown = {i: sorted(hits.get(i, []))[:per_session] for i in page}
+    event_ids = [h[3] for hs in shown.values() for h in hs]
+    rows = {}
+    if event_ids:
+        rows = {r["id"]: dict(r) for r in conn.execute(
+            f"SELECT id, seq, agent_id, kind, tool_name, ts, text FROM events WHERE id IN ({','.join('?' * len(event_ids))})", event_ids)}
+    out = []
+    for i in page:
+        m = meta[i]
+        snippets = [{"seq": r["seq"], "agent_id": r["agent_id"], "kind": r["kind"], "tool_name": r["tool_name"], "ts": r["ts"],
+                     "text": make_snippet(r["text"] or "", terms)} for r in (rows[h[3]] for h in shown[i] if h[3] in rows)]
+        out.append({"session_id": i, "title": m["title"], "project_name": m["project_name"], "project_path": m["project_path"],
+                    "started_at": m["started_at"], "outcome": m["outcome"], "agent": m["agent"], "hits": len(hits.get(i, ())),
+                    "summary": make_snippet(m["summary"], terms) if i in named and m["summary"] else None, "snippets": snippets})
+    return {"total": len(ids), "mentions": sum(len(v) for v in hits.values()), "sessions": out}

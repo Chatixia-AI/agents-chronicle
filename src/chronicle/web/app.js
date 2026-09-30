@@ -295,7 +295,30 @@ function md(src) {
 }
 function mdEl(src, cls = "") { return h("div", { class: `md gloss ${cls}`, html: md(src) }); }
 function snippetEl(text) { // server marks matches with «»
-  return h("span", { html: escapeHtml(text).replace(/«(.*?)»/g, "<mark>$1</mark>") });
+  return h("span", { html: escapeHtml(text).replace(/«(.*?)»/g, '<mark class="qhit">$1</mark>') });
+}
+function queryTerms(q) { // the words and "quoted phrases" a search matched on, as search.py splits them
+  return (String(q || "").trim().match(/"[^"]+"|\S+/g) || []).map((t) => t.replace(/^"|"$/g, "")).filter(Boolean);
+}
+function markTerms(root, terms) { // wrap every occurrence of the terms under root in <mark class="qhit">
+  if (!root || !terms?.length) return;
+  const re = new RegExp([...terms].sort((a, b) => b.length - a.length).map(escRe).join("|"), "gi");
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: (n) => (n.parentElement?.closest("mark, button, select, input, textarea") ? NodeFilter.FILTER_REJECT : NodeFilter.FILTER_ACCEPT),
+  });
+  const nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  for (const node of nodes) {
+    const text = node.nodeValue;
+    let m, last = 0, frag = null;
+    re.lastIndex = 0;
+    while ((m = re.exec(text))) {
+      frag ||= document.createDocumentFragment();
+      frag.append(text.slice(last, m.index), h("mark", { class: "qhit" }, m[0]));
+      last = m.index + m[0].length;
+    }
+    if (frag) { frag.append(text.slice(last)); node.replaceWith(frag); }
+  }
 }
 
 // =====================================================================================
@@ -1275,7 +1298,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     const after = [...promptList.children].find((x) => +x.dataset.seq > ev.seq);
     promptList.insertBefore(li, after || null);
   };
-  const transcript = transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "", onPrompt);
+  const transcript = transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "", onPrompt, queryTerms(params.q));
   tabs.transcript = transcript;
   tabs.details = h("div", { class: "grid cols-main" },
     h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
@@ -1297,9 +1320,11 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       if (card) { card.scrollIntoView({ block: "center", behavior: "smooth" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600); }
     } }, icon(KIND[k.kind] ? k.kind : "dot"), h("span", null, k.title))),
     sx.knowledge.length > 8 ? h("button", { type: "button", class: "s-kchip more", onclick: () => showTab("details") }, `+${sx.knowledge.length - 8} more`) : null) : null;
+  const summaryP = sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary) : null;
+  markTerms(summaryP, queryTerms(params.q)); // opened from Search: the terms stay marked here and in the transcript
   const page = h("div", { class: `session-page ${sessionOutline ? "with-outline" : ""}` },
     h("div", { class: "s-main" }, head, tiles,
-      sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary) : null, kchips,
+      summaryP, kchips,
       h("div", { class: "s-tabbar" }, tabBar, outlineBtn),
       tabs.transcript, tabs.details),
     outline);
@@ -1329,9 +1354,10 @@ function trackOutline(list) { // mark the prompt currently at the top of the tra
   scroller.addEventListener("scroll", onScroll, { passive: true });
 }
 
-function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
+function transcriptCard(sx, focusSeq, agent, onPrompt = null, terms = []) {
   const assistant = agentShort(sx.agent);
-  const state = { agent, kinds: new Set(["prompt", "text", "tool", "system", "command"]), offset: 0, start: 0, total: 0 };
+  const state = { agent, kinds: new Set(["prompt", "text", "tool", "system", "command"]), offset: 0, start: 0, total: 0, terms };
+  const bySeq = new Map(); // event seq -> the element showing it (a tool result lives in its call's row)
   const list = h("div", { class: "transcript" });
   let sink = list; // where renderEvent draws: the list, or a holder for earlier events that are then put in front
   const more = h("button", { class: "btn", type: "button", onclick: () => load(true) }, "Load more");
@@ -1341,7 +1367,7 @@ function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
     system: ["compact", "interrupt", "api_error", "notice", "notification", "compact_summary", "meta", "command_output", "bash_output"], command: ["command", "bash_input"] };
   let toolBlock = null, toolRows = {};
   async function load(append) {
-    if (!append) { state.offset = 0; list.replaceChildren(); toolBlock = null; toolRows = {}; if (state.kinds.has("prompt")) onPrompt?.(null); }
+    if (!append) { state.offset = 0; list.replaceChildren(); bySeq.clear(); toolBlock = null; toolRows = {}; if (state.kinds.has("prompt")) onPrompt?.(null); }
     const kinds = [...state.kinds].flatMap((k) => kindMap[k]).join(",");
     const params = { agent: state.agent, kinds, limit: 400, offset: state.offset };
     if (focusSeq != null && !append) params.around = focusSeq;
@@ -1352,10 +1378,17 @@ function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
     for (const ev of data.items) renderEvent(ev);
     syncControls();
     if (focusSeq != null && !append) {
-      const target = list.querySelector(`[data-seq="${focusSeq}"]`);
-      if (target) { target.classList.add("highlight"); setTimeout(() => target.scrollIntoView({ block: "center" }), 60); }
+      const target = bySeq.get(focusSeq);
+      if (target) focusEl(target);
       focusSeq = null;
     }
+  }
+  function focusEl(el) { // the linked event: outlined, opened if a tool row, and its first mention centred
+    if (el.tagName === "DETAILS") el.open = true;
+    el.classList.add("highlight");
+    const hit = el.querySelector("mark.qhit");
+    hit?.classList.add("on");
+    setTimeout(() => (hit || el).scrollIntoView({ block: "center" }), 60);
   }
   function syncControls() {
     more.hidden = state.offset >= state.total;
@@ -1380,6 +1413,15 @@ function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
     syncControls();
   }
   function renderEvent(ev) {
+    const el = drawEvent(ev);
+    if (!el) return;
+    bySeq.set(ev.seq, el.closest("[data-seq]") || el);
+    if (!state.terms.length) return;
+    markTerms(el, state.terms);
+    const row = el.closest("details.tool-row"); // a folded tool row with a mention inside says so
+    if (row) row.classList.toggle("qmatch", !!row.querySelector("mark.qhit"));
+  }
+  function drawEvent(ev) {
     if (ev.kind === "tool_use") {
       if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); sink.append(toolBlock); }
       const row = h("details", { class: "tool-row", "data-seq": ev.seq },
@@ -1391,7 +1433,7 @@ function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
       row.append(detail);
       toolBlock.append(row);
       if (ev.tool_use_id) toolRows[ev.tool_use_id] = row;
-      return;
+      return row;
     }
     if (ev.kind === "tool_result") {
       const row = ev.tool_use_id && toolRows[ev.tool_use_id];
@@ -1400,13 +1442,14 @@ function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
         row.querySelector(".ticon").textContent = ev.is_error ? "✗" : "✓";
         if (ev.is_error) row.classList.add("err");
         row.querySelector(".tdetail").append(...body);
-      } else {
-        if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); sink.append(toolBlock); }
-        toolBlock.append(h("details", { class: `tool-row ${ev.is_error ? "err" : ""}`, "data-seq": ev.seq },
-          h("summary", null, h("span", { class: "ticon" }, ev.is_error ? "✗" : "✓"), h("span", { class: "tname" }, ev.tool_name || "result"), h("span", { class: "tsum" }, (ev.text || "").slice(0, 160)), h("span", { class: "tstat" }, fmtTime(ev.ts))),
-          h("div", { class: "tdetail" }, body)));
+        return body[1];
       }
-      return;
+      if (!toolBlock) { toolBlock = h("div", { class: "tools-block" }); sink.append(toolBlock); }
+      const orphan = h("details", { class: `tool-row ${ev.is_error ? "err" : ""}`, "data-seq": ev.seq },
+        h("summary", null, h("span", { class: "ticon" }, ev.is_error ? "✗" : "✓"), h("span", { class: "tname" }, ev.tool_name || "result"), h("span", { class: "tsum" }, (ev.text || "").slice(0, 160)), h("span", { class: "tstat" }, fmtTime(ev.ts))),
+        h("div", { class: "tdetail" }, body));
+      toolBlock.append(orphan);
+      return orphan;
     }
     toolBlock = null;
     let node;
@@ -1431,6 +1474,7 @@ function transcriptCard(sx, focusSeq, agent, onPrompt = null) {
     }
     sink.append(node);
     if (ev.kind === "text" || ev.kind === "prompt") glossify(node, 4);
+    return node;
   }
   const chip = (key, label) => {
     const c = h("button", { type: "button", class: `chip ${state.kinds.has(key) ? "on" : ""}`, "aria-pressed": String(state.kinds.has(key)), onclick: () => {
@@ -1833,29 +1877,56 @@ route(/^\/project$/, async (params) => {
 // Search
 // =====================================================================================
 route(/^\/search$/, async (params) => {
-  const q = params.q || "";
-  const box = h("form", { class: "search-form", role: "search", onsubmit: (e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) go(`#/search?q=${encodeURIComponent(v)}`); } },
-    icon("search"), h("input", { class: "input", type: "search", name: "q", value: q, placeholder: "Search transcripts and knowledge", "aria-label": "Search transcripts and knowledge", autocomplete: "off" }));
-  if (!q.trim()) return h("div", null, h("div", { class: "page-head" }, h("div", null, h("h1", null, "Search"),
-    h("div", { class: "sub" }, "Trigram search matches any 3+ character substring, in any language. ⌘K jumps straight to a session, term or page."))), box);
-  const data = await api("/api/search", { q });
-  const total = data.sessions.length + data.knowledge.length + data.events.length;
-  return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, `Search: ${q}`), h("div", { class: "sub" }, total ? `${data.knowledge.length} knowledge items · ${data.sessions.length} sessions · ${data.events.length} transcript hits` : "No results"))),
-    box,
-    h("div", { class: "grid cols-2" },
-      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Sessions")),
-        data.sessions.length ? data.sessions.map((sx) => h("div", { class: "search-hit" },
-          h("a", { href: `#/session/${sx.session_id}` }, h("b", null, sx.title || "(untitled)")),
-          h("span", { class: "muted" }, ` · ${sx.project_name || ""} · ${fmtDate(sx.started_at)} · ${sx.hits} hits`),
-          sx.snippets.map((sn) => h("div", { class: "snip" }, h("span", { class: "muted" }, `${sn.kind}: `), sn.seq != null ? h("a", { href: `#/session/${sx.session_id}?seq=${sn.seq}${sn.agent_id ? "&agent=" + sn.agent_id : ""}`, style: { color: "inherit" } }, snippetEl(sn.text)) : snippetEl(sn.text))))) : h("div", { class: "empty" }, "No sessions")),
-      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Knowledge")),
-        data.knowledge.length ? h("div", { class: "grid" }, data.knowledge.map((k) => knowledgeCard(k, { compact: true }))) : h("div", { class: "empty" }, "No knowledge"))),
-    h("section", { class: "card section-gap" }, h("div", { class: "card-head" }, h("h2", null, "Transcript hits")),
-      data.events.length ? data.events.map((e) => h("div", { class: "search-hit" },
-        h("a", { href: `#/session/${e.session_id}?seq=${e.seq}${e.agent_id ? "&agent=" + e.agent_id : ""}` }, e.title || e.session_id.slice(0, 8)),
-        h("span", { class: "muted" }, ` · ${e.kind}${e.tool_name ? " " + e.tool_name : ""} · ${e.project_name || ""} · ${fmtDT(e.ts)}`),
-        h("div", { class: "snip" }, snippetEl(e.snippet)))) : h("div", { class: "empty" }, "No transcript hits")));
+  const q = params.q || "", sort = params.sort || "hits";
+  const box = h("form", { class: "search-form", role: "search", onsubmit: (e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) go(`#/search?q=${encodeURIComponent(v)}${sort !== "hits" ? "&sort=" + sort : ""}`); } },
+    icon("search"), h("input", { class: "input", type: "search", name: "q", value: q, placeholder: "Search all sessions", "aria-label": "Search all sessions", autocomplete: "off" }));
+  const head = (sub) => h("div", { class: "page-head" }, h("div", null, h("h1", null, "Search all sessions"), h("div", { class: "sub" }, sub)));
+  if (!q.trim()) return h("div", null, head("Every session that mentions a word or phrase, each mention highlighted and a click away. Matches any 3+ character substring, in any language."), box);
+  const data = await api("/api/search", { q, sort });
+  const qp = encodeURIComponent(q); // carried into each session, which keeps the mentions marked
+  const who = (m, agent) => m.kind === "prompt" ? "You" : m.kind === "text" ? agentShort(agent) : m.kind === "thinking" ? "Thinking"
+    : m.tool_name ? m.tool_name.replace(/^mcp__/, "mcp:") : m.kind.replace(/_/g, " ");
+  const hitRow = (sx, m) => h("li", null, h("a", { class: "sr-hit", href: `#/session/${sx.session_id}?seq=${m.seq}${m.agent_id ? "&agent=" + m.agent_id : ""}&q=${qp}` },
+    h("span", { class: `sr-who ${m.kind === "prompt" ? "you" : ""}` }, who(m, sx.agent), m.agent_id ? h("small", null, " · subagent") : null),
+    h("span", { class: "sr-snip" }, snippetEl(m.text ?? m.snippet)), h("span", { class: "sr-time" }, fmtTime(m.ts))));
+  const group = (sx) => {
+    const hits = h("ol", { class: "sr-hits" }, sx.snippets.map((m) => hitRow(sx, m)));
+    const rest = sx.hits - sx.snippets.length;
+    const all = rest > 0 ? h("button", { class: "link-btn sr-all", type: "button", onclick: async () => {
+      all.disabled = true; all.textContent = "Loading…";
+      const every = await api(`/api/sessions/${sx.session_id}/matches`, { q });
+      hits.replaceChildren(...every.map((m) => hitRow(sx, m)));
+      all.replaceWith(...(sx.hits > every.length ? [h("div", { class: "muted small sr-all" }, `Showing the first ${fmtNum(every.length)}; open the session for the rest.`)] : []));
+    } }, `Show all ${fmtNum(sx.hits)} mentions`) : null;
+    return h("article", { class: "sr-group" },
+      h("div", { class: "sr-head" },
+        h("a", { class: "sr-title", href: `#/session/${sx.session_id}?q=${qp}` }, sx.title || "(untitled)"), agentTag(sx.agent),
+        h("span", { class: "sr-count" }, sx.hits ? `${fmtNum(sx.hits)} mention${sx.hits === 1 ? "" : "s"}` : "in summary")),
+      h("div", { class: "sr-meta" }, `${sx.project_name || "–"} · ${fmtDT(sx.started_at)}`),
+      sx.summary ? h("div", { class: "sr-summary" }, snippetEl(sx.summary)) : null,
+      sx.snippets.length ? hits : null, all);
+  };
+  const list = h("div", { class: "sr-list" }, data.sessions.map(group));
+  let offset = data.sessions.length;
+  const more = h("button", { class: "btn", type: "button", hidden: offset >= data.total, onclick: async () => {
+    more.disabled = true;
+    const next = await api("/api/search", { q, sort, offset });
+    list.append(...next.sessions.map(group));
+    offset += next.sessions.length;
+    more.disabled = false; more.hidden = offset >= data.total;
+  } }, "More sessions");
+  const sortSel = h("select", { "aria-label": "Order sessions", onchange: (e) => go(`#/search?q=${qp}${e.target.value !== "hits" ? "&sort=" + e.target.value : ""}`) },
+    [["hits", "Most mentions"], ["newest", "Newest first"], ["oldest", "Oldest first"]].map(([v, l]) => h("option", { value: v, selected: v === sort }, l)));
+  const knowledge = data.knowledge.length ? h("section", { class: "card section-gap", id: "search-knowledge" }, h("div", { class: "card-head" }, h("h2", null, `Knowledge (${data.knowledge.length})`)),
+    h("div", { class: "grid" }, data.knowledge.map((k) => knowledgeCard(k, { compact: true })))) : null;
+  const sub = data.total
+    ? [`${fmtNum(data.total)} session${data.total === 1 ? "" : "s"} · ${fmtNum(data.mentions)} mention${data.mentions === 1 ? "" : "s"}`,
+      knowledge ? [" · ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); knowledge.scrollIntoView({ behavior: "smooth" }); } }, `${data.knowledge.length} knowledge items`)] : null]
+    : knowledge ? `No sessions mention “${q}”; ${data.knowledge.length} knowledge items do` : `No sessions mention “${q}”`;
+  return h("div", null, head(sub),
+    h("div", { class: "filters" }, box, data.total ? sortSel : null),
+    data.total ? h("section", { class: "card flush" }, list) : null,
+    h("div", { class: "load-more" }, more), knowledge);
 });
 
 // =====================================================================================
@@ -3191,7 +3262,8 @@ function renderRail() {
   const rail = $("#rail");
   const link = (sx) => h("a", { href: sx.href, "data-section": sx.key, title: sx.label, "aria-label": sx.label,
     onclick: () => { if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.key === "home" ? "home" : sx.key));
-  rail.replaceChildren(...SECTIONS.slice(0, 4).map(link), h("div", { class: "spacer" }), link(SECTIONS[4]));
+  rail.replaceChildren(...SECTIONS.slice(0, 4).map(link), link({ key: "search", label: "Search all sessions", href: "#/search" }),
+    h("div", { class: "spacer" }), link(SECTIONS[4]));
 }
 
 // ------------------------------------------------------------------ sidebar
@@ -3332,7 +3404,7 @@ function sidebarExpanded() {
 function updateShell(path, params) {
   const section = sectionOf(path, params);
   document.querySelectorAll("#rail a").forEach((a) => {
-    const on = a.dataset.section === section;
+    const on = a.dataset.section === (path === "/search" ? "search" : section); // search has no sidebar of its own
     a.classList.toggle("on", on);
     if (on) a.setAttribute("aria-current", "page"); else a.removeAttribute("aria-current");
   });
@@ -3406,7 +3478,7 @@ function drawPalette() {
   list.querySelector(".pal-item.on")?.scrollIntoView({ block: "nearest" });
 }
 function searchItem(q) {
-  return { group: "Search", label: `Search transcripts and knowledge for “${q}”`, icon: "search", hint: "↵", run: () => go(`#/search?q=${encodeURIComponent(q)}`) };
+  return { group: "Search", label: `Search all sessions for “${q}”`, icon: "search", hint: "↵", run: () => go(`#/search?q=${encodeURIComponent(q)}`) };
 }
 async function refreshPalette(q) {
   clearTimeout(pal.timer);

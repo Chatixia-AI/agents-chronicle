@@ -90,6 +90,12 @@ def test_http_api(synced):
         assert all(len(p["weekly"]) == 12 and isinstance(p["outcomes"], dict) and p["agents"] for p in projects)
         daily = json.loads(get("/api/overview?days=all")[1])["daily"]  # stat-tile sparklines
         assert daily and {"tool_calls", "lines_added"} <= set(daily[0])
+        found = json.loads(get("/api/search?q=logout&sort=newest")[1])  # search all sessions
+        assert found["sessions"][0]["session_id"] == SID and found["sessions"][0]["snippets"] and "knowledge" in found
+        matches = json.loads(get(f"/api/sessions/{SID[:8]}/matches?q=logout")[1])  # find in session, in transcript order
+        assert matches and all("«logout»" in m["snippet"].lower() for m in matches)
+        assert [m["seq"] for m in matches if not m["agent_id"]] == sorted(m["seq"] for m in matches if not m["agent_id"])
+        assert json.loads(get(f"/api/sessions/{SID}/matches?q=")[1]) == []
         try:
             get("/api/status", {"Host": "attacker.example:80"})
             raise AssertionError("foreign Host header accepted")

@@ -21,7 +21,7 @@ from . import __version__
 from .config import Config
 from .db import connect, kv_get
 from .llm import BACKENDS, make_runner
-from .search import search_events, search_knowledge, search_sessions
+from .search import search_all, search_events, search_knowledge, search_sessions
 from .synthesize import GLOBAL
 from .util import loads, to_iso, utcnow
 from .views import project_labels, resolve_session_id, session_record
@@ -376,6 +376,15 @@ class App:
             items.append(d)
         return {"total": total, "offset": offset, "items": items}
 
+    def matches(self, sid: str, q: dict) -> list[dict]:
+        """Every transcript event in one session that mentions the query, in transcript order (main thread first)."""
+        real = resolve_session_id(self.conn, sid)
+        if not real or not (q.get("q") or "").strip():
+            return []
+        hits = search_events(self.conn, q["q"], session_id=real, limit=500)
+        hits.sort(key=lambda e: (e["agent_id"] != "", e["agent_id"], e["seq"]))
+        return [{k: e[k] for k in ("seq", "agent_id", "kind", "tool_name", "ts", "snippet")} for e in hits]
+
     def projects(self) -> list[dict]:
         labels = project_labels(self.conn)
         # per project: active time in each of the last 12 weeks (oldest first), outcomes and agents
@@ -465,11 +474,10 @@ class App:
     def search(self, q: dict) -> dict:
         query = q.get("q") or ""
         project = q.get("project") or None
-        return {
-            "sessions": search_sessions(self.conn, query, project=project, limit=20),
-            "knowledge": search_knowledge(self.conn, query, project=project, limit=20),
-            "events": search_events(self.conn, query, project=project, limit=60),
-        }
+        offset = int(q.get("offset") or 0)
+        found = search_all(self.conn, query, project=project, sort=q.get("sort") or "hits", offset=offset, limit=25)
+        found["knowledge"] = search_knowledge(self.conn, query, project=project, limit=20) if not offset else []
+        return found
 
     def glossary(self, q: dict) -> dict:
         from .glossary import CATEGORIES, glossary_entries
@@ -965,6 +973,9 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/events", p)
                 if m:
                     return self._json(app.events(m.group(1), q))
+                m = re.fullmatch(r"/api/sessions/([\w-]+)/matches", p)
+                if m:
+                    return self._json(app.matches(m.group(1), q))
                 if p == "/api/projects":
                     return self._json(app.projects())
                 if p == "/api/project":

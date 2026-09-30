@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Search all sessions:** the Search page (now also in the rail) lists every session that mentions a word or
+  phrase, with how many times, ordered by most mentions, newest or oldest. Each session shows its mentions in
+  transcript order with the terms highlighted and who said them; **Show all** lists every mention. Clicking one
+  opens the transcript at that message with the terms still highlighted, including inside folded tool calls.
+
 ## 0.3.0 (2026-09-30)
 
 - **Analyze with Codex:** sessions, knowledge bases, the glossary and weekly reviews can now be written by OpenAI

@@ -41,7 +41,10 @@ bases and the global playbook (a TL;DR, section chips, a filter, and sections as
 open to their detail and sources), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a
 three-line TL;DR, the week's numbers against the week before, active time per day, where the time went, outcomes and
 knowledge captured, then themes and short lists of what shipped, what was learned, what is still open, what slowed
-you down and what to try next; the full write-up is folded away), search with jump-to-message. Glossary
+you down and what to try next; the full write-up is folded away), **Search all sessions** (the magnifier in the rail, or the last entry
+when you type in ⌘K): every session that mentions a word or phrase, most mentions first (or newest/oldest), each with its
+mentions highlighted in transcript order; **Show all** lists every one, and clicking a mention opens the transcript
+there with the terms still marked. Glossary
 terms are underlined wherever they appear (transcripts, knowledge, summaries): hover for the definition, click for
 the entry. Every chart has a table view; light and dark themes.
 
