@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 (2026-09-30)
 
 - **Search all sessions:** the Search page (now also in the rail) lists every session that mentions a word or
   phrase, with how many times, ordered by most mentions, newest or oldest. Each session shows its mentions in
