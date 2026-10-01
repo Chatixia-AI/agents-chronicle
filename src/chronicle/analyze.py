@@ -7,6 +7,7 @@ import logging
 import sqlite3
 from datetime import timedelta
 
+from . import ladder
 from .config import Config
 from .digest import build_digest
 from .ingest import best_title
@@ -308,6 +309,7 @@ def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data:
             best_title({"llm_title": title, "ai_title": s["ai_title"], "first_prompt": s["first_prompt"]}), session_id,
         ),
     )
+    kept = ladder.before_reanalysis(conn, session_id)
     conn.execute(
         "DELETE FROM knowledge WHERE session_id = ? AND source = 'analysis' AND pinned = 0 AND status != 'dismissed'",
         (session_id,),
@@ -318,13 +320,14 @@ def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data:
             continue
         conn.execute(
             "INSERT OR IGNORE INTO knowledge(session_id, project_path, project_name, kind, title, body, tags_json, scope, "
-            "confidence, evidence, source, source_ref, fingerprint, created_at, updated_at) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "confidence, evidence, source, source_ref, fingerprint, created_at, updated_at, stage) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (
                 session_id, s["project_path"], s["project_name"], item["kind"], redact(item["title"]).strip(),
                 redact(item.get("body") or "").strip(), dumps([t.lower() for t in item.get("tags") or []]),
                 item.get("scope") if item.get("scope") in ("project", "global") else "project",
                 item.get("confidence"), redact(item.get("evidence") or ""), "analysis", f"prompt-v{PROMPT_VERSION}",
-                fingerprint(session_id, item["kind"], item["title"]), now, now,
+                fingerprint(session_id, item["kind"], item["title"]), now, now, ladder.initial_stage(item),
             ),
         )
+    ladder.after_reanalysis(conn, session_id, kept)

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     open_threads_json TEXT,
     friction_json TEXT,
     analysis_json TEXT,
+    statusline_json TEXT,                          -- context and plan usage from Claude Code's status line (statusline.py)
     machine_id TEXT,                                -- the computer it ran on (machines.id)
     machine_path TEXT                               -- project_path as that computer recorded it, when it differs
 );
@@ -217,7 +218,13 @@ CREATE TABLE IF NOT EXISTS knowledge (
     status TEXT NOT NULL DEFAULT 'active',         -- active | superseded | dismissed
     pinned INTEGER NOT NULL DEFAULT 0,
     created_at TEXT,
-    updated_at TEXT
+    updated_at TEXT,
+    stage TEXT NOT NULL DEFAULT 'provisional',      -- wip | provisional | established | canonical (see ladder.py)
+    stage_reason TEXT,                             -- the evidence that earned the stage
+    confirmed_json TEXT,                           -- session ids that state the same lesson
+    superseded_by INTEGER,                         -- the item that replaced this one, when there is one
+    superseded_reason TEXT,                        -- duplicate | outdated | contradicted
+    superseded_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_session ON knowledge(session_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_project ON knowledge(project_path);
@@ -368,6 +375,10 @@ def init_schema(conn: sqlite3.Connection) -> None:
     for st in statements:
         if st not in tables:
             conn.execute(st)
+    if current < 8:  # knowledge gained a maturity stage: derive it for existing items from what they already carry
+        from .ladder import refresh_all
+
+        refresh_all(conn)
     conn.execute(f"PRAGMA user_version = {SCHEMA_VERSION}")
     conn.commit()
 

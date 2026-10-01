@@ -89,7 +89,16 @@ Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ
 任意：`chronicle install --inject-context` を使うと、新しいセッションにそのプロジェクトのナレッジベースの短い要約を渡す
 `SessionStart` フックも追加されます（既定ではオフ。内容は `chronicle context` で確認できます）。
 
-すべてを削除するには `chronicle uninstall` を実行します（データは残ります。`--purge` でデータも削除）。
+任意：`chronicle install --statusline` を使うと、Claude Code の各セッションが実際に使ったコンテキストと、Pro と Max プランでは
+そのセッションの間に 5 時間枠と 7 日枠の上限がどれだけ進んだかを記録します（Claude Code はこれらをステータスラインにしか渡しません）。
+`~/.claude/settings.json` の `statusLine` を `chronicle statusline` に設定し、これがスナップショットを `~/.claude-chronicle/statusline/`
+に保存してから、もともと使っていたステータスラインを同じ入力で実行するため、表示は以前と変わりません。元の設定は
+`~/.claude-chronicle/statusline/wrapped.json` に保存されます。ステータスラインを使っていなかった場合はモデル、コンテキスト、
+上限を表示し、Claude Code はフッターのキー操作のヒントの大半を表示しなくなります。同期のたびに各セッションの数値がデータベースに
+取り込まれます（セッションのページと **Status**）。`chronicle uninstall` で元のステータスラインに戻ります。
+
+すべてを削除するには `chronicle uninstall` を実行します（データは残ります。`--purge` でデータも削除）。`--statusline` で
+ステータスラインを包んでいた場合は、元のステータスラインも復元します。
 
 コマンドライン版からデスクトップアプリを使うには、`app` エクストラを追加して `chronicle app` を実行します：
 `uv tool install --python 3.13 'agents-chronicle[app]'`。今後アプリだけを使う場合は、先に `chronicle uninstall` を実行してから

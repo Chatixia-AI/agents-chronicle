@@ -23,6 +23,7 @@ from pathlib import Path
 
 from .config import Config
 from .db import kv_get, kv_set
+from .ladder import MEMORY_STAGE_REASON
 from .codex_parser import (CODEX_PARSER_VERSION, load_imports, load_titles, parent_thread_id, parse_codex_session,
                            read_meta, rollout_files, rollout_id)
 from .bob_parser import BOB_PARSER_VERSION, bob_db, load_tasks, parse_bob_task, task_signature
@@ -537,6 +538,16 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                         conn.rollback()
                         log.exception("%s sync failed: %s", name, d)
                         report.errors.append(f"{name} {d}: {exc}")
+            from .statusline import ingest as ingest_statusline
+
+            conn.execute("SAVEPOINT statusline")  # a bad record must not undo the sessions synced above
+            try:
+                ingest_statusline(conn)  # context and plan usage the status-line collector recorded
+                conn.execute("RELEASE statusline")
+            except Exception:
+                conn.execute("ROLLBACK TO statusline")
+                conn.execute("RELEASE statusline")
+                log.exception("status-line usage import failed")
             report.sessions_missing_source = mark_missing_sources(conn)
             try:
                 report.analyses_imported = apply_analyses(cfg, conn)
@@ -851,10 +862,11 @@ def import_codex_memories(conn, cfg: Config, mem: Path) -> int:
             continue
         conn.execute(
             "INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, tags_json, scope, confidence, "
-            "evidence, source, agent, source_ref, fingerprint, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "evidence, source, agent, source_ref, fingerprint, created_at, updated_at, stage, stage_reason) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (None, project_path, project_name_for(project_path) if project_path else None, "fact", title, body, tags,
              "project" if project_path else "global", "high", "Codex memory", "memory", "codex", str(f), fp,
-             to_iso(datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)), now))
+             to_iso(datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)), now, "established", MEMORY_STAGE_REASON))
         changed += 1
     return changed
 
@@ -1043,10 +1055,11 @@ def import_memory_dir(conn: sqlite3.Connection, cfg: Config, proj: Path, mem: Pa
             continue
         conn.execute(
             "INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, tags_json, scope, confidence, "
-            "evidence, source, source_ref, fingerprint, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "evidence, source, source_ref, fingerprint, created_at, updated_at, stage, stage_reason) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (None, project_path, project_name_for(project_path), kind, title, body.strip(), tags,
              "global" if mtype in ("user", "feedback") else "project", "high", name, "memory", str(f), fp,
-             to_iso(datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)), now),
+             to_iso(datetime.fromtimestamp(f.stat().st_mtime, timezone.utc)), now, "established", MEMORY_STAGE_REASON),
         )
         changed += 1
     return changed

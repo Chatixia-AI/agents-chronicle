@@ -308,6 +308,7 @@ def cmd_search(args) -> int:
 
 
 def cmd_knowledge(args) -> int:
+    from .ladder import stage_label
     from .search import search_knowledge
 
     cfg = _cfg()
@@ -318,7 +319,7 @@ def cmd_knowledge(args) -> int:
         print(json.dumps(rows, ensure_ascii=False, indent=1, default=str))
         return 0
     for k in rows:
-        console.print(f"[cyan]{k['kind']}[/] [bold]{k['title']}[/] [dim]({k.get('project_name') or '-'}, "
+        console.print(f"[cyan]{k['kind']}[/] [bold]{k['title']}[/] [dim]({k.get('project_name') or '-'}, {stage_label(k)}, "
                       f"{k.get('confidence') or '-'}, {(k.get('session_id') or k['source'])[:8]})[/]", highlight=False)
         if not args.brief:
             console.print(f"  {k.get('body') or ''}\n", highlight=False, markup=False)
@@ -390,10 +391,11 @@ def cmd_stats(args) -> int:
 
 def cmd_status(args) -> int:
     from .db import kv_get
-    from .install import UI_LABEL, hooks_installed, launchd_status, mcp_registered
+    from .install import UI_LABEL, hooks_installed, launchd_status, mcp_registered, statusline_installed
+    from .statusline import WINDOW_LABEL, plan_usage
     from .llm import make_runner
     from .util import human_cost, local_str
-    from .worker import PAUSE_KEY, count_pending
+    from .worker import PAUSE_KEY, QUEUE_REASON_LABEL, count_pending
 
     cfg = _cfg()
     conn = _conn(cfg)
@@ -416,6 +418,13 @@ def cmd_status(args) -> int:
         console.print(f"  hub for {others} other computer{'s' * (others != 1)} (`chronicle hub status`)")
     console.print(f"  {ok(hooks.get('SessionEnd'))} SessionEnd hook   {ok(hooks.get('SessionStart'))} SessionStart context hook"
                   f"{' (optional)' if not cfg.inject_session_start else ''}")
+    plan = plan_usage(conn)
+    limits = " · ".join(f"{WINDOW_LABEL[k]} {v['used_pct']:.0f}% (resets {local_str(v['resets_at'], '%m-%d %H:%M')})"
+                        for k, v in ((plan or {}).get("limits") or {}).items())
+    console.print(f"  {ok(statusline_installed(cfg))} status-line usage collector"
+                  + (f": plan limits {limits}, as of {local_str(plan['as_of'])}" if limits
+                     else " (optional: chronicle install --statusline)" if not statusline_installed(cfg)
+                     else ": no plan limits seen yet (Pro and Max plans only)"), highlight=False)
     ui = launchd_status(UI_LABEL)
     console.print(f"  {ok(ld.get('loaded'))} background sync agent (runs: {ld.get('runs', '-')}, last exit: {ld.get('last_exit', '-')})")
     console.print(f"  {ok(ui.get('loaded'))} dashboard agent: http://127.0.0.1:{cfg.server_port}/")
@@ -423,8 +432,12 @@ def cmd_status(args) -> int:
     console.print(f"  {ok(mcp_registered())} MCP server registered   {ok(runner.available())} analysis by {runner.label}: "
                   f"{runner.bin or f'`{runner.cli.split()[0]}` not found'}")
     console.print(f"  sessions: {sum(counts.values())} · " + " · ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
-    console.print(f"  analysis queue: {pending['ready']} ready now, {pending['queued']} pending/stale · "
+    console.print(f"  analysis queue: {pending['ready']} ready now, {pending['queued']} queued in all, {pending['held']} held · "
                   f"model {runner.model_label()} · auto={'on' if cfg.analysis.auto else 'off'} · spent {human_cost(spent)}")
+    if pending["reasons"]:
+        console.print("    waiting because: " + " · ".join(f"{QUEUE_REASON_LABEL.get(k, k)}: {v}" for k, v in sorted(pending["reasons"].items())))
+    if pending["block"]:
+        console.print(f"    [yellow]{pending['block']}[/]", highlight=False)
     paused = kv_get(conn, PAUSE_KEY)
     if paused:
         console.print(f"  analysis paused until {local_str(paused)}")
@@ -689,7 +702,8 @@ def cmd_install(args) -> int:
     from .db import kv_get, kv_set
     from .ingest import sync
     from .install import (LAUNCHD_LABEL, UI_LABEL, agent_path, background_supported, executable, install_hooks,
-                          install_launchd, install_mcp, install_ui_agent, launchd_status, uninstall_launchd)
+                          install_launchd, install_mcp, install_statusline, install_ui_agent, launchd_status,
+                          statusline_installed, uninstall_launchd)
     from .util import utcnow_iso
 
     cfg = _cfg()
@@ -726,6 +740,8 @@ def cmd_install(args) -> int:
             actions += install_hooks(cfg, exe, inject=args.inject_context or cfg.inject_session_start, dry_run=args.dry_run)
         if args.inject_context and not args.dry_run:
             _set_config_value(cfg, "inject", "session_start", "true")
+        if args.statusline or statusline_installed(cfg):  # opt-in; once on, re-installs keep its path current
+            actions += install_statusline(cfg, exe, dry_run=args.dry_run)
         if not args.no_mcp:
             actions += install_mcp(cfg, exe, dry_run=args.dry_run)
     elif cfg.claude_dirs and not args.dry_run:
@@ -852,10 +868,10 @@ def cmd_uninstall(args) -> int:
     import shutil
 
     from .connectors import mcp_clients_status, remove_mcp_client
-    from .install import uninstall_hooks, uninstall_launchd, uninstall_mcp
+    from .install import uninstall_hooks, uninstall_launchd, uninstall_mcp, uninstall_statusline
 
     cfg = _cfg()
-    actions = uninstall_hooks(cfg) + uninstall_launchd() + uninstall_mcp(cfg)
+    actions = uninstall_hooks(cfg) + uninstall_statusline(cfg) + uninstall_launchd() + uninstall_mcp(cfg)
     for c in mcp_clients_status():
         if c["registered"]:
             actions += remove_mcp_client(cfg, c["name"])
@@ -1435,6 +1451,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--no-mcp", action="store_true")
     s.add_argument("--no-ui", action="store_true", help="don't keep the dashboard running in the background (removes it if installed)")
     s.add_argument("--inject-context", action="store_true", help="also add a SessionStart hook that injects project knowledge")
+    s.add_argument("--statusline", action="store_true",
+                   help="also record context and plan-limit usage from Claude Code's status line (keeps your own status line)")
     s.add_argument("--interval", type=int, default=15, help="background sync interval in minutes (default 15)")
     s.add_argument("--exe", help="command used by hooks/launchd (default: the installed `chronicle`)")
     s.add_argument("--analyze", type=_analyze_choice, metavar="all|N|later",
@@ -1637,6 +1655,10 @@ def main(argv: list[str] | None = None) -> int:
         from .hooks import hook_main
 
         return hook_main(argv[1])
+    if argv[:1] == ["statusline"]:  # Claude Code runs this after every turn: same fast path
+        from .statusline import main as statusline_main
+
+        return statusline_main()
     parser = build_parser()
     args = parser.parse_args(argv)
     if not args.command:

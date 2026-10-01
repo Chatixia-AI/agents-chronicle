@@ -874,6 +874,12 @@ table.list-table :is(.title-cell, .def-cell, .term-cell) { overflow-wrap: anywhe
 .scope-tag { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; color: var(--muted); }
 .scope-tag .icon { width: 13px; height: 13px; }
 .meter { display: inline-flex; gap: 2px; align-items: flex-end; height: 12px; }
+.stage-tag { display: inline-flex; align-items: center; gap: 3px; font-size: 11px; font-weight: 500; line-height: 1.5;
+  padding: 0 7px; border-radius: 999px; white-space: nowrap; color: var(--muted); background: var(--surface-2); vertical-align: 1px; }
+.stage-tag b { font-weight: 600; }
+.stage-tag.s-established { color: var(--accent-ink); background: var(--accent-wash); }
+.stage-tag.s-canonical { color: var(--accent-ink); background: var(--accent-wash-2); box-shadow: inset 0 0 0 1px var(--accent); }
+.stage-tag.s-wip { color: var(--warning-ink); background: transparent; box-shadow: inset 0 0 0 1px var(--border-strong); }
 .meter i { width: 4px; border-radius: 1.5px; background: var(--accent-wash-2); }
 .meter i:nth-child(1) { height: 6px; }
 .meter i:nth-child(2) { height: 9px; }
@@ -1089,6 +1095,8 @@ button.mm-theme:hover { background: var(--surface-2); }
 .sfact small { font-size: 12px; }
 .sfact small.bad { color: var(--critical-ink); }
 .s-summary { max-width: 78ch; margin: 16px 0 0; font-size: 14.5px; line-height: 1.6; color: var(--ink-2); }
+.s-waiting { color: var(--muted); font-size: 13.5px; }
+.s-waiting .icon { width: 14px; height: 14px; vertical-align: -2px; }
 .s-kchips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .s-kchip { display: inline-flex; align-items: center; gap: 6px; max-width: 100%; padding: 4px 10px 4px 8px; border-radius: 8px; border: 1px solid var(--border); background: var(--surface); font-size: 12.5px; color: var(--ink); cursor: pointer; }
 .s-kchip span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 46ch; }
@@ -1435,3 +1443,5 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .kb-src { display: none; margin-top: 6px; font-size: 12px; color: var(--muted); }
 .kb-src a { color: var(--accent-ink); }
 .rv-items li.open .kb-src { display: block; }
+.warn-line { color: var(--warning-ink); }
+.warn-line .icon { width: 13px; height: 13px; vertical-align: -2px; }

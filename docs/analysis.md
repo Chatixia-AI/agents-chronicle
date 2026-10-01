@@ -56,8 +56,9 @@ instance, have no cache split (so no cost estimate), and Bob tasks have no per-c
    Analysis**, with `chronicle config set analysis.backend codex`, or for one run with `chronicle analyze
    --backend codex`.
 4. The JSON reply is validated leniently (with one repair pass) and stored. When a project gains
-   `min_new_items` new items, its knowledge base is re-synthesized; items that are outdated or
-   duplicated get marked *superseded* (pinned and memory items are never superseded). Once every session of
+   `min_new_items` new items, its knowledge base is re-synthesized; items that are outdated, contradicted or
+   duplicated get marked *superseded*, each naming the item that replaced it (pinned and memory items are never
+   superseded). A duplicate also counts as a confirmation: see [how knowledge earns trust](#how-knowledge-earns-trust). Once every session of
    a finished week is analyzed, the model writes that week's review (a three-line TL;DR, themes, accomplishments,
    learnings, open threads, recurring friction, concrete workflow suggestions). Knowledge bases, the playbook and
    reviews are written to be skimmed: a TL;DR, a short overview, a title per knowledge-base bullet, and word
@@ -65,6 +66,35 @@ instance, have no cache split (so no cost estimate), and Bob tasks have no per-c
 5. Usage-limit or auth errors pause analysis for an hour; other failures back off 30 min → 2 h → 8 h.
    Calls have a wall-clock deadline, and a call frozen by the Mac going to sleep is killed right after wake and
    re-queued without counting as a failure. Sessions that continue after being analyzed are re-analyzed.
+   A session that is not analyzed yet always says why: on its page, in **Status › Analysis** (a count per
+   reason) and in `chronicle status`. *Queued* reasons clear by themselves (ready for the next run, still active,
+   waiting to retry); *held* ones need a change first (project excluded, too few prompts, from before install
+   with backfill off, failed four times). When the whole queue is stopped (paused for a usage limit, automatic
+   analysis off, or the analyzer not found), that is said too.
+
+## How knowledge earns trust
+
+Every knowledge item has a stage, which says how far it has been confirmed:
+
+| Stage | Shown as | Earned by |
+| --- | --- | --- |
+| `wip` | tentative | one session, and the analysis was unsure (low confidence) |
+| `provisional` | seen once | one session |
+| `established` | established ×N | the same lesson in 2 or more sessions; also Claude Code and Codex memory notes, and items you add |
+| `canonical` | canonical ×N | the same lesson in 3 or more sessions spread over at least 14 days, or pinned by you |
+
+The evidence comes from synthesis: when it finds that an item from one session states the same lesson as an item
+from another, it reports the pair as a duplicate, and the surviving item takes over the other's sessions. The
+stage is then computed from those sessions and their dates, not judged by the model, and the reason is stored
+with it ("confirmed in 3 sessions over 19 days (2026-09-01 → 2026-09-20)"). Items that are merely related stay
+separate, and the cross-project playbook pools evidence without retiring anything. Re-analyzing a session keeps
+what its items had earned.
+
+Stages are used wherever knowledge is read: searches and the SessionStart digest list the most trusted items first,
+the MCP tools label each item (`[gotcha · established ×3]`), knowledge-base bullets carry the stage of their best
+source, and syntheses see each item's stage. Leaving the ladder is a status, not a stage: a superseded item keeps
+its stage and names its successor, and when an established or canonical item is overturned by a newer one (not
+just merged as a duplicate), that week's review lists it under **Overturned**.
 
 Cost: analysis runs through your own Claude Code or Codex login. With Claude, the reported cost is the API
 list-price equivalent: sessions averaged about $0.38 each with Sonnet (digests average ~150k characters), and

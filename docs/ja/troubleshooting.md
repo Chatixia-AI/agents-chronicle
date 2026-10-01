@@ -46,7 +46,8 @@ Codex にはセッション終了フックがないため、Codex のセッシ�
 
 ## 分析
 
-**何も分析されない。** 分析には、ログイン済みの `claude` CLI が必要です。`chronicle status` で `claude` がどこで見つかったかを
+**何も分析されない。** セッションを開くと、要約の下に待っている理由が表示されます。**Status › Analysis**（または
+`chronicle status`）では理由ごとの件数がわかります。分析には、ログイン済みの `claude` CLI が必要です。`chronicle status` で `claude` がどこで見つかったかを
 確認できます。アプリはログインシェルの PATH を読み込むため、npm や Homebrew でインストールした `claude` も見つかります。
 セッションは、終了するか `analysis.idle_minutes` の間アイドルになると分析されます。
 

@@ -87,6 +87,10 @@ def _on_session_start(payload: dict) -> int:
 def build_session_context(cfg, cwd: str) -> str | None:
     """A compact digest of what previous sessions learned about this project."""
     from .db import connect
+    from .ladder import STAGE_ORDER_SQL, STAGE_RANK, TRUSTED, stage_label
+
+    def trust_tag(i: dict) -> str:
+        return i["stage"] + (f" ×{i['sessions']}" if (i.get("sessions") or 0) > 1 else "")
     from .synthesize import kb_for_path, kb_sections
     from .util import local_str, one_line
 
@@ -102,16 +106,21 @@ def build_session_context(cfg, cwd: str) -> str | None:
                 if not items:
                     continue
                 lines.append(f"{section.get('title')}:")
-                lines += [f"- {one_line(i.get('text') or '', 300)}" for i in items[:6]]
+                # the best-established bullets first, each with its trust when it has earned some
+                items = sorted(items, key=lambda i: -STAGE_RANK.get(i.get("stage") or "provisional", 1))
+                lines += [f"- {one_line(i.get('text') or '', 300)}"
+                          + (f" ({trust_tag(i)})" if i.get("stage") in TRUSTED else "") for i in items[:6]]
         else:
             rows = conn.execute(
-                "SELECT kind, title FROM knowledge WHERE status = 'active' AND project_path = ? "
-                "AND kind IN ('gotcha', 'fix', 'fact', 'decision', 'preference') ORDER BY pinned DESC, id DESC LIMIT 12",
+                "SELECT k.kind, k.title, k.stage, k.session_id, k.confirmed_json FROM knowledge k WHERE k.status = 'active' "
+                "AND k.project_path = ? AND k.kind IN ('gotcha', 'fix', 'fact', 'decision', 'preference') "
+                f"ORDER BY k.pinned DESC, {STAGE_ORDER_SQL}, k.id DESC LIMIT 12",
                 (cwd,),
             ).fetchall()
             if rows:
                 lines.append("Chronicle notes from past coding-agent sessions in this project:")
-                lines += [f"- [{r['kind']}] {one_line(r['title'], 200)}" for r in rows]
+                lines += [f"- [{r['kind']}" + (f" · {stage_label(r)}" if r["stage"] in TRUSTED else "") + f"] {one_line(r['title'], 200)}"
+                          for r in rows]
         recent = conn.execute(
             "SELECT started_at, title, outcome FROM sessions WHERE project_path = ? AND source != 'history' "
             "ORDER BY started_at DESC LIMIT 3", (cwd,),

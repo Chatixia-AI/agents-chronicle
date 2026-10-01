@@ -49,9 +49,10 @@ good with `chronicle forget <id>`.
 
 ## Analysis
 
-**Nothing gets analyzed.** Analysis needs the `claude` CLI to be logged in. `chronicle status` shows where it found
-`claude`; the app reads your login shell's PATH, so a `claude` installed with npm or Homebrew is found too. A
-session is analyzed once it ends or has been idle for `analysis.idle_minutes`.
+**Nothing gets analyzed.** Open the session: under its summary it says why it is waiting, and **Status ›
+Analysis** (or `chronicle status`) counts sessions per reason. Analysis needs the `claude` CLI to be logged in.
+`chronicle status` shows where it found `claude`; the app reads your login shell's PATH, so a `claude` installed
+with npm or Homebrew is found too. A session is analyzed once it ends or has been idle for `analysis.idle_minutes`.
 
 **Analysis stopped with "usage limit".** Chronicle pauses analysis for an hour when Claude reports a usage limit or
 an auth error, and resumes by itself. Other failures back off (30 min, 2 h, 8 h). **Analyze now** on a session

@@ -24,6 +24,7 @@ archive, over HTTPS inside the tailnet.
 | Markdown vault | `~/.claude-chronicle/notes/` |
 | Logs | `~/.claude-chronicle/logs/` |
 | Backups of agent config files Chronicle edits | `~/.claude-chronicle/backups/` |
+| Status-line usage per session (only with `--statusline`) | `~/.claude-chronicle/statusline/` |
 | The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
 | This computer's id and name; a hub's token (readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/hub-token` |
 | On a hub: the session files other computers sent | `~/.claude-chronicle/machines/` |

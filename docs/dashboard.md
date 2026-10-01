@@ -39,12 +39,13 @@ it produced up top, then **Transcript**: the conversation with one-line tool cal
 output, and subagent threads; or **Details**: goal, highlights, open threads, the knowledge items, context-window
 chart with compactions, tools, files, subagents, PRs; on wide windows an **Outline** of the prompts and changed files
 sits beside the transcript and follows your scroll), a Knowledge overview (one card each for the Map, All knowledge,
-the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss), project knowledge
+the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
+[stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it), project knowledge
 bases and the global playbook (a TL;DR, section chips, a filter, and sections as cards of short bullets that
-open to their detail and sources), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a
+open to their detail and sources, with established and canonical bullets marked), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a
 three-line TL;DR, the week's numbers against the week before, active time per day, where the time went, outcomes and
 knowledge captured, then themes and short lists of what shipped, what was learned, what is still open, what slowed
-you down and what to try next; the full write-up is folded away), **Search all sessions** (the magnifier in the rail, or the last entry
+you down, what to try next and which trusted knowledge was overturned; the full write-up is folded away), **Search all sessions** (the magnifier in the rail, or the last entry
 when you type in ⌘K): every session that mentions a word or phrase, most mentions first (or newest/oldest), each with its
 mentions highlighted in transcript order; **Show all** lists every one, and clicking a mention opens the transcript
 there with the terms still marked. Glossary
