@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.0 (2026-10-01)
 
 - **On your phone:** `chronicle tailnet on` puts the dashboard on your Tailscale network with Tailscale Serve, at
   `https://<computer>.<tailnet>.ts.net/`, for your Tailscale login only (`[server] allowed_hosts` and
