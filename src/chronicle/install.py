@@ -1,4 +1,5 @@
-"""Install/uninstall Chronicle into Claude Code (hooks, MCP server) and macOS launchd."""
+"""Install/uninstall Chronicle into Claude Code (hooks, MCP server) and the background agents: launchd on macOS,
+systemd user units on Linux (for a hub that runs on a Linux box)."""
 
 from __future__ import annotations
 
@@ -236,6 +237,81 @@ def uninstall_statusline(cfg: Config) -> list[str]:
     return [done]
 
 
+# ------------------------------------------------------------------ systemd (Linux)
+SYSTEMD_UNITS = {LAUNCHD_LABEL: ("chronicle-sync.timer", "chronicle-sync.service"), UI_LABEL: ("chronicle-ui.service",)}
+
+
+def uses_systemd() -> bool:
+    return platform.system() == "Linux" and shutil.which("systemctl") is not None
+
+
+def background_supported() -> bool:
+    """Whether `chronicle install` can keep the sync and dashboard running from login here."""
+    return platform.system() == "Darwin" or uses_systemd()
+
+
+def systemd_dir() -> Path:
+    return Path(os.environ.get("XDG_CONFIG_HOME") or "~/.config").expanduser() / "systemd" / "user"
+
+
+def _sd_quote(arg: str) -> str:
+    arg = arg.replace("%", "%%")
+    if not arg or any(c in arg for c in ' \t"\'\\;$'):
+        return '"' + arg.replace("\\", "\\\\").replace('"', '\\"') + '"'
+    return arg
+
+
+def systemd_units(cfg: Config, exe: str, *, interval: int = 900) -> dict[str, str]:
+    """The unit files for the background sync (a timer) and the always-on dashboard."""
+    cmd = shlex.split(exe)
+    env = "\n".join(f"Environment={_sd_quote(f'{k}={v}')}" for k, v in _agent_env(cfg).items())
+    run = lambda *args: " ".join(_sd_quote(a) for a in [*cmd, *args])  # noqa: E731
+    return {
+        "chronicle-sync.service": (
+            "[Unit]\nDescription=Chronicle: archive, ingest and analyze coding-agent sessions\n\n"
+            f"[Service]\nType=oneshot\nExecStart={run('sync', '--work', '--quiet')}\n{env}\nNice=10\n"
+            "IOSchedulingClass=idle\n"),
+        "chronicle-sync.timer": (
+            "[Unit]\nDescription=Chronicle: sync every few minutes\n\n"
+            f"[Timer]\nOnBootSec=2min\nOnUnitActiveSec={interval}s\n\n[Install]\nWantedBy=timers.target\n"),
+        "chronicle-ui.service": (
+            "[Unit]\nDescription=Chronicle dashboard\n\n"
+            f"[Service]\nExecStart={run('ui')}\n{env}\nRestart=always\nRestartSec=30\n\n"
+            "[Install]\nWantedBy=default.target\n"),
+    }
+
+
+def _systemctl(*args: str) -> subprocess.CompletedProcess:
+    return subprocess.run(["systemctl", "--user", *args], capture_output=True, text=True)
+
+
+def _systemd_install(cfg: Config, exe: str, names: tuple[str, ...], enable: str, interval: int) -> str | None:
+    units = systemd_units(cfg, exe, interval=interval)
+    d = systemd_dir()
+    d.mkdir(parents=True, exist_ok=True)
+    for name in names:
+        (d / name).write_text(units[name])
+    _systemctl("daemon-reload")
+    proc = _systemctl("enable", "--now", enable)
+    if proc.returncode != 0:
+        return proc.stderr.strip() or f"exit {proc.returncode}"
+    if enable.endswith(".service"):
+        _systemctl("restart", enable)  # pick up a changed ExecStart
+    return None
+
+
+def _systemd_status(label: str) -> dict:
+    units = SYSTEMD_UNITS[label]
+    info = {"installed": (systemd_dir() / units[0]).exists(),
+            "loaded": _systemctl("is-active", units[0]).stdout.strip() == "active"}
+    show = _systemctl("show", units[-1], "-p", "ExecMainStatus", "-p", "NRestarts").stdout
+    for line in show.splitlines():
+        key, _, value = line.partition("=")
+        if key == "ExecMainStatus" and info["installed"]:
+            info["last_exit"] = value
+    return info
+
+
 # ------------------------------------------------------------------ launchd
 def plist_path(label: str = LAUNCHD_LABEL) -> Path:
     return Path("~/Library/LaunchAgents").expanduser() / f"{label}.plist"
@@ -262,11 +338,16 @@ def _bootstrap(label: str, plist: dict) -> str | None:
 
 
 def install_ui_agent(cfg: Config, exe: str, *, dry_run: bool = False) -> list[str]:
-    """Keep the dashboard running at http://127.0.0.1:<port> (restarted by launchd if it exits)."""
-    if platform.system() != "Darwin":
-        return ["dashboard agent skipped (not macOS); run `chronicle ui` yourself"]
-    program = shlex.split(exe) + ["ui"]
+    """Keep the dashboard running at http://127.0.0.1:<port> (restarted by launchd or systemd if it exits)."""
     url = f"http://127.0.0.1:{cfg.server_port}/"
+    if uses_systemd():
+        if dry_run:
+            return [f"systemd user unit {systemd_dir() / 'chronicle-ui.service'} serving {url}"]
+        err = _systemd_install(cfg, exe, ("chronicle-ui.service",), "chronicle-ui.service", 900)
+        return [f"dashboard agent failed: {err}"] if err else [f"dashboard always available at {url}"]
+    if platform.system() != "Darwin":
+        return ["dashboard agent skipped (no launchd or systemd); run `chronicle ui` yourself"]
+    program = shlex.split(exe) + ["ui"]
     if dry_run:
         return [f"dashboard agent {plist_path(UI_LABEL)} serving {url}"]
     err = _bootstrap(UI_LABEL, {
@@ -284,8 +365,14 @@ def install_ui_agent(cfg: Config, exe: str, *, dry_run: bool = False) -> list[st
 
 
 def install_launchd(cfg: Config, exe: str, *, interval: int = 900, dry_run: bool = False) -> list[str]:
+    """The background sync every `interval` seconds: a launchd agent on macOS, a systemd user timer on Linux."""
+    if uses_systemd():
+        if dry_run:
+            return [f"systemd user timer {systemd_dir() / 'chronicle-sync.timer'} running sync every {interval}s"]
+        err = _systemd_install(cfg, exe, ("chronicle-sync.service", "chronicle-sync.timer"), "chronicle-sync.timer", interval)
+        return [f"systemd timer failed: {err}"] if err else [f"systemd timer chronicle-sync.timer runs `chronicle sync --work` every {interval // 60} min"]
     if platform.system() != "Darwin":
-        return ["launchd skipped (not macOS); schedule `chronicle sync --work` with cron instead"]
+        return ["background sync skipped (no launchd or systemd); schedule `chronicle sync --work` with cron instead"]
     program = shlex.split(exe) + ["sync", "--work", "--quiet"]
     plist = {
         "Label": LAUNCHD_LABEL,
@@ -309,6 +396,18 @@ def install_launchd(cfg: Config, exe: str, *, interval: int = 900, dry_run: bool
 
 def uninstall_launchd(labels=(LAUNCHD_LABEL, UI_LABEL)) -> list[str]:
     out = []
+    if uses_systemd():
+        for label in labels:
+            units = SYSTEMD_UNITS.get(label, ())
+            if not any((systemd_dir() / u).exists() for u in units):
+                continue
+            _systemctl("disable", "--now", units[0])
+            for u in units:
+                (systemd_dir() / u).unlink(missing_ok=True)
+            out.append(f"removed systemd unit {units[0]}")
+        if out:
+            _systemctl("daemon-reload")
+        return out
     if platform.system() != "Darwin":
         return out
     for label in labels:
@@ -322,6 +421,8 @@ def uninstall_launchd(labels=(LAUNCHD_LABEL, UI_LABEL)) -> list[str]:
 
 
 def launchd_status(label: str = LAUNCHD_LABEL) -> dict:
+    if uses_systemd() and label in SYSTEMD_UNITS:
+        return _systemd_status(label)
     if platform.system() != "Darwin":
         return {"installed": False}
     proc = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{label}"], capture_output=True, text=True)
@@ -333,6 +434,15 @@ def launchd_status(label: str = LAUNCHD_LABEL) -> dict:
         elif line.startswith("runs ="):
             info["runs"] = line.split("=", 1)[-1].strip()
     return info
+
+
+def background_status() -> dict:
+    """The background sync agent's state, whichever service manager runs it."""
+    return launchd_status(LAUNCHD_LABEL)
+
+
+def agent_path(label: str) -> Path:
+    return systemd_dir() / SYSTEMD_UNITS[label][0] if uses_systemd() else plist_path(label)
 
 
 # ------------------------------------------------------------------ MCP

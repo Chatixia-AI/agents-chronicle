@@ -79,6 +79,19 @@ notes_dir = ""
 [server]
 host = "127.0.0.1"
 port = 8765
+# Other names the dashboard answers to besides 127.0.0.1 and localhost, e.g. its Tailscale name
+# ("pc.tail1234.ts.net"). `chronicle tailnet on` sets this.
+allowed_hosts = []
+# Reached by one of those names through Tailscale Serve: only these Tailscale logins get in
+# (empty = everyone on your tailnet). `chronicle tailnet on` sets it to yours.
+allowed_users = []
+
+[hub]
+# On a computer that sends its sessions to another one (the hub): the hub's address. Set by `chronicle hub join`.
+url = ""
+# On the hub: folders on the other computers that hold the same projects as a folder here,
+# e.g. { "/home/me/code" = "/Users/me/Projects" }. Projects are also matched by their git remote.
+path_map = {}
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -89,6 +102,9 @@ max_chars = 3000
 # Ask pypi.org for the latest version once a day while the dashboard is open (off: only when you click
 # Check for updates). Sends nothing about you.
 check_daily = false
+# Show a desktop notification when a new version is out: the background sync asks pypi.org once a day and
+# notifies once per release. Sends nothing about you.
+notify = false
 """
 
 
@@ -139,9 +155,14 @@ class Config:
     notes_dir: Path = Path("~/.claude-chronicle/notes")
     server_host: str = "127.0.0.1"
     server_port: int = 8765
+    server_allowed_hosts: list[str] = field(default_factory=list)
+    server_allowed_users: list[str] = field(default_factory=list)
+    hub_url: str = ""
+    hub_path_map: dict[str, str] = field(default_factory=dict)
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
+    update_notify: bool = False
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -163,6 +184,16 @@ class Config:
     @property
     def config_path(self) -> Path:
         return self.home / "config.toml"
+
+    @property
+    def machines_dir(self) -> Path:
+        """On a hub: the files other computers sent, one folder per computer."""
+        return self.home / "machines"
+
+    @property
+    def is_spoke(self) -> bool:
+        """This computer sends its sessions to a hub instead of recording them itself."""
+        return bool(self.hub_url)
 
     def ensure_dirs(self) -> None:
         for d in (self.home, self.archive_dir, self.logs_dir, self.locks_dir):
@@ -226,6 +257,8 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
     export = _section(data, "export")
     server = _section(data, "server")
     inject = _section(data, "inject")
+    hub = _section(data, "hub")
+    path_map = hub.get("path_map")
 
     env_dirs = os.environ.get("CHRONICLE_CLAUDE_DIRS")
     raw_dirs = env_dirs.split(os.pathsep) if env_dirs else sources.get("claude_dirs", ["~/.claude"])
@@ -246,9 +279,14 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         notes_dir=Path(export.get("notes_dir") or (home / "notes")).expanduser(),
         server_host=str(server.get("host", "127.0.0.1")),
         server_port=int(server.get("port", 8765)),
+        server_allowed_hosts=[str(h).strip().lower() for h in server.get("allowed_hosts") or [] if str(h).strip()],
+        server_allowed_users=[str(u).strip() for u in server.get("allowed_users") or [] if str(u).strip()],
+        hub_url=str(hub.get("url") or "").strip().rstrip("/"),
+        hub_path_map={str(k).rstrip("/"): str(v).rstrip("/") for k, v in path_map.items()} if isinstance(path_map, dict) else {},
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
+        update_notify=bool(_section(data, "updates").get("notify", False)),
     )
     return cfg
 

@@ -17,6 +17,8 @@ from typing import Iterator
 
 log = logging.getLogger("chronicle")
 
+PROGRESS_RE = re.compile(r"(\d[\d,]*)\s*(?:of|/)\s*(\d[\d,]*)")  # "12 of 40", "120/2,000": a job's progress
+
 
 # ---------------------------------------------------------------- time
 def utcnow() -> datetime:

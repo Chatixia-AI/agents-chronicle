@@ -32,9 +32,12 @@ _PROJECT_PROP = {"type": "string", "description": "Project path or name. Default
 _AGENT_PROP = {"type": "string", "enum": list(AGENTS),
                "description": "Only sessions from this agent: " + ", ".join(f"{k} ({v[0]})" for k, v in AGENTS.items())
                + ". Defaults to all."}
+# every tool only reads the local vault: clients may run them without asking, and nothing reaches the network
 TOOLS = [
     {
         "name": "search_knowledge",
+        "annotations": {"title": "Search knowledge", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "Search knowledge extracted from past coding-agent sessions (fixes, gotchas, decisions, "
                        "facts, commands, preferences). Best first stop for 'have we solved this before?'.",
         "inputSchema": {
@@ -51,6 +54,8 @@ TOOLS = [
     },
     {
         "name": "search_sessions",
+        "annotations": {"title": "Search sessions", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "Full-text search across past session transcripts (prompts, the agent's replies, tool calls) "
                        "and session summaries, imported claude.ai and ChatGPT chats included. Returns matching "
                        "sessions with snippets.",
@@ -67,6 +72,8 @@ TOOLS = [
     },
     {
         "name": "get_session",
+        "annotations": {"title": "Get session", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "Overview of one past session: summary, outcome, knowledge, files changed, prompts.",
         "inputSchema": {
             "type": "object",
@@ -76,6 +83,8 @@ TOOLS = [
     },
     {
         "name": "get_transcript",
+        "annotations": {"title": "Get transcript", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "Read part of a past session's conversation (user prompts and the agent's replies, optionally tool calls).",
         "inputSchema": {
             "type": "object",
@@ -90,6 +99,8 @@ TOOLS = [
     },
     {
         "name": "project_knowledge",
+        "annotations": {"title": "Project knowledge", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "The synthesized knowledge base for a project (architecture, how to run/test/deploy, "
                        "gotchas, decisions, open threads). Defaults to the current working directory's project. "
                        "Use project='global' for the cross-project playbook.",
@@ -97,6 +108,8 @@ TOOLS = [
     },
     {
         "name": "glossary",
+        "annotations": {"title": "Glossary", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "The developer's own vocabulary: internal system and service names, acronyms, domain terms "
                        "(incl. translations). With a term: its definition, aliases, how each project uses it and where "
                        "it appears. Without: the glossary of a project (default: the current one).",
@@ -107,6 +120,8 @@ TOOLS = [
     },
     {
         "name": "recent_sessions",
+        "annotations": {"title": "Recent sessions", "readOnlyHint": True, "destructiveHint": False,
+                        "idempotentHint": True, "openWorldHint": False},
         "description": "List recent sessions, optionally for one project or one agent.",
         "inputSchema": {
             "type": "object",
@@ -119,12 +134,6 @@ TOOLS = [
         },
     },
 ]
-
-
-# every tool only reads the local vault: clients may run them without asking, and nothing reaches the network
-for _tool in TOOLS:
-    _tool["annotations"] = {"title": _tool["name"].replace("_", " ").capitalize(), "readOnlyHint": True,
-                            "destructiveHint": False, "idempotentHint": True, "openWorldHint": False}
 
 
 class Tools:

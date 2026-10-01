@@ -2,6 +2,8 @@
 
 import json
 
+import pytest
+
 from chronicle import ladder
 from chronicle.analyze import analyze_session
 from chronicle.db import connect, init_schema
@@ -163,13 +165,14 @@ def test_overturned_trusted_knowledge_appears_in_the_review(synced, monkeypatch)
     assert "## Overturned" in md
 
 
-def test_migration_derives_stages_for_existing_items(tmp_path):
+@pytest.mark.parametrize("version", [6, 7])  # 7: databases from 0.5.x, which used 7 for the hub columns
+def test_migration_derives_stages_for_existing_items(tmp_path, version):
     path = tmp_path / "old.db"
     conn = connect(path)
     conn.execute("INSERT INTO knowledge(kind, title, confidence, source, pinned, fingerprint) VALUES "
                  "('fix', 'a', 'low', 'analysis', 0, 'f1'), ('fix', 'b', 'high', 'memory', 0, 'f2'), ('fix', 'c', 'high', 'analysis', 1, 'f3')")
     conn.execute("UPDATE knowledge SET stage = 'provisional'")
-    conn.execute("PRAGMA user_version = 6")
+    conn.execute(f"PRAGMA user_version = {version}")
     conn.commit()
     init_schema(conn)
     assert [r[0] for r in conn.execute("SELECT stage FROM knowledge ORDER BY fingerprint")] == ["wip", "established", "canonical"]

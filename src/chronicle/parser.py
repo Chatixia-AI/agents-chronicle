@@ -142,6 +142,7 @@ class ParsedSession:
     id: str
     project_path: str | None = None
     git_branch: str | None = None
+    git_remote: str | None = None  # the repository's remote URL, when the transcript records it (Codex does)
     cc_version: str | None = None
     entrypoint: str | None = None
     permission_mode: str | None = None

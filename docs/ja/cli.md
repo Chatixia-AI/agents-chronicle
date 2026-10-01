@@ -4,7 +4,7 @@
 
 | コマンド | |
 | --- | --- |
-| `chronicle install [--yes] [--dry-run]` | セットアップ：見つかったエージェントを一覧にし、記録するものを尋ね、取り込み、ダッシュボードを起動（[インストール](install.md#コマンドライン)） |
+| `chronicle install [--yes] [--analyze all\|N\|later] [--[no-]notify-updates] [--dry-run]` | セットアップ：見つかったエージェントを一覧にし、記録するものを尋ね、取り込み、今すぐ進捗付きで分析するか尋ね（用語集とマップはここから作られます）、ダッシュボードを起動（[インストール](install.md#コマンドライン)） |
 | `chronicle app` | デスクトップアプリ（ウインドウ＋メニューバー）。`app` エクストラが必要 |
 | `chronicle ui [--open]` | ダッシュボード（インストール後は :8765 で常時稼働。稼働中なら `chronicle ui` がそう表示し、`--open` でそれを開きます）。Sessions、Knowledge、Projects、Glossary は Cards と List（並べ替え可能な表。行をクリックで詳細）を切り替えられ、ページごとに記憶されます |
 | `chronicle sessions [-p project] [--since 7d]` | セッションの一覧 |
@@ -25,6 +25,11 @@
 | `chronicle connect <client>` / `disconnect <client>` | `claude-desktop`、`cursor`、`windsurf`、`gemini` に MCP サーバーを追加／削除 |
 | `chronicle mcp [--print-config]` | MCP サーバーを実行（クライアントが起動します）、またはほかの MCP クライアント用の設定項目を出力 |
 | `chronicle status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
+| `chronicle tailnet on\|off\|status [--anyone]` | Tailscale Serve でダッシュボードをスマートフォンやほかのデバイスから開けるようにする。通すのはあなたの Tailscale ログインだけ（`--anyone` で tailnet の全員）（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
+| `chronicle hub enable [--rotate]` | このコンピューターをほかのコンピューターのハブにする。ほかのコンピューターで実行する `chronicle hub join` のコマンドを表示 |
+| `chronicle hub join <address> --token <token>` / `hub leave` | このコンピューターのセッションをここで記録せずにハブへ送る、またはやめる（[ほかのコンピューター](devices.md#ほかのコンピューター)） |
+| `chronicle hub status` / `hub disable` | このハブに送ってくるコンピューターの一覧／受け付けをやめる |
+| `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |
 | `chronicle config set <section.key> <value>` | 設定を 1 つ変更。例：`chronicle config set analysis.backend codex`（[設定](configuration.md)） |
 

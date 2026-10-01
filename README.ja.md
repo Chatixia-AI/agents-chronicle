@@ -39,6 +39,8 @@ Chronicle は終わったセッションを読み、残す価値のあること�
   Gemini CLI からも接続できます。
 - **すべてを眺めるダッシュボード。** トランスクリプト全体を含むセッション、統計、自分の用語をマインドマップにした用語集、
   ひと目でわかる週次の振り返り。⌘K でどこへでも移動できます。
+- **スマートフォンとほかのコンピューターでも。** Tailscale 経由でスマートフォンからダッシュボードを開き、すべてのコンピューターの
+  セッションを 1 つのアーカイブにまとめて、分析は 1 回だけ（[スマートフォンとほかのコンピューター](docs/ja/devices.md)）。
 - **ただのファイルとしても。** Obsidian 互換の Markdown 保管庫と `chronicle` CLI。
 
 ## クイックスタート
@@ -117,7 +119,9 @@ API 換算では Sonnet で 1 セッションあたり平均約 $0.38 です。`
 `chronicle config set analysis.backend codex` で選びます。記録と閲覧はどちらでも使えます。どちらにもログインしていない場合、
 セッションは保管され、分析待ちの列で待ちます。
 
-**Windows や Linux は？** まだです。アプリとバックグラウンドのエージェントは macOS 専用です。
+**Windows や Linux は？** デスクトップアプリは macOS 専用です。Linux では `chronicle install` が同期とダッシュボードを systemd の
+ユーザーユニットとして動かすので、Linux マシンをほかのコンピューターの[ハブ](docs/ja/devices.md#linux-のハブ)にできます。
+Windows にはまだ対応していません。
 
 **特定のプロジェクトやセッションを除外できる？** [設定](docs/ja/configuration.md)の `sources.exclude_projects` に
 プロジェクトを追加するか、`chronicle forget <id>` でセッションを完全に削除します。
@@ -130,7 +134,8 @@ API 換算では Sonnet で 1 セッションあたり平均約 $0.38 です。`
 ## ドキュメント
 
 [インストール](docs/ja/install.md) · [ソース](docs/ja/sources.md) · [ダッシュボード・用語集・マップ](docs/ja/dashboard.md) ·
-[コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
+[コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [スマートフォンとほかのコンピューター](docs/ja/devices.md) ·
+[記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
 [データとプライバシー](docs/ja/privacy.md) · [トラブルシューティング](docs/ja/troubleshooting.md) · [開発](docs/ja/development.md)
 
 ## コントリビュート

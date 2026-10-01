@@ -43,5 +43,17 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `export.markdown` | `true` | mirror everything into the Markdown vault |
 | `export.notes_dir` | `""` | where the vault lives (empty: `~/.claude-chronicle/notes`) |
 | `server.host` / `port` | `127.0.0.1` / `8765` | the dashboard; the app uses a free port when this one is taken |
+| `server.allowed_hosts` | `[]` | other names the dashboard answers to besides 127.0.0.1 and localhost, e.g. its Tailscale name; `chronicle tailnet on` sets it ([Phone and other computers](devices.md#your-phone)) |
+| `server.allowed_users` | `[]` | reached by one of those names through Tailscale Serve, only these Tailscale logins get in (empty: everyone in your tailnet); `chronicle tailnet on` sets it to yours |
 | `inject.session_start` / `max_chars` | `false` / `3000` | give new sessions a digest of the project's knowledge base (SessionStart hook) |
 | `updates.check_daily` | `false` | ask pypi.org for the latest version once a day while the dashboard is open (Status › Updates) |
+| `updates.notify` | `false` | the background sync asks pypi.org once a day and shows a desktop notification once per new release (Status › Updates, or `chronicle install --notify-updates`) |
+
+## `[hub]`
+
+One archive for several computers ([Phone and other computers](devices.md#your-other-computers)).
+
+| Key | Default | |
+| --- | --- | --- |
+| `url` | `""` | on a computer that sends its sessions to a hub: the hub's address. Set by `chronicle hub join`, cleared by `chronicle hub leave`; while it is set, this computer sends instead of recording and analyzing |
+| `path_map` | `{}` | on the hub: folders on the other computers that hold the same projects as a folder here, e.g. `{ "/home/me/code" = "/Users/me/Projects" }`. Projects with a git remote are matched by it first |

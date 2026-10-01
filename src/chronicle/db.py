@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 7
+SCHEMA_VERSION = 8
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -93,12 +93,15 @@ CREATE TABLE IF NOT EXISTS sessions (
     open_threads_json TEXT,
     friction_json TEXT,
     analysis_json TEXT,
-    statusline_json TEXT                           -- context and plan usage from Claude Code's status line (statusline.py)
+    statusline_json TEXT,                          -- context and plan usage from Claude Code's status line (statusline.py)
+    machine_id TEXT,                                -- the computer it ran on (machines.id)
+    machine_path TEXT                               -- project_path as that computer recorded it, when it differs
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_path);
 CREATE INDEX IF NOT EXISTS idx_sessions_status ON sessions(analysis_status);
 CREATE INDEX IF NOT EXISTS idx_sessions_agent ON sessions(agent);
+CREATE INDEX IF NOT EXISTS idx_sessions_machine ON sessions(machine_id);
 
 CREATE TABLE IF NOT EXISTS events (
     id INTEGER PRIMARY KEY,
@@ -319,6 +322,20 @@ CREATE TABLE IF NOT EXISTS glossary_usage (
     PRIMARY KEY (term_id, project_path)
 );
 
+CREATE TABLE IF NOT EXISTS machines (
+    id TEXT PRIMARY KEY,                           -- a UUID each computer makes once (machine.json)
+    name TEXT,
+    platform TEXT,
+    version TEXT,                                  -- its Chronicle version
+    role TEXT,                                     -- this | spoke
+    first_seen TEXT,
+    last_seen TEXT,                                -- last time it said hello
+    last_push TEXT,                                -- last time it sent a file
+    files INTEGER DEFAULT 0,                       -- files received from it
+    bytes INTEGER DEFAULT 0,
+    repos_json TEXT                                -- {cwd: [git top level, normalized remote]} it reported
+);
+
 CREATE TABLE IF NOT EXISTS files_state (
     path TEXT PRIMARY KEY,
     size INTEGER,
@@ -358,7 +375,7 @@ def init_schema(conn: sqlite3.Connection) -> None:
     for st in statements:
         if st not in tables:
             conn.execute(st)
-    if current < 7:  # knowledge gained a maturity stage: derive it for existing items from what they already carry
+    if current < 8:  # knowledge gained a maturity stage: derive it for existing items from what they already carry
         from .ladder import refresh_all
 
         refresh_all(conn)

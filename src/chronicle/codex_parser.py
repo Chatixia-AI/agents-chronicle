@@ -404,6 +404,8 @@ class _CodexThread:
         if git.get("branch"):
             ps.git_branch = git["branch"]
             ps.branches[git["branch"]] += 1
+        if isinstance(git.get("repository_url"), str):
+            ps.git_remote = git["repository_url"]
         if p.get("timestamp"):
             self._touch(p["timestamp"])
 

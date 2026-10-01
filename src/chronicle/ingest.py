@@ -48,18 +48,24 @@ class SyncReport:
     errors: list[str] = field(default_factory=list)
     seconds: float = 0.0
     touched: list[str] = field(default_factory=list)
+    analyses_imported: int = 0
 
     def summary(self) -> str:
         return (
             f"{self.sessions_new} new, {self.sessions_updated} updated, {self.sessions_unchanged} unchanged sessions; "
             f"{self.files_archived} files archived ({self.bytes_archived / 1e6:.1f} MB); "
             f"{self.history_sessions} history-only sessions; {self.memory_items} memory notes; "
-            f"{len(self.errors)} errors in {self.seconds:.1f}s"
+            + (f"{self.analyses_imported} analyses from other computers; " if self.analyses_imported else "")
+            + f"{len(self.errors)} errors in {self.seconds:.1f}s"
         )
 
 
 # ------------------------------------------------------------------ paths
 def archive_key(claude_dir: Path) -> str:
+    from .hub import MACHINE_RE, ROOT_RE
+
+    if claude_dir.parent.parent.name == "machines" and MACHINE_RE.match(claude_dir.parent.name) and ROOT_RE.match(claude_dir.name):
+        return f"machines/{claude_dir.parent.name}/{claude_dir.name}"  # received from another computer (hub.py)
     for name in ("claude", "codex"):
         if claude_dir.resolve() == Path(f"~/.{name}").expanduser().resolve():
             return name
@@ -208,6 +214,12 @@ def paths_signature(paths, version: int) -> str:
 
 
 # ------------------------------------------------------------------ store
+def local_machine_id(cfg: Config) -> str:
+    from .hub import local_machine
+
+    return local_machine(cfg)["id"]
+
+
 def _json(counter) -> str:
     if isinstance(counter, Counter):
         return dumps(dict(counter.most_common()))
@@ -289,7 +301,11 @@ def store_parsed(
     )
 
     totals = ps.totals()
-    project_path = ps.project_path or (decode_project_dir(project_dir) if project_dir else None)
+    from .hub import machine_of, resolver
+
+    machine = machine_of(cfg, claude_dir)
+    recorded_path = ps.project_path or (decode_project_dir(project_dir) if project_dir else None)
+    project_path = resolver(cfg, conn).resolve(machine, recorded_path, ps.git_remote) if machine else recorded_path
     excluded = cfg.is_excluded(project_path)
 
     # analysis state machine
@@ -372,6 +388,8 @@ def store_parsed(
         "ended_flag": ended_flag,
         "analysis_status": status,
         "analysis_reason": reason,
+        "machine_id": machine or local_machine_id(cfg),
+        "machine_path": recorded_path if recorded_path != project_path else None,
     }
     row["title"] = best_title({"llm_title": prev["llm_title"] if prev else None, "ai_title": row["ai_title"],
                                "first_prompt": row["first_prompt"]})
@@ -438,7 +456,18 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
             return report
         archiver = Archiver(conn, report)
         skip = forgotten_ids(conn)
-        for claude_dir in cfg.claude_dirs:
+        from .hub import apply_analyses, machine_roots, register_local, resolver
+
+        me = register_local(conn, cfg)
+        conn.execute("UPDATE sessions SET machine_id = ? WHERE machine_id IS NULL", (me,))  # recorded before machines existed
+        conn.commit()
+        resolver(cfg, conn, fresh=True)
+        received = machine_roots(cfg)  # on a hub: the folders other computers sent
+        claude_dirs = [*cfg.claude_dirs, *(d for _m, kind, d in received if kind == "claude" and not only)]
+        codex_dirs = [*cfg.codex_dirs, *(d for _m, kind, d in received if kind == "codex")]
+        if only:  # the hook's single transcript may be a received one too
+            claude_dirs += [d for _m, kind, d in received if kind == "claude" and only.is_relative_to(d)]
+        for claude_dir in claude_dirs:
             projects = claude_dir / "projects"
             if not projects.is_dir():
                 continue
@@ -487,7 +516,7 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                             report.errors.append(f"history {hist}: {exc}")
                 conn.commit()
         if not only:
-            for codex_dir in cfg.codex_dirs:
+            for codex_dir in codex_dirs:
                 try:
                     _sync_codex(cfg, conn, archiver, codex_dir, report, skip, force=force)
                 except Exception as exc:
@@ -520,6 +549,12 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                 conn.execute("RELEASE statusline")
                 log.exception("status-line usage import failed")
             report.sessions_missing_source = mark_missing_sources(conn)
+            try:
+                report.analyses_imported = apply_analyses(cfg, conn)
+            except Exception as exc:
+                conn.rollback()
+                log.exception("applying analyses from other computers failed")
+                report.errors.append(f"imported analyses: {exc}")
             kv_set(conn, "last_sync", utcnow_iso())
         conn.commit()
     report.seconds = time.monotonic() - t0
@@ -900,7 +935,12 @@ def import_history(conn: sqlite3.Connection, cfg: Config, path: Path) -> int:
         return 0
     created = 0
     known = {r[0] for r in conn.execute("SELECT id FROM sessions WHERE source != 'history'")} | forgotten_ids(conn)
+    from .hub import machine_of, resolver
+
+    machine = machine_of(cfg, path)
     for sid, rec in parse_history(path).items():
+        if machine:
+            rec["project"] = resolver(cfg, conn).resolve(machine, rec.get("project"))
         if sid in known or cfg.is_excluded(rec.get("project")):
             continue
         prompts = [(ts, safe_text(text)) for ts, text in rec["prompts"] if str(text).strip()]
@@ -922,13 +962,14 @@ def import_history(conn: sqlite3.Connection, cfg: Config, path: Path) -> int:
         conn.execute(
             "INSERT INTO sessions(id, source, claude_dir, project_path, project_name, source_present, title, first_prompt, "
             "last_prompt, started_at, ended_at, duration_s, active_s, n_prompts, n_events, analysis_status, analysis_reason, "
-            "ingested_at, parser_version) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "ingested_at, parser_version, machine_id) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
             "ON CONFLICT(id) DO UPDATE SET n_prompts = excluded.n_prompts, n_events = excluded.n_events, "
             "last_prompt = excluded.last_prompt, ended_at = excluded.ended_at, duration_s = excluded.duration_s "
             "WHERE sessions.source = 'history'",
             (sid, "history", str(path.parent), project, project_name_for(project), 0, one_line(first, 90), first,
              prompts[-1][1], started, ended, dur, min(dur, len(prompts) * 300.0), len(real), len(prompts), "skipped",
-             "history only (transcript deleted before Chronicle)", utcnow_iso(), PARSER_VERSION),
+             "history only (transcript deleted before Chronicle)", utcnow_iso(), PARSER_VERSION,
+             machine or local_machine_id(cfg)),
         )
         created += 1
     kv_set(conn, f"history_sig:{path}", marker)

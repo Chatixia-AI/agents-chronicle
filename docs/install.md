@@ -62,10 +62,19 @@ run `uv tool install --python 3.13 .` in it.
 5. Asks whether to run Chronicle in the background, starting at login (default yes): the 15-minute sync and the
    always-on dashboard below. If you say no, Claude Code sessions are still recorded and analyzed as they end;
    run `chronicle sync --work` for the rest and `chronicle ui --open` for the dashboard. Not asked again once the
-   agents run; `--no-launchd --no-ui` turns them off.
-6. Prints the dashboard address; on a first install it offers to open it.
+   agents run; `--no-launchd --no-ui` turns them off. With the background sync on, it also asks once whether to
+   show a desktop notification when a new version of Chronicle is out (`--notify-updates` or
+   `--no-notify-updates` answers without asking).
+6. Explains analysis: each past session is read through your Claude Code (or Codex) login, which counts toward
+   your plan's usage, and the knowledge it yields builds each project's knowledge base, then the **Glossary**, then
+   the **Map**. Until sessions are analyzed, those two stay empty. It says how many sessions are waiting and how
+   long the background takes over them (6 every 15 minutes), then asks whether to analyze them now with a
+   progress bar per stage (sessions, knowledge bases, glossary, map themes): all of them, or the newest 20 for a
+   first Glossary and Map in minutes. Ctrl-C stops, keeping what is done; the rest is analyzed in the background.
+   `--analyze all`, `--analyze N` (the newest N) or `--analyze later` answers without asking.
+7. Prints the dashboard address; on a first install it offers to open it.
 
-Without a terminal, or with `--yes`, it takes the defaults without asking. Re-running it is safe: connected
+Without a terminal, or with `--yes`, it takes the defaults without asking (analysis: later). Re-running it is safe: connected
 agents are refreshed without a question, so it asks only about agents installed since. `--dry-run` shows what it
 would do and changes nothing.
 
@@ -111,7 +120,11 @@ first and let the app connect Claude Code, so the launchd agents do not run alon
 | The desktop app | Nothing: **Download** opens the latest release to drag into Applications |
 
 Only **Check for updates** goes online (to pypi.org), or, if you turn on **Check for updates daily** on the same
-card, a check once a day while the dashboard is open. The last answer is kept across restarts. Once an update is known, a notification says so (once per release, or per new commit in a checkout; **Later**
+card, a check once a day while the dashboard is open. **Notify me about new versions** (also offered by `chronicle
+install`) has the background sync check once a day instead, dashboard open or not, and show a desktop notification
+once per release saying how to update: macOS Notification Center, or `notify-send` on Linux. On macOS clicking the
+notification opens Script Editor, which posts it for Chronicle; the notification text says where to update. The
+last answer is kept across restarts. Once an update is known, a notification says so (once per release, or per new commit in a checkout; **Later**
 dismisses it), Settings gets a dot and the status bar shows **Update to …**. A checkout's Updates card lists the
 commits and changed files a reinstall would bring in.
 A dashboard run by `chronicle ui` (or its launchd agent) restarts itself afterwards and open tabs reload; a
