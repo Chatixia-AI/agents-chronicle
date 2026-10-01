@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1 (2026-10-01)
 
 - **Hear about new versions:** turn on **Notify me about new versions** (Status › Updates, or say yes when
   `chronicle install` asks) and the background sync asks pypi.org once a day, dashboard open or not, and shows a
