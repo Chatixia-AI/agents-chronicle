@@ -5,10 +5,13 @@
 **マシンの外に送られるもの：** 1 つだけです。セッションを分析するとき、そのセッションをまとめた要約（機密情報は先に伏せ字にします）が、
 分析用に選んだエージェントに、あなた自身のログインを通じて送られます：Claude Code（`claude -p`、既定）なら Anthropic に、
 Codex（`codex exec`）なら OpenAI に送られます。
-Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかに接続するのは、Status ページで
-アップデート確認だけです。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** か **Notify me about new versions** をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、
+Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかの接続の 1 つは
+アップデート確認です。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** か **Notify me about new versions** をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、
 同期のたびに `codex cloud` CLI も実行され、Codex のログインで OpenAI からあなた自身のタスクを取得します。こちらから何かを送ることはありません。
 claude.ai や ChatGPT のエクスポートを取り込むときはチャットだけを読み、アカウントのファイル（`users.json`、`user.json`）は開きません。
+提案した行が公開リポジトリに入る前に警告するため、GitHub のリモートがあるプロジェクトでは、あなた自身の `gh` のログインで
+`gh repo view` を実行します。GitHub に送るのはリポジトリの名前だけで、結果は 1 週間覚えておきます。`gh` が
+なければ何も送りません（[提案](suggestions.md#プライバシー)）。
 
 **スマートフォンやほかのコンピューターと使う場合**（[スマートフォンとほかのコンピューター](devices.md)）も、あなた自身のデバイスの外には
 何も出ません。`chronicle tailnet on` はダッシュボードを Tailscale のネットワーク内で、あなたの Tailscale ログインだけに開きます。
@@ -20,7 +23,7 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 | 元のトランスクリプト（無期限に保存、gzip） | `~/.claude-chronicle/archive/` |
 | Markdown 保管庫 | `~/.claude-chronicle/notes/` |
 | ログ | `~/.claude-chronicle/logs/` |
-| Chronicle が編集したエージェントの設定ファイルのバックアップ | `~/.claude-chronicle/backups/` |
+| Chronicle が編集したエージェントの設定ファイルと指示ファイルのバックアップ | `~/.claude-chronicle/backups/` |
 | セッションごとのステータスラインの使用量（`--statusline` を使った場合のみ） | `~/.claude-chronicle/statusline/` |
 | アプリの起動スクリプトとウインドウの保存領域 | `~/.claude-chronicle/bin/chronicle`、`~/.claude-chronicle/webview/` |
 | このコンピューターの ID と名前、ハブのトークン（あなただけが読めます） | `~/.claude-chronicle/machine.json`、`~/.claude-chronicle/hub-token` |
@@ -49,5 +52,10 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 - **他のエージェントのデータは読み取るだけです。** SQLite データベースは読み取り専用で開き、スナップショットとしてアーカイブします。Bob の
   ログイン状態は一切読みません。エージェントを接続するとその MCP 設定を編集しますが、事前に `~/.claude-chronicle/backups/` に
   バックアップします。
+- **指示ファイルと `~/.claude.json` に書き込むのは、提案を適用したときだけです。** Chronicle は `CLAUDE.md` や `AGENTS.md` の
+  自分の `<!-- BEGIN chronicle -->` ブロックの中だけに 1 行を加えるか、`~/.claude.json` に足りない Playwright MCP の引数を
+  加えます。どのファイルも事前に `~/.claude-chronicle/backups/` にバックアップし、**Undo** で変更を取り消せます。セットアップ
+  手順は表示するだけで、Chronicle が実行したり、シェルの起動ファイルを編集したりすることはありません。
+  [提案](suggestions.md)を参照してください。
 - **削除。** `chronicle forget <id> [--delete-transcript]` でセッションを完全に削除できます。`chronicle uninstall
   --purge` はすべてを削除します。

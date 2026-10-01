@@ -20,7 +20,7 @@ from pathlib import Path
 from .pricing import normalize_model, usage_cost
 from .util import iter_jsonl, one_line, parse_ts, safe_text, to_iso, truncate
 
-PARSER_VERSION = 1
+PARSER_VERSION = 2  # 2: replayed records (same uuid) and repeated tool ids are dropped; API retries count once
 
 TEXT_LIMITS = {
     "prompt": 20_000,
@@ -180,6 +180,9 @@ class ParsedSession:
     _timestamps: list = field(default_factory=list, repr=False)
     _cc_costs: dict = field(default_factory=dict, repr=False)
     _skill_calls: Counter = field(default_factory=Counter, repr=False)
+    _seen_uuids: set = field(default_factory=set, repr=False)
+    _seen_tool_ids: set = field(default_factory=set, repr=False)
+    _seen_result_ids: set = field(default_factory=set, repr=False)
 
     # ---------- aggregates
     def main_calls(self) -> list[ApiCall]:
@@ -400,6 +403,7 @@ class _Thread:
         self.n_tool_calls = 0
         self.n_tool_errors = 0
         self.model_seen: str | None = None
+        self.api_error_uuids: set[str] = set()
 
     # -------------------------------------------------------------- events
     def _event(self, ts, role, kind, text, *, limit_key=None, **kw) -> Event:
@@ -421,6 +425,13 @@ class _Thread:
     # -------------------------------------------------------------- feed
     def feed(self, d: dict) -> None:
         """Process one transcript line; a malformed line is skipped, never fatal for the session."""
+        # Claude Code can append the whole conversation chain to the transcript again (same uuids, original
+        # timestamps; seen after an artifact publish or a resume). The first copy is complete, the replay is not.
+        uuid = d.get("uuid")
+        if isinstance(uuid, str):
+            if uuid in self.ps._seen_uuids:
+                return
+            self.ps._seen_uuids.add(uuid)
         try:
             self._feed(d)
         except Exception as exc:  # unexpected shapes from future Claude Code versions or odd model output
@@ -544,6 +555,10 @@ class _Thread:
     def _tool_result(self, block: dict, tur, ts: str | None) -> None:
         ps = self.ps
         tid = block.get("tool_use_id")
+        if tid:
+            if tid in ps._seen_result_ids:
+                return  # the same result recorded twice (a replayed record under a new uuid)
+            ps._seen_result_ids.add(tid)
         text, images = _result_text(block.get("content"))
         is_error = bool(block.get("is_error"))
         call, started = self.pending.pop(tid, (None, None))
@@ -623,6 +638,10 @@ class _Thread:
 
     def _tool_use(self, b: dict, ts: str | None) -> None:
         ps = self.ps
+        if b.get("id"):
+            if b["id"] in ps._seen_tool_ids:
+                return  # one tool call, recorded twice
+            ps._seen_tool_ids.add(b["id"])
         name = b.get("name") or "?"
         inp = b.get("input") if isinstance(b.get("input"), dict) else {}
         summary, fp, cmd = summarize_tool_use(name, inp, ps.project_path)
@@ -668,9 +687,13 @@ class _Thread:
                 meta={"trigger": meta.get("trigger"), "pre_tokens": meta.get("preTokens")},
             )
         elif sub == "api_error":
-            ps.n_api_errors += 1
-            err = d.get("error") or {}
-            if (d.get("retryAttempt") or 1) == 1:
+            # each retry of a failing request is logged too, parented to the attempt before it: count the failure once
+            retry = (d.get("retryAttempt") or 1) > 1 and d.get("parentUuid") in self.api_error_uuids
+            if d.get("uuid"):
+                self.api_error_uuids.add(d["uuid"])
+            if not retry:
+                ps.n_api_errors += 1
+                err = d.get("error") or {}
                 self._event(ts, "system", "api_error", err.get("formatted") or err.get("message") or "API error")
         elif sub in ("informational", "model_refusal_fallback", "model_refusal_no_fallback", "local_command"):
             self._event(ts, "system", "notice", d.get("content") or sub)

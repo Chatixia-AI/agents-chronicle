@@ -4,13 +4,16 @@
 
 **What leaves your machine:** one thing. When a session is analyzed, a condensed digest of it (secrets redacted
 first) goes to the agent you chose for analysis, through your own login: Anthropic with Claude Code (`claude -p`,
-the default) or OpenAI with Codex (`codex exec`). Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. The one other
+the default) or OpenAI with Codex (`codex exec`). Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. One other
 connection is the update check: it asks pypi.org for the latest version number and sends nothing about you. It
 runs when you click **Check for updates** on the Status page, and once a day only if you turn on **Check for
 updates daily** or **Notify me about new versions** there (both off by default; `chronicle install` asks about
 the second). If you connect Codex Cloud, each sync also runs the
 `codex cloud` CLI, which fetches your own tasks from OpenAI with your Codex login; nothing is sent the other way.
 Importing a claude.ai or ChatGPT export reads only the chats, never the account files (`users.json`, `user.json`).
+To warn before a suggested line lands in a public repository, Chronicle runs `gh repo view` with your own `gh` login
+for projects with a GitHub remote; that sends GitHub the repository's name and nothing else, and the answer is
+remembered for a week. Without `gh` nothing is sent ([Suggestions](suggestions.md#privacy)).
 
 **With your phone and other computers** ([Phone and other computers](devices.md)), nothing leaves your own
 devices either: `chronicle tailnet on` makes the dashboard reachable inside your Tailscale network, to your
@@ -23,7 +26,7 @@ archive, over HTTPS inside the tailnet.
 | Raw transcripts, kept forever (gzip) | `~/.claude-chronicle/archive/` |
 | Markdown vault | `~/.claude-chronicle/notes/` |
 | Logs | `~/.claude-chronicle/logs/` |
-| Backups of agent config files Chronicle edits | `~/.claude-chronicle/backups/` |
+| Backups of agent config and instruction files Chronicle edits | `~/.claude-chronicle/backups/` |
 | Status-line usage per session (only with `--statusline`) | `~/.claude-chronicle/statusline/` |
 | The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
 | This computer's id and name; a hub's token (readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/hub-token` |
@@ -53,5 +56,10 @@ archive, over HTTPS inside the tailnet.
 - **Other agents' stores are only read.** SQLite databases are opened read-only and archived as snapshots; Bob's
   login state is never read. Connecting an agent edits its MCP config, backed up to `~/.claude-chronicle/backups/`
   first.
+- **Instruction files and `~/.claude.json` are written only when you apply a suggestion.** Chronicle may add a line
+  to a `CLAUDE.md` or `AGENTS.md`, inside its own `<!-- BEGIN chronicle -->` block and nowhere else in the file, or
+  add the missing Playwright MCP arguments to `~/.claude.json`. Each file is backed up to
+  `~/.claude-chronicle/backups/` first, and **Undo** takes the change back out. Setup steps are only shown; Chronicle
+  never runs them or edits your shell startup files. See [Suggestions](suggestions.md).
 - **Deleting.** `chronicle forget <id> [--delete-transcript]` removes a session for good; `chronicle uninstall
   --purge` deletes everything.

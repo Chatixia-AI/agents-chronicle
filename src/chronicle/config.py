@@ -105,6 +105,13 @@ check_daily = false
 # Show a desktop notification when a new version is out: the background sync asks pypi.org once a day and
 # notifies once per release. Sends nothing about you.
 notify = false
+
+[suggestions]
+# Propose fixes for what keeps going wrong (lines for CLAUDE.md / AGENTS.md, config changes, setup steps), refreshed
+# after every background sync. Nothing is written until you approve a suggestion; `chronicle suggest`.
+enabled = true
+# Show a desktop notification when new suggestions arrive.
+notify = false
 """
 
 
@@ -163,6 +170,8 @@ class Config:
     inject_max_chars: int = 3000
     update_check_daily: bool = False
     update_notify: bool = False
+    suggestions_enabled: bool = True
+    suggestions_notify: bool = False
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -287,6 +296,8 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
         update_notify=bool(_section(data, "updates").get("notify", False)),
+        suggestions_enabled=bool(_section(data, "suggestions").get("enabled", True)),
+        suggestions_notify=bool(_section(data, "suggestions").get("notify", False)),
     )
     return cfg
 

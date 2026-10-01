@@ -24,6 +24,27 @@
   numbers, then runs your own status line with the same input, so it looks exactly as before (with none, it shows
   model, context and limits). Session pages and **Status** show the numbers; sessions without a record stay unknown
   rather than zero. `chronicle uninstall` restores your status line.
+- **What goes wrong, and fixes to approve:** Chronicle now finds the failures that keep coming back across your
+  sessions, from failed tool calls and the friction notes analysis writes, with no model call: Playwright refusing a
+  screenshot path or a busy browser, edits on stale context, zsh globs that match nothing, `sleep` polling blocked,
+  a missing `timeout`, ports already taken, relative `cd`s, several sessions in one tree, and more. Expected failures
+  (tests failing in a dev loop, read-only checks, provider outages, calls you turned down) are kept apart as noise.
+  The **What goes wrong** page and `chronicle friction` show each cause's sessions, projects, 12-week trend and
+  whether it is still happening, plus the tools that fail most.
+- **Suggestions:** one queue of proposed fixes for those causes, and for knowledge confirmed often enough to tell your
+  agents: a line for `CLAUDE.md` or `AGENTS.md` (user level, or the project's), the Playwright MCP arguments for
+  `~/.claude.json`, or a setup step such as `setopt NO_NOMATCH`, which Chronicle shows and never runs. Nothing is
+  written until you apply one: **Preview** shows the diff, the file is backed up first, the line goes inside
+  Chronicle's own `<!-- BEGIN chronicle -->` block at the end of the file, and **Undo** takes it back out. You can
+  edit the line before applying. Warnings flag a public repository (checked with `gh`), text that looks sensitive,
+  and files git doesn't track. A dismissed suggestion never comes back, and one whose cause stopped happening goes
+  stale. The queue refreshes after each background sync; the rail shows a badge for new ones, Home shows the top 3,
+  and `[suggestions] notify = true` adds a desktop notification. On the command line: `chronicle suggest` (`show`,
+  `apply`, `dismiss`, `done`, `undo`, `refresh`). [Suggestions and What goes wrong](docs/suggestions.md)
+- **Fixed: a partly downloaded export was "not a chat export".** A large ChatGPT export (gigabytes of
+  attachments) whose download stopped early lacks the end of the zip, so it was rejected outright. ChatGPT puts the
+  chats first, so Chronicle now reads them from such a zip and says the download was incomplete; if the cut falls
+  inside the chats, it says to download the export again.
 
 ## 0.5.1 (2026-10-01)
 

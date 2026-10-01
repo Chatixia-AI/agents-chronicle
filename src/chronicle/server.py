@@ -929,6 +929,49 @@ class App:
         return True
 
 
+    # ------------------------------------------------------------------ suggestions / what goes wrong
+    def suggestions(self, q: dict) -> dict:
+        from . import suggest
+
+        status = q.get("status") if q.get("status") in suggest.STATUSES else None
+        rows = suggest.list_suggestions(self.conn, status=status, project=q.get("project") or None)
+        limit = int(q["limit"]) if str(q.get("limit") or "").isdigit() else None  # the Home card needs only the top few
+        return {"suggestions": rows[:limit] if limit else rows, "total": len(rows), "counts": suggest.counts(self.conn)}
+
+    def suggestion_preview(self, sid: int, q: dict) -> tuple[dict, int]:
+        from . import suggest
+
+        got = suggest.preview(self.conn, self.cfg, sid, (q.get("text") or "").strip() or None)
+        return got, (404 if got.get("error") == "no such suggestion" else 200)
+
+    def action_suggestion(self, sid: int, verb: str, body: dict) -> tuple[dict, int]:
+        """apply / unapply / dismiss / done / edit. A refusal is a 400 carrying the reason; an unknown id a 404."""
+        from . import suggest
+
+        if suggest.get(self.conn, sid) is None:
+            return {"ok": False, "error": "no such suggestion"}, 404
+        text = body.get("text")
+        text = text if isinstance(text, str) and text.strip() else None
+        if verb == "apply":
+            got = suggest.apply(self.conn, self.cfg, sid, text)
+        elif verb == "unapply":
+            got = suggest.unapply(self.conn, self.cfg, sid)
+        elif verb == "dismiss":
+            got = suggest.dismiss(self.conn, sid, str(body.get("reason") or "") or None)
+        elif verb == "done":
+            got = suggest.mark_done(self.conn, sid)
+        else:  # edit: keep the text you changed, so a refresh does not replace it
+            got = suggest.edit_text(self.conn, sid, text or "")
+        return got, (200 if got.get("ok") else 400)
+
+    def friction(self, q: dict) -> dict:
+        from .friction import report
+
+        days = q.get("days")
+        days = int(days) if days and days.isdigit() and int(days) > 0 else None
+        return report(self.conn, days=days, project=q.get("project") or None, noise=q.get("noise") in ("1", "true"))
+
+
 def make_handler(app: App, port: int):
     local_hosts = {f"{h}:{port}" for h in LOOPBACK}
 
@@ -1111,6 +1154,17 @@ def make_handler(app: App, port: int):
                     return self._json(app.imports())
                 if p == "/api/devices":
                     return self._json(app.devices())
+                if p == "/api/suggestions":
+                    return self._json(app.suggestions(q))
+                if p == "/api/suggestions/unseen":
+                    from .suggest import count_unseen
+
+                    return self._json({"unseen": count_unseen(app.conn)})
+                m = re.fullmatch(r"/api/suggestions/(\d+)/preview", p)
+                if m:
+                    return self._json(*app.suggestion_preview(int(m.group(1)), q))
+                if p == "/api/friction":
+                    return self._json(app.friction(q))
                 if p.startswith("/api/"):
                     return self._json({"error": "not found"}, 404)
                 return self._static(p)
@@ -1196,6 +1250,18 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/knowledge/(\d+)", p)
                 if m:
                     return self._json({"ok": app.action_knowledge(int(m.group(1)), body)})
+                if p == "/api/suggestions/seen":
+                    from .suggest import mark_seen
+
+                    mark_seen(app.conn)
+                    return self._json({"ok": True})
+                if p == "/api/suggestions/refresh":
+                    from .suggest import refresh
+
+                    return self._json(refresh(app.conn, app.cfg))
+                m = re.fullmatch(r"/api/suggestions/(\d+)/(apply|unapply|dismiss|done|edit)", p)
+                if m:
+                    return self._json(*app.action_suggestion(int(m.group(1)), m.group(2), body if isinstance(body, dict) else {}))
                 return self._json({"error": "not found"}, 404)
             except Exception as exc:
                 log.exception("POST %s failed", p)

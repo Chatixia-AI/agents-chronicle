@@ -49,6 +49,15 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `updates.check_daily` | `false` | ask pypi.org for the latest version once a day while the dashboard is open (Status › Updates) |
 | `updates.notify` | `false` | the background sync asks pypi.org once a day and shows a desktop notification once per new release (Status › Updates, or `chronicle install --notify-updates`) |
 
+## `[suggestions]`
+
+Proposed fixes for what keeps going wrong ([Suggestions and What goes wrong](suggestions.md)).
+
+| Key | Default | |
+| --- | --- | --- |
+| `enabled` | `true` | refresh the suggestions after each background sync (no model is called). Nothing is written until you apply one; **Check again** and `chronicle suggest refresh` work either way |
+| `notify` | `false` | show a desktop notification when a background sync finds new suggestions |
+
 ## `[hub]`
 
 One archive for several computers ([Phone and other computers](devices.md#your-other-computers)).

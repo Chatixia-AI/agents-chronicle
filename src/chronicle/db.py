@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 8
+SCHEMA_VERSION = 9
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -335,6 +335,31 @@ CREATE TABLE IF NOT EXISTS machines (
     bytes INTEGER DEFAULT 0,
     repos_json TEXT                                -- {cwd: [git top level, normalized remote]} it reported
 );
+
+CREATE TABLE IF NOT EXISTS suggestions (
+    id INTEGER PRIMARY KEY,
+    key TEXT NOT NULL UNIQUE,                      -- stable identity, e.g. friction:<cause>:<agent>:user, knowledge:<id>:<file>
+    kind TEXT NOT NULL,                            -- instruction | config | environment
+    origin TEXT NOT NULL,                          -- friction | knowledge
+    cause_id TEXT,                                 -- friction.CATALOG id
+    knowledge_id INTEGER,
+    project_path TEXT,                             -- NULL = user level
+    agent TEXT,                                    -- claude | codex | copilot | bob | all
+    target_path TEXT,                              -- the file the change goes to; NULL for environment steps
+    title TEXT NOT NULL,
+    text TEXT NOT NULL,                            -- the proposed line / config change / command (editable before apply)
+    evidence_json TEXT,
+    warnings_json TEXT,
+    score REAL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'new',            -- new | applied | dismissed | stale | done (an environment step you did)
+    created_at TEXT,
+    updated_at TEXT,
+    seen_at TEXT,
+    applied_at TEXT,
+    applied_text TEXT,
+    dismissed_reason TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
 
 CREATE TABLE IF NOT EXISTS files_state (
     path TEXT PRIMARY KEY,
