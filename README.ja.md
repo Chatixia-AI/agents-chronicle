@@ -12,7 +12,7 @@ Claude Code、Codex、GitHub Copilot、IBM Bob のセッションと claude.ai�
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT ライセンス"></a>
 </p>
 
-<p align="center"><a href="#クイックスタート">クイックスタート</a> · <a href="docs/ja/README.md">ドキュメント</a> · <a href="CHANGELOG.md">変更履歴</a> · <a href="README.md">English</a></p>
+<p align="center"><a href="#クイックスタート">クイックスタート</a> · <a href="docs/ja/README.md">ドキュメント</a> · <a href="CHANGELOG.md">変更履歴</a> · <a href="ROADMAP.ja.md">ロードマップ</a> · <a href="README.md">English</a></p>
 
 コーディングエージェントは一日中問題を解決しますが、その教訓はすぐに消えてしまいます。Claude Code はトランスクリプトを
 30 日で削除し、あるセッションで見つけた修正が次のセッションに引き継がれることもありません。Chronicle はすべてのセッションを

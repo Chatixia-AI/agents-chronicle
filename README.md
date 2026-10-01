@@ -13,7 +13,7 @@ knowledge on your own machine.</p>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
 </p>
 
-<p align="center"><a href="#quick-start">Quick start</a> · <a href="docs/README.md">Docs</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="README.ja.md">日本語</a></p>
+<p align="center"><a href="#quick-start">Quick start</a> · <a href="docs/README.md">Docs</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="README.ja.md">日本語</a></p>
 
 Your coding agents solve problems all day, and then the lesson disappears: Claude Code deletes transcripts after 30
 days, and nothing carries a fix from one session to the next. Chronicle keeps every session, uses Claude Code or Codex
