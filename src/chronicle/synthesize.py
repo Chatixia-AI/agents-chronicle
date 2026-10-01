@@ -7,7 +7,9 @@ import json
 import logging
 import sqlite3
 
+from . import ladder
 from .config import Config
+from .ladder import STAGE_ORDER_SQL, SUPERSEDE_REASONS, TRUSTED
 from .llm import Runner, make_runner
 from .util import dumps, local_str, loads, one_line, truncate, utcnow_iso
 
@@ -19,7 +21,7 @@ MAX_ITEMS = 250
 KB_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["tldr", "overview", "sections", "superseded_ids"],
+    "required": ["tldr", "overview", "sections", "superseded"],
     "properties": {
         "tldr": {"type": "array", "items": {"type": "string"},
                  "description": "Exactly 3 bullets, at most 14 words each: what matters most"},
@@ -53,10 +55,20 @@ KB_SCHEMA = {
                 },
             },
         },
-        "superseded_ids": {
+        "superseded": {
             "type": "array",
-            "items": {"type": "integer"},
-            "description": "ids of items that are outdated, contradicted by newer items, or fully duplicated by another item",
+            "description": "items that should leave the knowledge base, each with the item that replaces it",
+            "items": {
+                "type": "object",
+                "additionalProperties": False,
+                "required": ["id", "by", "reason"],
+                "properties": {
+                    "id": {"type": "integer", "description": "the item that leaves"},
+                    "by": {"type": ["integer", "null"],
+                           "description": "the item that replaces it (for a duplicate, the one that stays); null if none"},
+                    "reason": {"type": "string", "enum": list(SUPERSEDE_REASONS)},
+                },
+            },
         },
     },
 }
@@ -64,8 +76,10 @@ KB_SCHEMA = {
 PROJECT_SYSTEM = """\
 You maintain the knowledge base of one software project, distilled from many Claude Code sessions.
 
-You receive the project's recent sessions and its knowledge items (each with an id, kind, date, confidence and \
-source; "memory" items were written by Claude Code's own memory feature and are usually reliable). You may also \
+You receive the project's recent sessions and its knowledge items (each with an id, kind, date, confidence, \
+source and stage; "memory" items were written by Claude Code's own memory feature and are usually reliable). The stage \
+says how well an item is established: wip, provisional (seen once), established (confirmed by several sessions), \
+canonical (long confirmed, or pinned by the developer). You may also \
 receive the previous version of the knowledge base.
 
 People skim the knowledge base and agents read it before they work, so keep it short: fragments are fine, no \
@@ -75,25 +89,29 @@ where it stands now.
 - Sections of concise, self-contained bullets, each with a short title that states the rule or fact. Suggested sections (use only those that have content, add others if \
 needed): "Architecture & key facts", "Run, test & deploy", "Gotchas & fixes", "Decisions & rationale", \
 "Conventions & preferences", "Useful commands", "Open threads".
-- Merge duplicates into one bullet, prefer newer and higher-confidence items when they conflict, and keep concrete \
-identifiers (paths, commands, config keys, error messages). Cite the ids each bullet is based on.
-- List in superseded_ids the items that are outdated, contradicted by a newer item, or fully duplicated.
+- Merge duplicates into one bullet, prefer newer, higher-stage and higher-confidence items when they conflict, and \
+keep concrete identifiers (paths, commands, config keys, error messages). Cite the ids each bullet is based on.
+- List in superseded every item that should leave: reason "duplicate" when another item states the same lesson \
+(by = the item that stays; prefer keeping the higher-stage one), "outdated" or "contradicted" when a newer item \
+replaces it (by = that item, or null). Report every true duplicate, including ones from different sessions: that is \
+how a lesson that keeps recurring becomes established. Items that are merely related are not duplicates.
 Do not invent anything that the items do not support."""
 
 GLOBAL_SYSTEM = """\
 You maintain a developer's personal engineering playbook, distilled from knowledge extracted across all of their \
 Claude Code sessions and projects.
 
-You receive cross-project knowledge items (each with an id, kind, project, date and confidence) and possibly the \
-previous playbook. The developer skims the playbook, and agents read it before they work, so keep it short: \
+You receive cross-project knowledge items (each with an id, kind, project, date, confidence and stage: wip, \
+provisional, established or canonical) and possibly the previous playbook. The developer skims the playbook, and agents read it before they work, so keep it short: \
 fragments are fine, no filler or hedging, and respect the word limits. Write the current playbook:
 - A three-bullet TL;DR of the rules that matter most, and a short overview of how this developer works and what \
 they work on (no names, emails or long project lists).
 - Sections of concise, self-contained bullets, each with a short title that states the rule or fact. Suggested \
 sections (use only those with content): "Working preferences for Claude", "Tooling & platform gotchas", \
 "Reusable patterns & commands", "Learnings", "Recurring problems".
-- Merge duplicates, prefer newer items on conflict, keep concrete identifiers, and cite source ids per bullet.
-- List in superseded_ids the items that are outdated, contradicted or fully duplicated.
+- Merge duplicates, prefer newer and higher-stage items on conflict, keep concrete identifiers, and cite source ids per bullet.
+- List in superseded the items that state the same lesson as another (reason "duplicate", by = the item that stays), \
+and those that are outdated or contradicted (by = the newer item, or null). Merely related items are not duplicates.
 Do not invent anything that the items do not support."""
 
 # The playbook differs from a project's knowledge base only in what its overview describes
@@ -108,6 +126,7 @@ def _item_line(k: dict) -> dict:
         "date": (k.get("created_at") or "")[:10],
         "confidence": k.get("confidence"),
         "source": k.get("source"),
+        "stage": k.get("stage") or "provisional",
         "project": k.get("project_name"),
         "title": k["title"],
         "body": truncate(k.get("body") or "", 900),
@@ -155,14 +174,15 @@ def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str,
     is_global = project_path == GLOBAL
     if is_global:
         items = [dict(r) for r in conn.execute(
-            "SELECT * FROM knowledge WHERE status = 'active' AND (scope = 'global' OR kind = 'preference') "
-            "ORDER BY pinned DESC, id DESC LIMIT ?", (MAX_ITEMS,))]
+            "SELECT * FROM knowledge k WHERE status = 'active' AND (scope = 'global' OR kind = 'preference') "
+            f"ORDER BY pinned DESC, {STAGE_ORDER_SQL}, id DESC LIMIT ?", (MAX_ITEMS,))]
         name = "Global playbook"
         sessions_txt = ""
     else:
         items = [dict(r) for r in conn.execute(
-            "SELECT * FROM knowledge WHERE status = 'active' AND project_path = ? "
-            "ORDER BY pinned DESC, CASE confidence WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, id DESC LIMIT ?",
+            "SELECT * FROM knowledge k WHERE status = 'active' AND project_path = ? "
+            f"ORDER BY pinned DESC, {STAGE_ORDER_SQL}, CASE confidence WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, "
+            "id DESC LIMIT ?",
             (project_path, MAX_ITEMS))]
         name_row = conn.execute("SELECT project_name FROM sessions WHERE project_path = ? LIMIT 1", (project_path,)).fetchone()
         name = name_row[0] if name_row else project_path.rstrip("/").split("/")[-1]
@@ -193,17 +213,16 @@ def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str,
                      model=cfg.synthesis.model)
     data = normalize_kb(res.data)
     valid_ids = {k["id"] for k in items}
-    # only a project's own synthesis retires items: the global playbook merges across projects, and a
-    # cross-project duplicate must stay in each project's knowledge base
-    superseded = [] if is_global else [i for i in data["superseded_ids"] if i in valid_ids]
-    markdown = render_kb_markdown(name, data, n_items=len(items), model=res.model)  # render before any write
     try:
-        if superseded:
-            conn.execute(
-                f"UPDATE knowledge SET status = 'superseded', updated_at = ? WHERE pinned = 0 AND source != 'memory' "
-                f"AND id IN ({','.join('?' * len(superseded))})",
-                [utcnow_iso(), *superseded],
-            )
+        # only a project's own synthesis retires items: the global playbook merges across projects, and a
+        # cross-project duplicate must stay in each project's knowledge base. Both pool the evidence of duplicates.
+        superseded = ladder.apply_synthesis(conn, data["superseded"], valid_ids, retire=not is_global)
+        for section in data["sections"]:
+            for it in section["items"]:
+                trust = ladder.bullet_trust(conn, [i for i in it.get("sources") or [] if i in valid_ids])
+                if trust:
+                    it["stage"], it["sessions"] = trust["stage"], trust["sessions"]
+        markdown = render_kb_markdown(name, data, n_items=len(items), model=res.model)
         conn.execute(
             "INSERT INTO project_kb(project_path, project_name, updated_at, model, knowledge_max_id, n_items, overview, markdown, kb_json) "
             "VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(project_path) DO UPDATE SET project_name=excluded.project_name, "
@@ -255,8 +274,23 @@ def normalize_kb(data: dict) -> dict:
                 items.append(item)
         if items:
             sections.append({"title": str(sec.get("title") or "Notes"), "items": items})
+    superseded, seen = [], set()
+    for entry in data.get("superseded") if isinstance(data.get("superseded"), list) else []:
+        if isinstance(entry, dict):
+            got = ids([entry.get("id")])
+            by = ids([entry.get("by")]) if entry.get("by") is not None else []
+            reason = entry.get("reason") if entry.get("reason") in SUPERSEDE_REASONS else "outdated"
+        else:
+            got, by, reason = ids([entry]), [], "outdated"
+        if got and got[0] not in seen:
+            seen.add(got[0])
+            superseded.append({"id": got[0], "by": by[0] if by else None, "reason": reason})
+    for legacy in ids(data.get("superseded_ids")):  # the older reply shape: a bare list of ids
+        if legacy not in seen:
+            seen.add(legacy)
+            superseded.append({"id": legacy, "by": None, "reason": "outdated"})
     out = {"overview": str(data.get("overview") or "").strip(), "sections": sections,
-           "superseded_ids": ids(data.get("superseded_ids"))}
+           "superseded": superseded, "superseded_ids": [e["id"] for e in superseded]}
     tldr = data.get("tldr")
     tldr = [tldr] if isinstance(tldr, str) else tldr if isinstance(tldr, list) else []
     if any(str(x).strip() for x in tldr):
@@ -280,7 +314,11 @@ def render_kb_markdown(name: str, data: dict, *, n_items: int, model: str | None
         for it in items:
             src = ", ".join(link(i) for i in it.get("sources") or [] if isinstance(i, int))
             title = f"**{str(it['title']).strip()}**: " if it.get("title") else ""
-            lines.append(f"- {title}{str(it.get('text') or '').strip()}" + (f" <sub>[{src}]</sub>" if src else ""))
+            trust = it.get("stage") if it.get("stage") in TRUSTED else ""
+            if trust and (it.get("sessions") or 0) > 1:
+                trust += f" ×{it['sessions']}"
+            note = " · ".join(x for x in (src, trust) if x)
+            lines.append(f"- {title}{str(it.get('text') or '').strip()}" + (f" <sub>[{note}]</sub>" if note else ""))
         lines.append("")
     return "\n".join(lines).strip() + "\n"
 

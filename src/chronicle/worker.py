@@ -6,12 +6,12 @@ import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
-from datetime import timedelta
+from datetime import datetime, timedelta
 
 from .config import Config
 from .db import connect, kv_get, kv_set
 from .llm import BudgetExceededError, LLMError, Runner, UsageLimitError, make_runner
-from .util import file_lock, to_iso, utcnow
+from .util import file_lock, local_str, one_line, to_iso, utcnow
 
 log = logging.getLogger("chronicle.worker")
 
@@ -50,7 +50,7 @@ def pending_sessions(conn, cfg: Config, limit: int) -> list[str]:
     }
     sql = (
         "SELECT id, project_path FROM sessions WHERE source != 'history' "
-        "AND analysis_status IN ('pending', 'stale', 'error') AND analysis_attempts < 4 "
+        f"AND analysis_status IN ('pending', 'stale', 'error') AND analysis_attempts < {MAX_ATTEMPTS} "
         "AND (analysis_not_before IS NULL OR analysis_not_before <= :now) "
         "AND n_prompts >= :min_prompts AND (ended_flag = 1 OR ended_at <= :idle)"
     )
@@ -67,12 +67,73 @@ def pending_sessions(conn, cfg: Config, limit: int) -> list[str]:
     return ids
 
 
+MAX_ATTEMPTS = 4
+# Why a session that is not analyzed yet is waiting. "Queued" codes clear by themselves; "held" codes need a change
+# (a setting, or a longer session) before the session is ever analyzed. One function computes them, mirroring
+# pending_sessions(), so every surface (session page, Status, CLI) names the same reason.
+QUEUED_CODES = ("ready", "active", "retry")
+HELD_CODES = ("excluded", "too_short", "before_install", "gave_up")
+QUEUE_REASON_LABEL = {"ready": "ready now", "active": "still active", "retry": "retry later", "excluded": "project excluded",
+                      "too_short": "too few prompts", "before_install": "before install (backfill off)",
+                      "gave_up": "failed, not retried"}
+
+
+def waiting_reason(conn, cfg: Config, s) -> tuple[str, str] | None:
+    """(code, explanation) for a session still waiting for analysis, or None when it is not waiting."""
+    status = s["analysis_status"]
+    if s["source"] == "history" or status not in ("pending", "stale", "error"):
+        return None
+    attempts = s["analysis_attempts"] or 0
+    if attempts >= MAX_ATTEMPTS:
+        return "gave_up", f"analysis failed {attempts if attempts < 99 else 'for good'}; it will not be retried " \
+                          f"automatically ({one_line(s['analysis_reason'] or 'no error recorded', 160)})"
+    if cfg.is_excluded(s["project_path"]):
+        return "excluded", "its project is excluded from analysis (sources.exclude_projects)"
+    if (s["n_prompts"] or 0) < cfg.analysis.min_prompts:
+        return "too_short", f"fewer than {cfg.analysis.min_prompts} prompts (analysis.min_prompts)"
+    if not cfg.analysis.backfill and (s["started_at"] or "") < (kv_get(conn, "installed_at") or "0000"):
+        return "before_install", "it started before Chronicle was installed, and analysis.backfill is off"
+    now = utcnow()
+    if s["analysis_not_before"] and s["analysis_not_before"] > to_iso(now):
+        return "retry", f"retrying at {local_str(s['analysis_not_before'], '%m-%d %H:%M')} after a failed attempt " \
+                        f"({one_line(s['analysis_reason'] or '', 160)})"
+    idle_at = (s["ended_at"] or "")
+    if not s["ended_flag"] and idle_at > to_iso(now - timedelta(minutes=cfg.analysis.idle_minutes)):
+        ready_at = datetime.fromisoformat(idle_at.replace("Z", "+00:00")) + timedelta(minutes=cfg.analysis.idle_minutes)
+        return "active", f"the session may still be going; it is analyzed once idle for {cfg.analysis.idle_minutes} " \
+                         f"minutes (around {local_str(to_iso(ready_at), '%H:%M')})"
+    block = queue_block(conn, cfg)
+    if block:
+        return "ready", f"ready, but {block}"
+    return "ready", ("ready: the background agent analyzes it on its next run (every 15 minutes)" if status != "stale"
+                     else "ready to re-analyze: the session continued after it was analyzed")
+
+
+def queue_block(conn, cfg: Config, runner: Runner | None = None) -> str | None:
+    """What stops the whole queue right now, if anything."""
+    paused = kv_get(conn, PAUSE_KEY)
+    if paused and paused > to_iso(utcnow()):
+        return f"analysis is paused until {local_str(paused, '%m-%d %H:%M')} (usage limit); it resumes by itself"
+    if not cfg.analysis.auto:
+        return "automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`"
+    runner = runner or make_runner(cfg)
+    if not runner.available():
+        return f"{runner.label} (`{runner.cli.split()[0]}`) was not found, so nothing can be analyzed"
+    return None
+
+
 def count_pending(conn, cfg: Config) -> dict:
-    ready = len(pending_sessions(conn, cfg, 100_000))
-    waiting = conn.execute(
-        "SELECT COUNT(*) FROM sessions WHERE source != 'history' AND analysis_status IN ('pending','stale')"
-    ).fetchone()[0]
-    return {"ready": ready, "queued": waiting}
+    """The analysis queue: `ready` now, `queued` (everything that will be analyzed by itself, ready included),
+    `held` (needs a change first), each with a count per reason, and `block` when the whole queue is stopped."""
+    reasons: dict[str, int] = {}
+    for s in conn.execute(
+            "SELECT analysis_status, source, analysis_attempts, analysis_reason, analysis_not_before, project_path, n_prompts, "
+            "started_at, ended_at, ended_flag FROM sessions WHERE source != 'history' AND analysis_status IN ('pending','stale','error')"):
+        got = waiting_reason(conn, cfg, s)
+        if got:
+            reasons[got[0]] = reasons.get(got[0], 0) + 1
+    return {"ready": reasons.get("ready", 0), "queued": sum(reasons.get(c, 0) for c in QUEUED_CODES),
+            "held": sum(reasons.get(c, 0) for c in HELD_CODES), "reasons": reasons, "block": queue_block(conn, cfg)}
 
 
 def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyses: int | None = None,

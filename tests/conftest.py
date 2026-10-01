@@ -180,6 +180,10 @@ elif "knowledge base" in system or "playbook" in system:
         data = {"overview": 7, "sections": [{"title": "T", "items": ["plain string bullet", 3, {"text": "ok", "sources": ["2", "x"]}]}, "junk"], "superseded_ids": "nope"}
     if mode == "supersede":
         data["superseded_ids"] = ids
+    if mode == "superseded-json":  # the current reply shape, driven by the test
+        data.pop("superseded_ids")
+        data["superseded"] = json.loads(os.environ["FAKE_SUPERSEDED"])
+        data["sections"][0]["items"][0]["sources"] = json.loads(os.environ.get("FAKE_SOURCES", "null")) or ids[:2]
 elif "part " in prompt and "<transcript_part" in prompt:
     data = {"summary": "part notes", "highlights": ["h"], "knowledge": [{"kind": "gotcha", "title": "Part gotcha", "body": "b", "tags": ["x"], "scope": "project", "confidence": "low", "evidence": "e"}], "open_threads": [], "friction": [], "tags": ["t"]}
 else:

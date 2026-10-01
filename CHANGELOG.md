@@ -1,5 +1,30 @@
 # Changelog
 
+## Unreleased
+
+- **Knowledge earns its trust:** every knowledge item now has a stage, *tentative*, *seen once*, *established* or
+  *canonical*, computed from how many sessions confirmed it and over how long, never guessed by the model. When
+  synthesis finds the same lesson in another session it reports the pair as a duplicate, and the surviving item
+  takes over that session: two sessions make it established, three over at least two weeks (or a pin) make it
+  canonical, and the reason is kept ("confirmed in 3 sessions over 19 days"). Search, the MCP tools and the
+  SessionStart digest list the most trusted knowledge first and label it (`[gotcha · established ×3]`);
+  knowledge-base bullets, knowledge cards and the knowledge table show the stage. A superseded item now names the
+  item that replaced it and why (duplicate, outdated, contradicted), and established or canonical knowledge that a
+  newer session overturns is listed under **Overturned** in that week's review. Existing items get their stage on
+  upgrade. [How knowledge earns trust](docs/analysis.md#how-knowledge-earns-trust)
+- **Every waiting session says why:** a session that is not analyzed yet explains it on its page (still active and
+  analyzed around 14:20, retrying at 16:05 after a timeout, project excluded, too few prompts, from before install
+  with backfill off, failed four times…), and **Status** and `chronicle status` count the queue per reason. Sessions
+  that will never be analyzed without a change are now counted as *held* instead of *queued*, and the status bar no
+  longer counts ready sessions twice. When the whole queue is stopped (paused, automatic analysis off, analyzer not
+  found) that is said too.
+- **Real context and plan usage from the status line (optional):** `chronicle install --statusline` records, per
+  Claude Code session, the peak context window use and, on Pro and Max plans, how far the 5-hour and 7-day limits
+  moved while it ran. Claude Code shares these only with its status line, so Chronicle wraps yours: it records the
+  numbers, then runs your own status line with the same input, so it looks exactly as before (with none, it shows
+  model, context and limits). Session pages and **Status** show the numbers; sessions without a record stay unknown
+  rather than zero. `chronicle uninstall` restores your status line.
+
 ## 0.4.0 (2026-09-30)
 
 - **Search all sessions:** the Search page (now also in the rail) lists every session that mentions a word or

@@ -20,6 +20,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 from . import __version__
 from .config import Config
 from .db import connect, kv_get
+from .ladder import refresh as refresh_stage
 from .llm import BACKENDS, make_runner
 from .search import search_all, search_events, search_knowledge, search_sessions
 from .synthesize import GLOBAL
@@ -333,6 +334,14 @@ class App:
         if not real:
             return None
         s = session_record(self.conn, real)
+        from .worker import waiting_reason
+
+        row = self.conn.execute("SELECT * FROM sessions WHERE id = ?", (real,)).fetchone()
+        why = waiting_reason(self.conn, self.cfg, row) if row else None
+        s["waiting"] = {"code": why[0], "text": why[1]} if why else None
+        from .statusline import session_usage
+
+        s["usage"] = session_usage(row["statusline_json"]) if row else None  # None: not recorded, never zero
         s["api_calls"] = [dict(r) for r in self.conn.execute(
             "SELECT ts, agent_id, model, input_tokens, output_tokens, cache_read_tokens, cache_write_tokens, cost_usd "
             "FROM api_calls WHERE session_id = ? ORDER BY ts", (real,))]
@@ -748,7 +757,8 @@ class App:
         return {"started": self.jobs.start("update", run_update)}
 
     def status(self) -> dict:
-        from .install import hooks_installed, launchd_status, mcp_registered
+        from .install import hooks_installed, launchd_status, mcp_registered, statusline_installed
+        from .statusline import plan_usage
 
         c = self.conn
         st = self.status_small()
@@ -759,6 +769,7 @@ class App:
         st["launchd"] = launchd_status()
         st["ui_agent"] = launchd_status("com.claude-chronicle.ui")
         st["mcp"] = mcp_registered()
+        st["statusline"] = {"installed": statusline_installed(self.cfg), "plan": plan_usage(c)}
         st["db_size"] = self.cfg.db_path.stat().st_size if self.cfg.db_path.exists() else 0
         st["archive_dir"] = str(self.cfg.archive_dir)
         st["notes_dir"] = str(self.cfg.notes_dir)
@@ -872,12 +883,15 @@ class App:
         if body.get("status") in ("active", "dismissed", "superseded"):
             sets.append("status = ?")
             params.append(body["status"])
+            if body["status"] == "active":  # restored by hand: it no longer points at a successor
+                sets.append("superseded_by = NULL, superseded_reason = NULL, superseded_at = NULL")
         if "pinned" in body:
             sets.append("pinned = ?")
             params.append(1 if body["pinned"] else 0)
         if not sets:
             return False
         self.conn.execute(f"UPDATE knowledge SET {', '.join(sets)}, updated_at = ? WHERE id = ?", [*params, to_iso(utcnow()), kid])
+        refresh_stage(self.conn, [kid])  # a pin makes an item canonical; unpinning returns it to what its evidence earns
         self.conn.commit()
         return True
 

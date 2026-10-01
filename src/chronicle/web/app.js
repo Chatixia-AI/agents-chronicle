@@ -233,6 +233,45 @@ function outcomeBadge(outcome, status, source) {
   const cls = status === "error" ? "critical" : status === "running" ? "accent" : "";
   return h("span", { class: `badge ${cls}` }, icon(STATUS_ICON[status] || "dot", status === "running" ? "spin" : ""), STATUS_LABEL[status] || status || "–");
 }
+// Maturity: how well an item is established, earned by recurring across sessions (see ladder.py)
+// Plan usage from Claude Code's status line (statusline.py). Absent means not recorded: never shown as zero.
+const LIMIT_LABEL = { five_hour: "5-hour", seven_day: "7-day", spend_limit: "spend" };
+function planLine(plan) {
+  const ws = Object.entries(plan?.limits || {});
+  if (!ws.length) return null;
+  return ws.map(([k, v]) => `${LIMIT_LABEL[k] || k} limit ${Math.round(v.used_pct)}% (resets ${fmtDT(v.resets_at)})`).join(" · ")
+    + ` · as of ${ago(plan.as_of)}`;
+}
+function planFact(usage, sfact) {
+  const moved = Object.entries(usage?.limits_moved || {}).filter(([, v]) => v != null);
+  if (!moved.length) return null;
+  const [k, v] = moved.find(([k]) => k === "five_hour") || moved[0];
+  const pct = (x) => `${x < 10 ? x.toFixed(1) : Math.round(x)}%`;
+  const el = sfact(`${LIMIT_LABEL[k] || k} limit used`, pct(v),
+    moved.filter(([x]) => x !== k).map(([x, y]) => `${LIMIT_LABEL[x] || x} ${pct(y)}`).join(" · ") || null);
+  el.title = "How far your plan limits moved while this session ran (includes anything else using the same account then)";
+  return el;
+}
+// Why sessions wait for analysis (worker.waiting_reason): queued ones clear by themselves, held ones need a change
+const QUEUE_REASON_LABEL = { ready: "ready now", active: "still active", retry: "retry later", excluded: "project excluded",
+  too_short: "too few prompts", before_install: "before install", gave_up: "failed, not retried" };
+const QUEUE_REASON_HINT = { active: "Analyzed once the session has been idle for analysis.idle_minutes",
+  retry: "A failed attempt is retried with a growing delay", excluded: "sources.exclude_projects",
+  too_short: "analysis.min_prompts", before_install: "Turn on analysis.backfill to analyze older sessions",
+  gave_up: "Open the session to see the error; re-run it from its page" };
+const STAGE_LABEL = { wip: "tentative", provisional: "seen once", established: "established", canonical: "canonical" };
+const STAGE_RANK = { canonical: 0, established: 1, provisional: 2, wip: 3 };
+function confirmCount(k) {
+  if (k.confirmations != null) return k.confirmations;
+  let ids = [];
+  try { ids = JSON.parse(k.confirmed_json || "[]") || []; } catch (e) { ids = []; }
+  return new Set([k.session_id, ...ids].filter(Boolean)).size;
+}
+function stageTag(stage, n, reason, { quiet = false } = {}) {
+  if (!stage || (quiet && stage === "provisional")) return null;
+  const label = STAGE_LABEL[stage] || stage;
+  return h("span", { class: `stage-tag s-${stage}`, title: reason || label }, label, n > 1 ? h("b", null, `×${n}`) : null);
+}
 function confidenceMeter(level) { // three steps; the fill is the accent, the track a lighter step of it
   const n = { high: 3, medium: 2, low: 1 }[level] || 0;
   return n ? h("span", { class: "meter", title: `${level} confidence`, "aria-label": `${level} confidence` },
@@ -1228,7 +1267,9 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     sfact("Tokens", fmtCompact(sx.total_tokens), sx.sub_tokens ? `${fmtCompact(sx.sub_tokens)} subagents` : null),
     sfact("Est. API cost", fmtCost(sx.est_cost_usd)),
     sfact("Lines", `+${fmtCompact(sx.lines_added)} −${fmtCompact(sx.lines_removed)}`, `${sx.n_files} files`),
-    sfact("Peak context", fmtCompact(sx.peak_context), sx.n_compactions ? `${sx.n_compactions} compaction${sx.n_compactions === 1 ? "" : "s"}` : null),
+    sfact("Peak context", fmtCompact(sx.peak_context), [sx.usage?.context_peak_pct != null ? `${Math.round(sx.usage.context_peak_pct)}% of ${fmtCompact(sx.usage.context_size)}` : null,
+      sx.n_compactions ? `${sx.n_compactions} compaction${sx.n_compactions === 1 ? "" : "s"}` : null].filter(Boolean).join(" · ") || null),
+    planFact(sx.usage, sfact),
     sx.n_subagents ? sfact("Subagents", fmtNum(sx.n_subagents)) : null);
   // summary
   const summary = h("section", { class: "card summary-card" }, h("div", { class: "card-head" }, h("h2", null, "Summary"),
@@ -1246,6 +1287,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     if (sx.friction?.length) summary.append(h("div", { class: "subhead" }, "Friction"), h("ul", { class: "bullets" }, sx.friction.map((f) => h("li", null, h("b", null, f.kind), ": ", f.note))));
   } else {
     const reason = sx.source === "history" ? "Only prompts survive for this session (recovered from Claude Code's prompt history)."
+      : sx.waiting ? `Not analyzed yet: ${sx.waiting.text}.`
       : `Not analyzed yet (${STATUS_LABEL[sx.analysis_status] || sx.analysis_status}${sx.analysis_reason ? ": " + sx.analysis_reason : ""}).`;
     summary.append(h("div", { class: "muted" }, reason), sx.first_prompt ? h("div", { class: "subhead" }, "First prompt") : null,
       sx.first_prompt ? h("div", { style: { whiteSpace: "pre-wrap" } }, sx.first_prompt.slice(0, 1200)) : null);
@@ -1320,7 +1362,8 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       if (card) { card.scrollIntoView({ block: "center", behavior: "smooth" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600); }
     } }, icon(KIND[k.kind] ? k.kind : "dot"), h("span", null, k.title))),
     sx.knowledge.length > 8 ? h("button", { type: "button", class: "s-kchip more", onclick: () => showTab("details") }, `+${sx.knowledge.length - 8} more`) : null) : null;
-  const summaryP = sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary) : null;
+  const summaryP = sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary)
+    : sx.waiting ? h("p", { class: "s-summary s-waiting" }, icon("queued"), ` Not analyzed yet: ${sx.waiting.text}.`) : null;
   markTerms(summaryP, queryTerms(params.q)); // opened from Search: the terms stay marked here and in the transcript
   const page = h("div", { class: `session-page ${sessionOutline ? "with-outline" : ""}` },
     h("div", { class: "s-main" }, head, tiles,
@@ -1514,6 +1557,7 @@ function knowledgeCard(k, { compact = false, hideSession = false } = {}) {
       h("span", { class: "kmeta" },
         k.scope === "global" ? h("span", { class: "scope-tag", title: "Applies across projects" }, icon("domain"), "global") : null,
         k.source === "memory" ? h("span", { class: "scope-tag", title: "Imported from the agent's own memory notes" }, icon("knowledge"), `${agentShort(k.agent)} memory`) : null,
+        stageTag(k.stage, confirmCount(k), k.stage_reason, { quiet: true }),
         confidenceMeter(k.confidence))),
     h("div", { class: "ktitle" }, k.title), body,
     k.tags?.length ? h("div", { class: "ktags" }, k.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null);
@@ -1553,6 +1597,7 @@ function knowledgeTable(items) {
     { key: "title", label: "Knowledge", value: (k) => k.title },
     { key: "project", label: "Project", value: scopeOf },
     { key: "session", label: "From" },
+    { key: "stage", label: "Stage", value: (k) => (STAGE_RANK[k.stage] ?? 2) * 1000 - confirmCount(k) },
     { key: "confidence", label: "Confidence", value: (k) => ({ high: 0, medium: 1, low: 2 })[k.confidence] ?? 3 },
     { key: "created", label: "Added", desc: true, value: (k) => k.created_at },
     { key: "actions", label: "" },
@@ -1565,6 +1610,7 @@ function knowledgeTable(items) {
       h("td", { class: "nowrap" }, scopeOf(k) || "–"),
       h("td", { class: "from-cell" }, k.session_id ? h("a", { href: `#/session/${k.session_id}` }, (k.session_title || "session").slice(0, 44))
         : h("span", { class: "muted" }, k.source === "memory" ? `${agentShort(k.agent)} memory` : "–")),
+      h("td", { class: "nowrap" }, stageTag(k.stage, confirmCount(k), k.stage_reason) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, confidenceMeter(k.confidence) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, fmtDate(k.created_at)));
     tr.append(h("td", { class: "actions-cell" }, knowledgeActions(k, tr, () => { tr.closeDetail(); tr.remove(); })));
@@ -1809,8 +1855,10 @@ function kbView(p, isGlobal) {
     return ks.length ? h("div", { class: "kb-src" }, "From ", ks.map((k, i) => [i ? " · " : "",
       k.session_id ? h("a", { href: `#/session/${k.session_id}` }, isGlobal && k.project_name ? `${k.project_name}: ${k.title}` : k.title) : k.title])) : null;
   };
-  const render = (it) => [h("span", null, it.title ? [h("b", null, it.title), " "] : null, h("span", { html: mdInline(escapeHtml(it.text || "")) })),
-    sourceLinks(it)];
+  const trust = (it) => it.stage === "established" || it.stage === "canonical"
+    ? [stageTag(it.stage, it.sessions || 0, `backed by ${it.sessions || 1} session${it.sessions === 1 ? "" : "s"}`), " "] : null;
+  const render = (it) => [h("span", null, it.title ? [h("b", null, it.title), " ", trust(it)] : trust(it),
+    h("span", { html: mdInline(escapeHtml(it.text || "")) })), sourceLinks(it)];
   const draw = () => {
     const q = filter.value.trim().toLowerCase();
     const shown = sections.map((sec) => ({ ...sec, items: q ? sec.items.filter((it) => `${it.title || ""} ${plain(it.text)}`.toLowerCase().includes(q)) : sec.items }))
@@ -3023,9 +3071,10 @@ function reviewView(r) {
     return el;
   })) : null;
   const LISTS = [["accomplishments", "Shipped", "completed", "good"], ["learnings", "Learned", "learning", "accent"],
-    ["open_threads", "Still open", "todo", "warning"], ["friction", "Slowed you down", "gotcha", "serious"], ["suggestions", "Try next", "sparkles", "accent"]];
+    ["open_threads", "Still open", "todo", "warning"], ["friction", "Slowed you down", "gotcha", "serious"], ["suggestions", "Try next", "sparkles", "accent"],
+    ["overturned", "Overturned", "gotcha", "warning"]]; // trusted knowledge a newer session replaced
   const lists = LISTS.filter(([key]) => rv[key] && rv[key].length);
-  const spans = { 1: [6], 2: [3, 3], 3: [2, 2, 2], 4: [3, 3, 3, 3], 5: [2, 2, 2, 3, 3] }[lists.length] || [];
+  const spans = { 1: [6], 2: [3, 3], 3: [2, 2, 2], 4: [3, 3, 3, 3], 5: [2, 2, 2, 3, 3], 6: [2, 2, 2, 2, 2, 2] }[lists.length] || [];
   const listGrid = lists.length ? h("div", { class: "rv-lists" }, lists.map(([key, title, ic, tone], i) =>
     h("section", { class: `card rv-list t-${tone}`, style: `--span: ${spans[i] || 2}` },
       h("div", { class: "rv-list-head" }, icon(ic), h("h3", null, title), h("span", null, fmtNum(rv[key].length))),
@@ -3168,7 +3217,9 @@ route(/^\/status$/, async () => {
           row(st.hooks?.SessionEnd, "SessionEnd hook", "archives + ingests each session as it ends"),
           row(st.launchd?.loaded, "Background agent (launchd)", st.launchd?.loaded ? `runs every 15 min · ${st.launchd.runs || 0} runs · last exit ${st.launchd.last_exit ?? "-"}` : "not loaded"),
           row(st.mcp, "MCP server registered", "Claude Code can search this vault"),
-          row(!!st.hooks?.SessionStart, "SessionStart knowledge injection", "optional: chronicle install --inject-context")),
+          row(!!st.hooks?.SessionStart, "SessionStart knowledge injection", "optional: chronicle install --inject-context"),
+          row(!!st.statusline?.installed, "Status-line usage collector", !st.statusline?.installed ? "optional: chronicle install --statusline"
+            : planLine(st.statusline.plan) || "no plan limits seen yet (Pro and Max plans only)")),
         h("div", { class: "subhead" }, "Storage"),
         h("div", null, h("span", { class: "codeline" }, st.archive_dir), " raw transcripts (kept forever, gzip)"),
         h("div", { style: { marginTop: "6px" } }, h("span", { class: "codeline" }, st.notes_dir), " Markdown vault"),
@@ -3177,7 +3228,10 @@ route(/^\/status$/, async () => {
         analyzerPicker(st.analysis),
         h("div", { class: "status-list" },
           h("div", null, `Model `, h("code", null, st.config.model), ` · auto ${st.config.auto ? "on" : "off"} · backfill ${st.config.backfill ? "on" : "off"} · ${st.config.max_per_run} per run`),
-          h("div", null, `${fmtNum(st.pending.ready)} ready now · ${fmtNum(st.pending.queued)} queued/stale · spent ${fmtCost(st.analysis_cost)} (API-equivalent)`),
+          h("div", null, `${fmtNum(st.pending.ready)} ready now · ${fmtNum(st.pending.queued)} queued in all · ${fmtNum(st.pending.held || 0)} held · spent ${fmtCost(st.analysis_cost)} (API-equivalent)`),
+          Object.keys(st.pending.reasons || {}).length ? h("div", null, "Waiting because: ", Object.entries(st.pending.reasons).map(([k, v]) =>
+            h("span", { class: "tag", title: QUEUE_REASON_HINT[k] || "" }, `${QUEUE_REASON_LABEL[k] || k}: ${fmtNum(v)}`))) : null,
+          st.pending.block ? h("div", { class: "warn-line" }, icon("pause"), ` ${st.pending.block[0].toUpperCase()}${st.pending.block.slice(1)}.`) : null,
           st.paused_until ? h("div", null, `Paused until ${fmtDT(st.paused_until)} (usage limit)`) : null,
           h("div", null, Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}: ${v}`)))),
         st.errors.length ? [h("div", { class: "subhead" }, "Recent failures"), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null),
@@ -3548,7 +3602,7 @@ async function pollStatus() {
     const pill = $("#status-pill");
     pill.className = busy ? "busy" : paused ? "warn" : "";
     pill.replaceChildren(h("span", { class: "dot" }), busy ? (running[0][1].message || running[0][0]) : paused ? `Analysis paused until ${fmtTime(st.paused_until)}` : "Up to date");
-    const waiting = (st.pending.ready || 0) + (st.pending.queued || 0);
+    const waiting = st.pending.queued || 0; // ready is part of queued
     $("#status-queue").textContent = waiting ? `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} queued for analysis` : "";
     $("#status-sync").textContent = st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
@@ -3613,11 +3667,14 @@ function drawActivity(st) {
     h("span", { class: `act-mark ${j.state === "done" ? "ok" : "no"}` }, j.state === "done" ? "✓" : "✗"),
     h("div", null, h("div", null, h("b", null, jobLabel(name)), h("span", { class: "muted" }, ` · ${ago(new Date(j.finished * 1000).toISOString())}`)),
       h("div", { class: "act-msg muted" }, String(j.result || (j.state === "done" ? "done" : "failed")).slice(0, 220))));
-  const waiting = (st.pending?.ready || 0) + (st.pending?.queued || 0);
+  const waiting = st.pending?.queued || 0; // ready is part of queued
   const paused = st.paused_until && st.paused_until > new Date().toISOString();
-  const queue = paused ? `Analysis paused until ${fmtTime(st.paused_until)} (${analyzer()} usage limit or sign-in); it resumes by itself.`
+  const held = st.pending?.held || 0;
+  const queue = (paused ? `Analysis paused until ${fmtTime(st.paused_until)} (${analyzer()} usage limit or sign-in); it resumes by itself.`
     : !waiting ? "Nothing waiting for analysis."
-    : `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} waiting for analysis` + (st.analysis?.auto ? `; the background agent analyzes up to ${st.analysis.max_per_run} every 15 minutes.` : "; automatic analysis is off.");
+    : `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} waiting for analysis`
+      + (st.pending?.block ? `, but ${st.pending.block}.` : `; the background agent analyzes up to ${st.analysis?.max_per_run} every 15 minutes.`))
+    + (held ? ` ${fmtNum(held)} held until a setting changes (see Status).` : "");
   box.replaceChildren(...[
     h("div", { class: "act-head" }, h("b", null, "Activity"),
       h("button", { class: "un-close", type: "button", "aria-label": "Close", onclick: () => toggleActivity(false) }, "×")),

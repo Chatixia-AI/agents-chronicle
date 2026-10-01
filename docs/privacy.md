@@ -18,6 +18,7 @@ Importing a claude.ai or ChatGPT export reads only the chats, never the account 
 | Markdown vault | `~/.claude-chronicle/notes/` |
 | Logs | `~/.claude-chronicle/logs/` |
 | Backups of agent config files Chronicle edits | `~/.claude-chronicle/backups/` |
+| Status-line usage per session (only with `--statusline`) | `~/.claude-chronicle/statusline/` |
 | The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
 
 ## Details

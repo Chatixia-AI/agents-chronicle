@@ -83,7 +83,17 @@ For Claude Code, and for the Mac itself, it sets up four things (each can be ski
 Optional: `chronicle install --inject-context` also adds a `SessionStart` hook that gives each new
 session a short digest of the project's knowledge base (off by default; preview it with `chronicle context`).
 
-Remove everything with `chronicle uninstall` (data is kept; `--purge` deletes it too).
+Optional: `chronicle install --statusline` records each Claude Code session's real context use and, on Pro and Max
+plans, how far the 5-hour and 7-day limits moved while it ran (Claude Code shares these only with the status line).
+It sets `statusLine` in `~/.claude/settings.json` to `chronicle statusline`, which saves the snapshot under
+`~/.claude-chronicle/statusline/` and then runs the status line you already had, with the same input, so it looks
+exactly as before; your original is kept in `~/.claude-chronicle/statusline/wrapped.json`. If you had none, it
+shows model, context and limits, and Claude Code then hides most of its footer key hints. The sync copies each
+session's numbers into the database (the session page and **Status**). `chronicle uninstall` puts your own status
+line back.
+
+Remove everything with `chronicle uninstall` (data is kept; `--purge` deletes it too). It also restores your own
+status line if `--statusline` wrapped it.
 
 To use the desktop app from a command-line install, add the `app` extra and run `chronicle app`:
 `uv tool install --python 3.13 'agents-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`

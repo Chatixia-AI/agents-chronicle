@@ -11,6 +11,7 @@ from . import __version__
 from .config import Config
 from .agents import AGENTS, short_name, speaker
 from .db import connect
+from .ladder import stage_label
 from .redact import redact
 from .search import search_knowledge, search_sessions
 from .synthesize import GLOBAL, kb_for_path
@@ -152,8 +153,9 @@ class Tools:
         out = [f"{len(rows)} knowledge item(s) for {query!r}:\n"]
         for k in rows:
             src = f"session {k['session_id'][:8]} ({local_str(k.get('session_started'), '%Y-%m-%d')})" if k["session_id"] else k["source"]
-            out.append(f"## [{k['kind']}] {k['title']}\n_{k.get('project_name') or '-'} · {k.get('confidence') or '-'} confidence · {src}_\n\n"
-                       f"{truncate(k.get('body') or '', 1500)}\n")
+            trust = stage_label(k) + (f" ({k['stage_reason']})" if k.get("stage_reason") else "")
+            out.append(f"## [{k['kind']} · {stage_label(k)}] {k['title']}\n_{k.get('project_name') or '-'} · {trust} · "
+                       f"{k.get('confidence') or '-'} confidence · {src}_\n\n{truncate(k.get('body') or '', 1500)}\n")
         return "\n".join(out)
 
     def search_sessions(self, query: str, project: str | None = None, agent: str | None = None, limit: int = 10) -> str:
@@ -223,7 +225,7 @@ class Tools:
         if not items:
             return f"No knowledge recorded yet for {path}."
         lines = [f"No synthesized knowledge base yet for {path}; latest knowledge items:\n"]
-        lines += [f"- [{k['kind']}] **{k['title']}** — {one_line(k.get('body') or '', 300)}" for k in items]
+        lines += [f"- [{k['kind']} · {stage_label(k)}] **{k['title']}** — {one_line(k.get('body') or '', 300)}" for k in items]
         return "\n".join(lines)
 
     def glossary(self, term: str | None = None, project: str | None = None) -> str:

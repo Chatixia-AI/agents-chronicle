@@ -7,6 +7,7 @@ import logging
 import sqlite3
 from datetime import date, datetime, time, timedelta
 
+from . import ladder
 from .config import Config
 from .llm import Runner, make_runner
 from .util import dumps, human_cost, human_count, human_duration, loads, one_line, to_iso, utcnow_iso
@@ -164,6 +165,7 @@ def generate_review(conn: sqlite3.Connection, cfg: Config, key: str | None = Non
     )
     res = runner.run(prompt, REVIEW_SCHEMA, system=SYSTEM, model=cfg.synthesis.model)
     data = normalize_review(res.data)
+    data["overturned"] = [overturned_line(k) for k in ladder.overturned(conn, since, until)]
     markdown = render_review(key, start, end, data, stats)
     try:
         _store_review(conn, key, since, until, res, len(sessions), markdown, data, stats, len(prompt))
@@ -187,6 +189,13 @@ def _store_review(conn, key, since, until, res, n_sessions, markdown, data, stat
         (key, utcnow_iso(), utcnow_iso(), res.model, prompt_chars, res.cost_usd, res.duration_ms),
     )
     conn.commit()
+
+
+def overturned_line(k: dict) -> str:
+    """One overturned item: what it said, how trusted it was, and what replaced it."""
+    what = f"{k['title']}" + (f" ({k['project_name']})" if k.get("project_name") else "")
+    why = f"{k['stage']}, {k.get('superseded_reason') or 'outdated'}"
+    return f"{what}: was {why}" + (f"; now \u201c{k['successor_title']}\u201d" if k.get("successor_title") else "")
 
 
 def normalize_review(data: dict) -> dict:
@@ -224,7 +233,7 @@ def render_review(key: str, start: datetime, end: datetime, data: dict, stats: d
             out.append(f"- **{t.get('title')}**{projects}: {t.get('detail')}")
         out.append("")
     for title, key_ in (("Accomplishments", "accomplishments"), ("Learnings", "learnings"), ("Open threads", "open_threads"),
-                        ("Friction", "friction"), ("Suggestions", "suggestions")):
+                        ("Friction", "friction"), ("Suggestions", "suggestions"), ("Overturned", "overturned")):
         items = data.get(key_) or []
         if items:
             prefix = "- [ ] " if key_ == "open_threads" else "- "

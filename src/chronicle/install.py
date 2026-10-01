@@ -167,6 +167,75 @@ def uninstall_hooks(cfg: Config) -> list[str]:
     return [f"removed {removed} hook(s) from {path}"] if removed else []
 
 
+# ------------------------------------------------------------------ status line (optional)
+def statusline_installed(cfg: Config) -> bool:
+    from .statusline import is_ours
+
+    try:
+        return is_ours(_load_settings(settings_path(cfg)).get("statusLine"))
+    except (OSError, ValueError):
+        return False
+
+
+def install_statusline(cfg: Config, exe: str, *, dry_run: bool = False) -> list[str]:
+    """Point Claude Code's status line at `chronicle statusline`, which records usage and then runs the status
+    line the user already had (saved to statusline/wrapped.json) so it looks exactly as before."""
+    from .statusline import is_ours, wrapped_path
+
+    path = settings_path(cfg)
+    settings = _load_settings(path)
+    current = settings.get("statusLine")
+    actions = []
+    if isinstance(current, dict) and not is_ours(current) and current.get("command"):
+        actions.append(f"keeps your status line: runs `{current['command']}` after recording")
+        if not dry_run:
+            wrapped_path().parent.mkdir(parents=True, exist_ok=True)
+            wrapped_path().write_text(json.dumps(current, indent=2, ensure_ascii=False) + "\n")
+    elif not is_ours(current):
+        actions.append("no status line before: shows model, context and plan limits "
+                       "(Claude Code then hides most footer key hints)")
+        if not dry_run:
+            wrapped_path().unlink(missing_ok=True)
+    base = current if isinstance(current, dict) else {}
+    keep = {k: v for k, v in base.items() if k in ("padding", "refreshInterval")}
+    settings["statusLine"] = {"type": "command", "command": _exe_cmd(exe, "statusline"), **keep}
+    actions.append(f"statusLine: {settings['statusLine']['command']}")
+    new_text = json.dumps(settings, indent=2, ensure_ascii=False) + "\n"
+    if not dry_run and (not path.exists() or path.read_text() != new_text):
+        backup = _backup(cfg, path)
+        if backup:
+            actions.append(f"backed up {path} -> {backup}")
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(new_text)
+    return actions
+
+
+def uninstall_statusline(cfg: Config) -> list[str]:
+    """Give the status line back: the user's own command if Chronicle wrapped one, else none."""
+    from .statusline import is_ours, wrapped_path
+
+    path = settings_path(cfg)
+    if not path.exists():
+        return []
+    settings = _load_settings(path)
+    if not is_ours(settings.get("statusLine")):
+        return []
+    try:
+        original = json.loads(wrapped_path().read_text())
+    except (OSError, ValueError):
+        original = None
+    if isinstance(original, dict) and original.get("command"):
+        settings["statusLine"] = original
+        done = f"restored your status line `{original['command']}` in {path}"
+    else:
+        settings.pop("statusLine", None)
+        done = f"removed the Chronicle status line from {path}"
+    _backup(cfg, path)
+    path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
+    wrapped_path().unlink(missing_ok=True)
+    return [done]
+
+
 # ------------------------------------------------------------------ launchd
 def plist_path(label: str = LAUNCHD_LABEL) -> Path:
     return Path("~/Library/LaunchAgents").expanduser() / f"{label}.plist"

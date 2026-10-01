@@ -17,6 +17,7 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 | Markdown 保管庫 | `~/.claude-chronicle/notes/` |
 | ログ | `~/.claude-chronicle/logs/` |
 | Chronicle が編集したエージェントの設定ファイルのバックアップ | `~/.claude-chronicle/backups/` |
+| セッションごとのステータスラインの使用量（`--statusline` を使った場合のみ） | `~/.claude-chronicle/statusline/` |
 | アプリの起動スクリプトとウインドウの保存領域 | `~/.claude-chronicle/bin/chronicle`、`~/.claude-chronicle/webview/` |
 
 ## 詳細

@@ -6,6 +6,7 @@ import re
 import sqlite3
 
 from .db import fts_query, short_terms
+from .ladder import STAGE_ORDER_SQL, confirmations
 from .util import loads
 
 
@@ -145,7 +146,7 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
     sql = "SELECT k.*, s.title AS session_title, s.started_at AS session_started FROM knowledge k LEFT JOIN sessions s ON s.id = k.session_id"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += " ORDER BY k.pinned DESC, COALESCE(s.started_at, k.created_at) DESC LIMIT ?"
+    sql += f" ORDER BY k.pinned DESC, {STAGE_ORDER_SQL}, COALESCE(s.started_at, k.created_at) DESC LIMIT ?"
     params.append(limit)
     try:
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
@@ -153,6 +154,7 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
         return []
     for r in rows:
         r["tags"] = loads(r.pop("tags_json", None), []) or []
+        r["confirmations"] = len(confirmations(r))
     return rows
 
 
