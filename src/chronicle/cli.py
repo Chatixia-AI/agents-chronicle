@@ -63,6 +63,8 @@ def cmd_ingest_session(args) -> int:
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
+    if cfg.is_spoke:
+        return _push(cfg, quiet=True)
     conn = _conn(cfg)
     path = Path(args.transcript).expanduser() if args.transcript else None
     if path and path.exists():
@@ -83,6 +85,8 @@ def cmd_sync(args) -> int:
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir, verbose=args.verbose)
+    if cfg.is_spoke:  # the hub records and analyzes; this computer only sends it files
+        return _push(cfg, quiet=args.quiet)
     conn = _conn(cfg)
     report = sync(cfg, conn, force=args.force)
     if not args.quiet:
@@ -105,6 +109,9 @@ def cmd_work(args) -> int:
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
+    if cfg.is_spoke:
+        print(f"This computer sends its sessions to the hub at {cfg.hub_url}, which analyzes them.")
+        return 0
     report = run_worker(cfg, max_analyses=args.limit, analyze=not args.no_analyze, synthesize=not args.no_synthesize,
                         export=not args.no_export, force=args.force, model=args.model, wait=True,
                         progress=lambda m: print(f"  {m}"))
@@ -396,6 +403,15 @@ def cmd_status(args) -> int:
     pending = count_pending(conn, cfg)
     spent = conn.execute("SELECT COALESCE(SUM(cost_usd),0) FROM analyses").fetchone()[0]
     console.print(f"[bold]Chronicle[/] · home {cfg.home}")
+    from .hub import last_push, read_token
+
+    if cfg.is_spoke:
+        last = last_push(cfg)
+        console.print(f"  sends its sessions to the hub at {cfg.hub_url}"
+                      f" (last push: {local_str(last['at']) + ' · ' + last['summary'] if last else 'never'})", highlight=False)
+    elif read_token(cfg):
+        others = conn.execute("SELECT COUNT(*) FROM machines WHERE role = 'spoke'").fetchone()[0]
+        console.print(f"  hub for {others} other computer{'s' * (others != 1)} (`chronicle hub status`)")
     console.print(f"  {ok(hooks.get('SessionEnd'))} SessionEnd hook   {ok(hooks.get('SessionStart'))} SessionStart context hook"
                   f"{' (optional)' if not cfg.inject_session_start else ''}")
     ui = launchd_status(UI_LABEL)
@@ -477,14 +493,183 @@ def _wait_for_port(port: int, seconds: float = 8.0) -> bool:
     return False
 
 
+ANALYZE_NEWEST = 20  # what "analyze the newest now" means at install: enough for a first Glossary and Map in minutes
+STAGE_SECONDS = {"session": 45, "synthesis": 85, "glossary": 55, "themes": 70}  # typical call times, until measured here
+
+
+def _about(minutes: float) -> str:
+    if minutes < 60:
+        return f"about {max(1, round(minutes))} min"
+    if minutes < 48 * 60:
+        return f"about {round(minutes / 60)} h"
+    return f"about {round(minutes / 1440)} days"
+
+
+def _estimate_minutes(conn, cfg, ids: list[str]) -> float:
+    """Rough wall time to analyze `ids` now, then build the knowledge bases, glossaries and Map themes they feed."""
+    import math
+
+    secs = dict(STAGE_SECONDS)
+    secs.update({r[0]: r[1] for r in conn.execute(
+        "SELECT kind, AVG(duration_ms) / 1000.0 FROM analyses WHERE status = 'done' AND duration_ms > 0 GROUP BY kind")
+        if r[0] in secs and r[1]})
+    project_of = dict(conn.execute("SELECT id, project_path FROM sessions"))
+    projects = len({project_of.get(i) for i in ids}) + 1  # + the cross-project playbook
+    conc = max(1, cfg.analysis.concurrency)
+    return (math.ceil(len(ids) / conc) * secs["session"] + projects * secs["synthesis"]
+            + math.ceil(projects / conc) * secs["glossary"] + 2 * secs["themes"]) / 60
+
+
+def _analysis_step(cfg, conn, console, analyzer, *, interactive: bool, choice: str | None, background_sync: bool,
+                   interval: int) -> tuple[list[str], int, str]:
+    """Explain what analysis builds (knowledge, then the Glossary and the Map) and when it happens; ask whether to
+    analyze now. Returns (sessions to analyze now, sessions waiting, how the rest gets analyzed)."""
+    import math
+
+    from .worker import pending_sessions
+
+    ids = pending_sessions(conn, cfg, 100_000)
+    n = len(ids)
+    if background_sync and cfg.analysis.auto:
+        later = "in the background"
+    elif not cfg.analysis.auto:
+        later = "when you run `chronicle analyze --pending` (analysis.auto is off)"
+    else:
+        later = "when you run `chronicle analyze --pending` (nothing runs in the background)"
+    if not n:
+        return [], 0, later
+    console.print("\n[bold]Analysis: knowledge, the Glossary and the Map[/]")
+    console.print(f"  Chronicle reads each session through your {analyzer.label} login and pulls out what was learned "
+                  "(fixes, decisions, gotchas, commands). That knowledge builds each project's knowledge base, then the "
+                  "Glossary, then the Map. Until sessions are analyzed, the Glossary and the Map stay empty.",
+                  highlight=False)
+    console.print(f"  {n} past session{'s' * (n != 1)} waiting. Each is one {analyzer.label} call and counts toward "
+                  "your plan's usage.", highlight=False)
+    if later == "in the background":
+        runs = math.ceil(n / max(1, cfg.analysis.max_per_run))
+        console.print(f"  Later: in the background, {cfg.analysis.max_per_run} every {interval} min, so all of them in "
+                      f"{_about(runs * interval)}. A project's glossary is built once all its sessions are analyzed.",
+                      highlight=False)
+    else:
+        console.print(f"  Later: {later}.", highlight=False)
+
+    if choice is None and not interactive:
+        choice = "later"
+    if choice is None:
+        newest = ids[:ANALYZE_NEWEST]
+        if n <= ANALYZE_NEWEST:
+            choice = "all" if _ask(f"Analyze {'them' if n > 1 else 'it'} now and show the progress? "
+                                   f"({_about(_estimate_minutes(conn, cfg, ids))})", True) else "later"
+        else:
+            try:
+                answer = input(f"Analyze now and show the progress? [N]ewest {len(newest)} "
+                               f"({_about(_estimate_minutes(conn, cfg, newest))}) / [a]ll {n} "
+                               f"({_about(_estimate_minutes(conn, cfg, ids))}) / [l]ater: ").strip().lower()
+            except EOFError:
+                answer = ""
+            choice = ("all" if answer.startswith("a") else "later" if answer.startswith(("l", "no", "s"))
+                      else answer if answer.isdigit() else str(ANALYZE_NEWEST))
+    if choice == "all":
+        return ids, n, later
+    if choice.isdigit():
+        return ids[:int(choice)], n, later
+    return [], n, later
+
+
+class _StageProgress:
+    """Draws the worker's progress messages as one bar per stage, so the Glossary and the Map are seen being built."""
+
+    STAGES = {"analyzing": "Sessions", "synthesizing": "Knowledge bases", "glossary": "Glossary", "themes": "Map themes",
+              "writing weekly review": "Weekly review"}
+
+    def __init__(self, bar):
+        import threading
+
+        self.bar, self.task, self.stage, self.count = bar, None, None, 0
+        self.lock = threading.Lock()  # sessions report from several analysis threads at once
+
+    def __call__(self, message: str) -> None:
+        with self.lock:
+            self._update(message)
+
+    def _update(self, message: str) -> None:
+        from .synthesize import GLOBAL
+        from .util import PROGRESS_RE
+
+        stage = next((s for s in self.STAGES if message.startswith(s)), None)
+        if (stage is None and self.task is None) or message.startswith("stopping"):
+            self.bar.console.print(f"  {message}", highlight=False)
+            return
+        if stage and stage != self.stage:
+            self.finish()
+            self.stage, self.count = stage, 0
+            self.task = self.bar.add_task(self.STAGES[stage], total=None, detail="")
+        m = PROGRESS_RE.search(message)
+        if m:
+            done, total = (int(g.replace(",", "")) for g in m.groups())
+            self.bar.update(self.task, completed=done, total=total, detail=f"{done} of {total}")
+        elif stage == "synthesizing":
+            self.count += 1
+            name = message.removeprefix("synthesizing ").rstrip("…")
+            self.bar.update(self.task, detail=f"{self.count}: {'global playbook' if name == GLOBAL else name}")
+
+    def finish(self) -> None:
+        if self.task is not None:
+            total = next(t.total for t in self.bar.tasks if t.id == self.task) or 1
+            self.bar.update(self.task, total=total, completed=total,
+                            detail=f"{self.count} built" if self.stage == "synthesizing" else "done")
+
+
+def _analyze_now(cfg, console, ids: list[str], waiting: int, later: str) -> str:
+    """Analyze `ids` with live progress, then build the knowledge bases, glossaries and Map themes they feed.
+    Returns the line for the closing summary about what is left."""
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeElapsedColumn
+
+    from .worker import run_worker
+
+    console.print(f"\nAnalyzing {len(ids)} session{'s' * (len(ids) != 1)}. Ctrl-C stops; what is left is analyzed {later}.",
+                  highlight=False)
+    try:
+        with Progress(SpinnerColumn(), TextColumn("{task.description:<16}"), BarColumn(), TextColumn("{task.fields[detail]}"),
+                      TimeElapsedColumn(), console=console) as bar:
+            stages = _StageProgress(bar)
+            report = run_worker(cfg, session_ids=ids, force=True, wait=True, progress=stages)
+            stages.finish()
+    except KeyboardInterrupt:
+        console.print(f"[yellow]Stopped.[/] The rest is analyzed {later}; the Glossary and the Map are built after.",
+                      highlight=False)
+        return f"Sessions still waiting for analysis are analyzed {later}."
+    conn = _conn(cfg)
+    terms = conn.execute("SELECT COUNT(*) FROM glossary").fetchone()[0]
+    themed = conn.execute("SELECT COUNT(DISTINCT category) FROM glossary_themes").fetchone()[0]
+    conn.close()
+    console.print(f"• analyzed {len(report.analyzed)} session{'s' * (len(report.analyzed) != 1)}"
+                  + (f" ({len(report.skipped)} too short to analyze)" if report.skipped else "")
+                  + f", built {len(report.synthesized)} knowledge base{'s' * (len(report.synthesized) != 1)}, "
+                  f"{terms} glossary term{'s' * (terms != 1)}"
+                  + (f", Map themes for {themed} categor{'ies' if themed != 1 else 'y'}" if themed else ""), highlight=False)
+    for target, err in report.failed[:3]:
+        console.print(f"  [red]![/] {target[:40]}: {err[:200]}", highlight=False)
+    if report.paused_until:
+        from .util import local_str
+
+        console.print(f"  [yellow]{_analyzer(cfg)} usage limit reached[/]: analysis resumes after "
+                      f"{local_str(report.paused_until)}.", highlight=False)
+    rest = waiting - len(report.analyzed) - len(report.skipped)
+    if rest > 0:
+        return (f"The other {rest} session{'s are' if rest != 1 else ' is'} analyzed {later}; the Glossary and the Map "
+                "grow as they are.")
+    return "The Glossary and the Map are ready on the dashboard." if terms else ""
+
+
 def cmd_install(args) -> int:
     import platform
 
     from .connectors import connect, disconnect
     from .db import kv_get, kv_set
     from .ingest import sync
-    from .install import (LAUNCHD_LABEL, UI_LABEL, executable, install_hooks, install_launchd, install_mcp, install_ui_agent,
-                          launchd_status, plist_path, uninstall_launchd)
+    from .install import (LAUNCHD_LABEL, UI_LABEL, agent_path, background_supported, executable, install_hooks,
+                          install_launchd, install_mcp, install_ui_agent, launchd_status, uninstall_launchd)
     from .util import utcnow_iso
 
     cfg = _cfg()
@@ -501,9 +686,9 @@ def cmd_install(args) -> int:
                       "`uv tool install agents-chronicle` gives it a stable path.\n", highlight=False)
 
     picked, mcp_clients = _setup_choices(cfg, conn, console, ask=ask)
-    background_on = True  # elsewhere install_launchd/install_ui_agent only say what to do instead
+    background_on = False  # nothing keeps Chronicle running here: say so instead of promising background analysis
     turned_off = [label for label, off in ((LAUNCHD_LABEL, args.no_launchd), (UI_LABEL, args.no_ui)) if off]
-    if platform.system() == "Darwin" and not (args.no_launchd and args.no_ui):
+    if background_supported() and not (args.no_launchd and args.no_ui):
         background_on = (any(launchd_status(label).get("loaded") for label in (LAUNCHD_LABEL, UI_LABEL))
                          or ask("Run Chronicle in the background, starting at login? (syncs every 15 minutes and "
                                 "keeps the dashboard up)", True))
@@ -530,7 +715,7 @@ def cmd_install(args) -> int:
             actions += install_launchd(cfg, exe, interval=args.interval * 60, dry_run=True)
         if background_on and not args.no_ui:
             actions += install_ui_agent(cfg, exe, dry_run=True)
-        actions += [f"would remove launchd agent {label}" for label in turned_off if plist_path(label).exists()]
+        actions += [f"would remove background agent {agent_path(label)}" for label in turned_off if agent_path(label).exists()]
         for a in actions:
             console.print(f"• {a}", highlight=False, soft_wrap=True)
         return 0
@@ -550,7 +735,16 @@ def cmd_install(args) -> int:
     if first_install:
         kv_set(conn, "installed_at", utcnow_iso())
         conn.commit()
+    now, waiting, later = [], 0, ""
+    if picked and analyzer and not cfg.is_spoke:
+        now, waiting, later = _analysis_step(cfg, conn, console, analyzer, interactive=interactive, choice=args.analyze,
+                                             background_sync=background_on and not args.no_launchd, interval=args.interval)
     conn.close()
+    if now:  # before the background agents start, so they don't take the same sessions
+        after = _analyze_now(cfg, console, now, waiting, later)
+    else:
+        after = (f"The {waiting} waiting session{'s are' if waiting != 1 else ' is'} analyzed {later}; the Glossary "
+                 "and the Map are built from them." if waiting else "")
 
     background = []
     if background_on and not args.no_launchd:
@@ -565,9 +759,8 @@ def cmd_install(args) -> int:
     ui_running = any(a.startswith("dashboard always available") for a in background)
     console.print("\n[bold green]Done.[/]" + (" Nothing is recorded yet: connect an agent any time with "
                                               "`chronicle connect <name>`." if not picked else ""))
-    if picked and analyzer and cfg.analysis.auto and background_on:
-        console.print(f"Past sessions are analyzed in the background, a few at a time, through your {analyzer.label} "
-                      "login (this counts toward your plan's usage).", highlight=False)
+    if after:
+        console.print(after, highlight=False)
     if not background_on:
         hooked = "claude" in picked and not args.no_hooks
         console.print("Not running in the background"
@@ -615,7 +808,7 @@ def _choose_analyzer(cfg, console, *, ask, dry_run: bool):
         return make_runner(cfg)
     console.print(f"[yellow]{missing}[/] Chronicle analyzes sessions through your own Claude Code or Codex login; "
                   "until one is installed and signed in (and chosen as analysis.backend), sessions are recorded but "
-                  "not analyzed.\n", highlight=False)
+                  "not analyzed, so the Glossary and the Map stay empty.\n", highlight=False)
     return None
 
 
@@ -939,6 +1132,243 @@ def cmd_connect(args) -> int:
     return 0
 
 
+def _push(cfg, *, quiet: bool = False) -> int:
+    from .hub import HubError, push
+
+    live = not quiet and sys.stdout.isatty()
+
+    def progress(message: str) -> None:
+        if live:
+            print(f"\r\033[K  {message[:110]}", end="", flush=True)
+
+    try:
+        report = push(cfg, progress=progress)
+    except HubError as exc:
+        if live:
+            print("\r\033[K", end="")
+        print(f"push: {exc}", file=sys.stderr)
+        return 1
+    if live:
+        print("\r\033[K", end="")
+    if not quiet:
+        print(f"push: {report.summary()}")
+    for err in report.errors[:10]:
+        print(f"  ! {err}", file=sys.stderr)
+    return 0 if not report.errors else 1
+
+
+def cmd_push(args) -> int:
+    from .util import setup_logging
+
+    cfg = _cfg()
+    setup_logging(cfg.logs_dir)
+    if not cfg.is_spoke:
+        print("This computer has not joined a hub. On the hub run `chronicle hub enable`, then run the command it "
+              "prints here.", file=sys.stderr)
+        return 1
+    return _push(cfg, quiet=args.quiet)
+
+
+def _hub_url_guess(cfg) -> str | None:
+    """The address other computers reach this one's dashboard at: its Tailscale name, when Serve is set up."""
+    for host in cfg.server_allowed_hosts:
+        if host.endswith(".ts.net"):
+            return f"https://{host}"
+    return None
+
+
+def cmd_hub(args) -> int:
+    import platform
+
+    from . import hub
+    from .install import background_status, hooks_installed
+
+    cfg = _cfg()
+    console = _console()
+    action = args.action
+
+    if action == "enable":
+        if cfg.is_spoke:
+            console.print(f"This computer sends its sessions to the hub at {cfg.hub_url}. Run `chronicle hub leave` "
+                          "first to make it a hub itself.", highlight=False)
+            return 1
+        token = hub.read_token(cfg)
+        if not token or args.rotate:
+            token = hub.new_token(cfg)
+            if args.rotate:
+                console.print("New token: computers that joined with the old one must join again.")
+        conn = _conn(cfg)
+        hub.register_local(conn, cfg)
+        conn.commit()
+        conn.close()
+        url = (args.url_opt or args.url or _hub_url_guess(cfg) or "").rstrip("/")
+        console.print(f"[bold]{hub.local_machine(cfg)['name']}[/] is a hub: other computers can send it their sessions.",
+                      highlight=False)
+        if not url:
+            console.print("Other computers need an address to reach it. Run `chronicle tailnet on` (Tailscale), then "
+                          "`chronicle hub enable` again, or pass the address: `chronicle hub enable --url "
+                          f"http://<address>:{cfg.server_port}` (only on a network you trust: without Tailscale the "
+                          "files travel unencrypted).", highlight=False)
+            return 0
+        from urllib.parse import urlparse
+
+        given = urlparse(url if "://" in url else f"http://{url}")
+        name = (given.hostname or "").lower()
+        if name and name not in ("127.0.0.1", "localhost", "::1") and name not in cfg.server_allowed_hosts:
+            _set_config_value(cfg, "server", "allowed_hosts", json.dumps([*cfg.server_allowed_hosts, name]))
+            if cfg.server_host in ("127.0.0.1", "localhost"):
+                console.print(f"[yellow]The dashboard listens on {cfg.server_host} only[/]: for other computers to reach "
+                              f"{url} without Tailscale, set `chronicle config set server.host 0.0.0.0` and restart it.",
+                              highlight=False)
+        console.print("On each other computer, install Chronicle and run:\n")
+        console.print(f"  [bold]{hub.join_command(url, token)}[/]\n", highlight=False, soft_wrap=True)
+        console.print("[dim]The token lets a computer send sessions here; keep it private. "
+                      "`chronicle hub enable --rotate` replaces it.[/]", highlight=False)
+        if not _wait_for_port(cfg.server_port, 1.0):
+            console.print(f"[yellow]The dashboard is not running on port {cfg.server_port}[/]: it is what receives "
+                          "the files. `chronicle install` keeps it running (or run `chronicle ui`).", highlight=False)
+        if platform.system() == "Linux":
+            console.print("[dim]A hub that should run while nobody is logged in: `loginctl enable-linger $USER`.[/]",
+                          highlight=False)
+        return 0
+
+    if action == "join":
+        if not args.url or not args.token:
+            console.print("Usage: chronicle hub join <hub address> --token <token> (the hub's `chronicle hub enable` "
+                          "prints the whole command).")
+            return 2
+        if hub.read_token(cfg) and not cfg.is_spoke:
+            console.print("This computer is a hub itself (`chronicle hub disable` first).")
+            return 1
+        url = args.url.rstrip("/")
+        if "://" not in url:
+            url = f"https://{url}"
+        hub.write_token(cfg, args.token)
+        _set_config_value(cfg, "hub", "url", json.dumps(url))
+        from .config import load_config
+
+        cfg = load_config(cfg.home)
+        console.print(f"Joined the hub at {url}. This computer now sends its Claude Code and Codex sessions there; "
+                      "the hub records and analyzes them.", highlight=False)
+        if args.no_push:
+            return 0
+        console.print("Sending the sessions on this computer (the first time can take a while)…")
+        code = _push(cfg)
+        if code == 0:
+            bg = background_status()
+            hooked = bool(hooks_installed(cfg).get("SessionEnd"))
+            if bg.get("loaded") or hooked:
+                console.print("New sessions go to the hub as each one ends" + (" and every 15 minutes." if bg.get("loaded") else "."))
+            else:
+                console.print("To send new sessions automatically (as each ends, and every 15 minutes), run "
+                              "`chronicle install`. Until then: `chronicle push`.")
+            console.print("[dim]This computer's own dashboard and MCP tools keep what they had and are no longer "
+                          "updated; open the hub's dashboard instead. `chronicle hub leave` undoes this.[/]",
+                          highlight=False)
+        return code
+
+    if action == "leave":
+        if not cfg.is_spoke:
+            console.print("This computer has not joined a hub.")
+            return 0
+        _set_config_value(cfg, "hub", "url", '""')
+        hub.token_path(cfg).unlink(missing_ok=True)
+        console.print(f"Left the hub at {cfg.hub_url}. This computer records and analyzes its own sessions again; "
+                      "the hub keeps what it was sent.", highlight=False)
+        return 0
+
+    if action == "disable":
+        if cfg.is_spoke or not hub.read_token(cfg):
+            console.print("This computer is not a hub.")
+            return 0
+        hub.token_path(cfg).unlink(missing_ok=True)
+        console.print("Other computers can no longer send sessions here. What they sent is kept.")
+        return 0
+
+    # status
+    if cfg.is_spoke:
+        last = hub.last_push(cfg)
+        console.print(f"Sends its sessions to the hub at [bold]{cfg.hub_url}[/]", highlight=False)
+        console.print(f"  last push: {last['at'] + ' · ' + last['summary'] if last else 'never'}", highlight=False)
+        return 0
+    conn = _conn(cfg)
+    rows = hub.machines(conn, cfg)
+    conn.close()
+    role = "a hub" if hub.read_token(cfg) else "not a hub (`chronicle hub enable` makes it one)"
+    console.print(f"[bold]{hub.local_machine(cfg)['name']}[/] is {role}.", highlight=False)
+    from .util import local_str
+
+    for m in rows:
+        seen = "this computer" if m["this"] else f"last sent {local_str(m['last_push']) if m['last_push'] else 'nothing yet'}"
+        console.print(f"  {m['name'] or m['id'][:8]:<28} {m['platform'] or '':<8} {m['sessions']:>5} session{'s' * (m['sessions'] != 1)} · {seen}",
+                      highlight=False)
+    return 0
+
+
+def cmd_tailnet(args) -> int:
+    import platform
+
+    from . import tailnet
+
+    cfg = _cfg()
+    console = _console()
+    cli = tailnet.find_cli()
+    if not cli:
+        console.print("Tailscale is not installed. Install it on this computer and your phone "
+                      "(https://tailscale.com/download), sign both in to the same account, then run this again.")
+        return 1
+    try:
+        st = tailnet.status(cli)
+    except (tailnet.TailnetError, OSError) as exc:
+        console.print(f"Could not ask Tailscale for its status: {exc}", highlight=False)
+        return 1
+    hosts = [h for h in cfg.server_allowed_hosts if h != st.dns_name]
+
+    if args.action == "status":
+        serving = tailnet.serves_port(tailnet.serve_status(cli), cfg.server_port)
+        console.print(f"Tailscale: {st.state or 'unknown'}" + (f" as {st.login} · this computer is {st.dns_name}" if st.running else ""),
+                      highlight=False)
+        console.print(f"  dashboard on the tailnet: {st.url + '/' if serving else 'off (`chronicle tailnet on`)'}", highlight=False)
+        console.print(f"  allowed_hosts: {cfg.server_allowed_hosts or '[]'} · allowed_users: {cfg.server_allowed_users or 'anyone on the tailnet'}",
+                      highlight=False)
+        return 0
+
+    if not st.running or not st.dns_name:
+        console.print(f"Tailscale is not connected ({st.state or 'unknown'}). Sign in with `tailscale up` or the "
+                      "Tailscale app, then run this again.", highlight=False)
+        return 1
+
+    if args.action == "off":
+        proc = tailnet.serve(cli, cfg.server_port, off=True, interactive=False)
+        _set_config_value(cfg, "server", "allowed_hosts", json.dumps(hosts))
+        _set_config_value(cfg, "server", "allowed_users", "[]")
+        console.print("The dashboard is no longer on your tailnet." if proc.returncode == 0 else
+                      f"Tailscale said: {(proc.stderr or proc.stdout).strip()[:300]}", highlight=False)
+        return 0
+
+    # on
+    _set_config_value(cfg, "server", "allowed_hosts", json.dumps([*hosts, st.dns_name]))
+    _set_config_value(cfg, "server", "allowed_users", json.dumps([] if args.anyone or not st.login else [st.login]))
+    console.print(f"Serving the dashboard at [bold]{st.url}/[/] with Tailscale Serve…", highlight=False)
+    proc = tailnet.serve(cli, cfg.server_port, interactive=sys.stdin.isatty())
+    if proc.returncode != 0:
+        hint = (" On Linux, let your user configure Tailscale once: `sudo tailscale set --operator=$USER`."
+                if platform.system() == "Linux" else "")
+        console.print(f"[red]Tailscale Serve did not start[/]{': ' + (proc.stderr or '').strip()[:300] if proc.stderr else ''}.{hint}",
+                      highlight=False)
+        return 1
+    console.print(f"\nOpen [bold]{st.url}/[/] on your phone (with the Tailscale app on) or any computer in your tailnet.",
+                  highlight=False)
+    console.print("On an iPhone: Share › Add to Home Screen, for an app icon. On Android: ⋮ › Add to Home screen.")
+    who = "you" if not args.anyone and st.login else "anyone in your tailnet"
+    console.print(f"[dim]Only {who} ({st.login or 'tailnet'}) can open it; nothing is reachable from the internet. "
+                  "`chronicle tailnet off` stops it.[/]", highlight=False)
+    if not _wait_for_port(cfg.server_port, 1.0):
+        console.print(f"[yellow]The dashboard is not running on port {cfg.server_port}.[/] `chronicle install` keeps it "
+                      "running in the background (or run `chronicle ui`).", highlight=False)
+    return 0
+
+
 def cmd_context(args) -> int:
     import os
 
@@ -950,6 +1380,13 @@ def cmd_context(args) -> int:
 
 
 # ---------------------------------------------------------------------------- parser
+def _analyze_choice(value: str) -> str:
+    value = value.strip().lower()
+    if value in ("all", "later") or (value.isdigit() and int(value) > 0):
+        return value
+    raise argparse.ArgumentTypeError("use all, later or a number of sessions")
+
+
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="chronicle",
@@ -970,6 +1407,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--inject-context", action="store_true", help="also add a SessionStart hook that injects project knowledge")
     s.add_argument("--interval", type=int, default=15, help="background sync interval in minutes (default 15)")
     s.add_argument("--exe", help="command used by hooks/launchd (default: the installed `chronicle`)")
+    s.add_argument("--analyze", type=_analyze_choice, metavar="all|N|later",
+                   help="analyze past sessions now with progress (all, or the newest N), or later; asked when omitted "
+                        "(later without a terminal). The Glossary and the Map are built from the analyzed sessions")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=cmd_install)
 
@@ -1126,6 +1566,25 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install` and `connect`")
     s.add_argument("--print-config", action="store_true", help="print a JSON entry to add Chronicle to any MCP client by hand")
     s.set_defaults(fn=cmd_mcp)
+
+    s = sub.add_parser("tailnet", help="reach the dashboard from your phone and other computers through Tailscale")
+    s.add_argument("action", nargs="?", choices=["on", "off", "status"], default="status")
+    s.add_argument("--anyone", action="store_true", help="with on: let anyone in your tailnet in, not just your login")
+    s.set_defaults(fn=cmd_tailnet)
+
+    s = sub.add_parser("hub", help="one archive for several computers: this one records them all (enable), "
+                                   "or sends its sessions to one that does (join)")
+    s.add_argument("action", nargs="?", choices=["status", "enable", "join", "leave", "disable"], default="status")
+    s.add_argument("url", nargs="?", help="with join: the hub's address")
+    s.add_argument("--token", help="with join: the token the hub's `chronicle hub enable` printed")
+    s.add_argument("--url", dest="url_opt", help=argparse.SUPPRESS)
+    s.add_argument("--rotate", action="store_true", help="with enable: make a new token (computers must join again)")
+    s.add_argument("--no-push", action="store_true", help="with join: don't send this computer's sessions yet")
+    s.set_defaults(fn=cmd_hub)
+
+    s = sub.add_parser("push", help="send this computer's new sessions to its hub now (the background job does this)")
+    s.add_argument("--quiet", action="store_true")
+    s.set_defaults(fn=cmd_push)
 
     s = sub.add_parser("hook", help=argparse.SUPPRESS)
     s.add_argument("event", choices=["session-end", "session-start", "stop", "pre-compact"])

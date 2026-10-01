@@ -43,5 +43,16 @@
 | `export.markdown` | `true` | すべてを Markdown 保管庫にミラーする |
 | `export.notes_dir` | `""` | 保管庫の場所（空の場合：`~/.claude-chronicle/notes`） |
 | `server.host` / `port` | `127.0.0.1` / `8765` | ダッシュボード。このポートが使用中の場合、アプリは空いているポートを使います |
+| `server.allowed_hosts` | `[]` | 127.0.0.1 と localhost のほかにダッシュボードが応答する名前。Tailscale の名前など。`chronicle tailnet on` が設定します（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
+| `server.allowed_users` | `[]` | それらの名前で Tailscale Serve 経由でアクセスしたとき、通す Tailscale ログイン（空の場合は tailnet の全員）。`chronicle tailnet on` があなたのログインを設定します |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
 | `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |
+
+## `[hub]`
+
+複数のコンピューターで 1 つのアーカイブ（[スマートフォンとほかのコンピューター](devices.md#ほかのコンピューター)）。
+
+| キー | 既定値 | |
+| --- | --- | --- |
+| `url` | `""` | セッションをハブに送るコンピューターで：ハブのアドレス。`chronicle hub join` が設定し、`chronicle hub leave` が消します。設定されている間、このコンピューターは記録・分析をせずにハブへ送ります |
+| `path_map` | `{}` | ハブで：ほかのコンピューターのフォルダーのうち、こちらのフォルダーと同じプロジェクトを持つもの。例：`{ "/home/me/code" = "/Users/me/Projects" }`。git リモートのあるプロジェクトは先にリモートで対応付けます |

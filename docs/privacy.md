@@ -11,6 +11,11 @@ updates daily** there (off by default). If you connect Codex Cloud, each sync al
 `codex cloud` CLI, which fetches your own tasks from OpenAI with your Codex login; nothing is sent the other way.
 Importing a claude.ai or ChatGPT export reads only the chats, never the account files (`users.json`, `user.json`).
 
+**With your phone and other computers** ([Phone and other computers](devices.md)), nothing leaves your own
+devices either: `chronicle tailnet on` makes the dashboard reachable inside your Tailscale network, to your
+Tailscale login only; a computer that joined a hub sends it that computer's raw session files, unredacted like the
+archive, over HTTPS inside the tailnet.
+
 | Stored locally | Where |
 | --- | --- |
 | Database: sessions, events, knowledge, glossary, reviews | `~/.claude-chronicle/chronicle.db` (SQLite) |
@@ -19,6 +24,8 @@ Importing a claude.ai or ChatGPT export reads only the chats, never the account 
 | Logs | `~/.claude-chronicle/logs/` |
 | Backups of agent config files Chronicle edits | `~/.claude-chronicle/backups/` |
 | The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
+| This computer's id and name; a hub's token (readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/hub-token` |
+| On a hub: the session files other computers sent | `~/.claude-chronicle/machines/` |
 
 ## Details
 
@@ -32,7 +39,9 @@ Importing a claude.ai or ChatGPT export reads only the chats, never the account 
   off.
 - **The dashboard** binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding) and requires a custom header
   on state-changing requests (CSRF). In the app window, the page can call only three window actions (theme, drag,
-  zoom).
+  zoom). Reached through Tailscale Serve, it answers only to the names in `[server] allowed_hosts` and lets in only
+  the Tailscale logins in `[server] allowed_users`, a header it trusts only from Serve on the same computer. A
+  hub takes other computers' files only with its token (`chronicle hub enable --rotate` replaces it).
 - **Exports** (Export on a session, or on a selection in the Sessions list) are redacted like everything the
   dashboard shows, in Markdown and JSON. **Original transcript** is the agent's own file as archived, unredacted:
   check it before sharing.

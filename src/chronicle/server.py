@@ -1,4 +1,9 @@
-"""Local dashboard: JSON API + static single-page app (stdlib only, binds to localhost)."""
+"""Local dashboard: JSON API + static single-page app (stdlib only, binds to localhost).
+
+Besides 127.0.0.1 and localhost it answers only to the names in `[server] allowed_hosts` (Tailscale Serve's, set by
+`chronicle tailnet on`), and there only to the Tailscale logins in `[server] allowed_users`. On a hub, /api/hub/* takes
+other computers' session files, authenticated by the hub's token instead (hub.py).
+"""
 
 from __future__ import annotations
 
@@ -23,12 +28,14 @@ from .db import connect, kv_get
 from .llm import BACKENDS, make_runner
 from .search import search_all, search_events, search_knowledge, search_sessions
 from .synthesize import GLOBAL
-from .util import loads, to_iso, utcnow
+from .util import PROGRESS_RE, loads, to_iso, utcnow
 from .views import project_labels, resolve_session_id, session_record
 
 log = logging.getLogger("chronicle.server")
 MAX_SELECTION = 1000  # sessions one "analyze selected" may cover
 WEB_DIR = Path(__file__).parent / "web"
+LOOPBACK = ("127.0.0.1", "localhost", "[::1]")
+mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
 # The page is served from the files as they were when this process started, so it always matches the code
@@ -47,7 +54,6 @@ def _ui_build() -> str:
 
 
 UI_BUILD = _ui_build()
-PROGRESS_RE = re.compile(r"(\d[\d,]*)\s*(?:of|/)\s*(\d[\d,]*)")  # "12 of 40", "120/2,000": a job's progress
 
 SESSION_LIST_COLS = (
     "id, source, agent, title, project_name, project_path, started_at, ended_at, duration_s, active_s, n_prompts, "
@@ -110,6 +116,9 @@ class App:
         self.jobs = Jobs()
         self._cfg_sig = self._config_sig()
         self._update_check = threading.Lock()  # one daily update check at a time
+        from .hub import IngestTrigger
+
+        self.ingest = IngestTrigger(cfg)  # a hub ingests what other computers send, right after they send it
 
     def _config_sig(self):
         try:
@@ -661,6 +670,24 @@ class App:
             "version": __version__,
             "update": available(),
             "ui_build": UI_BUILD,
+            "hub_url": self.cfg.hub_url or None,  # set on a computer that sends its sessions to a hub
+        }
+
+    def devices(self) -> dict:
+        """This computer's role, the computers a hub hears from, and how the dashboard is reachable."""
+        from .hub import last_push, local_machine, machines, read_token
+
+        role = "spoke" if self.cfg.is_spoke else "hub" if read_token(self.cfg) else "single"
+        return {
+            "this": local_machine(self.cfg),
+            "role": role,
+            "hub_url": self.cfg.hub_url or None,
+            "last_push": last_push(self.cfg) if role == "spoke" else None,
+            "machines": machines(self.conn, self.cfg),
+            "path_map": self.cfg.hub_path_map,
+            "allowed_hosts": self.cfg.server_allowed_hosts,
+            "allowed_users": self.cfg.server_allowed_users,
+            "port": self.cfg.server_port,
         }
 
     def update_info(self, remote: bool) -> dict:
@@ -774,6 +801,11 @@ class App:
         from .ingest import sync
         from .worker import run_worker
 
+        if self.cfg.is_spoke:
+            from .hub import push
+
+            return self.jobs.start("sync", lambda progress: push(self.cfg, progress=progress).summary())
+
         def job(progress):
             progress("syncing transcripts…")
             conn = connect(self.cfg.db_path)
@@ -883,7 +915,7 @@ class App:
 
 
 def make_handler(app: App, port: int):
-    allowed_hosts = {f"127.0.0.1:{port}", f"localhost:{port}", f"[::1]:{port}"}
+    local_hosts = {f"{h}:{port}" for h in LOOPBACK}
 
     class Handler(BaseHTTPRequestHandler):
         server_version = f"chronicle/{__version__}"
@@ -891,8 +923,59 @@ def make_handler(app: App, port: int):
         def log_message(self, fmt, *args):  # quiet
             log.debug("%s - %s", self.address_string(), fmt % args)
 
+        def _host(self) -> str:
+            return (self.headers.get("Host") or "").strip().lower()
+
         def _host_ok(self) -> bool:
-            return self.headers.get("Host", "") in allowed_hosts
+            """The Host header names this dashboard (a DNS-rebinding guard): localhost, or an allowed name."""
+            host = self._host()
+            if host in local_hosts:
+                return True
+            name = host.rsplit(":", 1)[0] if host.count(":") == 1 else host
+            return any(host == a or name == a for a in app.cfg.server_allowed_hosts)
+
+        def _user_ok(self) -> bool:
+            """With [server] allowed_users set, a request that came through Tailscale Serve needs one of those logins.
+
+            Serve connects from localhost and always sets X-Forwarded-For and Tailscale-User-Login itself (a client's
+            own values are replaced), but it passes the client's Host header through as sent: whether a request came
+            through Serve is told by X-Forwarded-For, never by the Host name, or a tailnet device could claim
+            `Host: 127.0.0.1` and skip the check."""
+            users = app.cfg.server_allowed_users
+            if not users:
+                return True
+            if self.client_address[0] not in ("127.0.0.1", "::1"):
+                return False  # only Serve on this computer may vouch for a login
+            proxied = self.headers.get("X-Forwarded-For") is not None or self.headers.get("Tailscale-User-Login") is not None
+            if not proxied and self._host() in local_hosts:
+                return True  # this computer itself
+            return (self.headers.get("Tailscale-User-Login") or "") in users
+
+        def _hub_api(self, p: str):
+            """Another computer sending its sessions (hub.py). Authenticated by the hub token, not a browser header."""
+            from . import hub
+
+            if not hub.token_ok(app.cfg, self.headers.get("Authorization")):
+                return self._json({"error": "unauthorized"}, 401)
+            q = {k: v[-1] for k, v in parse_qs(urlparse(self.path).query).items()}
+            length = int(self.headers.get("Content-Length") or 0)
+            try:
+                if p == "/api/hub/file":
+                    return self._json(hub.receive_file(app.cfg, app.conn, q, self.rfile, length))
+                if p == "/api/hub/analyses":
+                    return self._json(hub.receive_analyses(app.cfg, app.conn, q, self.rfile, length))
+                body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                if not isinstance(body, dict):
+                    return self._json({"error": "bad json"}, 400)
+                if p == "/api/hub/hello":
+                    return self._json(hub.hello(app.cfg, app.conn, body))
+                if p == "/api/hub/done":
+                    hub.check_machine(app.cfg, str(body.get("machine") or ""))
+                    app.ingest.request()
+                    return self._json({"ok": True})
+            except (hub.HubError, ValueError) as exc:
+                return self._json({"error": str(exc)}, 400)
+            return self._json({"error": "not found"}, 404)
 
         def _json(self, data, status=200):
             body = json.dumps(data, ensure_ascii=False, default=str).encode()
@@ -949,6 +1032,8 @@ def make_handler(app: App, port: int):
         def _get(self):
             if not self._host_ok():
                 return self._json({"error": "forbidden host"}, 403)
+            if not self._user_ok():
+                return self._json({"error": "this Tailscale login is not allowed ([server] allowed_users)"}, 403)
             url = urlparse(self.path)
             q = {k: v[-1] for k, v in parse_qs(url.query).items()}
             p = url.path
@@ -1009,6 +1094,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.update_info(remote=False))
                 if p == "/api/imports":
                     return self._json(app.imports())
+                if p == "/api/devices":
+                    return self._json(app.devices())
                 if p.startswith("/api/"):
                     return self._json({"error": "not found"}, 404)
                 return self._static(p)
@@ -1043,7 +1130,11 @@ def make_handler(app: App, port: int):
             return self._json({"started": started})
 
         def _post(self):
-            if not self._host_ok() or self.headers.get("X-Chronicle") != "1":
+            if not self._host_ok():
+                return self._json({"error": "forbidden"}, 403)
+            if urlparse(self.path).path.startswith("/api/hub/"):
+                return self._hub_api(urlparse(self.path).path)
+            if self.headers.get("X-Chronicle") != "1" or not self._user_ok():
                 return self._json({"error": "forbidden"}, 403)
             if urlparse(self.path).path == "/api/import":
                 return self._import_upload()

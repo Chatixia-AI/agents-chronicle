@@ -1,5 +1,29 @@
 # Changelog
 
+## Unreleased
+
+- **On your phone:** `chronicle tailnet on` puts the dashboard on your Tailscale network with Tailscale Serve, at
+  `https://<computer>.<tailnet>.ts.net/`, for your Tailscale login only (`[server] allowed_hosts` and
+  `allowed_users`); nothing is opened to the internet. On a phone the dashboard puts its sections in a tab bar at
+  the bottom, uses the whole width, keeps clear of the notch and opens Sessions as cards; **Add to Home Screen**
+  gives it an icon and opens it like an app.
+- **One archive for several computers:** `chronicle hub enable` makes a computer the hub, and prints the `chronicle
+  hub join` command to run on the others. They send their Claude Code and Codex sessions to the hub as each one ends
+  and every 15 minutes (`chronicle push` sends now); the hub records and analyzes them, once, and a computer that
+  already analyzed sessions hands those analyses over when it joins. Sessions from each computer are filed under the
+  hub's projects by git remote, or by `[hub] path_map`. A session's page names the computer it ran on, and the new
+  **Settings › Devices** page lists the computers. See [Phone and other computers](docs/devices.md).
+- **Install builds the Glossary and the Map:** `chronicle install` now explains that the Glossary and the Map are
+  built from analyzed sessions, says how many are waiting and how long the background would take, and offers to
+  analyze them now (all, or the newest 20) with a progress bar for each stage: sessions, knowledge bases, glossary,
+  map themes. `--analyze all|N|later` answers without asking. Before, a fresh install left both pages empty for
+  hours while the background worked through the backlog 6 sessions at a time.
+- Ctrl-C during `chronicle analyze` (or install) now stops after the sessions already in progress instead of
+  running the rest of the queue.
+- Where nothing can run in the background, `chronicle install` no longer says past sessions are analyzed there.
+- **Linux:** `chronicle install` runs the background sync and the dashboard as systemd user units, so a Linux box
+  can be the hub.
+
 ## 0.4.0 (2026-09-30)
 
 - **Search all sessions:** the Search page (now also in the rail) lists every session that mentions a word or

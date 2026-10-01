@@ -84,6 +84,7 @@ const ICONS = {
   x: ["M18 6 6 18", "m6 6 12 12"],
   download: ["M12 3v12", "m7 10 5 5 5-5", "M5 21h14"],
   mcp: ["M9 17H7A5 5 0 0 1 7 7h2", "M15 7h2a5 5 0 1 1 0 10h-2", "M8 12h8"],
+  devices: [["rect", { x: 2, y: 4, width: 13, height: 10, rx: 1.5 }], "M1 18h15", ["rect", { x: 17, y: 8, width: 6, height: 12, rx: 1.5 }], "M20 17h.01"],
   arrow: ["M5 12h14", "m12 5 7 7-7 7"],
   branch: ["M6 3v12", ["circle", { cx: 18, cy: 6, r: 3 }], ["circle", { cx: 6, cy: 18, r: 3 }], "M18 9a9 9 0 0 1-9 9"],
   flame: ["M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"],
@@ -695,6 +696,7 @@ function navKey(path) {
   if (path.startsWith("/mcp")) return "mcp";
   if (path.startsWith("/glossary")) return "glossary";
   if (path.startsWith("/map")) return "map";
+  if (path.startsWith("/devices")) return "devices";
   if (path.startsWith("/appearance")) return "appearance";
   if (path.startsWith("/search")) return "search";
   if (path === "/" || path === "") return "overview";
@@ -1003,7 +1005,7 @@ route(/^\/sessions$/, async (params) => {
   const state = { q: params.q || "", project: params.project || "", outcome: params.outcome || "", status: params.status || "",
     days: params.days || "", sort: params.sort || "started_at", order: params.order || "desc", day: params.day || "",
     agent: params.agent || "" };
-  const mode = viewMode("sessions", "list");
+  const mode = viewMode("sessions", matchMedia("(max-width: 600px)").matches ? "cards" : "list"); // a phone has no room for the table
   let offset = 0, scale = null, total = 0;
   // ---- selection (list view): pick sessions, then analyze them in one go
   const picked = new Set(), boxes = new Map(); // id -> checkbox of a loaded row
@@ -1210,6 +1212,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       h("h1", null, sx.title || "(untitled session)"),
       h("div", { class: "meta" },
         h("span", null, "Project ", h("a", { href: `#/project?path=${encodeURIComponent(sx.project_path || "")}` }, h("b", null, sx.project_name || "–"))),
+        sx.machine_name ? h("span", { title: sx.machine_path ? `Ran in ${sx.machine_path} there` : "" }, "on ", h("b", null, sx.machine_name)) : null,
         h("span", null, `${fmtDT(sx.started_at)} → ${fmtDT(sx.ended_at)}`),
         h("span", null, h("b", null, fmtDur(sx.active_s)), " active · ", fmtDur(sx.duration_s), " wall"),
         sx.git_branch ? h("span", null, "branch ", h("code", null, sx.git_branch)) : null,
@@ -3166,7 +3169,7 @@ route(/^\/status$/, async () => {
       h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, "Recording")),
         h("div", { class: "status-list" },
           row(st.hooks?.SessionEnd, "SessionEnd hook", "archives + ingests each session as it ends"),
-          row(st.launchd?.loaded, "Background agent (launchd)", st.launchd?.loaded ? `runs every 15 min · ${st.launchd.runs || 0} runs · last exit ${st.launchd.last_exit ?? "-"}` : "not loaded"),
+          row(st.launchd?.loaded, "Background agent", st.launchd?.loaded ? `runs every 15 min · ${st.launchd.runs || 0} runs · last exit ${st.launchd.last_exit ?? "-"}` : "not loaded"),
           row(st.mcp, "MCP server registered", "Claude Code can search this vault"),
           row(!!st.hooks?.SessionStart, "SessionStart knowledge injection", "optional: chronicle install --inject-context")),
         h("div", { class: "subhead" }, "Storage"),
@@ -3182,6 +3185,63 @@ route(/^\/status$/, async () => {
           h("div", null, Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}: ${v}`)))),
         st.errors.length ? [h("div", { class: "subhead" }, "Recent failures"), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null),
       updatesCard()));
+});
+
+// =====================================================================================
+// Devices: this computer as a hub or as one that sends to a hub, and the dashboard on a phone (Tailscale)
+// =====================================================================================
+route(/^\/devices$/, async () => {
+  const dv = await api("/api/devices");
+  const ts = dv.allowed_hosts.find((x) => x.endsWith(".ts.net"));
+  const cmd = (text) => h("pre", { class: "mcp-code" }, text);
+  const others = dv.machines.filter((m) => !m.this);
+  const role = {
+    single: "Records and analyzes its own sessions.",
+    hub: "The hub: records and analyzes its own sessions and the ones your other computers send it.",
+    spoke: "Sends its sessions to a hub, which records and analyzes them. This dashboard shows what this computer had before it joined.",
+  }[dv.role];
+  const thisCard = h("section", { class: "card" }, cardHead("This computer", { iconName: "devices" }),
+    h("p", null, h("b", null, dv.this.name), ` · ${role}`),
+    dv.role === "spoke" ? [
+      h("div", { class: "status-list" },
+        h("div", null, "Hub ", h("span", { class: "codeline" }, dv.hub_url)),
+        h("div", { class: "muted" }, dv.last_push ? `Last sent ${ago(dv.last_push.at)}: ${dv.last_push.summary}` : "Nothing sent yet."),
+        ...(dv.last_push?.errors || []).map((e) => h("div", { class: "muted" }, `! ${e}`))),
+      h("p", null, extLink(`${dv.hub_url}/`, "Open the hub's dashboard"), h("span", { class: "muted" }, " · chronicle hub leave stops sending"))] : null);
+  const phone = h("section", { class: "card" }, cardHead("On your phone", { iconName: "devices" }),
+    ts ? [
+      h("p", null, "This dashboard is on your tailnet at ", extLink(`https://${ts}/`, `https://${ts}/`),
+        ". Open it on your phone with the Tailscale app on, then add it to the Home Screen (iPhone: Share › Add to Home Screen) to open it like an app."),
+      h("div", { class: "muted" }, dv.allowed_users.length ? `Only ${dv.allowed_users.join(", ")} can open it. Nothing is reachable from the internet.`
+        : "Anyone in your tailnet can open it. Nothing is reachable from the internet."),
+      h("div", { class: "muted", style: { marginTop: "6px" } }, "chronicle tailnet off takes it off the tailnet.")]
+    : [
+      h("p", null, "Open this dashboard on your phone through Tailscale, a private network between your own devices: nothing is opened to the internet, and only your Tailscale login gets in. Install Tailscale on this computer and your phone, sign both in to the same account, then run here:"),
+      cmd("chronicle tailnet on")]);
+  let computers = null;
+  if (dv.role !== "spoke") {
+    const table = h("div", { class: "table-wrap" }, h("table", { class: "data" },
+      h("thead", null, h("tr", null, ...["Computer", "Platform", "Sessions", "Latest session", "Last sent"].map((x, i) => h("th", { class: i === 2 ? "num" : "" }, x)))),
+      h("tbody", null, ...dv.machines.map((m) => h("tr", null,
+        h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, " (this one)") : null),
+        h("td", null, m.platform || "–"),
+        h("td", { class: "num" }, fmtNum(m.sessions)),
+        h("td", null, m.last_session ? ago(m.last_session) : "–"),
+        h("td", null, m.this ? "–" : m.last_push ? ago(m.last_push) : "nothing yet"))))));
+    const maps = Object.entries(dv.path_map || {});
+    computers = h("section", { class: "card" }, cardHead("Computers", { iconName: "devices", hint: dv.role === "hub" ? `${others.length} sending here` : null }),
+      dv.role === "hub" ? [
+        table,
+        h("p", { class: "muted" }, "To add a computer, run chronicle hub enable here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote."),
+        maps.length ? [h("div", { class: "subhead" }, "Folders mapped ([hub] path_map)"), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null]
+      : [
+        h("p", null, "Keep the sessions of your other computers here too. This computer becomes the hub, the only one that records and analyzes (so each session is analyzed once); the others send it their Claude Code and Codex sessions over your tailnet. Run here:"),
+        cmd("chronicle hub enable"),
+        h("p", { class: "muted" }, "It prints a chronicle hub join … command to run on each other computer.")]);
+  }
+  return h("div", { class: "narrow-page" },
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Devices"), h("div", { class: "sub" }, "One Chronicle for your computers and your phone."))),
+    h("div", { class: "grid" }, thisCard, phone, computers));
 });
 
 // =====================================================================================
@@ -3227,8 +3287,8 @@ const SECTIONS = [
   { key: "settings", label: "Settings", href: "#/status" },
 ];
 const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
-  projects: "projects", status: "settings", sources: "settings", mcp: "settings", appearance: "settings" };
-const PAGE_LABEL = { glossary: "Glossary", map: "Map", reviews: "Weekly reviews", status: "Status", sources: "Sources", mcp: "MCP", appearance: "Appearance" };
+  projects: "projects", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings" };
+const PAGE_LABEL = { glossary: "Glossary", map: "Map", reviews: "Weekly reviews", status: "Status", sources: "Sources", mcp: "MCP", devices: "Devices", appearance: "Appearance" };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 
 function sectionOf(path, params) {
@@ -3367,6 +3427,7 @@ function settingsSidebar(box) {
       sbRow("Status", "#/status", "status", null, ["/status"]),
       sbRow("Sources", "#/sources", "sources", null, ["/sources"]),
       sbRow("MCP", "#/mcp", "mcp", null, ["/mcp"]),
+      sbRow("Devices", "#/devices", "devices", null, ["/devices"]),
       sbRow("Appearance", "#/appearance", "appearance", null, ["/appearance"])));
 }
 async function buildSidebar(section) {
@@ -3429,7 +3490,7 @@ function paletteCommands() {
     nav("Home", "#/", "home"), nav("Sessions", "#/sessions", "sessions"), nav("Knowledge", "#/knowledge", "knowledge"), nav("All knowledge", "#/knowledge/all", "knowledge"),
     nav("Glossary", "#/glossary", "glossary"), nav("Map", "#/map", "map"), nav("Projects", "#/projects", "projects"),
     nav("Global playbook", `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav("Weekly reviews", "#/reviews", "reviews"),
-    nav("Status", "#/status", "status"), nav("Sources", "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", "connect other agents"), nav("Appearance", "#/appearance", "appearance"),
+    nav("Status", "#/status", "status"), nav("Sources", "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", "connect other agents"), nav("Devices", "#/devices", "devices", "phone, other computers"), nav("Appearance", "#/appearance", "appearance"),
     { group: "Commands", label: "Sync now", icon: "sync", hint: "", run: syncNow },
     { group: "Commands", label: "Toggle sidebar", icon: "sidebar", hint: "⌘B", run: toggleSidebar },
     { group: "Commands", label: dark ? "Switch to light theme" : "Switch to dark theme", icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
@@ -3550,7 +3611,8 @@ async function pollStatus() {
     pill.replaceChildren(h("span", { class: "dot" }), busy ? (running[0][1].message || running[0][0]) : paused ? `Analysis paused until ${fmtTime(st.paused_until)}` : "Up to date");
     const waiting = (st.pending.ready || 0) + (st.pending.queued || 0);
     $("#status-queue").textContent = waiting ? `${fmtNum(waiting)} session${waiting === 1 ? "" : "s"} queued for analysis` : "";
-    $("#status-sync").textContent = st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
+    $("#status-sync").textContent = st.hub_url ? `Sends its sessions to ${st.hub_url.replace(/^https?:\/\//, "")}`
+      : st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
     showUpdate(st.update, st.version);
     for (const name of [...watched]) {

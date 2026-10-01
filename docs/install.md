@@ -63,9 +63,16 @@ run `uv tool install --python 3.13 .` in it.
    always-on dashboard below. If you say no, Claude Code sessions are still recorded and analyzed as they end;
    run `chronicle sync --work` for the rest and `chronicle ui --open` for the dashboard. Not asked again once the
    agents run; `--no-launchd --no-ui` turns them off.
-6. Prints the dashboard address; on a first install it offers to open it.
+6. Explains analysis: each past session is read through your Claude Code (or Codex) login, which counts toward
+   your plan's usage, and the knowledge it yields builds each project's knowledge base, then the **Glossary**, then
+   the **Map**. Until sessions are analyzed, those two stay empty. It says how many sessions are waiting and how
+   long the background takes over them (6 every 15 minutes), then asks whether to analyze them now with a
+   progress bar per stage (sessions, knowledge bases, glossary, map themes): all of them, or the newest 20 for a
+   first Glossary and Map in minutes. Ctrl-C stops, keeping what is done; the rest is analyzed in the background.
+   `--analyze all`, `--analyze N` (the newest N) or `--analyze later` answers without asking.
+7. Prints the dashboard address; on a first install it offers to open it.
 
-Without a terminal, or with `--yes`, it takes the defaults without asking. Re-running it is safe: connected
+Without a terminal, or with `--yes`, it takes the defaults without asking (analysis: later). Re-running it is safe: connected
 agents are refreshed without a question, so it asks only about agents installed since. `--dry-run` shows what it
 would do and changes nothing.
 

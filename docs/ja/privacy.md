@@ -10,6 +10,10 @@ Chronicle の作者やその他のサービスには何も送られず、テレ�
 同期のたびに `codex cloud` CLI も実行され、Codex のログインで OpenAI からあなた自身のタスクを取得します。こちらから何かを送ることはありません。
 claude.ai や ChatGPT のエクスポートを取り込むときはチャットだけを読み、アカウントのファイル（`users.json`、`user.json`）は開きません。
 
+**スマートフォンやほかのコンピューターと使う場合**（[スマートフォンとほかのコンピューター](devices.md)）も、あなた自身のデバイスの外には
+何も出ません。`chronicle tailnet on` はダッシュボードを Tailscale のネットワーク内で、あなたの Tailscale ログインだけに開きます。
+ハブに参加したコンピューターは、自分の元のセッションファイルを（アーカイブと同じく伏せ字なしで）tailnet 内の HTTPS でハブに送ります。
+
 | ローカルに保存されるもの | 場所 |
 | --- | --- |
 | データベース：セッション、イベント、ナレッジ、用語集、振り返り | `~/.claude-chronicle/chronicle.db`（SQLite） |
@@ -18,6 +22,8 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 | ログ | `~/.claude-chronicle/logs/` |
 | Chronicle が編集したエージェントの設定ファイルのバックアップ | `~/.claude-chronicle/backups/` |
 | アプリの起動スクリプトとウインドウの保存領域 | `~/.claude-chronicle/bin/chronicle`、`~/.claude-chronicle/webview/` |
+| このコンピューターの ID と名前、ハブのトークン（あなただけが読めます） | `~/.claude-chronicle/machine.json`、`~/.claude-chronicle/hub-token` |
+| ハブで：ほかのコンピューターが送ってきたセッションファイル | `~/.claude-chronicle/machines/` |
 
 ## 詳細
 
@@ -30,7 +36,9 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
   （[詳細](analysis.md#分析の仕組み)）。`analysis.auto = false` で自動分析をオフにできます。
 - **ダッシュボード**は 127.0.0.1 にのみバインドし、外部の `Host` ヘッダーを拒否し（DNS リバインディング対策）、状態を変更するリクエストには
   独自ヘッダーを必須にしています（CSRF 対策）。アプリのウインドウでは、ページが呼び出せるウインドウ操作は 3 つ（テーマ、ドラッグ、
-  ズーム）だけです。
+  ズーム）だけです。Tailscale Serve 経由では `[server] allowed_hosts` の名前にだけ応答し、`[server] allowed_users` の
+  Tailscale ログインだけを通します（このヘッダーは同じコンピューターの Serve から来たものだけを信用します）。ハブがほかの
+  コンピューターのファイルを受け取るのは、そのトークンがあるときだけです（`chronicle hub enable --rotate` で作り直せます）。
 - **書き出し**（セッションページの Export、または Sessions の一覧で選んだセッションの Export）は、Markdown と JSON では
   ダッシュボードの表示と同じく機密情報を伏せ字にします。**Original transcript** はエージェント自身のファイルをそのまま渡すため
   伏せ字になりません。共有する前に確認してください。

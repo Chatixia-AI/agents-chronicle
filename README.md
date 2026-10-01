@@ -40,6 +40,8 @@ from the [demo data](docs/development.md#demo-data):
   Gemini CLI can connect too.
 - **A dashboard to browse it all.** Sessions with their full transcripts, statistics, a glossary of your own
   vocabulary drawn as a mindmap, and a weekly review you can take in at a glance. ⌘K jumps anywhere.
+- **On your phone and your other computers.** Open the dashboard on your phone through Tailscale, and keep every
+  computer's sessions in one archive, analyzed once ([Phone and other computers](docs/devices.md)).
 - **Plain files too.** An Obsidian-compatible Markdown vault and a `chronicle` CLI.
 
 ## Quick start
@@ -119,7 +121,9 @@ milliseconds; analysis runs later in the background.
 with `chronicle config set analysis.backend codex`. Recording and browsing work either way; with neither signed in,
 sessions are archived and wait in the analysis queue.
 
-**Windows or Linux?** Not yet. The app and the background agents are macOS only.
+**Windows or Linux?** The desktop app is macOS only. On Linux, `chronicle install` runs the sync and the dashboard
+as systemd user units, so a Linux box can be the [hub](docs/devices.md#a-linux-hub) for your other computers.
+Windows is not supported yet.
 
 **Can I keep a project or a session out?** Add the project to `sources.exclude_projects` in the
 [configuration](docs/configuration.md), or remove a session for good with `chronicle forget <id>`.
@@ -132,7 +136,8 @@ Something not working? See [Troubleshooting](docs/troubleshooting.md).
 ## Documentation
 
 [Install](docs/install.md) · [Sources](docs/sources.md) · [Dashboard, glossary and Map](docs/dashboard.md) ·
-[Command line](docs/cli.md) · [MCP server](docs/mcp.md) · [What gets recorded and how analysis works](docs/analysis.md) ·
+[Command line](docs/cli.md) · [MCP server](docs/mcp.md) · [Phone and other computers](docs/devices.md) ·
+[What gets recorded and how analysis works](docs/analysis.md) ·
 [Configuration](docs/configuration.md) · [Data and privacy](docs/privacy.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)
 

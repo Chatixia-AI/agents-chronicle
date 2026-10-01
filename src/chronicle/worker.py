@@ -79,6 +79,9 @@ def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyse
                analyze: bool = True, synthesize: bool = True, export: bool = True, force: bool = False,
                model: str | None = None, progress=None, wait: bool = False) -> WorkReport:
     report = WorkReport()
+    if cfg.is_spoke:  # its sessions go to the hub, which analyzes them; analyzing here would pay twice
+        report.note = f"analysis runs on the hub ({cfg.hub_url})"
+        return report
     if wait and progress:
         with file_lock(cfg.locks_dir / "worker.lock", blocking=False) as free:
             pass
@@ -169,22 +172,30 @@ def _analyze_many(cfg: Config, ids: list[str], runner: Runner, report: WorkRepor
 
     with ThreadPoolExecutor(max_workers=max(1, cfg.analysis.concurrency)) as pool:
         futures = [pool.submit(task, sid) for sid in ids]
-        for fut in as_completed(futures):
-            sid, status, info = fut.result()
-            with lock:
-                finished += 1
-                if status == "done":
-                    report.analyzed.append(sid)
-                    report.cost_usd += info or 0.0
-                elif status == "skipped":
-                    report.skipped.append(sid)
-                elif status == "paused":
-                    report.failed.append((sid, info))
-                    report.paused_until = to_iso(utcnow() + timedelta(hours=1))
-                elif status == "failed":
-                    report.failed.append((sid, info))
+        try:
+            for fut in as_completed(futures):
+                sid, status, info = fut.result()
+                with lock:
+                    finished += 1
+                    if status == "done":
+                        report.analyzed.append(sid)
+                        report.cost_usd += info or 0.0
+                    elif status == "skipped":
+                        report.skipped.append(sid)
+                    elif status == "paused":
+                        report.failed.append((sid, info))
+                        report.paused_until = to_iso(utcnow() + timedelta(hours=1))
+                    elif status == "failed":
+                        report.failed.append((sid, info))
+                if progress:
+                    progress(f"{sid[:8]}: {status}" if len(ids) == 1 else f"analyzing sessions: {finished} of {len(ids)} done")
+        except KeyboardInterrupt:  # Ctrl-C: drop the queue; the calls already running finish and are saved
+            stop.set()
+            for fut in futures:
+                fut.cancel()
             if progress:
-                progress(f"{sid[:8]}: {status}" if len(ids) == 1 else f"analyzing sessions: {finished} of {len(ids)} done")
+                progress("stopping: finishing the sessions already in progress…")
+            raise
 
 
 def _synthesize(cfg: Config, conn, runner: Runner, report: WorkReport, *, force=False, progress=None):

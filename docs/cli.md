@@ -4,7 +4,7 @@
 
 | Command | |
 | --- | --- |
-| `chronicle install [--yes] [--dry-run]` | Setup: lists the agents found, asks which to record, imports them, starts the dashboard ([Install](install.md#command-line)) |
+| `chronicle install [--yes] [--analyze all\|N\|later] [--dry-run]` | Setup: lists the agents found, asks which to record, imports them, offers to analyze them now with progress (which builds the Glossary and the Map), starts the dashboard ([Install](install.md#command-line)) |
 | `chronicle app` | The desktop app (window + menu bar); needs the `app` extra |
 | `chronicle ui [--open]` | Dashboard (also always running at :8765 after install; if it is, `chronicle ui` says so and `--open` opens it). Sessions, Knowledge, Projects and Glossary switch between Cards and List (a sortable table; click a row for details), remembered per page |
 | `chronicle sessions [-p project] [--since 7d]` | List sessions |
@@ -25,6 +25,11 @@
 | `chronicle connect <client>` / `disconnect <client>` | Add or remove the MCP server in `claude-desktop`, `cursor`, `windsurf` or `gemini` |
 | `chronicle mcp [--print-config]` | Run the MCP server (clients start it), or print a config entry for any other MCP client |
 | `chronicle status` | Health: hooks, agents, MCP, queue, failures |
+| `chronicle tailnet on\|off\|status [--anyone]` | Open the dashboard on your phone and other devices through Tailscale Serve, to your Tailscale login only (`--anyone`: everyone in your tailnet) ([Phone and other computers](devices.md#your-phone)) |
+| `chronicle hub enable [--rotate]` | Make this computer the hub for your others; prints the `chronicle hub join` command to run on them |
+| `chronicle hub join <address> --token <token>` / `hub leave` | Send this computer's sessions to a hub instead of recording them here, or stop ([Your other computers](devices.md#your-other-computers)) |
+| `chronicle hub status` / `hub disable` | The computers sending to this hub; stop accepting them |
+| `chronicle push` | On a computer that joined a hub: send its new sessions now (the hook and the background sync do this) |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
 | `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` ([Configuration](configuration.md)) |
 

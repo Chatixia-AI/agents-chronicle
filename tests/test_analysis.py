@@ -189,6 +189,27 @@ def test_sleep_interrupted_call_is_requeued_without_penalty(synced, monkeypatch)
     assert tuple(row) == ("pending", 0)
 
 
+def test_ctrl_c_drops_the_queued_sessions(synced, monkeypatch):
+    import time
+
+    started, messages = [], []
+
+    def slow(conn, cfg, sid, runner, model=None):
+        started.append(sid)
+        time.sleep(0.2)
+
+    def interrupted(futures):
+        raise KeyboardInterrupt
+        yield
+
+    monkeypatch.setattr("chronicle.analyze.analyze_session", slow)
+    monkeypatch.setattr("chronicle.worker.as_completed", interrupted)
+    synced["cfg"].analysis.concurrency = 1
+    with pytest.raises(KeyboardInterrupt):
+        run_worker(synced["cfg"], session_ids=[SID] * 5, progress=messages.append)
+    assert len(started) <= 1 and "stopping: finishing the sessions already in progress…" in messages
+
+
 def test_synthesis_waits_for_queued_sessions(synced):
     conn, cfg = synced["conn"], synced["cfg"]
     analyze_session(conn, cfg, SID)

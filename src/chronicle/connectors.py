@@ -47,7 +47,7 @@ def _recorded(conn: sqlite3.Connection, where: str, params=()) -> dict:
 
 # ------------------------------------------------------------------ Claude Code
 def claude_status(cfg: Config, conn: sqlite3.Connection) -> dict:
-    from .install import LAUNCHD_LABEL, hooks_installed, launchd_status, mcp_registered
+    from .install import LAUNCHD_LABEL, hooks_installed, launchd_status, mcp_registered, uses_systemd
 
     binary = cfg.claude_bin()
     dirs = cfg.claude_dirs
@@ -80,7 +80,8 @@ def claude_status(cfg: Config, conn: sqlite3.Connection) -> dict:
             {"label": "MCP server in Claude Code", "ok": mcp_registered(), "detail": "Claude can search your sessions and knowledge"},
             {"label": "Knowledge injection", "ok": bool(hooks.get("SessionStart")), "optional": True,
              "detail": "SessionStart hook adds the project's knowledge base to new sessions"},
-            {"label": "Background sync", "ok": bool(sync.get("loaded")), "detail": "launchd, every 15 minutes"},
+            {"label": "Background sync", "ok": bool(sync.get("loaded")),
+             "detail": f"{'systemd' if uses_systemd() else 'launchd'}, every 15 minutes"},
         ],
         "notes": [f"{recovered['sessions']} older sessions recovered (prompt history / Codex imports)"] if recovered["sessions"] else [],
     }

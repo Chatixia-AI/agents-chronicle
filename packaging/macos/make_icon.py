@@ -1,4 +1,5 @@
-"""Draw Chronicle's app icon and write packaging/macos/Chronicle.icns (needs Pillow and macOS's iconutil).
+"""Draw Chronicle's app icon and write packaging/macos/Chronicle.icns (needs Pillow and macOS's iconutil), plus the
+dashboard's icons for phones' home screens (src/chronicle/web/icon-*.png; without iconutil, only those).
 
     uv run --group build python packaging/macos/make_icon.py
 """
@@ -11,7 +12,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFilter
 
 HERE = Path(__file__).parent
+WEB = HERE.parents[1] / "src" / "chronicle" / "web"
 S = 1024
+M, R = 100, 185  # macOS icon grid: an 824px rounded square centred in 1024
+TOP, BOTTOM = (78, 150, 250), (22, 62, 168)  # the tile's blue, top to bottom
 
 
 def _layer(box, radius, fill, angle=0.0, highlight=0):
@@ -30,24 +34,44 @@ def _shadow(box, radius, angle=0.0, alpha=90, blur=26, dy=18):
     return _layer((x0, y0 + dy, x1, y1 + dy), radius, (8, 20, 60, alpha), angle).filter(ImageFilter.GaussianBlur(blur))
 
 
+def _gradient(size: int) -> Image.Image:
+    grad = Image.new("RGBA", (size, size))
+    gd = ImageDraw.Draw(grad)
+    for y in range(size):
+        t = y / (size - 1)
+        gd.line([(0, y), (size, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TOP, BOTTOM)) + (255,))
+    return grad
+
+
+def phone_icon(icon: Image.Image) -> Image.Image:
+    """The tile, full bleed: phones cut their own rounded shape and would fill transparent corners with black."""
+    box = (M, M, S - M, S - M)
+    mask = Image.new("L", (S, S), 0)
+    ImageDraw.Draw(mask).rounded_rectangle(box, R, fill=255)
+    base = _gradient(S - 2 * M)
+    base.paste(icon.crop(box), (0, 0), mask.crop(box))
+    return base.convert("RGB")
+
+
+def write_web_icons(icon: Image.Image) -> None:
+    phone = phone_icon(icon)
+    for size in (180, 192, 512):  # iOS home screen; the web app manifest's two sizes
+        phone.resize((size, size), Image.LANCZOS).save(WEB / f"icon-{size}.png", optimize=True)
+
+
 def draw() -> Image.Image:
     """Chronicle in the Liquid Glass style: a stack of translucent session cards on a deep blue tile;
     the front card is a transcript (lines of text) with the latest session marked in amber."""
     img = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     # macOS icon grid: an 824px rounded square centred in 1024, with a soft drop shadow
-    m, r = 100, 185
+    m, r = M, R
     tile = (m, m, S - m, S - m)
     shadow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     ImageDraw.Draw(shadow).rounded_rectangle((m, m + 14, S - m, S - m + 14), r, fill=(0, 0, 0, 110))
     img.alpha_composite(shadow.filter(ImageFilter.GaussianBlur(18)))
 
     # the tile: Chronicle blue, lighter at the top, with a soft glow in the upper left
-    top, bottom = (78, 150, 250), (22, 62, 168)
-    grad = Image.new("RGBA", (S, S))
-    gd = ImageDraw.Draw(grad)
-    for y in range(S):
-        t = y / (S - 1)
-        gd.line([(0, y), (S, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(top, bottom)) + (255,))
+    grad = _gradient(S)
     glow = Image.new("RGBA", (S, S), (0, 0, 0, 0))
     ImageDraw.Draw(glow).ellipse((60, -40, 700, 560), fill=(255, 255, 255, 70))
     grad.alpha_composite(glow.filter(ImageFilter.GaussianBlur(90)))
@@ -80,7 +104,8 @@ def main() -> None:
     icon = draw()
     icon.save(HERE / "icon.png")
     # the dashboard's touch icon, and the Dock icon when the app runs from source (Chronicle.app uses the .icns)
-    icon.resize((256, 256), Image.LANCZOS).save(HERE.parents[1] / "src" / "chronicle" / "web" / "icon.png", optimize=True)
+    icon.resize((256, 256), Image.LANCZOS).save(WEB / "icon.png", optimize=True)
+    write_web_icons(icon)
     with tempfile.TemporaryDirectory() as tmp:
         iconset = Path(tmp) / "Chronicle.iconset"
         iconset.mkdir()
@@ -95,5 +120,6 @@ def main() -> None:
 
 if __name__ == "__main__":
     if not shutil.which("iconutil"):
-        raise SystemExit("iconutil not found (macOS only)")
+        write_web_icons(draw())
+        raise SystemExit(f"iconutil not found (macOS only): wrote only the web icons in {WEB}")
     main()

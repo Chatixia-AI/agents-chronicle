@@ -56,11 +56,12 @@ def _install(*extra):
 
 
 def test_install_asks_per_agent_and_connects_the_chosen(machine, monkeypatch, capsys):
-    asked = _answer(monkeypatch, {"Claude Code": "y", "Codex": "n", "Cursor": "y", "Open": "n"})
+    asked = _answer(monkeypatch, {"Claude Code": "y", "Codex": "n", "Cursor": "y", "Analyze": "n", "Open": "n"})
     assert _install() == 0
     out = capsys.readouterr().out
     assert [q.split("?")[0] for q in asked] == ["Record Claude Code sessions", "Record Codex sessions",
-                                                 "Give Cursor Chronicle's MCP tools (search your past sessions)"]
+                                                 "Give Cursor Chronicle's MCP tools (search your past sessions)",
+                                                 "Analyze it now and show the progress"]
     cfg = load_config(machine["home"])
     assert hooks_installed(cfg).get("SessionEnd") and machine["mcp_calls"] == ["/opt/bin/chronicle"]
     assert cfg.codex_dirs == [] and not cfg.codex_cloud
@@ -164,6 +165,96 @@ def test_uninstall_launchd_removes_only_the_given_agents(tmp_path, monkeypatch):
     assert install.uninstall_launchd([install.UI_LABEL]) == [f"removed launchd agent {install.UI_LABEL}"]
     assert not install.plist_path(install.UI_LABEL).exists() and install.plist_path(install.LAUNCHD_LABEL).exists()
     assert booted_out == [f"gui/{os.getuid()}/{install.UI_LABEL}"]
+
+
+def _glossary_terms(cfg) -> int:
+    return connect(cfg.db_path).execute("SELECT COUNT(*) FROM glossary").fetchone()[0]
+
+
+def test_install_explains_analysis_and_builds_the_glossary_now_when_asked(machine, monkeypatch, capsys):
+    asked = _answer(monkeypatch, {"Claude Code": "y", "Codex": "n", "Cursor": "n", "Analyze": "y", "Open": "n"})
+    assert _install() == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Until sessions are analyzed, the Glossary and the Map stay empty" in out and "1 past session waiting" in out
+    assert any(q.startswith("Analyze it now and show the progress? (about") for q in asked)
+    cfg = load_config(machine["home"])
+    conn = connect(cfg.db_path)
+    assert conn.execute("SELECT analysis_status FROM sessions WHERE agent = 'claude' AND source != 'history'").fetchone()[0] == "done"
+    assert _glossary_terms(cfg) > 0 and conn.execute("SELECT COUNT(*) FROM project_kb").fetchone()[0] >= 1
+    assert "analyzed 1 session, built" in out and "glossary term" in out
+    assert "The Glossary and the Map are ready on the dashboard." in out
+
+
+def test_install_without_a_terminal_leaves_analysis_for_later_and_says_how(machine, capsys):
+    assert _install("--yes") == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert _glossary_terms(load_config(machine["home"])) == 0
+    assert "1 past session waiting" in out
+    assert "The 1 waiting session is analyzed when you run `chronicle analyze --pending` (nothing runs in the background)" in out
+
+
+def test_analyze_flag_runs_it_without_asking(machine, monkeypatch, capsys):
+    monkeypatch.setattr("builtins.input", lambda q: pytest.fail(f"asked {q!r} with --yes"))
+    assert _install("--yes", "--analyze", "all") == 0
+    assert _glossary_terms(load_config(machine["home"])) > 0
+    assert "analyzed 1 session" in capsys.readouterr().out
+
+
+def test_background_analysis_says_how_long_the_backlog_takes(machine, monkeypatch, capsys):
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr("chronicle.install.launchd_status", lambda label="": {"loaded": True})
+    monkeypatch.setattr("chronicle.install.install_launchd", lambda *a, **k: [])
+    monkeypatch.setattr("chronicle.install.install_ui_agent", lambda *a, **k: [])
+    _answer(monkeypatch, {"Analyze": "later", "Open": "n"})
+    assert main(["install", "--exe", "/opt/bin/chronicle"]) == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Later: in the background, 6 every 15 min, so all of them in about 15 min" in out
+    assert "The 1 waiting session is analyzed in the background" in out
+
+
+def test_background_is_not_promised_where_it_cannot_run(machine, monkeypatch, capsys):
+    monkeypatch.setattr("platform.system", lambda: "Windows")
+    _answer(monkeypatch, {"Analyze": "n", "Open": "n"})
+    assert main(["install", "--exe", "/opt/bin/chronicle"]) == 0
+    out = " ".join(capsys.readouterr().out.split())
+    assert "Not running in the background" in out and "analyzed in the background" not in out
+
+
+def test_stage_progress_draws_one_bar_per_stage():
+    from rich.console import Console
+    from rich.progress import Progress
+
+    from chronicle.cli import _StageProgress
+
+    with Progress(console=Console(file=open(os.devnull, "w"))) as bar:
+        stages = _StageProgress(bar)
+        for m in ["analyzing sessions: 0 of 3 done", "analyzing sessions: 3 of 3 done", "synthesizing demo-app…",
+                  "synthesizing __global__…", "glossary 1/2: demo-app -> 4", "glossary 2/2: __global__ -> 1",
+                  "themes 1/1: tool -> 2"]:
+            stages(m)
+        stages.finish()
+        rows = {t.description: (t.completed, t.total, t.fields["detail"]) for t in bar.tasks}
+    assert rows == {"Sessions": (3, 3, "done"), "Knowledge bases": (1, 1, "2 built"), "Glossary": (2, 2, "done"),
+                    "Map themes": (1, 1, "done")}
+
+
+def test_stage_progress_takes_messages_from_several_threads_at_once():
+    import threading
+
+    from rich.console import Console
+    from rich.progress import Progress
+
+    from chronicle.cli import _StageProgress
+
+    with Progress(console=Console(file=open(os.devnull, "w"))) as bar:
+        stages = _StageProgress(bar)
+        go = threading.Barrier(8)
+        threads = [threading.Thread(target=lambda: (go.wait(), stages("analyzing sessions: 0 of 8 done"))) for _ in range(8)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join()
+        assert [t.description for t in bar.tasks] == ["Sessions"]
 
 
 def test_version_flag_reports_the_installed_version(capsys):

@@ -67,6 +67,7 @@ nav:
       - Dashboard, glossary and Map: dashboard.md
       - Command line: cli.md
       - MCP server: mcp.md
+      - Phone and other computers: devices.md
   - Reference:
       - What gets recorded and how analysis works: analysis.md
       - Configuration: configuration.md
@@ -80,6 +81,7 @@ nav:
       - ダッシュボード、用語集、マップ: ja/dashboard.md
       - コマンドライン: ja/cli.md
       - MCP サーバー: ja/mcp.md
+      - スマートフォンとほかのコンピューター: ja/devices.md
       - 記録される内容と分析の仕組み: ja/analysis.md
       - 設定: ja/configuration.md
       - データとプライバシー: ja/privacy.md

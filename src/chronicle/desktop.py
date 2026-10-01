@@ -150,6 +150,12 @@ class Background:
         try:
             cfg = load_config()
             cfg.ensure_dirs()
+            if cfg.is_spoke:  # this Mac sends its sessions to a hub, which records and analyzes them
+                from .hub import push
+
+                log.info("app push: %s", push(cfg).summary())
+                self.error = None
+                return
             conn = connect(cfg.db_path)
             try:
                 report = sync(cfg, conn)

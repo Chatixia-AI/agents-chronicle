@@ -9,6 +9,7 @@
 | [Dashboard, glossary and Map](dashboard.md) | The layout, keyboard shortcuts, every page, the glossary, the Map and themes |
 | [Command line](cli.md) | Every `chronicle` command and the Markdown vault |
 | [MCP server](mcp.md) | The tools your agents get, connecting Claude Desktop, Cursor, Windsurf, Gemini CLI or any other MCP client |
+| [Phone and other computers](devices.md) | The dashboard on your phone through Tailscale, and one archive for several computers (a hub) |
 | [What gets recorded and how analysis works](analysis.md) | Session data, knowledge kinds, the analysis pipeline and its cost |
 | [Configuration](configuration.md) | Every `config.toml` setting |
 | [Data and privacy](privacy.md) | What is stored where, and what leaves your machine |
