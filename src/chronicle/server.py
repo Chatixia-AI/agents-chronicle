@@ -697,7 +697,7 @@ class App:
         info = check(remote, detail=True)
         if remote:
             remember(self.conn)
-        return {**info, "check_daily": self.cfg.update_check_daily}
+        return {**info, "check_daily": self.cfg.update_check_daily, "notify": self.cfg.update_notify}
 
     def _maybe_check_daily(self) -> None:
         """With [updates] check_daily on, ask PyPI once a day, in the background, while a dashboard polls."""
@@ -721,10 +721,11 @@ class App:
 
         threading.Thread(target=run, name="update-check", daemon=True).start()
 
-    def action_check_daily(self, on: bool) -> dict:
+    def action_update_setting(self, key: str, on: bool) -> dict:
+        """Status › Updates switches: check_daily (while the dashboard is open) and notify (from the background)."""
         from .config import load_config, set_config_value
 
-        set_config_value(self.cfg, "updates", "check_daily", "true" if on else "false")
+        set_config_value(self.cfg, "updates", key, "true" if on else "false")
         self.cfg = load_config(self.cfg.home)
         self._cfg_sig = self._config_sig()
         self._maybe_check_daily()
@@ -1154,7 +1155,9 @@ def make_handler(app: App, port: int):
                 if p == "/api/analysis/backend":
                     return self._json(app.action_backend(str(body.get("backend") or "")))
                 if p == "/api/update/daily":
-                    return self._json(app.action_check_daily(bool(body.get("on"))))
+                    return self._json(app.action_update_setting("check_daily", bool(body.get("on"))))
+                if p == "/api/update/notify":
+                    return self._json(app.action_update_setting("notify", bool(body.get("on"))))
                 if p == "/api/update":
                     return self._json(app.action_update())
                 if p == "/api/sessions/analyze":

@@ -47,6 +47,7 @@
 | `server.allowed_users` | `[]` | それらの名前で Tailscale Serve 経由でアクセスしたとき、通す Tailscale ログイン（空の場合は tailnet の全員）。`chronicle tailnet on` があなたのログインを設定します |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
 | `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |
+| `updates.notify` | `false` | バックグラウンド同期が 1 日 1 回 pypi.org に問い合わせ、新しいリリースごとに 1 回デスクトップ通知を表示する（Status › Updates、または `chronicle install --notify-updates`） |
 
 ## `[hub]`
 

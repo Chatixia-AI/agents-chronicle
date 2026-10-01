@@ -3094,14 +3094,19 @@ function updatesCard() {
       toast(u.restartable ? "Updating Chronicle; the dashboard restarts when it is done" : "Updating Chronicle…", 6000);
       watchJob("update");
     } }, label) : null;
-    const daily = online ? h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(!!u.check_daily),
-      "aria-label": "Check for updates daily", onclick: async () => {
-        daily.disabled = true;
-        const r = await post("/api/update/daily", { on: !u.check_daily });
-        if (r.error) { toast(r.error); daily.disabled = false; return; }
-        draw(r);
-        if (r.check_daily && !r.checked_at) setTimeout(async () => { draw(await api("/api/update")); pollStatus(); }, 4000); // the first check runs now
-      } }) : null;
+    const setting = (key, path, label) => {
+      const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(!!u[key]), "aria-label": label,
+        onclick: async () => {
+          sw.disabled = true;
+          const r = await post(path, { on: !u[key] });
+          if (r.error) { toast(r.error); sw.disabled = false; return; }
+          draw(r);
+          if (key === "check_daily" && r.check_daily && !r.checked_at) setTimeout(async () => { draw(await api("/api/update")); pollStatus(); }, 4000); // the first check runs now
+        } });
+      return sw;
+    };
+    const daily = online ? setting("check_daily", "/api/update/daily", "Check for updates daily") : null;
+    const notify = online ? setting("notify", "/api/update/notify", "Notify me about new versions") : null;
     const download = u.kind === "app" && u.available ? h("a", { class: "btn primary", href: u.releases_url, target: "_blank", rel: "noopener" }, `Download ${u.latest}`) : null;
     box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, "Updates"), h("div", { class: "tools" }, check, run, download)),
       h("div", { class: "status-list" },
@@ -3111,6 +3116,8 @@ function updatesCard() {
         u.note ? h("div", { class: "muted" }, u.note) : null,
         daily ? h("div", { class: "set-row upd-daily" }, h("div", null, h("b", null, "Check for updates daily"),
           h("div", { class: "muted" }, "Asks pypi.org for the latest version number once a day while Chronicle is open. Sends nothing about you.")), daily) : null,
+        notify ? h("div", { class: "set-row upd-daily" }, h("div", null, h("b", null, "Notify me about new versions"),
+          h("div", { class: "muted" }, "A desktop notification when a new version is out, even with the dashboard closed: the background sync asks pypi.org once a day. Sends nothing about you.")), notify) : null,
         u.command && (u.available || u.source) ? h("div", { class: "muted" }, "Runs ", h("span", { class: "codeline" }, u.command),
           u.restartable ? ", then restarts the dashboard." : ". Quit and reopen Chronicle afterwards.") : null));
     if (parseHash().params.focus === "updates") { // from the notification or the status bar: show this card, once

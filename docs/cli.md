@@ -4,7 +4,7 @@
 
 | Command | |
 | --- | --- |
-| `chronicle install [--yes] [--analyze all\|N\|later] [--dry-run]` | Setup: lists the agents found, asks which to record, imports them, offers to analyze them now with progress (which builds the Glossary and the Map), starts the dashboard ([Install](install.md#command-line)) |
+| `chronicle install [--yes] [--analyze all\|N\|later] [--[no-]notify-updates] [--dry-run]` | Setup: lists the agents found, asks which to record, imports them, offers to analyze them now with progress (which builds the Glossary and the Map), starts the dashboard ([Install](install.md#command-line)) |
 | `chronicle app` | The desktop app (window + menu bar); needs the `app` extra |
 | `chronicle ui [--open]` | Dashboard (also always running at :8765 after install; if it is, `chronicle ui` says so and `--open` opens it). Sessions, Knowledge, Projects and Glossary switch between Cards and List (a sortable table; click a row for details), remembered per page |
 | `chronicle sessions [-p project] [--since 7d]` | List sessions |

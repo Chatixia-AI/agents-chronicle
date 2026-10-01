@@ -81,10 +81,12 @@ def cmd_ingest_session(args) -> int:
 
 def cmd_sync(args) -> int:
     from .ingest import sync
+    from .notify import release_check_safely
     from .util import setup_logging
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir, verbose=args.verbose)
+    release_check_safely(cfg)  # [updates] notify: at most one PyPI request a day, one notification per release
     if cfg.is_spoke:  # the hub records and analyzes; this computer only sends it files
         return _push(cfg, quiet=args.quiet)
     conn = _conn(cfg)
@@ -662,6 +664,24 @@ def _analyze_now(cfg, console, ids: list[str], waiting: int, later: str) -> str:
     return "The Glossary and the Map are ready on the dashboard." if terms else ""
 
 
+NOTIFY_ASKED_KEY = "update_notify_asked"  # kv: install asked about release notifications, so it asks only once
+
+
+def _notify_choice(cfg, conn, args, *, ask, background_sync: bool) -> bool | None:
+    """Turn release notifications on or off (True/False), or leave the setting alone (None). Asked once, and only
+    where they can work: an install that updates from PyPI, with the background sync running to check."""
+    from .db import kv_get
+    from .update import compares_online
+
+    if args.notify_updates is not None:
+        return args.notify_updates
+    if (ask is None or cfg.update_notify or not background_sync or kv_get(conn, NOTIFY_ASKED_KEY)
+            or not compares_online()):
+        return None
+    return ask("Notify you when a new version of Chronicle is out? (a desktop notification; asks pypi.org once a "
+               "day and sends nothing about you)", True)
+
+
 def cmd_install(args) -> int:
     import platform
 
@@ -692,6 +712,8 @@ def cmd_install(args) -> int:
         background_on = (any(launchd_status(label).get("loaded") for label in (LAUNCHD_LABEL, UI_LABEL))
                          or ask("Run Chronicle in the background, starting at login? (syncs every 15 minutes and "
                                 "keeps the dashboard up)", True))
+    notify = _notify_choice(cfg, conn, args, ask=_ask if interactive else None,
+                            background_sync=background_on and not args.no_launchd)
     if args.dry_run:
         console.print("Would record: " + (", ".join(picked) or "nothing") +
                       (f"; would add the MCP server to: {', '.join(mcp_clients)}" if mcp_clients else ""))
@@ -716,11 +738,19 @@ def cmd_install(args) -> int:
         if background_on and not args.no_ui:
             actions += install_ui_agent(cfg, exe, dry_run=True)
         actions += [f"would remove background agent {agent_path(label)}" for label in turned_off if agent_path(label).exists()]
+        if notify is not None:
+            actions.append(f"would turn release notifications {'on' if notify else 'off'}")
         for a in actions:
             console.print(f"• {a}", highlight=False, soft_wrap=True)
         return 0
     for name in [n for n in picked if n != "claude"] + mcp_clients:
         actions += connect(cfg, name, exe)
+    if notify is not None:
+        _set_config_value(cfg, "updates", "notify", "true" if notify else "false")
+        kv_set(conn, NOTIFY_ASKED_KEY, utcnow_iso())
+        conn.commit()
+        actions.append("a desktop notification when a new version is out (turn off in Status › Updates)" if notify
+                       else "no release notifications (turn on in Status › Updates)")
     for a in actions:
         console.print(f"• {a}", highlight=False, soft_wrap=True)
 
@@ -1410,6 +1440,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--analyze", type=_analyze_choice, metavar="all|N|later",
                    help="analyze past sessions now with progress (all, or the newest N), or later; asked when omitted "
                         "(later without a terminal). The Glossary and the Map are built from the analyzed sessions")
+    s.add_argument("--notify-updates", action=argparse.BooleanOptionalAction, default=None,
+                   help="show a desktop notification when a new version is out (asks pypi.org once a day); "
+                        "asked once when omitted")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=cmd_install)
 

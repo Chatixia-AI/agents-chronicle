@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Hear about new versions:** turn on **Notify me about new versions** (Status › Updates, or say yes when
+  `chronicle install` asks) and the background sync asks pypi.org once a day, dashboard open or not, and shows a
+  desktop notification once per release saying how to update. macOS shows it in Notification Center, Linux through
+  `notify-send`. Off by default; it sends nothing about you. `chronicle install --notify-updates` (or
+  `--no-notify-updates`) answers without asking.
+
 ## 0.5.0 (2026-10-01)
 
 - **On your phone:** `chronicle tailnet on` puts the dashboard on your Tailscale network with Tailscale Serve, at

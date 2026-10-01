@@ -143,7 +143,7 @@ def test_daily_check_is_opt_in_and_runs_once_a_day(method, env, monkeypatch):
     app = App(env["cfg"])
     assert app.status_small()["update"] is None and not calls  # off by default: never online on its own
 
-    info = app.action_check_daily(True)
+    info = app.action_update_setting("check_daily", True)
     assert info["check_daily"] and "check_daily = true" in env["cfg"].config_path.read_text()
     for _ in range(50):  # the first check runs in the background
         if not app._update_check.locked() and calls:
@@ -154,7 +154,7 @@ def test_daily_check_is_opt_in_and_runs_once_a_day(method, env, monkeypatch):
     assert len(calls) == 1  # the next one is due a day later
     assert update.check_due(now=time.time() + update.DAY + 1)
 
-    assert not app.action_check_daily(False)["check_daily"]
+    assert not app.action_update_setting("check_daily", False)["check_daily"]
 
 
 def test_checkouts_never_check_pypi_daily(method, tmp_path):

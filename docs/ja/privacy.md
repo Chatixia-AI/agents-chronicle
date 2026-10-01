@@ -6,7 +6,7 @@
 分析用に選んだエージェントに、あなた自身のログインを通じて送られます：Claude Code（`claude -p`、既定）なら Anthropic に、
 Codex（`codex exec`）なら OpenAI に送られます。
 Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかに接続するのは、Status ページで
-アップデート確認だけです。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** をオンにした場合だけ 1 日 1 回実行されます（既定はオフ）。Codex Cloud を接続した場合は、
+アップデート確認だけです。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** か **Notify me about new versions** をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、
 同期のたびに `codex cloud` CLI も実行され、Codex のログインで OpenAI からあなた自身のタスクを取得します。こちらから何かを送ることはありません。
 claude.ai や ChatGPT のエクスポートを取り込むときはチャットだけを読み、アカウントのファイル（`users.json`、`user.json`）は開きません。
 

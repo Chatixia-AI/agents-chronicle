@@ -62,7 +62,9 @@ run `uv tool install --python 3.13 .` in it.
 5. Asks whether to run Chronicle in the background, starting at login (default yes): the 15-minute sync and the
    always-on dashboard below. If you say no, Claude Code sessions are still recorded and analyzed as they end;
    run `chronicle sync --work` for the rest and `chronicle ui --open` for the dashboard. Not asked again once the
-   agents run; `--no-launchd --no-ui` turns them off.
+   agents run; `--no-launchd --no-ui` turns them off. With the background sync on, it also asks once whether to
+   show a desktop notification when a new version of Chronicle is out (`--notify-updates` or
+   `--no-notify-updates` answers without asking).
 6. Explains analysis: each past session is read through your Claude Code (or Codex) login, which counts toward
    your plan's usage, and the knowledge it yields builds each project's knowledge base, then the **Glossary**, then
    the **Map**. Until sessions are analyzed, those two stay empty. It says how many sessions are waiting and how
@@ -108,7 +110,11 @@ first and let the app connect Claude Code, so the launchd agents do not run alon
 | The desktop app | Nothing: **Download** opens the latest release to drag into Applications |
 
 Only **Check for updates** goes online (to pypi.org), or, if you turn on **Check for updates daily** on the same
-card, a check once a day while the dashboard is open. The last answer is kept across restarts. Once an update is known, a notification says so (once per release, or per new commit in a checkout; **Later**
+card, a check once a day while the dashboard is open. **Notify me about new versions** (also offered by `chronicle
+install`) has the background sync check once a day instead, dashboard open or not, and show a desktop notification
+once per release saying how to update: macOS Notification Center, or `notify-send` on Linux. On macOS clicking the
+notification opens Script Editor, which posts it for Chronicle; the notification text says where to update. The
+last answer is kept across restarts. Once an update is known, a notification says so (once per release, or per new commit in a checkout; **Later**
 dismisses it), Settings gets a dot and the status bar shows **Update to …**. A checkout's Updates card lists the
 commits and changed files a reinstall would bring in.
 A dashboard run by `chronicle ui` (or its launchd agent) restarts itself afterwards and open tabs reload; a

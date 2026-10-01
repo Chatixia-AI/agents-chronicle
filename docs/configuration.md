@@ -47,6 +47,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `server.allowed_users` | `[]` | reached by one of those names through Tailscale Serve, only these Tailscale logins get in (empty: everyone in your tailnet); `chronicle tailnet on` sets it to yours |
 | `inject.session_start` / `max_chars` | `false` / `3000` | give new sessions a digest of the project's knowledge base (SessionStart hook) |
 | `updates.check_daily` | `false` | ask pypi.org for the latest version once a day while the dashboard is open (Status › Updates) |
+| `updates.notify` | `false` | the background sync asks pypi.org once a day and shows a desktop notification once per new release (Status › Updates, or `chronicle install --notify-updates`) |
 
 ## `[hub]`
 

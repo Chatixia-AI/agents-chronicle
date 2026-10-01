@@ -102,6 +102,9 @@ max_chars = 3000
 # Ask pypi.org for the latest version once a day while the dashboard is open (off: only when you click
 # Check for updates). Sends nothing about you.
 check_daily = false
+# Show a desktop notification when a new version is out: the background sync asks pypi.org once a day and
+# notifies once per release. Sends nothing about you.
+notify = false
 """
 
 
@@ -159,6 +162,7 @@ class Config:
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
+    update_notify: bool = False
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -282,6 +286,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
+        update_notify=bool(_section(data, "updates").get("notify", False)),
     )
     return cfg
 
