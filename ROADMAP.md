@@ -75,6 +75,10 @@ carefully.
 
 ## Later
 
+- **Linked discussions.** When a session's agent reads a team-chat thread through an MCP tool, keep the thread's
+  link (not its text) with the session, show it on the session page, and let knowledge cite it. That gives you
+  "this discussion, this session, this code" without Chronicle ever connecting to Slack. An option will drop such
+  tools' message text from the archive and keep only the links. It waits until real sessions use such a tool.
 - **Remote access without Tailscale**, over a peer-to-peer connection with QR pairing. A design exists. It needs a
   browser-side peer, and its WebRTC dependency would be an optional install so the core package stays small.
 - **More agents recorded.** Claude Desktop, Cursor, Windsurf and Gemini CLI can use Chronicle's MCP server today,
