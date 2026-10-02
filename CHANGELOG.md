@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **An architecture sketch for each project:** synthesizing a project's knowledge base now also draws its main parts
+  (code it owns, ways in, data it keeps, external services) and how they connect, shown hand-drawn at the top of the
+  project page. Every part and connection cites the knowledge items behind it, and anything without a valid source is
+  dropped. Click a part to see where it comes from; **Excalidraw** downloads it as an editable `.excalidraw` file
+  (`/api/diagram?path=`), laid out the same way. The Markdown knowledge base carries it as a Mermaid flowchart, so the
+  notes export and the `project_knowledge` MCP tool include it. Existing knowledge bases show it after their next
+  synthesis. [Architecture sketch](docs/dashboard.md#architecture-sketch)
 - **The sessions behind your files, in VS Code:** a new extension (`vscode-extension/`) adds two
   sections to the Explorer. **Chronicle: This File** lists the sessions that read or changed the open file,
   newest first, with what each did to it; every window follows its own editor. **Chronicle: Files in Workspace** shows
