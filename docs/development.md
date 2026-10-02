@@ -5,7 +5,7 @@
 ## Tests and a local install
 
 ```bash
-uv sync && uv run pytest -q        # 128 tests, ~18 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -20,6 +20,13 @@ signed and run on the Mac that built them; to distribute, set `CHRONICLE_CODESIG
 Application certificate) and `NOTARY_KEYCHAIN_PROFILE` (from `xcrun notarytool store-credentials`), and the script
 signs, notarizes and staples the DMG. `packaging/macos/make_icon.py` redraws the icon (the `.icns`, and `web/icon.png`, which the dashboard and a from-source app window use). `desktop.py` extends
 pywebview's Cocoa app delegate, hence the `<7` pin on pywebview.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` runs on every pull request and every push to `main`: the test suite (`test`, a required
+check on `main`) and `pip-audit` over the locked dependencies (`audit`). Dependabot proposes weekly updates for
+`uv.lock` and the workflows' actions, which are pinned to commit hashes (the version is in a comment beside each).
+GitHub's secret scanning, push protection and CodeQL code scanning are on in the repository settings.
 
 ## Releasing
 
