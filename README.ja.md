@@ -10,7 +10,7 @@ Claude Code、Codex、GitHub Copilot、IBM Bob のセッションと claude.ai�
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11 以上">
   <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS アプリと CLI">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT ライセンス"></a>
-  <a href="https://pypistats.org/packages/agents-chronicle"><img src="https://img.shields.io/pypi/dm/agents-chronicle?label=downloads" alt="月間ダウンロード数"></a>
+  <a href="https://pepy.tech/projects/agents-chronicle"><img src="https://static.pepy.tech/badge/agents-chronicle" alt="累計ダウンロード数"></a>
 </p>
 <p align="center">
   <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
