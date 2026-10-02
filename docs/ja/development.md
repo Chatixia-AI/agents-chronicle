@@ -57,9 +57,11 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
 
 ## ドキュメントサイト
 
-<https://chronicle.chatixia.net/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と `README.ja.md` が
-ホームページになり、`docs/` の外を指すリンクは `docs/_site/hooks.py` が GitHub へのリンクに書き換えます。
-`main` へのプッシュでドキュメントが変わると、`.github/workflows/docs.yml` が GitHub Pages に公開します。
+<https://chronicle.chatixia.net/docs/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と
+`README.ja.md` がホームページになり、`docs/` の外を指すリンクは `docs/_site/hooks.py` が GitHub へのリンクに書き換えます。
+ランディングページを含むサイト全体は [Chatixia-AI/chronicle-site](https://github.com/Chatixia-AI/chronicle-site) にあり、
+このドキュメントをそのままビルドしてすべてを公開します。`.github/workflows/docs.yml` はプルリクエストごとにビルドを確認し、
+`main` でドキュメントが変わると chronicle-site に再ビルドを依頼します（毎日の再ビルドもあります）。
 
 ```bash
 uv run --only-group docs mkdocs serve            # http://127.0.0.1:8000/ でプレビュー（保存で再読み込み）

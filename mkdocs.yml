@@ -1,8 +1,9 @@
 # The documentation site, built from docs/ and the READMEs as they are (see docs/_site/hooks.py).
-# Preview: uv run --only-group docs mkdocs serve. Published to GitHub Pages by .github/workflows/docs.yml.
+# Preview: uv run --only-group docs mkdocs serve. Published under /docs/ of chronicle.chatixia.net by
+# Chatixia-AI/chronicle-site, which builds this as it is.
 site_name: Chronicle
 site_description: A searchable memory of every coding-agent session you run.
-site_url: https://chronicle.chatixia.net/
+site_url: https://chronicle.chatixia.net/docs/
 repo_url: https://github.com/Chatixia-AI/agents-chronicle
 repo_name: agents-chronicle
 edit_uri: edit/main/docs/
