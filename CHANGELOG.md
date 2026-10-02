@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.1 (2026-10-02)
 
 - **Suggestions go to the right file:** a preference about how you work (one the analysis marked *global*) is now
   proposed once for your user-level `CLAUDE.md` or `AGENTS.md`, not once for each project it came up in. Other global
