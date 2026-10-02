@@ -976,7 +976,7 @@ class App:
         return got, (404 if got.get("error") == "no such suggestion" else 200)
 
     def action_suggestion(self, sid: int, verb: str, body: dict) -> tuple[dict, int]:
-        """apply / unapply / dismiss / done / edit. A refusal is a 400 carrying the reason; an unknown id a 404."""
+        """apply / unapply / dismiss / done / edit / move. A refusal is a 400 carrying the reason; an unknown id a 404."""
         from . import suggest
 
         if suggest.get(self.conn, sid) is None:
@@ -991,6 +991,8 @@ class App:
             got = suggest.dismiss(self.conn, sid, str(body.get("reason") or "") or None)
         elif verb == "done":
             got = suggest.mark_done(self.conn, sid)
+        elif verb == "move":  # to the user-level file, or back to the project files
+            got = suggest.move(self.conn, self.cfg, sid, str(body.get("to") or ""))
         else:  # edit: keep the text you changed, so a refresh does not replace it
             got = suggest.edit_text(self.conn, sid, text or "")
         return got, (200 if got.get("ok") else 400)
@@ -1294,7 +1296,7 @@ def make_handler(app: App, port: int):
                     from .suggest import refresh
 
                     return self._json(refresh(app.conn, app.cfg))
-                m = re.fullmatch(r"/api/suggestions/(\d+)/(apply|unapply|dismiss|done|edit)", p)
+                m = re.fullmatch(r"/api/suggestions/(\d+)/(apply|unapply|dismiss|done|edit|move)", p)
                 if m:
                     return self._json(*app.action_suggestion(int(m.group(1)), m.group(2), body if isinstance(body, dict) else {}))
                 return self._json({"error": "not found"}, 404)

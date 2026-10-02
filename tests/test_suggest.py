@@ -5,7 +5,7 @@ import sqlite3
 
 import pytest
 
-from chronicle import suggest
+from chronicle import instructions, suggest
 from chronicle.db import SCHEMA_VERSION, connect
 from chronicle.instructions import BEGIN
 
@@ -51,6 +51,7 @@ def test_schema_has_the_suggestions_table(tmp_path):
     assert {"key", "kind", "origin", "target_path", "text", "evidence_json", "warnings_json", "status", "seen_at",
             "applied_text", "dismissed_reason"} <= cols
     assert "idx_suggestions_status" in {r[1] for r in conn.execute("PRAGMA index_list(suggestions)")}
+    assert {r[1] for r in conn.execute("PRAGMA table_info(suggestion_scopes)")} == {"subject", "scope", "updated_at"}
 
 
 def test_refresh_proposes_fixes_for_recurring_causes(archive):
@@ -401,3 +402,88 @@ def test_an_edited_config_change_cannot_widen_what_is_written(archive, text):
     before = path.read_text()
     res = suggest.apply(conn, cfg, s["id"], text=text)
     assert not res["ok"] and path.read_text() == before
+
+
+def _know(conn, sid, project, title, *, kind="gotcha", scope="project", stage="provisional"):
+    conn.execute("INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, scope, confidence, "
+                 "source, fingerprint, status, created_at, updated_at, stage) VALUES (?, ?, 'app', ?, ?, "
+                 "'Keeps the work predictable.', ?, 'high', 'analysis', ?, 'active', ?, ?, ?)",
+                 (sid, project, kind, title, scope, f"fp-{sid}-{title}", ago(1), ago(1), stage))
+
+
+def test_a_preference_about_you_goes_to_the_user_level_file(archive):
+    a, conn, cfg, home = archive["a"], archive["conn"], archive["cfg"], archive["home"]
+    p = a.project("app")
+    a.session("k", p)
+    _know(conn, "k", p, "Never profile unrelated running processes", kind="preference", scope="global")
+    _know(conn, "k", p, "Never deploy the billing worker on Fridays", scope="global")  # useful elsewhere, not about you
+    _know(conn, "k", p, "Always answer in British English", kind="preference")  # the analysis tied it to this project
+    suggest.refresh(conn, cfg)
+    assert {s["title"]: s["target_path"] for s in suggest.list_suggestions(conn)} == {
+        "Never profile unrelated running processes": str(home / ".claude" / "CLAUDE.md"),
+        "Never deploy the billing worker on Fridays": f"{p}/CLAUDE.md",
+        "Always answer in British English": f"{p}/CLAUDE.md"}
+
+
+def test_a_line_you_move_stays_moved_and_takes_its_lesson_along(archive):
+    a, conn, cfg, home = archive["a"], archive["conn"], archive["cfg"], archive["home"]
+    p, q = a.project("app"), a.project("web")
+    a.session("k1", p)
+    a.session("k2", q)
+    for sid, project in (("k1", p), ("k2", q)):  # one lesson, learned in two projects: a line in each
+        _know(conn, sid, project, "Prefer small focused commits with clear messages", kind="preference")
+    suggest.refresh(conn, cfg)
+    cards = suggest.list_suggestions(conn)
+    assert sorted(s["project_path"] for s in cards) == sorted([p, q])
+    assert suggest.edit_text(conn, cards[0]["id"], "Small, focused commits.")["ok"]
+    got = suggest.move(conn, cfg, cards[0]["id"], "user")
+    assert got == {"ok": True, "moved": 1, "targets": [str(home / ".claude" / "CLAUDE.md")]}
+    (card,) = suggest.list_suggestions(conn)  # both project cards gone, not stale
+    assert card["project_path"] is None and card["status"] == "new" and card["text"] == "Small, focused commits."
+    assert suggest.refresh(conn, cfg) == {"new": 0, "updated": 0, "stale": 0}
+    assert [s["id"] for s in suggest.list_suggestions(conn)] == [card["id"]]
+    assert suggest.move(conn, cfg, card["id"], "user") == {"ok": False, "error": "it is already there"}
+
+    assert suggest.move(conn, cfg, card["id"], "project")["moved"] == 2
+    back = suggest.list_suggestions(conn)
+    assert sorted(s["project_path"] for s in back) == sorted([p, q]) and suggest.refresh(conn, cfg)["stale"] == 0
+    assert suggest.apply(conn, cfg, back[0]["id"])["ok"]
+    assert not suggest.move(conn, cfg, back[0]["id"], "user")["ok"]  # an applied line stays where it was written
+
+
+def test_moving_a_line_for_a_recurring_failure(archive):
+    a, conn, cfg = archive["a"], archive["conn"], archive["cfg"]
+    p = a.project("solo")
+    for i in range(3):
+        a.session(f"cwd{i}", p)
+        a.cause(f"cwd{i}", "cwd-drift", ago(1))
+    suggest.refresh(conn, cfg)
+    local = _by_key(conn)[f"friction:cwd-drift:claude:{p}"]
+    assert suggest.move(conn, cfg, local["id"], "user")["moved"] == 1
+    suggest.refresh(conn, cfg)
+    got = _by_key(conn)
+    assert got["friction:cwd-drift:claude:user"]["status"] == "new" and f"friction:cwd-drift:claude:{p}" not in got
+
+
+def test_lines_past_the_limit_wait_their_turn_without_going_stale(archive):
+    a, conn, cfg = archive["a"], archive["conn"], archive["cfg"]
+    p = a.project("app")
+    a.session("k", p)
+    for title in ("Build the docs site with mkdocs build --strict", "Regenerate protobuf stubs with buf generate",
+                  "Seed the local database using make seed", "Lint stylesheets with stylelint",
+                  "Rotate the signing key with vault write transit", "Preview emails through mailpit on port 8025",
+                  "Profile slow queries with EXPLAIN ANALYZE", "Package the chart with helm package",
+                  "Export translations via lingui extract"):
+        _know(conn, "k", p, title, kind="command")
+    suggest.refresh(conn, cfg)
+    shown = suggest.list_suggestions(conn)
+    assert len(shown) == instructions.MAX_PER_FILE
+    _know(conn, "k", p, "Reset the emulator with adb emu kill", kind="command", stage="established")  # outranks one
+    suggest.refresh(conn, cfg)
+    assert len(suggest.list_suggestions(conn)) == instructions.MAX_PER_FILE and suggest.counts(conn)["stale"] == 0
+    # what you dismiss stops taking a place, so one that was waiting comes up
+    before = {s["title"] for s in suggest.list_suggestions(conn)}
+    assert suggest.dismiss(conn, shown[0]["id"])["ok"]
+    suggest.refresh(conn, cfg)
+    now = suggest.list_suggestions(conn, status="new")
+    assert len(now) == instructions.MAX_PER_FILE and {s["title"] for s in now} - before

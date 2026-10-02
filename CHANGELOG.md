@@ -1,5 +1,20 @@
 # Changelog
 
+## Unreleased
+
+- **Suggestions go to the right file:** a preference about how you work (one the analysis marked *global*) is now
+  proposed once for your user-level `CLAUDE.md` or `AGENTS.md`, not once for each project it came up in. Other global
+  knowledge, like a gotcha about a tool, stays in its project's file, since the user-level file is read in every
+  session. Each waiting card can move: **Move to every project**, or from the user level back to the projects it came
+  from (`chronicle suggest move ID --to user|project`). Chronicle remembers the choice for that lesson or cause, its
+  other waiting cards move along, and your edited wording comes too. Lines you dismissed or applied no longer use up
+  one of a file's 8 places, so the next ones come up. A card whose lesson moved to another file, or that is waiting
+  for a place, now leaves the queue quietly instead of showing as stale.
+  [Moving a line](docs/suggestions.md#moving-a-line)
+- **Easier to read at a glance:** on Suggestions, the status filter is one joined switch and **What goes wrong** is a
+  link, so **Check again** is the only button in the header. The rail icons show their name and what the section
+  holds as soon as you point at them or tab to them, in the app window too.
+
 ## 0.6.0 (2026-10-02)
 
 - **Screen imported chats before analyzing them:** years of claude.ai and ChatGPT chats are mostly lookups, rewrites

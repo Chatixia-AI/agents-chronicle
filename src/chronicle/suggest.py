@@ -117,9 +117,11 @@ def _read(path: Path | None) -> str:
 
 
 def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
-                        project_agents: dict[str, list[str]] | None = None) -> list[dict]:
+                        project_agents: dict[str, list[str]] | None = None,
+                        choices: dict[str, tuple[str, str]] | None = None) -> list[dict]:
     out = []
     cid = cause["id"]
+    choice = instructions.chosen_scope(choices or {}, [f"cause:{cid}"])  # where you moved it, if you did
     seen_agents = [a for a in cause["agents"] if a in ("claude", "codex", "copilot", "bob")]
     score = round(cause["sessions"] + 0.5 * len(cause["projects"]) + 0.25 * cause["immediate_repeats"], 3)
     base = {"origin": "friction", "cause_id": cid, "knowledge_id": None, "score": score}
@@ -143,7 +145,7 @@ def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
         if not agents:
             continue
         spread = len(cause["projects"]) >= 3
-        scope = "project" if fix["scope"] == "project" else ("user" if spread else "project")
+        scope = choice or ("project" if fix["scope"] == "project" else ("user" if spread else "project"))
         targets: dict[tuple[Path, str | None], list[str]] = {}
         if scope == "user":
             for a in agents:
@@ -152,7 +154,7 @@ def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
                     targets.setdefault((t, None), []).append(a)
         else:
             paths = cause.get("project_paths") or []
-            chosen = [p["path"] for p in paths if p["sessions"] >= 2][:5] if fix["scope"] == "project" else []
+            chosen = [p["path"] for p in paths if p["sessions"] >= 2][:5] if "project" in (fix["scope"], choice) else []
             for path in chosen or [p["path"] for p in paths[:1]]:
                 here = (project_agents or {}).get(path)
                 for a in [a for a in agents if not here or a in here]:
@@ -176,26 +178,34 @@ def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
     return out
 
 
-def proposals(conn: sqlite3.Connection, cfg: Config) -> tuple[list[dict], dict[str, dict]]:
-    """(every suggestion the data supports right now, the scanned causes by id)."""
+def proposals(conn: sqlite3.Connection, cfg: Config) -> tuple[list[dict], dict[str, dict], list[dict]]:
+    """(every suggestion the data supports right now, the scanned causes by id, knowledge lines waiting for room in
+    their file)."""
     causes = {c["id"]: c for c in friction._scan(conn)}
     project_agents = instructions._project_agents(conn)
+    choices = instructions.scope_choices(conn)
+    rows = [dict(r) for r in conn.execute("SELECT * FROM suggestions")]
+    status = {r["key"]: r["status"] for r in rows}
+    decided = [r for r in rows if r["origin"] == "knowledge" and r["status"] in ("dismissed", "applied")]
     out: list[dict] = []
+    waiting: list[dict] = []
     for c in causes.values():
         if c["noise"] or c["category"] == "other" or not c["fixes"]:
             continue
         if not c["still_happening"] or not (c["sessions"] >= 3 or len(c["projects"]) >= 2):
             continue
-        out.extend(_friction_proposals(conn, cfg, c, project_agents))
-    for k in instructions.candidates(conn, cfg):
+        out.extend(_friction_proposals(conn, cfg, c, project_agents, choices))
+    # lessons you already dismissed or applied in a file take none of its places, so the next ones come up
+    for k in instructions.candidates(conn, cfg, lambda c: status.get(c["key"]) in ("dismissed", "applied", "done")
+                                     or _decided_lesson(decided, c), waiting):
         out.append({**k, "warnings": k.get("warnings") or {}})
     seen: set[str] = set()
-    return [p for p in out if not (p["key"] in seen or seen.add(p["key"]))], causes
+    return [p for p in out if not (p["key"] in seen or seen.add(p["key"]))], causes, waiting
 
 
 def refresh(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
     """Upsert every current proposal by key; mark proposals the data no longer supports stale."""
-    found, causes = proposals(conn, cfg)
+    found, causes, waiting = proposals(conn, cfg)
     now = utcnow_iso()
     existing = {r["key"]: dict(r) for r in conn.execute("SELECT * FROM suggestions")}
     report = {"new": 0, "updated": 0, "stale": 0}
@@ -243,10 +253,17 @@ def refresh(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
             if old["status"] != "stale":
                 report["updated"] += 1
     keys = {p["key"] for p in found}
+    # a waiting card whose lesson or cause is now proposed for another file, or waits for room in its file, was only
+    # a proposal: it is dropped rather than called stale, and comes back where and when there is room
+    live = {i for p in found + waiting if p["origin"] == "knowledge" for i in _lesson_ids(p)}
+    live_causes = {p["cause_id"] for p in found if p["origin"] == "friction" and p["kind"] == "instruction"}
     for key, old in existing.items():
         if key in keys:
             continue
-        if old["status"] == "new":
+        if old["status"] == "new" and old["kind"] == "instruction" and (
+                old["cause_id"] in live_causes if old["origin"] == "friction" else bool(live & _lesson_ids(old))):
+            conn.execute("DELETE FROM suggestions WHERE id = ?", (old["id"],))
+        elif old["status"] == "new":
             conn.execute("UPDATE suggestions SET status = 'stale', updated_at = ? WHERE id = ?", (now, old["id"]))
             report["stale"] += 1
         elif old["status"] == "applied" and old["origin"] == "friction":
@@ -258,6 +275,46 @@ def refresh(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
                 conn.execute("UPDATE suggestions SET evidence_json = ? WHERE id = ?", (dumps(ev), old["id"]))
     conn.commit()
     return report
+
+
+def move(conn: sqlite3.Connection, cfg: Config, sid: int, to: str) -> dict:
+    """Send a waiting instruction line to the user-level file ("user") or back to the files of its projects
+    ("project"), and remember that over the automatic choice. Every waiting card of the same lesson or cause is made
+    again where it now goes, ahead of the 8-a-file limit; applied and dismissed ones stay as they are."""
+    s = get(conn, sid)
+    if s is None:
+        return {"ok": False, "error": "no such suggestion"}
+    if to not in ("user", "project"):
+        return {"ok": False, "error": "move to user or project"}
+    if s["kind"] != "instruction" or s["status"] != "new" or s["origin"] not in ("friction", "knowledge"):
+        return {"ok": False, "error": "only an instruction line waiting for review can move"}
+    if (s["project_path"] is None) == (to == "user"):
+        return {"ok": False, "error": "it is already there"}
+    ids = _lesson_ids(s)
+    subjects = [f"cause:{s['cause_id']}"] if s["origin"] == "friction" else [f"knowledge:{i}" for i in sorted(ids)]
+
+    def mine(r: dict) -> bool:
+        if r["origin"] != s["origin"]:
+            return False
+        return r["cause_id"] == s["cause_id"] if r["origin"] == "friction" else bool(ids & _lesson_ids(r))
+    now = utcnow_iso()
+    conn.executemany("INSERT INTO suggestion_scopes(subject, scope, updated_at) VALUES (?, ?, ?) "
+                     "ON CONFLICT(subject) DO UPDATE SET scope = excluded.scope, updated_at = excluded.updated_at",
+                     [(x, to, now) for x in subjects])
+    conn.commit()
+    refresh(conn, cfg)  # makes its cards where it now goes and drops the waiting ones where it was
+    waiting = "SELECT * FROM suggestions WHERE status = 'new' AND kind = 'instruction'"
+    arrived = [r for r in map(dict, conn.execute(waiting)) if mine(r) and (r["project_path"] is None) == (to == "user")]
+    if s["text"] != s["evidence"].get("generated_text", s["text"]):  # your wording comes along
+        conn.executemany("UPDATE suggestions SET text = ? WHERE id = ?", [(s["text"], r["id"]) for r in arrived])
+        conn.commit()
+    return {"ok": True, "moved": len(arrived), "targets": sorted({r["target_path"] for r in arrived})}
+
+
+def _lesson_ids(s: dict) -> set[int]:
+    """The knowledge items behind a proposal or a stored suggestion: the one it names and the rest of its lesson."""
+    ev = s["evidence"] if "evidence" in s else (loads(s.get("evidence_json"), {}) or {})
+    return {i for i in (s.get("knowledge_id"), *(ev.get("knowledge_ids") or [])) if i is not None}
 
 
 def _decided_lesson(rows, p: dict) -> bool:

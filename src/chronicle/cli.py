@@ -1207,7 +1207,7 @@ def cmd_suggest(args) -> int:
         if not rows:
             print("no suggestions" + ("" if args.all else " waiting (--all for applied and dismissed ones)"))
         else:
-            print("\nchronicle suggest show ID · apply ID · dismiss ID · done ID (setup steps)")
+            print("\nchronicle suggest show ID · apply ID · dismiss ID · done ID (setup steps) · move ID --to user|project")
         return 0
     if not ids:
         print(f"usage: chronicle suggest {action} ID", file=sys.stderr)
@@ -1230,6 +1230,19 @@ def cmd_suggest(args) -> int:
             got = suggest.mark_done(conn, sid)
             print(f"#{sid} marked done" if got["ok"] else f"#{sid}: {got['error']}", file=sys.stdout if got["ok"] else sys.stderr)
             failed += not got["ok"]
+            continue
+        if action == "move":
+            if not args.to:
+                print("usage: chronicle suggest move ID --to user|project", file=sys.stderr)
+                return 2
+            got = suggest.move(conn, cfg, sid, args.to)
+            if not got["ok"]:
+                print(f"#{sid}: {got['error']}", file=sys.stderr)
+                failed += 1
+            elif got["moved"]:
+                print(f"#{sid} moved to " + ", ".join(_home_short(t) for t in got["targets"]) + " (see chronicle suggest)")
+            else:
+                print(f"#{sid} moved, but nothing is waiting there: it was dismissed or applied there before")
             continue
         if action == "undo":
             got = suggest.unapply(conn, cfg, sid)
@@ -1859,15 +1872,17 @@ def build_parser() -> argparse.ArgumentParser:
 
     s = sub.add_parser("suggest", aliases=["suggestions"],
                        help="proposed fixes (instruction lines, config changes, setup steps); nothing is written until you apply one")
-    s.add_argument("action", nargs="?", choices=["list", "show", "apply", "dismiss", "done", "undo", "refresh"],
+    s.add_argument("action", nargs="?", choices=["list", "show", "apply", "dismiss", "done", "undo", "move", "refresh"],
                    help="list (default), show ID (the diff), apply ID..., dismiss ID, done ID (a setup step you ran), "
-                        "undo ID (take an applied one back out), refresh")
+                        "undo ID (take an applied one back out), move ID --to user|project, refresh")
     s.add_argument("ids", nargs="*", type=int, metavar="ID")
     s.add_argument("-p", "--project", help="only this project's suggestions (path or name)")
     s.add_argument("--all", action="store_true", help="also applied, dismissed, stale and done ones")
     s.add_argument("--json", action="store_true")
     s.add_argument("-y", "--yes", action="store_true", help="with apply: don't ask before writing")
     s.add_argument("--reason", help="with dismiss: why (kept for you)")
+    s.add_argument("--to", choices=["user", "project"],
+                   help="with move: the user-level file (every project) or the files of the projects it came from")
     s.set_defaults(fn=cmd_suggest)
 
     s = sub.add_parser("friction", help="what goes wrong: recurring failure causes across your sessions, and tool error rates")

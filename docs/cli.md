@@ -24,6 +24,7 @@
 | `chronicle friction [-p project] [--days N] [--json] [--noise]` | What goes wrong: recurring failure causes across your sessions (sessions, projects, last seen, still happening, trend), then the tools that fail most; `--noise` also lists expected failures ([Suggestions](suggestions.md#what-goes-wrong)) |
 | `chronicle suggest [-p project] [--all] [--json]` | Proposed fixes waiting for you: instruction lines, config changes, setup steps. Nothing is written until you apply one ([Suggestions](suggestions.md)) |
 | `chronicle suggest show\|apply\|dismiss\|done\|undo ID… [--yes] [--reason R]` | Show the diff; apply it (asks first unless `--yes`, backs the file up); never propose it again; mark a setup step you ran as done; take an applied one back out |
+| `chronicle suggest move ID --to user\|project` | Put a waiting line in your user-level file, or back in the files of the projects it came from; remembered for that lesson or cause ([Moving a line](suggestions.md#moving-a-line)) |
 | `chronicle suggest refresh` | Look at the latest sessions and knowledge for suggestions now (the background sync does this after each run) |
 | `chronicle forget <id> [--delete-transcript]` | Remove a session from the vault for good (it is never re-ingested) |
 | `chronicle sources` | Which agents are connected, and how |
