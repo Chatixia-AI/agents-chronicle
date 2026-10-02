@@ -54,7 +54,7 @@ code --install-extension chronicle-sessions-0.1.0.vsix
   `../myapp-feature/src/app.py` で、`myapp/src/app.py` とは別のパスです。
 - **リモートウィンドウのファイル**（SSH、コンテナー、WSL）。一覧には、Chronicle はこのコンピューター上のファイルしか
   わからないと表示されます。
-- **まだ同期されていないセッション。** Claude Code のセッションは終わったときに、Codex、Copilot、Bob のセッションは
+- **まだ同期されていないセッション。** Claude Code のセッションは終わったときに、Codex、Copilot、Bob、Antigravity のセッションは
   15 分ごとに取り込まれます（[ソース](sources.md)）。
 
 ## エンドポイント

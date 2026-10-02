@@ -1,11 +1,11 @@
-# ソース：Claude Code、Codex、GitHub Copilot、IBM Bob
+# ソース：Claude Code、Codex、GitHub Copilot、IBM Bob、Google Antigravity
 
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
 `chronicle sources`（またはダッシュボードの **Sources** タブ）で、各コーディングエージェントについて次の情報を確認できます：
 検出されたかどうか、バージョン、ディスク上のセッション数と記録・分析済みの数、記録方法、フックと MCP サーバーが設定されているか。
 接続と切断はダッシュボード、または `chronicle connect <agent>` / `chronicle disconnect <agent>` で行います
-（`claude`、`codex`、`codex-cloud`、`copilot`、`bob`。記録済みのセッションは常に残ります）。どのソースも同じセッションモデルに変換されるため、
+（`claude`、`codex`、`codex-cloud`、`copilot`、`bob`、`antigravity`。記録済みのセッションは常に残ります）。どのソースも同じセッションモデルに変換されるため、
 すべてのエージェントのセッションがダッシュボード、分析、ナレッジベース、用語集、MCP ツールを共有します。
 
 **Codex**（`~/.codex`）は任意で接続します。接続すると：
@@ -46,6 +46,17 @@ GPT-5 の料金で見積もります。
 そのデータベースの SQLite スナップショットをアーカイブします。`~/.bob` 内のそれ以外（ログイン状態など）は読みません。
 Bob IDE は会話ファイルをローカルに保存しないため、記録されるのはこのデータベース内のタスクだけです。接続すると
 `~/.bob/settings/mcp_settings.json` に MCP サーバーが登録されます。
+
+**Google Antigravity** は任意で接続します（`chronicle connect antigravity`）。Antigravity は各会話を
+`~/.gemini/antigravity/conversations/` に独自の形式（古いバージョンでは暗号化、新しいバージョンでは SQLite データベース）で
+保存し、それとは別に、エージェントの成果物の隣へ平文のステップログ `brain/<id>/.system_generated/logs/transcript_full.jsonl`
+（古いバージョンでは `transcript.jsonl`）を書き出します。Chronicle はこのログから、プロンプト（成果物の承認を含む）、返答、
+思考、ツール呼び出しとその結果・所要時間、バックグラウンドタスクの通知、モデル呼び出しごとのトークン数を読み込みます。
+新しいバージョンの会話データベース（読み取り専用で開きます）からはワークスペースのフォルダー、git のブランチとリモート、
+モデルを、`annotations/<id>.pbtxt` からはタイトルを加えます。ログと、タスク・計画・ウォークスルーの Markdown ファイルを
+アーカイブします（生成された画像は対象外）。暗号化された形式にしかない会話は読み込めず、その件数は Sources のカードに
+表示されます。Antigravity は料金を記録しないため、Gemini モデルのセッションにはトークン数だけが表示され、費用は出ません。
+接続すると、Antigravity のグローバルな MCP 設定 `~/.gemini/config/mcp_config.json` に MCP サーバーが登録されます。
 
 **claude.ai と ChatGPT のチャット**は Mac に保存されないため、データのエクスポートから取り込みます。claude.ai は
 **設定 › プライバシー › データをエクスポート**、ChatGPT は **設定 › データコントロール › データをエクスポート** を開くと、届いたメールのリンクから

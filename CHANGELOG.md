@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Google Antigravity is a source:** `chronicle connect antigravity` (or the Sources page) records Antigravity
+  conversations from the step log Antigravity writes beside each conversation's artifacts
+  (`~/.gemini/antigravity/brain/<id>/.system_generated/logs/`): prompts, replies, thinking, tool calls with results
+  and durations, and tokens per call, plus the workspace, git branch and model from its conversation database.
+  Connecting also gives Antigravity Chronicle's MCP server (`~/.gemini/config/mcp_config.json`).
 - **An architecture sketch for each project:** synthesizing a project's knowledge base now also draws its main parts
   (code it owns, ways in, data it keeps, external services) and how they connect, shown hand-drawn at the top of the
   project page. Every part and connection cites the knowledge items behind it, and anything without a valid source is

@@ -211,8 +211,8 @@ const STATUS_LABEL = {
 };
 const STATUS_ICON = { pending: "queued", stale: "queued", running: "running", error: "gotcha", skipped: "skipped", done: "completed" };
 
-const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
-const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
+const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "GitHub Copilot", bob: "IBM Bob", antigravity: "Google Antigravity", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
+const AGENT_SHORT = { claude: "Claude", codex: "Codex", copilot: "Copilot", bob: "Bob", antigravity: "Antigravity", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
 function agentShort(a) { return AGENT_SHORT[a] || a || "Claude"; }
 function agentName(a) { return AGENTS[a] || "Claude Code"; }
 // the agent that analyzes sessions (Status › Analysis): full name, and the short one for "… is writing"

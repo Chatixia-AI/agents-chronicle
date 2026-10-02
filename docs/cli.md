@@ -28,7 +28,7 @@
 | `chronicle suggest refresh` | Look at the latest sessions and knowledge for suggestions now (the background sync does this after each run) |
 | `chronicle forget <id> [--delete-transcript]` | Remove a session from the vault for good (it is never re-ingested) |
 | `chronicle sources` | Which agents are connected, and how |
-| `chronicle connect <agent>` / `disconnect <agent>` | Start/stop recording `claude`, `codex`, `codex-cloud`, `copilot` or `bob` (data is kept) |
+| `chronicle connect <agent>` / `disconnect <agent>` | Start/stop recording `claude`, `codex`, `codex-cloud`, `copilot`, `bob` or `antigravity` (data is kept) |
 | `chronicle connect <client>` / `disconnect <client>` | Add or remove the MCP server in `claude-desktop`, `cursor`, `windsurf` or `gemini` |
 | `chronicle mcp [--print-config]` | Run the MCP server (clients start it), or print a config entry for any other MCP client |
 | `chronicle status` | Health: hooks, agents, MCP, queue, failures |

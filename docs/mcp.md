@@ -3,7 +3,7 @@
 [← Chronicle](../README.md) · [Docs index](README.md)
 
 Chronicle includes a [Model Context Protocol](https://modelcontextprotocol.io) server, so any MCP client can search
-your past sessions and knowledge: Claude Code, Codex, Copilot, Bob, Claude Desktop, Cursor, Windsurf, Gemini CLI, or
+your past sessions and knowledge: Claude Code, Codex, Copilot, Bob, Antigravity, Claude Desktop, Cursor, Windsurf, Gemini CLI, or
 anything else that speaks MCP. Ask things like *"have we hit this error before?"*, *"why did we put idempotency in
 Postgres?"* or *"how is billing-api deployed?"*.
 
@@ -38,6 +38,7 @@ All tools are marked read-only (`readOnlyHint`), so clients that honour the hint
 | Codex | `~/.codex/config.toml`, with `codex mcp add` (`chronicle connect codex`) |
 | GitHub Copilot | VS Code `User/mcp.json` and `~/.copilot/mcp-config.json` (`chronicle connect copilot`) |
 | IBM Bob | `~/.bob/settings/mcp_settings.json` (`chronicle connect bob`) |
+| Google Antigravity | `~/.gemini/config/mcp_config.json` (`chronicle connect antigravity`) |
 
 **Other clients** only get the server. Chronicle doesn't record their sessions. Add one from **Settings › MCP › Other MCP
 clients**, or from the command line:

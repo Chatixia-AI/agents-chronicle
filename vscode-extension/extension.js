@@ -3,7 +3,7 @@
 // VS Code's own Node provides fetch.
 const vscode = require("vscode");
 
-const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "Copilot", bob: "IBM Bob", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
+const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "Copilot", bob: "IBM Bob", antigravity: "Antigravity", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
 
 const setting = (key, fallback) => vscode.workspace.getConfiguration("chronicle").get(key, fallback);
 const baseUrl = () => String(setting("url", "http://127.0.0.1:8765")).replace(/\/+$/, "");

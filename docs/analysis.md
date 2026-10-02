@@ -30,8 +30,8 @@ friction, sentiment, and knowledge items:
 
 Claude's own auto-memory notes (`projects/*/memory/*.md`) and Codex's memory notes are imported as knowledge too.
 
-Codex, Copilot and Bob sessions fill the same fields wherever their logs carry the data: Copilot Chat logs, for
-instance, have no cache split (so no cost estimate), and Bob tasks have no per-call timings.
+Codex, Copilot, Bob and Antigravity sessions fill the same fields wherever their logs carry the data: Copilot Chat logs, for
+instance, have no cache split (so no cost estimate), Bob tasks have no per-call timings, and Gemini models in Antigravity have no price.
 
 ## How analysis works
 

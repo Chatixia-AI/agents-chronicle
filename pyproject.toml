@@ -2,7 +2,7 @@
 name = "agents-chronicle"
 version = "0.6.1"
 dynamic = ["readme"]
-description = "Record, archive, analyze and explore every coding-agent session (Claude Code, Codex, Copilot, Bob): a local knowledge vault built with Claude Code itself."
+description = "Record, archive, analyze and explore every coding-agent session (Claude Code, Codex, Copilot, Bob, Antigravity): a local knowledge vault built with Claude Code itself."
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]

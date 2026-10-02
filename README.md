@@ -3,7 +3,7 @@
 <h1 align="center">Chronicle</h1>
 
 <p align="center"><b>A searchable memory of every coding-agent session you run.</b><br>
-Claude Code, Codex, GitHub Copilot and IBM Bob sessions and your claude.ai and ChatGPT chats, kept and turned into
+Claude Code, Codex, GitHub Copilot, IBM Bob and Google Antigravity sessions and your claude.ai and ChatGPT chats, kept and turned into
 knowledge on your own machine.</p>
 
 <p align="center">
@@ -88,6 +88,7 @@ Connect more agents later from **Settings › Sources**, `chronicle connect <age
 | Codex Cloud | tasks at chatgpt.com/codex (via the `codex` CLI: title, repo, diff) | every 15 min | via Codex |
 | GitHub Copilot | Copilot CLI and agent sessions; Copilot Chat logs in VS Code | every 15 min | ✅ VS Code and Copilot CLI |
 | IBM Bob | `~/.bob/db/bob.db`, read-only | every 15 min | ✅ |
+| Google Antigravity | `~/.gemini/antigravity` conversation logs, read-only | every 15 min | ✅ |
 | claude.ai, ChatGPT | data export: `chronicle import <zip>` | when you import it | – |
 
 All of them share one dashboard, knowledge base, glossary and set of MCP tools; analysis runs through Claude Code

@@ -14,6 +14,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `codex_cloud` | `false` | `true` once Codex Cloud is connected: list its tasks through the codex CLI every sync |
 | `copilot_dirs` | `[]` | `~/.copilot` and VS Code `User` directories once Copilot is connected |
 | `bob_dirs` | `[]` | `["~/.bob"]` once Bob is connected |
+| `antigravity_dirs` | `[]` | `["~/.gemini/antigravity"]` once Antigravity is connected |
 | `import_history` | `true` | recover prompts of sessions Claude Code already deleted, from `history.jsonl` |
 | `import_memory` | `true` | import Claude's auto-memory notes (`projects/*/memory/*.md`) as knowledge |
 | `exclude_projects` | `[]` | glob patterns of project paths to ignore entirely, e.g. `["/Users/me/secret/*"]` |

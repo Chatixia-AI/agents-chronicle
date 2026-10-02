@@ -26,6 +26,8 @@ from .db import kv_get, kv_set
 from .ladder import MEMORY_STAGE_REASON
 from .codex_parser import (CODEX_PARSER_VERSION, load_imports, load_titles, parent_thread_id, parse_codex_session,
                            read_meta, rollout_files, rollout_id)
+from .antigravity_parser import (ANTIGRAVITY_PARSER_VERSION, LOGS, conversation_dirs, load_db_meta, load_title,
+                                 parse_antigravity_conversation, transcript_files)
 from .bob_parser import BOB_PARSER_VERSION, bob_db, load_tasks, parse_bob_task, task_signature
 from .copilot_parser import (COPILOT_PARSER_VERSION, agent_session_dirs, chat_files, load_usage, parse_copilot_agent,
                              parse_vscode_chat, workspace_folder)
@@ -576,7 +578,8 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                     conn.rollback()
                     log.exception("codex cloud sync failed")
                     report.errors.append(f"codex cloud: {exc}")
-            for name, dirs, fn in (("copilot", cfg.copilot_dirs, _sync_copilot), ("bob", cfg.bob_dirs, _sync_bob)):
+            for name, dirs, fn in (("copilot", cfg.copilot_dirs, _sync_copilot), ("bob", cfg.bob_dirs, _sync_bob),
+                                   ("antigravity", cfg.antigravity_dirs, _sync_antigravity)):
                 for d in dirs:
                     try:
                         fn(cfg, conn, archiver, d, report, skip, force=force)
@@ -695,7 +698,7 @@ def _ingest_codex(conn, cfg, codex_dir: Path, main: Path, subs: list[Path], dst:
         report.sessions_updated += 1
 
 
-# ------------------------------------------------------------------ GitHub Copilot, IBM Bob
+# ------------------------------------------------------------------ GitHub Copilot, IBM Bob, Google Antigravity
 def snapshot_sqlite(conn, src: Path, dst: Path) -> bool:
     """Archive a live SQLite database consistently (backup API), only when it or its WAL changed."""
     parts = []
@@ -730,7 +733,7 @@ def snapshot_sqlite(conn, src: Path, dst: Path) -> bool:
 
 def _store_other(conn, cfg, ps: ParsedSession, report: SyncReport, *, root: Path, transcript: Path, archive: Path,
                  sig: str, agent: str, source: str = "transcript") -> None:
-    """Store a parsed Copilot/Bob/Codex Cloud session (the tail every non-Claude source shares)."""
+    """Store a parsed Copilot/Bob/Antigravity/Codex Cloud session (the tail every non-Claude source shares)."""
     if cfg.is_excluded(ps.project_path) or kv_get(conn, f"forget:{ps.id}"):
         return
     try:
@@ -819,6 +822,31 @@ def _sync_bob(cfg: Config, conn, archiver: Archiver, root: Path, report: SyncRep
         if ps is None:
             continue  # a task that never got a prompt
         _store_other(conn, cfg, ps, report, root=root, transcript=db, archive=snap, sig=sig, agent="bob")
+
+
+def _sync_antigravity(cfg: Config, conn, archiver: Archiver, root: Path, report: SyncReport, skip: set[str], *, force=False):
+    """Google Antigravity conversations from ~/.gemini/antigravity (read-only): each one's step log, title and database."""
+    dst = cfg.archive_dir / "antigravity"
+    for conv in conversation_dirs(root):
+        cid, logs = conv.name, transcript_files(conv)
+        sig = paths_signature([*logs, root / "annotations" / f"{cid}.pbtxt"], ANTIGRAVITY_PARSER_VERSION)
+        if cid in skip or _unchanged(conn, cid, sig, force):
+            report.sessions_unchanged += 1
+            continue
+        conn.commit()
+        try:
+            ps = parse_antigravity_conversation(conv, title=load_title(root, cid),
+                                                db_meta=load_db_meta(root / "conversations" / f"{cid}.db"))
+        except Exception as exc:
+            log.exception("antigravity parse failed: %s", conv)
+            report.errors.append(f"parse {conv}: {exc}")
+            continue
+        if ps is None:
+            continue  # a conversation that never got a prompt
+        archived = [archiver.archive(f, dst / cid / f.relative_to(conv / LOGS)) for f in logs]
+        for f in [*conv.glob("*.md"), *conv.glob("*.md.metadata.json")]:  # task, plan and walkthrough (not the images)
+            archiver.archive(f, dst / cid / f.name)
+        _store_other(conn, cfg, ps, report, root=root, transcript=logs[0], archive=archived[0], sig=sig, agent="antigravity")
 
 
 def _cloud_project(conn, label: str | None) -> str | None:
