@@ -8,6 +8,7 @@ import logging
 import sqlite3
 
 from . import ladder
+from .diagram import DIAGRAM_SCHEMA, normalize_diagram, to_mermaid
 from .config import Config
 from .ladder import STAGE_ORDER_SQL, SUPERSEDE_REASONS, TRUSTED
 from .llm import Runner, make_runner
@@ -21,7 +22,7 @@ MAX_ITEMS = 250
 KB_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["tldr", "overview", "sections", "superseded"],
+    "required": ["tldr", "overview", "sections", "diagram", "superseded"],
     "properties": {
         "tldr": {"type": "array", "items": {"type": "string"},
                  "description": "Exactly 3 bullets, at most 14 words each: what matters most"},
@@ -55,6 +56,7 @@ KB_SCHEMA = {
                 },
             },
         },
+        "diagram": DIAGRAM_SCHEMA,
         "superseded": {
             "type": "array",
             "description": "items that should leave the knowledge base, each with the item that replaces it",
@@ -89,6 +91,11 @@ where it stands now.
 - Sections of concise, self-contained bullets, each with a short title that states the rule or fact. Suggested sections (use only those that have content, add others if \
 needed): "Architecture & key facts", "Run, test & deploy", "Gotchas & fixes", "Decisions & rationale", \
 "Conventions & preferences", "Useful commands", "Open threads".
+- An architecture sketch (diagram): the project's main parts as nodes (component = code it owns, interface = a way in \
+such as a CLI, UI, API or MCP server, store = a database, file or config it keeps, external = a service or tool it \
+depends on) and edges for how they connect (calls, reads, writes, serves, deploys to). At most 12 nodes, labelled in \
+the project's own names. Cite on every node and edge the ids of the items that state it, and draw only connections the \
+items state; leave nodes and edges empty when the items do not say how the project is built.
 - Merge duplicates into one bullet, prefer newer, higher-stage and higher-confidence items when they conflict, and \
 keep concrete identifiers (paths, commands, config keys, error messages). Cite the ids each bullet is based on.
 - List in superseded every item that should leave: reason "duplicate" when another item states the same lesson \
@@ -114,9 +121,11 @@ sections (use only those with content): "Working preferences for Claude", "Tooli
 and those that are outdated or contradicted (by = the newer item, or null). Merely related items are not duplicates.
 Do not invent anything that the items do not support."""
 
-# The playbook differs from a project's knowledge base only in what its overview describes
+# The playbook differs from a project's knowledge base in what its overview describes, and draws no architecture
 GLOBAL_SCHEMA = copy.deepcopy(KB_SCHEMA)
 GLOBAL_SCHEMA["properties"]["overview"]["description"] = "At most 3 plain sentences: how this developer works and on what"
+del GLOBAL_SCHEMA["properties"]["diagram"]
+GLOBAL_SCHEMA["required"].remove("diagram")
 
 
 def _item_line(k: dict) -> dict:
@@ -211,8 +220,10 @@ def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str,
     parts.append("Write the updated knowledge base." if not is_global else "Write the updated playbook.")
     res = runner.run("\n\n".join(parts), GLOBAL_SCHEMA if is_global else KB_SCHEMA, system=GLOBAL_SYSTEM if is_global else PROJECT_SYSTEM,
                      model=cfg.synthesis.model)
-    data = normalize_kb(res.data)
     valid_ids = {k["id"] for k in items}
+    data = normalize_kb(res.data, valid_ids)
+    if is_global:
+        data.pop("diagram", None)  # the playbook spans projects: it has no architecture to draw
     try:
         # only a project's own synthesis retires items: the global playbook merges across projects, and a
         # cross-project duplicate must stay in each project's knowledge base. Both pool the evidence of duplicates.
@@ -244,8 +255,9 @@ def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str,
     return data
 
 
-def normalize_kb(data: dict) -> dict:
-    """Coerce a model reply into {overview, sections[{title, items[{text, sources[int]}]}], superseded_ids[int]}."""
+def normalize_kb(data: dict, valid_ids: set[int] | None = None) -> dict:
+    """Coerce a model reply into {overview, sections[{title, items[{text, sources[int]}]}], superseded_ids[int]},
+    plus a diagram when one survives pruning to what the knowledge items (`valid_ids`, when given) support."""
     def ids(values) -> list[int]:
         out = []
         for v in values if isinstance(values, list) else []:
@@ -295,6 +307,9 @@ def normalize_kb(data: dict) -> dict:
     tldr = [tldr] if isinstance(tldr, str) else tldr if isinstance(tldr, list) else []
     if any(str(x).strip() for x in tldr):
         out["tldr"] = [str(x).strip() for x in tldr if str(x).strip()][:3]
+    diagram = normalize_diagram(data.get("diagram"), valid_ids)
+    if diagram:
+        out["diagram"] = diagram
     return out
 
 
@@ -306,6 +321,8 @@ def render_kb_markdown(name: str, data: dict, *, n_items: int, model: str | None
         lines += ["**TL;DR**", ""] + [f"- {x}" for x in data["tldr"]] + [""]
     if data.get("overview"):
         lines += ["## Overview", "", data["overview"].strip(), ""]
+    if data.get("diagram"):
+        lines += ["## Architecture", "", "```mermaid", to_mermaid(data["diagram"]), "```", ""]
     for section in data.get("sections") or []:
         items = section.get("items") or []
         if not items:

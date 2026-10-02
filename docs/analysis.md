@@ -62,7 +62,8 @@ instance, have no cache split (so no cost estimate), and Bob tasks have no per-c
    a finished week is analyzed, the model writes that week's review (a three-line TL;DR, themes, accomplishments,
    learnings, open threads, recurring friction, concrete workflow suggestions). Knowledge bases, the playbook and
    reviews are written to be skimmed: a TL;DR, a short overview, a title per knowledge-base bullet, and word
-   limits on every field. The review's numbers and charts come from the database, not from the model.
+   limits on every field. A project's knowledge base also gets an
+   [architecture sketch](dashboard.md#architecture-sketch), kept only where cited items back it. The review's numbers and charts come from the database, not from the model.
 5. Usage-limit or auth errors pause analysis for an hour; other failures back off 30 min → 2 h → 8 h.
    Calls have a wall-clock deadline, and a call frozen by the Mac going to sleep is killed right after wake and
    re-queued without counting as a failure. Sessions that continue after being analyzed are re-analyzed.

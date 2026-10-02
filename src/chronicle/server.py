@@ -486,6 +486,7 @@ class App:
             (path,)).fetchone()
         if not stats or not stats["sessions"]:
             return None
+        from .diagram import for_kb
         from .glossary import glossary_entries
         kb = c.execute("SELECT * FROM project_kb WHERE project_path = ?", (path,)).fetchone()
         labels = project_labels(c)
@@ -494,6 +495,7 @@ class App:
             "label": labels.get(path, stats["project_name"]),
             "stats": dict(stats),
             "kb": dict(kb) if kb else None,
+            "diagram": for_kb(kb["kb_json"]) if kb else None,
             "sessions": self._session_rows("project_path = ?", [path], "started_at DESC", 200),
             "knowledge": [self._k(dict(r)) for r in c.execute(
                 "SELECT k.*, s.title session_title FROM knowledge k LEFT JOIN sessions s ON s.id = k.session_id "
@@ -970,6 +972,19 @@ class App:
 
         return export_sessions(self.conn, self._export_ids(ids), fmt)
 
+    def diagram_file(self, path: str) -> tuple[str, str, bytes] | None:
+        """A project's architecture sketch as an .excalidraw file, to open and edit in Excalidraw."""
+        from .diagram import normalize_diagram, to_excalidraw
+
+        kb = self.conn.execute("SELECT project_name, kb_json FROM project_kb WHERE project_path = ?", (path,)).fetchone()
+        d = normalize_diagram((loads(kb["kb_json"], {}) or {}).get("diagram")) if kb and path != GLOBAL else None
+        if not d:
+            return None
+        name = project_labels(self.conn).get(path) or kb["project_name"] or Path(path).name
+        scene = to_excalidraw(d, f"{name}: architecture")
+        slug = re.sub(r"[^\w.-]+", "-", name).strip("-") or "project"
+        return f"{slug}-architecture.excalidraw", "application/vnd.excalidraw+json", json.dumps(scene, ensure_ascii=False, indent=1).encode()
+
     def export_check(self, ids: str, fmt: str) -> dict:
         from .session_export import FORMATS, ExportError, has_original
 
@@ -1236,6 +1251,9 @@ def make_handler(app: App, port: int):
                 if p == "/api/project":
                     proj = app.project(unquote(q.get("path", "")))
                     return self._json(proj) if proj else self._json({"error": "not found"}, 404)
+                if p == "/api/diagram":  # a download: the project's architecture sketch as an .excalidraw file
+                    f = app.diagram_file(q.get("path", ""))
+                    return self._download(*f) if f else self._json({"error": "no architecture sketch for this project"}, 404)
                 if p == "/api/file":  # parse_qs has decoded the path already: a second unquote would mangle a literal %
                     return self._json(app.file_sessions(q.get("path", ""), min(int(q.get("limit") or 50), 500)))
                 if p == "/api/files":

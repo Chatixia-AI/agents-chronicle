@@ -43,7 +43,8 @@ sits beside the transcript and follows your scroll), a Knowledge overview (one c
 the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
 [stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it), project knowledge
 bases and the global playbook (a TL;DR, section chips, a filter, and sections as cards of short bullets that
-open to their detail and sources, with established and canonical bullets marked), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a
+open to their detail and sources, with established and canonical bullets marked; a project's opens with its
+[architecture sketch](#architecture-sketch)), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a
 three-line TL;DR, the week's numbers against the week before, active time per day, where the time went, outcomes and
 knowledge captured, then themes and short lists of what shipped, what was learned, what is still open, what slowed
 you down, what to try next and which trusted knowledge was overturned; the full write-up is folded away), **Search all sessions** (the magnifier in the rail, or the last entry
@@ -72,6 +73,19 @@ time and any project: sessions and projects hit, a 12-week trend, last seen and 
 a link to its suggestions. Click a cause for examples and fixes. Below are the tools that fail most, and a **Noise**
 card for expected failures (tests failing in a dev loop, provider outages), collapsed. See
 [Suggestions and What goes wrong](suggestions.md).
+
+## Architecture sketch
+
+When a project's knowledge base is synthesized, the model also draws the project's main parts (code it owns, ways in
+such as a CLI, UI, API or MCP server, data it keeps, external services) and how they connect. Every part and
+connection must cite the knowledge items that state it: a connection with no valid source is dropped, and so is a
+part left with no connection, so the sketch shows only what your sessions established. The project page draws it in a
+hand-drawn style ([rough.js](https://roughjs.com), shipped with Chronicle). Hover a part for what it is, click a part
+or a connection to see the knowledge it comes from, and switch to **Table** for the connections as a list.
+**Excalidraw** downloads it as an `.excalidraw` file laid out the same way, to edit in excalidraw.com or the
+Excalidraw VS Code extension. The Markdown knowledge base (notes export, `project_knowledge` over MCP) carries it as a
+Mermaid flowchart under **Architecture**. Knowledge bases synthesized before this show no sketch until their next
+synthesis (**Re-synthesize** on the project page). The global playbook has none.
 
 ## Glossary
 

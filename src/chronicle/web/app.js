@@ -1899,8 +1899,126 @@ function kbView(p, isGlobal) {
   draw();
   const full = data.overview && data.tldr && data.tldr.length ? h("details", { class: "card rv-full" }, h("summary", null, "Read the overview"), mdEl(data.overview))
     : data.overview ? h("details", { class: "card rv-full" }, h("summary", null, "Read the full overview"), mdEl(data.overview)) : null;
-  box.append(hero, h("div", { class: "kb-tools" }, nav, bullets > 10 ? filter : null), grid, full);
+  append(box, [hero, !isGlobal && p.diagram && window.rough ? diagramCard(p) : null,
+    h("div", { class: "kb-tools" }, nav, bullets > 10 ? filter : null), grid, full]);
   return box;
+}
+
+// A knowledge base's architecture sketch, hand-drawn with rough.js on the layout the server computed (the same layout
+// the .excalidraw download uses). Every part and connection cites the knowledge items that state it.
+const DIAGRAM_KINDS = { component: "Code it owns", interface: "Way in (CLI, UI, API)", store: "Data it keeps", external: "External" };
+const ROUGH_FILL = "#010203"; // marks rough.js's hachure strokes, so CSS can colour fills and outlines by theme
+function roughEls(gen, drawable, cls = "") {
+  return gen.toPaths(drawable).map((p) => s("path", { d: p.d, class: p.stroke === ROUGH_FILL ? "f" : `o ${cls}`.trim(), "stroke-width": p.strokeWidth }));
+}
+function roughSeed(str) {
+  let x = 7;
+  for (const c of str) x = (x * 31 + c.codePointAt(0)) >>> 0;
+  return (x % 2147483646) + 1; // stable per part: the sketch keeps its wobble between renders, as Excalidraw does
+}
+function diagramCard(p) {
+  const dg = p.diagram, L = dg.layout;
+  const kIndex = Object.fromEntries((p.knowledge || []).map((k) => [k.id, k]));
+  const byId = Object.fromEntries(dg.nodes.map((n) => [n.id, n]));
+  const cited = new Set([...dg.nodes, ...dg.edges].flatMap((x) => x.sources || []));
+  const detail = h("div", { class: "kbd-detail", "aria-live": "polite" });
+  const sources = (ids) => {
+    const ks = (ids || []).map((id) => kIndex[id]).filter(Boolean).slice(0, 6);
+    return ks.length ? h("div", { class: "kbd-src" }, "From ", ks.map((k, i) => [i ? " · " : "",
+      k.session_id ? h("a", { href: `#/session/${k.session_id}` }, k.title) : k.title])) : null;
+  };
+  let picked = null; // ["node", id] or ["edge", index]: survives a redraw on resize
+
+  const draw = (body) => {
+    const gen = rough.generator();
+    const svg = s("svg", { class: "kbd-svg", viewBox: `0 0 ${L.width} ${L.height}`, role: "img",
+      "aria-label": `Architecture sketch: ${dg.nodes.length} parts, ${dg.edges.length} connections` });
+    Object.assign(svg.style, { maxWidth: `${L.width}px`, minWidth: `${Math.round(L.width * 0.72)}px` });
+    const edgeG = s("g"), nodeG = s("g"), labelG = s("g");
+    const els = { node: {}, edge: [], label: [] };
+    dg.edges.forEach((e, i) => {
+      const lay = L.edges[i], o = { seed: roughSeed(`${e.from}>${e.to}`), roughness: 0.9, bowing: 0.6, strokeWidth: 1.2, stroke: "#000" };
+      const g = s("g", { class: "kbd-edge" }, s("path", { class: "hit", d: lay.d }),
+        roughEls(gen, gen.path(lay.d, o)), roughEls(gen, gen.linearPath(lay.head, o)));
+      g.addEventListener("click", (ev) => { ev.stopPropagation(); select(["edge", i]); });
+      hoverable(g, () => [`${byId[e.from].label} → ${byId[e.to].label}`, e.label || null], { focusable: false });
+      edgeG.append(g);
+      els.edge.push(g);
+      if (lay.label) {
+        const lb = lay.label, n = lb.lines.length;
+        const t = s("text", { class: "kbd-elabel", x: lb.x, y: lb.y, "text-anchor": "middle", style: { fontSize: `${L.label_font}px` } },
+          lb.lines.map((ln, j) => s("tspan", { x: lb.x, y: lb.y + (j - (n - 1) / 2) * L.label_line, "dominant-baseline": "central" }, ln)));
+        labelG.append(t);
+        els.label[i] = t;
+      }
+    });
+    dg.nodes.forEach((n, i) => {
+      const b = L.nodes[i], o = { seed: roughSeed(n.id), roughness: 1.15, bowing: 0.9, strokeWidth: 1.4, stroke: "#000",
+        fill: ROUGH_FILL, fillStyle: "hachure", hachureGap: 5.5, hachureAngle: -41, fillWeight: 0.9 };
+      let shape;
+      if (n.kind === "store") { // a cylinder: the body, then the front rim of its cap
+        const ry = L.font * 0.45, rx = b.w / 2, { x, y, w } = b, bottom = b.y + b.h - ry;
+        shape = [roughEls(gen, gen.path(`M${x},${y + ry} A${rx},${ry} 0 0 1 ${x + w},${y + ry} V${bottom} A${rx},${ry} 0 0 1 ${x},${bottom} Z`, o)),
+          roughEls(gen, gen.path(`M${x},${y + ry} A${rx},${ry} 0 0 0 ${x + w},${y + ry}`, { ...o, fill: undefined }))];
+      } else if (n.kind === "interface") {
+        const r = 11, { x, y, w } = b, y2 = b.y + b.h, x2 = b.x + w;
+        shape = roughEls(gen, gen.path(`M${x + r},${y}H${x2 - r}Q${x2},${y} ${x2},${y + r}V${y2 - r}Q${x2},${y2} ${x2 - r},${y2}` +
+          `H${x + r}Q${x},${y2} ${x},${y2 - r}V${y + r}Q${x},${y} ${x + r},${y}Z`, o));
+      } else {
+        shape = roughEls(gen, gen.rectangle(b.x, b.y, b.w, b.h, n.kind === "external" ? { ...o, disableMultiStroke: true } : o), n.kind === "external" ? "dash" : "");
+      }
+      const cy = b.y + b.h / 2 + (n.kind === "store" ? L.font * 0.45 : 0), k = b.lines.length;
+      const label = s("text", { class: "kbd-label", "text-anchor": "middle", style: { fontSize: `${L.font}px` } },
+        b.lines.map((ln, j) => s("tspan", { x: b.x + b.w / 2, y: cy + (j - (k - 1) / 2) * L.line, "dominant-baseline": "central" }, ln)));
+      const g = s("g", { class: `kbd-node k-${n.kind}`, role: "button", "aria-label": `${n.label}: ${DIAGRAM_KINDS[n.kind]}` }, shape, label);
+      g.addEventListener("click", (ev) => { ev.stopPropagation(); select(["node", n.id]); });
+      g.addEventListener("keydown", (ev) => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); select(["node", n.id]); } });
+      hoverable(g, () => [n.label, DIAGRAM_KINDS[n.kind], n.note || null]);
+      nodeG.append(g);
+      els.node[n.id] = g;
+    });
+    svg.append(edgeG, nodeG, labelG);
+    svg.addEventListener("click", () => select(null));
+
+    function select(what) {
+      picked = what && picked && what[0] === picked[0] && what[1] === picked[1] ? null : what; // a second click lets go
+      svg.classList.toggle("picking", !!picked);
+      [...Object.values(els.node), ...els.edge, ...els.label].forEach((e) => e && e.classList.remove("on"));
+      if (!picked) {
+        detail.replaceChildren(h("span", { class: "muted" }, "Click a part or a connection to see the knowledge it comes from."));
+        return;
+      }
+      if (picked[0] === "node") {
+        const n = byId[picked[1]];
+        if (!n) return select(null);
+        els.node[n.id].classList.add("on");
+        dg.edges.forEach((e, i) => {
+          if (e.from !== n.id && e.to !== n.id) return;
+          [els.edge[i], els.label[i], els.node[e.from], els.node[e.to]].forEach((x) => x && x.classList.add("on"));
+        });
+        detail.replaceChildren(h("div", null, h("b", null, n.label), h("span", { class: "muted" }, ` · ${DIAGRAM_KINDS[n.kind]}`),
+          n.note ? h("span", null, ` · ${n.note}`) : null), sources(n.sources));
+      } else {
+        const e = dg.edges[picked[1]];
+        [els.edge[picked[1]], els.label[picked[1]], els.node[e.from], els.node[e.to]].forEach((x) => x && x.classList.add("on"));
+        detail.replaceChildren(h("div", null, h("b", null, byId[e.from].label), ` → ${e.label ? `${e.label} → ` : ""}`, h("b", null, byId[e.to].label)),
+          sources(e.sources));
+      }
+    }
+    const kinds = Object.keys(DIAGRAM_KINDS).filter((k) => dg.nodes.some((n) => n.kind === k));
+    body.append(h("div", { class: "kbd-scroll" }, svg),
+      h("div", { class: "kbd-foot" }, h("div", { class: "kbd-legend" }, kinds.map((k) => h("span", { class: `k-${k}` }, h("i"), DIAGRAM_KINDS[k]))), detail));
+    const keep = picked; // keep the selection across a redraw (select toggles, so start from none)
+    picked = null;
+    select(keep);
+  };
+  const table = () => ({ columns: ["From", "Connection", "To", "Based on"],
+    rows: dg.edges.map((e) => [byId[e.from].label, e.label || "→", byId[e.to].label,
+      (e.sources || []).map((id) => kIndex[id]?.title).filter(Boolean).join(" · ") || `${(e.sources || []).length} items`]) });
+  const download = h("a", { class: "btn small kbd-dl", href: `/api/diagram?path=${encodeURIComponent(p.project_path)}`, download: "",
+    title: "Download as an .excalidraw file to edit it in excalidraw.com or the Excalidraw VS Code extension" }, icon("download"), "Excalidraw");
+  return chartCard("Architecture", `Sketched from ${fmtNum(cited.size)} knowledge item${cited.size === 1 ? "" : "s"} · click a part to see its sources`,
+    (body) => draw(body), table, [download], "system");
 }
 
 route(/^\/project$/, async (params) => {

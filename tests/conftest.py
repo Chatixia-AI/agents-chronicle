@@ -189,6 +189,12 @@ elif "knowledge base" in system or "playbook" in system:
         data.pop("superseded_ids")
         data["superseded"] = json.loads(os.environ["FAKE_SUPERSEDED"])
         data["sections"][0]["items"][0]["sources"] = json.loads(os.environ.get("FAKE_SOURCES", "null")) or ids[:2]
+    if mode == "diagram":  # one supported connection, one that cites an item the model was never shown, one loose part
+        data["diagram"] = {"nodes": [{"id": "api", "label": "Auth API", "kind": "component", "note": "auth.py", "sources": ids[:1]},
+                                     {"id": "db", "label": "Token store", "kind": "store", "note": "", "sources": ids[:1]},
+                                     {"id": "lone", "label": "Unconnected", "kind": "component", "note": "", "sources": ids[:1]}],
+                           "edges": [{"from": "api", "to": "db", "label": "writes tokens", "sources": ids[:1]},
+                                     {"from": "db", "to": "api", "label": "invented", "sources": [999999]}]}
 elif "part " in prompt and "<transcript_part" in prompt:
     data = {"summary": "part notes", "highlights": ["h"], "knowledge": [{"kind": "gotcha", "title": "Part gotcha", "body": "b", "tags": ["x"], "scope": "project", "confidence": "low", "evidence": "e"}], "open_threads": [], "friction": [], "tags": ["t"]}
 else:
