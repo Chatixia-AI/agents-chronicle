@@ -154,7 +154,12 @@ if mode == "hang":
 if mode == "limit":
     print(json.dumps({"type": "result", "subtype": "success", "is_error": True, "result": "Claude AI usage limit reached|1790000000"}))
     sys.exit(1)
-if "into themes" in system:
+if "imported chat history" in system:  # screening (screen.py): the verdict follows the title; "unanswered" is left out
+    found = __import__("re").findall(r"^#(\d+) · .*? · .*? · (.*)$", prompt, __import__("re").M)
+    data = {"chats": [{"n": int(n), "verdict": "analyze" if "deploy" in t.lower() else "maybe" if "maybe" in t.lower() else "skip",
+                       "topic": t.lower()[:20], "reason": f"because: {t}"} for n, t in found if "unanswered" not in t]
+            + [{"n": 999, "verdict": "analyze", "topic": "x", "reason": "out of range"}, {"n": 1, "verdict": "bogus"}]}
+elif "into themes" in system:
     ids = [int(x) for x in __import__("re").findall(r'"id": (\d+)', prompt)]
     data = {"themes": [{"name": "Testing", "description": "How tests run", "term_ids": ids[:1] + [999999]},
                        {"name": "Testing", "description": "a duplicate name merges", "term_ids": ids[:1]},

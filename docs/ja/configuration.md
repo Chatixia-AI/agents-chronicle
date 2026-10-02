@@ -26,6 +26,7 @@
 | `backend` | `claude` | セッションを分析するエージェント（あなた自身のログインを使用）：`claude`（Claude Code）または `codex`（Codex）。**Status › Analysis** でも変更できます |
 | `model` / `effort` | `sonnet` / `medium` | Claude：`claude --model` の任意のエイリアス。`effort` は Codex の推論の強さにも使われます（`max` は `xhigh` になります） |
 | `codex_model` | `""` | Codex のモデル。例：`gpt-5.5`。空の場合は Codex の既定のモデルを使います |
+| `screen_model` | `haiku` | 取り込んだチャットを選別するモデル（`chronicle screen`）。各チャットの冒頭だけを、1 回の呼び出しで 60 件ずつ読みます |
 | `max_budget_usd` | `3.0` | `claude -p` の呼び出し 1 回あたりの費用上限（API 換算の USD。Codex はトークン数だけを報告します） |
 | `idle_minutes` | `20` | 分析されるには、セッションが終了しているか、この時間アイドルである必要があります |
 | `min_prompts` | `1` | 人間のプロンプトがこれより少ないセッションはスキップされます |

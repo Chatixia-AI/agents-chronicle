@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **Screen imported chats before analyzing them:** years of claude.ai and ChatGPT chats are mostly lookups, rewrites
+  and everyday questions, and analyzing all of them would take your plan's limits for days. **Screen N chats** on the
+  export's card (Sources › Chat exports) or `chronicle screen` sorts them into *worth analyzing*, *maybe* and *not
+  worth it*, each with a topic and a one-line reason, reading only each chat's opening. Rules settle the certain cases
+  without a model call (no reply, too short, translating or summarizing pasted text); Haiku (`analysis.screen_model`)
+  reads the rest, 60 chats a call, knowing which projects you work on, and keeps anything about your own work at least
+  *maybe*. Nothing is analyzed until you choose **Queue N worth analyzing** (`chronicle screen --queue`, `--maybe` for
+  the maybes too). The Sessions list gets a *Screening* filter and shows each chat's verdict and reason until it is
+  analyzed; `chronicle screen --list analyze` does the same on the command line, `--sample 200` tries it first, and
+  `chronicle import --screen` screens right after importing. A chat is screened again when a newer export changes it,
+  and a chat queued for analysis now stays queued when a newer export updates it.
+  [Screening imported chats](docs/sources.md#screening-imported-chats)
 - **Knowledge earns its trust:** every knowledge item now has a stage, *tentative*, *seen once*, *established* or
   *canonical*, computed from how many sessions confirmed it and over how long, never guessed by the model. When
   synthesis finds the same lesson in another session it reports the pair as a duplicate, and the surviving item

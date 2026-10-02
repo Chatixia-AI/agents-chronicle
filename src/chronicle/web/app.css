@@ -729,8 +729,17 @@ table.data.sessions :is(th, td) { padding-left: 8px; padding-right: 8px; } /* el
 .src-body .check .mark.na { color: var(--muted); }
 .src-body .check .d { color: var(--muted); font-size: 12px; }
 .src-note { color: var(--ink-2); font-size: 12.5px; margin-bottom: 12px; }
+.screen-stats { margin-top: -6px; }
+.screen-stats a { color: var(--ink-2); text-decoration: none; }
+.screen-stats a:hover b, .screen-stats a:hover { color: var(--accent); }
+/* screening of imported chats: the verdict, then why */
+.screen-v { font-weight: 600; color: var(--ink-2); }
+.screen-v.good { color: var(--good-ink); }
+.screen-v.warning { color: var(--warning-ink); }
+.screen-line { margin-top: 6px; font-size: 13px; color: var(--ink-2); }
 .src-foot { display: flex; gap: 8px; align-items: center; justify-content: space-between; flex-wrap: wrap; border-top: 1px solid var(--grid); padding-top: 12px; font-size: 12.5px; }
 .src-actions { display: flex; gap: 8px; align-items: center; flex: none; }
+.src-foot .src-actions { flex-wrap: wrap; flex: 0 1 auto; max-width: 100%; } /* a phone: the buttons wrap rather than run off the card */
 @media (max-width: 760px) {
   .src-sum { display: none; }
   .src-title { flex-direction: column; align-items: stretch; gap: 1px; }

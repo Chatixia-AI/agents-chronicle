@@ -18,7 +18,9 @@
 | `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | Export sessions: one file, or a .zip of several (`raw`: the original transcript) |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage; `--themes` groups big categories into themes for the Map |
 | `chronicle review [2026-W39\|current]` | Weekly engineering review written by the analysis model (automatic for each completed week) |
-| `chronicle import <zip> [--analyze]` | Import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or `conversations.json`); repeatable. See [Sources](sources.md) |
+| `chronicle import <zip> [--analyze] [--screen]` | Import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or `conversations.json`); repeatable. `--screen` screens them right after. See [Sources](sources.md) |
+| `chronicle screen [--source chatgpt\|claude-ai] [--sample N] [--dry-run] [--redo]` | Sort imported chats into worth analyzing, maybe and not worth it, reading only each chat's opening ([Screening imported chats](sources.md#screening-imported-chats)) |
+| `chronicle screen --list analyze\|maybe\|skip [--json]` / `--queue [--maybe]` | Show the chats screened as one verdict, with why; queue the ones worth analyzing (and the maybes) for the background analysis |
 | `chronicle friction [-p project] [--days N] [--json] [--noise]` | What goes wrong: recurring failure causes across your sessions (sessions, projects, last seen, still happening, trend), then the tools that fail most; `--noise` also lists expected failures ([Suggestions](suggestions.md#what-goes-wrong)) |
 | `chronicle suggest [-p project] [--all] [--json]` | Proposed fixes waiting for you: instruction lines, config changes, setup steps. Nothing is written until you apply one ([Suggestions](suggestions.md)) |
 | `chronicle suggest show\|apply\|dismiss\|done\|undo ID… [--yes] [--reason R]` | Show the diff; apply it (asks first unless `--yes`, backs the file up); never propose it again; mark a setup step you ran as done; take an applied one back out |
