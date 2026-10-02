@@ -68,6 +68,7 @@ nav:
       - Command line: cli.md
       - Suggestions and What goes wrong: suggestions.md
       - MCP server: mcp.md
+      - VS Code extension: vscode.md
       - Phone and other computers: devices.md
   - Reference:
       - What gets recorded and how analysis works: analysis.md
@@ -83,6 +84,7 @@ nav:
       - コマンドライン: ja/cli.md
       - 提案と「うまくいかないこと」: ja/suggestions.md
       - MCP サーバー: ja/mcp.md
+      - VS Code 拡張機能: ja/vscode.md
       - スマートフォンとほかのコンピューター: ja/devices.md
       - 記録される内容と分析の仕組み: ja/analysis.md
       - 設定: ja/configuration.md

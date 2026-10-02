@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **The sessions behind your files, in VS Code:** a new extension (`vscode-extension/`) adds two
+  sections to the Explorer. **Chronicle: This File** lists the sessions that read or changed the open file,
+  newest first, with what each did to it; every window follows its own editor. **Chronicle: Files in Workspace** shows
+  the files sessions touched in your open folders as a folder tree, leaving out what git ignores, and each file
+  expands to its sessions. Click a session to open it in the dashboard. They read the new `/api/file?path=` and
+  `/api/files?root=` endpoints, which also match the relative paths Codex sometimes records. Not on the Marketplace
+  yet: build it with `npx @vscode/vsce package`. [VS Code extension](docs/vscode.md)
+
 ## 0.6.1 (2026-10-02)
 
 - **Suggestions go to the right file:** a preference about how you work (one the analysis marked *global*) is now

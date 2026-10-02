@@ -1,0 +1,130 @@
+{
+  "name": "chronicle-sessions",
+  "displayName": "Chronicle",
+  "description": "The coding-agent sessions behind your files: for the open file, and for every file agents worked on, from your local Chronicle.",
+  "version": "0.1.0",
+  "publisher": "chatixia",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Chatixia-AI/agents-chronicle",
+    "directory": "vscode-extension"
+  },
+  "homepage": "https://chronicle.chatixia.net/vscode/",
+  "engines": {
+    "vscode": "^1.82.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "keywords": [
+    "claude code",
+    "codex",
+    "copilot",
+    "agents",
+    "history"
+  ],
+  "extensionKind": [
+    "ui"
+  ],
+  "main": "./extension.js",
+  "activationEvents": [],
+  "contributes": {
+    "views": {
+      "explorer": [
+        {
+          "id": "chronicle.fileSessions",
+          "name": "Chronicle: This File",
+          "icon": "media/chronicle.svg"
+        },
+        {
+          "id": "chronicle.workspaceFiles",
+          "name": "Chronicle: Files in Workspace",
+          "icon": "media/chronicle.svg"
+        }
+      ]
+    },
+    "commands": [
+      {
+        "command": "chronicle.refresh",
+        "title": "Refresh",
+        "category": "Chronicle",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "chronicle.openDashboard",
+        "title": "Open Dashboard",
+        "category": "Chronicle",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "chronicle.openFile",
+        "title": "Open File",
+        "category": "Chronicle",
+        "icon": "$(go-to-file)"
+      },
+      {
+        "command": "chronicle.openSession",
+        "title": "Open Session in Chronicle",
+        "category": "Chronicle",
+        "icon": "$(link-external)"
+      }
+    ],
+    "menus": {
+      "view/title": [
+        {
+          "command": "chronicle.refresh",
+          "when": "view =~ /^chronicle\\./",
+          "group": "navigation"
+        },
+        {
+          "command": "chronicle.openDashboard",
+          "when": "view == chronicle.fileSessions",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "chronicle.openSession",
+          "when": "false"
+        },
+        {
+          "command": "chronicle.openFile",
+          "when": "false"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "chronicle.openFile",
+          "when": "view == chronicle.workspaceFiles && viewItem == chronicleFile",
+          "group": "inline"
+        },
+        {
+          "command": "chronicle.openSession",
+          "when": "view =~ /^chronicle\\./ && viewItem == chronicleSession",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Chronicle",
+      "properties": {
+        "chronicle.url": {
+          "type": "string",
+          "default": "http://127.0.0.1:8765",
+          "markdownDescription": "Address of the Chronicle dashboard (`chronicle ui`). Change it if you set `[server] port` in Chronicle's config."
+        },
+        "chronicle.includeReads": {
+          "type": "boolean",
+          "default": true,
+          "description": "Also list sessions that only read the file, not just the ones that changed it."
+        },
+        "chronicle.showIgnoredFiles": {
+          "type": "boolean",
+          "default": false,
+          "description": "Also show files git ignores (screenshots, build output, caches) in Chronicle: Files in Workspace."
+        }
+      }
+    }
+  }
+}

@@ -694,6 +694,9 @@ const routes = [];
 function route(pattern, view) { routes.push([pattern, view]); }
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 function parseHash() {
+  if (/^#%2F/i.test(location.hash)) {  // a link that encoded the whole route (VS Code's openExternal does): decode it once
+    history.replaceState(null, "", "#" + decodeURIComponent(location.hash.slice(1)));
+  }
   const raw = location.hash.slice(1) || "/";
   const [path, qs] = raw.split("?");
   return { path, params: Object.fromEntries(new URLSearchParams(qs || "")) };

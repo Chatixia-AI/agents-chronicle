@@ -42,7 +42,7 @@ repos:
   - repo: local
     hooks:
       - id: node-check
-        name: node --check (dashboard JavaScript parses)
+        name: node --check (dashboard and VS Code extension JavaScript parses)
         language: system
         entry: node --check
-        files: ^src/chronicle/web/.*\.js$
+        files: ^(src/chronicle/web|vscode-extension)/.*\.js$
