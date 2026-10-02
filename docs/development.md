@@ -58,9 +58,12 @@ is a dry run: tests plus a DMG kept as a workflow artifact, nothing published.
 
 ## Documentation site
 
-<https://chronicle.chatixia.net/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md` and
-`README.ja.md` become the home pages, and `docs/_site/hooks.py` points links that leave `docs/` at GitHub.
-`.github/workflows/docs.yml` publishes it to GitHub Pages on every push to `main` that touches the docs.
+<https://chronicle.chatixia.net/docs/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md`
+and `README.ja.md` become the home pages, and `docs/_site/hooks.py` points links that leave `docs/` at GitHub.
+The website around it, landing page included, lives in
+[Chatixia-AI/chronicle-site](https://github.com/Chatixia-AI/chronicle-site), which builds these docs as they are and
+publishes everything. `.github/workflows/docs.yml` checks the build on every pull request and, when the docs change on
+`main`, asks chronicle-site to rebuild (it also rebuilds daily).
 
 ```bash
 uv run --only-group docs mkdocs serve            # preview at http://127.0.0.1:8000/, reloads on save

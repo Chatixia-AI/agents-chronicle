@@ -10,7 +10,7 @@
     "url": "https://github.com/Chatixia-AI/agents-chronicle",
     "directory": "vscode-extension"
   },
-  "homepage": "https://chronicle.chatixia.net/vscode/",
+  "homepage": "https://chronicle.chatixia.net/docs/vscode/",
   "engines": {
     "vscode": "^1.82.0"
   },

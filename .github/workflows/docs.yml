@@ -1,7 +1,9 @@
 name: Docs
 
-# Builds the documentation site from docs/ and the READMEs (mkdocs.yml) and publishes it to GitHub Pages.
-# Pull requests only build it, so broken links and anchors fail before they reach main.
+# Builds the documentation (docs/ and the READMEs, mkdocs.yml) so broken links and anchors fail before they reach
+# main. Chatixia-AI/chronicle-site publishes it at chronicle.chatixia.net/docs/: when the docs change on main, this
+# asks that site to rebuild (it also rebuilds daily). The request needs the secret SITE_DISPATCH_TOKEN, a
+# fine-grained token with Contents: write on chronicle-site; without it the step is skipped.
 
 on:
   push:
@@ -15,7 +17,7 @@ permissions:
   contents: read
 
 concurrency:
-  group: pages-${{ github.ref }}
+  group: docs-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -29,21 +31,18 @@ jobs:
       - run: uv run --locked --only-group docs mkdocs build --strict
         env:
           NO_MKDOCS_2_WARNING: "1"
-      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9  # v5.0.0
-        if: github.event_name != 'pull_request'
-        with:
-          path: site
 
-  deploy:
+  publish:
     needs: build
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
-    permissions:
-      pages: write
-      id-token: write
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
-      - id: deployment
-        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346  # v5.0.1
+      - name: Ask chronicle-site to rebuild
+        env:
+          GH_TOKEN: ${{ secrets.SITE_DISPATCH_TOKEN }}
+        run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::notice::SITE_DISPATCH_TOKEN isn't set; chronicle-site picks up the docs on its daily build."
+            exit 0
+          fi
+          gh api repos/Chatixia-AI/chronicle-site/dispatches -f event_type=docs-updated
