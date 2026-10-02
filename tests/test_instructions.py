@@ -98,7 +98,7 @@ def test_overlap_ignores_our_own_block():
 
 def test_sensitive_hits():
     hits = ins.sensitive("ssh 192.168.1.20 then open app-prod.azurewebsites.net as ops@corp.example.jp, "
-                         "sub 123e4567-e89b-12d3-a456-426614174000, key in /Users/alice/.ssh, api_key=abcd1234efgh")
+                         "sub 123e4567-e89b-12d3-a456-426614174000, key in /Users/alice/.ssh, api_key=abcd1234efgh")  # gitleaks:allow (a fake key the test needs)
     kinds = {h.split(":")[0] for h in hits}
     assert kinds == {"private-ip", "host", "email", "guid", "home-path", "token"}
     assert ins.sensitive("Run `pip install xlsx@0.20.3`, see github.com/x/y and docs.python.org; edit config.toml") == []

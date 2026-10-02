@@ -1,0 +1,48 @@
+# Checks run on `git commit` (install once: `uvx pre-commit install`), and on every pull request in CI.
+# Run them all by hand: `uvx pre-commit run --all-files`. Revisions are pinned to commits; `uvx pre-commit autoupdate --freeze` moves them.
+repos:
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: 3e8a8703264a2f4a69428a0aa4dcb512790b2c8c  # frozen: v6.0.0
+    hooks:
+      - id: check-merge-conflict
+      - id: check-case-conflict
+      - id: check-yaml
+        args: [--unsafe]  # syntax only: mkdocs.yml uses !!python tags
+      - id: check-toml
+      - id: check-json
+      - id: check-added-large-files
+        args: [--maxkb=600]
+      - id: detect-private-key
+      - id: trailing-whitespace
+        exclude: \.excalidraw\.svg$  # written by the Excalidraw exporter
+      - id: end-of-file-fixer
+        exclude: \.excalidraw\.svg$
+
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: f12be1ebaa5351c1fc76472de98db2c3446c8253  # frozen: v0.16.10
+    hooks:
+      - id: ruff-check  # rules in pyproject.toml: likely bugs, not style
+
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0f4b65a503cc866b9b5e62dda2020f7943b01a65  # frozen: 0.12.22
+    hooks:
+      - id: uv-lock
+        args: [--check]  # pyproject.toml and uv.lock agree
+
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: 83d9cd684c87d95d656c1458ef04895a7f1cbd8e  # frozen: v8.30.1
+    hooks:
+      - id: gitleaks
+
+  - repo: https://github.com/zizmorcore/zizmor-pre-commit
+    rev: fa412071e4f5d44d44f9e365f4676f9df92456a2  # frozen: v1.30.1
+    hooks:
+      - id: zizmor
+
+  - repo: local
+    hooks:
+      - id: node-check
+        name: node --check (dashboard JavaScript parses)
+        language: system
+        entry: node --check
+        files: ^src/chronicle/web/.*\.js$

@@ -11,6 +11,14 @@ knowledge on your own machine.</p>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS app and CLI">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
+  <a href="https://pypistats.org/packages/agents-chronicle"><img src="https://img.shields.io/pypi/dm/agents-chronicle?label=downloads" alt="Monthly downloads"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main" alt="CodeQL"></a>
+  <a href="https://chronicle.chatixia.net/"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/docs.yml/badge.svg?branch=main" alt="Docs"></a>
+  <a href="https://pre-commit.com/"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit" alt="pre-commit"></a>
+  <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
 </p>
 
 <p align="center"><a href="#quick-start">Quick start</a> · <a href="docs/README.md">Docs</a> · <a href="CHANGELOG.md">Changelog</a> · <a href="ROADMAP.md">Roadmap</a> · <a href="README.ja.md">日本語</a></p>

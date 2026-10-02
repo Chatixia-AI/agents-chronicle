@@ -95,7 +95,7 @@ def _export_projects(conn, root: Path, labels: dict, names: dict) -> int:
                 "SELECT id, session_id FROM knowledge WHERE project_path = ?", (path,)).fetchall()}
             lines.append(render_kb_markdown(
                 label, data, n_items=kb["n_items"] or 0, model=kb["model"],
-                link=lambda i: f"[[{ids[i]}|k{i}]]" if ids.get(i) else f"k{i}",
+                link=lambda i, ids=ids: f"[[{ids[i]}|k{i}]]" if ids.get(i) else f"k{i}",
             ))
         else:
             lines += [f"# {label}", "", f"`{path}`", "", "_No synthesized knowledge base yet._", ""]

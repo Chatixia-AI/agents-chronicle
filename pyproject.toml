@@ -69,5 +69,13 @@ docs = [
     "mkdocs-material>=9.6",
 ]
 
+[tool.ruff]
+target-version = "py311"
+line-length = 120
+
+[tool.ruff.lint]
+# likely bugs only (pyflakes, bugbear, syntax and runtime errors); the code keeps its own layout, so no formatter
+select = ["F", "B", "E9", "PLE"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

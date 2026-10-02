@@ -377,7 +377,7 @@ def test_undo_deletes_a_file_chronicle_created_but_keeps_yours(archive):
 
 
 def test_an_applied_suggestion_must_be_undone_before_dismissing(archive):
-    a, conn, cfg, home = archive["a"], archive["conn"], archive["cfg"], archive["home"]
+    a, conn, cfg = archive["a"], archive["conn"], archive["cfg"]
     _spread(a, "zsh-nomatch")
     suggest.refresh(conn, cfg)
     s = _by_key(conn)["friction:zsh-nomatch:claude:user"]
