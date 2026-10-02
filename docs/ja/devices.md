@@ -83,7 +83,7 @@ chronicle hub join https://pc.tail1234.ts.net --token …
 - `claude_dirs` の各フォルダーから `projects/`（トランスクリプト、サブエージェントのスレッド、メモリーのメモ）と `history.jsonl`。
   `codex_dirs` の各フォルダーから `sessions/`、`memories/`、Codex のセッション一覧。
 - `sources.exclude_projects` にあるプロジェクトは送りません。
-- GitHub Copilot、IBM Bob、Codex Cloud、チャットのエクスポートは送りません。これらはハブで接続または取り込みます。
+- GitHub Copilot、IBM Bob、Google Antigravity、Codex Cloud、チャットのエクスポートは送りません。これらはハブで接続または取り込みます。
 - ファイルは tailnet 内の HTTPS で圧縮して送られ、到着時に SHA-256 で照合されます。送るのはハブにないファイルか、ハブのものが
   古いファイルだけです。各コンピューターはハブのトークンで認証します。トークンは `~/.claude-chronicle/hub-token` にあり、
   あなたのユーザーだけが読めます。`chronicle hub enable --rotate` で作り直すと、ほかのコンピューターは参加し直す必要があります。

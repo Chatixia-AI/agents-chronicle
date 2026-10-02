@@ -1,4 +1,4 @@
-"""Chronicle: a local, self-analyzing archive of every coding-agent session (Claude Code, Codex, Copilot, Bob)."""
+"""Chronicle: a local, self-analyzing archive of every coding-agent session (Claude Code, Codex, Copilot, Bob, Antigravity)."""
 
 from importlib.metadata import PackageNotFoundError, version
 

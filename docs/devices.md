@@ -85,7 +85,7 @@ computer's name.
 - From each `claude_dirs` folder: `projects/` (transcripts, subagent threads, memory notes) and `history.jsonl`.
   From each `codex_dirs` folder: `sessions/`, `memories/` and Codex's session index.
 - Projects in `sources.exclude_projects` are never sent.
-- GitHub Copilot, IBM Bob, Codex Cloud and chat exports are not sent: connect or import those on the hub.
+- GitHub Copilot, IBM Bob, Google Antigravity, Codex Cloud and chat exports are not sent: connect or import those on the hub.
 - Files travel over HTTPS inside your tailnet, compressed, and are checked against a SHA-256 on arrival. Only files
   the hub lacks, or has an older copy of, are sent. Each computer proves itself with the hub's token, kept in
   `~/.claude-chronicle/hub-token`, readable by your user only. `chronicle hub enable --rotate` replaces it; the

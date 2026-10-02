@@ -21,7 +21,7 @@ from .views import project_labels, resolve_session_id, session_markdown, session
 SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
 INSTRUCTIONS = (
-    "Chronicle is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob), "
+    "Chronicle is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob, Google Antigravity), "
     "plus chats imported from claude.ai and ChatGPT and tasks run in Codex Cloud, with AI-extracted knowledge "
     "(fixes, gotchas, decisions, project facts, commands, preferences) and per-project knowledge bases. "
     "Use it to recall how something was solved before, why a decision was made, how a project is run or "

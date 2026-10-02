@@ -5,7 +5,7 @@
 ## Tests and a local install
 
 ```bash
-uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot, Bob and Antigravity stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -80,7 +80,7 @@ Excalidraw VS Code extension (`pomdtr.excalidraw-editor`) or on excalidraw.com; 
 ## Code layout
 
 `parser.py` (Claude transcript format), `codex_parser.py` (Codex rollouts), `copilot_parser.py` (Copilot agent
-sessions + VS Code chat logs), `bob_parser.py` (Bob tasks), `agents.py` (agent names), `connectors.py` (Sources),
+sessions + VS Code chat logs), `bob_parser.py` (Bob tasks), `antigravity_parser.py` (Antigravity step logs), `agents.py` (agent names), `connectors.py` (Sources),
 `ingest.py` (archive + store), `digest.py` / `analyze.py` /
 `llm.py` (analysis), `synthesize.py` (knowledge bases), `diagram.py` (architecture sketch: layout, Excalidraw and
 Mermaid export), `glossary.py`, `reviews.py`, `worker.py` (queue), `server.py` + `web/`

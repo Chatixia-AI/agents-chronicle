@@ -253,9 +253,10 @@ def env(tmp_path, monkeypatch):
     monkeypatch.delenv("CHRONICLE_CLAUDE_DIRS", raising=False)
     monkeypatch.delenv("CHRONICLE_INTERNAL", raising=False)
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "fake_claude.log"))
-    # never read the real Copilot / VS Code / Bob stores from tests
+    # never read the real Copilot / VS Code / Bob / Antigravity stores from tests
     monkeypatch.setenv("COPILOT_HOME", str(tmp_path / "no-copilot"))
     monkeypatch.setenv("BOB_HOME", str(tmp_path / "no-bob"))
+    monkeypatch.setenv("ANTIGRAVITY_HOME", str(tmp_path / "no-antigravity"))
     monkeypatch.setattr("chronicle.connectors.vscode_user_dirs", lambda: [])
     from chronicle.config import load_config
 

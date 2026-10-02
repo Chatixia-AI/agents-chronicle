@@ -1727,8 +1727,8 @@ def _analyze_choice(value: str) -> str:
 def build_parser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser(
         prog="chronicle",
-        description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob); "
-                    "extract reusable knowledge.",
+        description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob, "
+                    "Google Antigravity); extract reusable knowledge.",
     )
     p.add_argument("--version", action="version", version=f"%(prog)s {__version__}")
     sub = p.add_subparsers(dest="command", metavar="<command>")
@@ -1899,9 +1899,9 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("sources", aliases=["connectors"], help="which coding agents are connected and how")
     s.set_defaults(fn=cmd_sources)
 
-    agents = ["claude", "codex", "codex-cloud", "copilot", "bob"]
+    agents = ["claude", "codex", "codex-cloud", "copilot", "bob", "antigravity"]
     clients = ["claude-desktop", "cursor", "windsurf", "gemini"]
-    s = sub.add_parser("connect", help="start recording an agent (claude, codex, codex-cloud, copilot, bob), or give an MCP client "
+    s = sub.add_parser("connect", help="start recording an agent (claude, codex, codex-cloud, copilot, bob, antigravity), or give an MCP client "
                                        "(claude-desktop, cursor, windsurf, gemini) Chronicle's MCP server")
     s.add_argument("name", choices=agents + clients)
     s.add_argument("--exe", help="command the agent should run for Chronicle's MCP server")

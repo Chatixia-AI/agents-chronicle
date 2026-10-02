@@ -5,7 +5,7 @@
 ## テストとローカルへのインストール
 
 ```bash
-uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot, Bob and Antigravity stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -79,7 +79,7 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 ## コードの構成
 
 `parser.py`（Claude のトランスクリプト形式）、`codex_parser.py`（Codex のロールアウト）、`copilot_parser.py`（Copilot の
-エージェントセッション＋VS Code のチャットログ）、`bob_parser.py`（Bob のタスク）、`agents.py`（エージェント名）、`connectors.py`（ソース）、
+エージェントセッション＋VS Code のチャットログ）、`bob_parser.py`（Bob のタスク）、`antigravity_parser.py`（Antigravity のステップログ）、`agents.py`（エージェント名）、`connectors.py`（ソース）、
 `ingest.py`（アーカイブ＋保存）、`digest.py` / `analyze.py` /
 `llm.py`（分析）、`synthesize.py`（ナレッジベース）、`glossary.py`、`reviews.py`、`worker.py`（キュー）、`server.py` ＋ `web/`
 （ダッシュボード）、`mcp_server.py`、`export_md.py`、`hooks.py` / `install.py`、`desktop.py`（macOS アプリ）、`cli.py`。`packaging/macos/` がアプリをビルドします。

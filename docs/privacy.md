@@ -54,7 +54,7 @@ archive, over HTTPS inside the tailnet.
   client's conversation and so reach that client's model, with secrets redacted as in the digests. Give the server
   only to clients whose model provider you trust with your sessions. See [MCP server](mcp.md#privacy).
 - **Other agents' stores are only read.** SQLite databases are opened read-only and archived as snapshots; Bob's
-  login state is never read. Connecting an agent edits its MCP config, backed up to `~/.claude-chronicle/backups/`
+  login state is never read, and from Antigravity only conversation logs and Markdown artifacts are archived. Connecting an agent edits its MCP config, backed up to `~/.claude-chronicle/backups/`
   first.
 - **Instruction files and `~/.claude.json` are written only when you apply a suggestion.** Chronicle may add a line
   to a `CLAUDE.md` or `AGENTS.md`, inside its own `<!-- BEGIN chronicle -->` block and nowhere else in the file, or

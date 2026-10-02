@@ -3,7 +3,7 @@
 <h1 align="center">Chronicle</h1>
 
 <p align="center"><b>実行したすべてのコーディングエージェントのセッションを、検索できる記憶に。</b><br>
-Claude Code、Codex、GitHub Copilot、IBM Bob のセッションと claude.ai・ChatGPT のチャットを、自分のマシンの中で保存し、ナレッジに変えます。</p>
+Claude Code、Codex、GitHub Copilot、IBM Bob、Google Antigravity のセッションと claude.ai・ChatGPT のチャットを、自分のマシンの中で保存し、ナレッジに変えます。</p>
 
 <p align="center">
   <a href="https://pypi.org/project/agents-chronicle/"><img src="https://img.shields.io/pypi/v/agents-chronicle?label=PyPI" alt="PyPI のバージョン"></a>
@@ -86,6 +86,7 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
 | Codex Cloud | chatgpt.com/codex のタスク（`codex` CLI 経由。タイトル、リポジトリ、差分） | 15 分ごと | Codex 経由 |
 | GitHub Copilot | Copilot CLI とエージェントのセッション、VS Code の Copilot Chat ログ | 15 分ごと | ✅ VS Code と Copilot CLI |
 | IBM Bob | `~/.bob/db/bob.db`（読み取り専用） | 15 分ごと | ✅ |
+| Google Antigravity | `~/.gemini/antigravity` の会話ログ（読み取り専用） | 15 分ごと | ✅ |
 | claude.ai、ChatGPT | データエクスポート：`chronicle import <zip>` | 取り込んだとき | – |
 
 すべて同じダッシュボード、ナレッジ、用語集、MCP ツールを共有します。分析は Claude Code と Codex のうち、選んだほうで行います。

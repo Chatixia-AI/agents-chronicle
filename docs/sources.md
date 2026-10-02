@@ -1,11 +1,11 @@
-# Sources: Claude Code, Codex, GitHub Copilot, IBM Bob
+# Sources: Claude Code, Codex, GitHub Copilot, IBM Bob, Google Antigravity
 
 [← Chronicle](../README.md) · [Docs index](README.md)
 
 `chronicle sources` (or the dashboard's **Sources** tab) shows each coding agent: detected or not, version,
 sessions on disk vs. recorded and analyzed, how it is recorded, and whether its hook and MCP server are in
 place. Connect or disconnect from the dashboard or with `chronicle connect <agent>` / `chronicle disconnect <agent>`
-(`claude`, `codex`, `codex-cloud`, `copilot`, `bob`; recorded sessions are always kept). Every source maps onto the same session
+(`claude`, `codex`, `codex-cloud`, `copilot`, `bob`, `antigravity`; recorded sessions are always kept). Every source maps onto the same session
 model, so sessions from all agents share the dashboard, analysis, knowledge bases, glossary and MCP tools.
 
 **Codex** (`~/.codex`) is opt-in. Connecting it:
@@ -49,6 +49,17 @@ Both files are backed up to `~/.claude-chronicle/backups/` first, and other serv
 and archives a SQLite snapshot of that database; nothing else in `~/.bob` (e.g. login state) is read. The Bob IDE
 keeps no conversation files locally, so only the tasks in that database are recorded. Connecting registers the MCP
 server in `~/.bob/settings/mcp_settings.json`.
+
+**Google Antigravity** is opt-in (`chronicle connect antigravity`). Antigravity keeps each conversation in its own
+store under `~/.gemini/antigravity/conversations/` (encrypted in older versions, a SQLite database in newer ones), and
+also writes a plain step log beside the agent's artifacts: `brain/<id>/.system_generated/logs/transcript_full.jsonl`
+(`transcript.jsonl` in older versions). Chronicle reads that log: prompts (artifact approvals included), replies,
+thinking, tool calls with their results and durations, background-task notices and tokens per model call. From a
+newer version's conversation database, opened read-only, it adds the workspace folder, git branch and remote, and the
+model; the title comes from `annotations/<id>.pbtxt`. The log and the task, plan and walkthrough Markdown files are
+archived, generated images are not. A conversation kept only in the encrypted store cannot be read; the Sources card
+counts those. Antigravity records no prices, so sessions on Gemini models show tokens but no cost. Connecting
+registers the MCP server in `~/.gemini/config/mcp_config.json`, Antigravity's global MCP config.
 
 **Chats on claude.ai and ChatGPT** are not stored on your Mac, so they come in from a data export: on claude.ai,
 **Settings › Privacy › Export data**; on ChatGPT, **Settings › Data controls › Export data**. The email's link

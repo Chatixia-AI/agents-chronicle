@@ -27,10 +27,11 @@ log = logging.getLogger("chronicle.copilot")
 
 COPILOT_PARSER_VERSION = 1
 _TERMINAL_TOOLS = {"run_in_terminal", "bash", "shell", "powershell", "run_command", "execute_command"}
-_READ_TOOLS = {"read_file", "view", "read", "get_file", "open_file"}
+_READ_TOOLS = {"read_file", "view", "read", "get_file", "open_file", "view_file"}
 _EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "insert_edit_into_file", "edit", "str_replace",
-               "apply_patch", "edit_file", "apply_diff", "search_and_replace", "insert_content", "edit_notebook_file"}
-_WRITE_TOOLS = {"create_file", "write_file", "create"}
+               "apply_patch", "edit_file", "apply_diff", "search_and_replace", "insert_content", "edit_notebook_file",
+               "replace_file_content", "multi_replace_file_content"}
+_WRITE_TOOLS = {"create_file", "write_file", "create", "write_to_file"}
 
 
 # ------------------------------------------------------------------ shared helpers

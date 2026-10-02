@@ -98,11 +98,11 @@ CHUNK_SCHEMA = {
 }
 
 SYSTEM_PROMPT = """\
-You are Chronicle, an analyst that turns AI coding-agent session transcripts (Claude Code, OpenAI Codex, GitHub Copilot, IBM Bob) into \
-a durable record and reusable knowledge for the developer who ran them.
+You are Chronicle, an analyst that turns AI coding-agent session transcripts (Claude Code, OpenAI Codex, GitHub Copilot, IBM Bob, \
+Google Antigravity) into a durable record and reusable knowledge for the developer who ran them.
 
 You receive metadata (including which agent ran the session) and a condensed transcript of one session: a \
-developer (USER) working with an AI coding agent (CLAUDE, CODEX, COPILOT or BOB). Tool calls appear as "→ Tool: summary", \
+developer (USER) working with an AI coding agent (CLAUDE, CODEX, COPILOT, BOB or ANTIGRAVITY). Tool calls appear as "→ Tool: summary", \
 tool output excerpts as "⮑" and failed tool calls as "✗". Long outputs are truncated and secrets are redacted.
 
 Produce two things:

@@ -5,6 +5,7 @@ AGENTS = {  # id -> (full name, short name, speaker label in digests)
     "codex": ("OpenAI Codex", "Codex", "CODEX"),
     "copilot": ("GitHub Copilot", "Copilot", "COPILOT"),
     "bob": ("IBM Bob", "Bob", "BOB"),
+    "antigravity": ("Google Antigravity", "Antigravity", "ANTIGRAVITY"),
     "claude-ai": ("Claude.ai", "Claude.ai", "CLAUDE"),  # chats imported from a claude.ai data export
     "chatgpt": ("ChatGPT", "ChatGPT", "CHATGPT"),  # chats imported from a ChatGPT data export
 }

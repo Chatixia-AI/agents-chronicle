@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import plistlib
 import re
 import shlex
 import shutil
@@ -433,6 +434,79 @@ def disconnect_bob(cfg: Config) -> list[str]:
     return actions
 
 
+# ------------------------------------------------------------------ Google Antigravity
+def antigravity_home() -> Path:
+    return Path(os.environ.get("ANTIGRAVITY_HOME", "~/.gemini/antigravity")).expanduser()
+
+
+def antigravity_mcp_config(home: Path) -> Path:
+    """Antigravity's global MCP servers live beside its home: ~/.gemini/config/mcp_config.json."""
+    return home.parent / "config" / "mcp_config.json"
+
+
+def _app_version(app: Path) -> str | None:
+    try:
+        with open(app / "Contents" / "Info.plist", "rb") as fh:
+            return plistlib.load(fh).get("CFBundleShortVersionString")
+    except (OSError, ValueError, plistlib.InvalidFileException):
+        return None
+
+
+def antigravity_status(cfg: Config, conn: sqlite3.Connection) -> dict:
+    from .antigravity_parser import conversation_dirs, stored_conversations
+
+    home = cfg.antigravity_dirs[0] if cfg.antigravity_dirs else antigravity_home()
+    readable = {d.name for d in conversation_dirs(home)}
+    unreadable = [c for c in stored_conversations(home) if c not in readable]
+    connected = bool(cfg.antigravity_dirs)
+    app = APPLICATIONS / "Antigravity.app"
+    mcp_config = antigravity_mcp_config(home)
+    return {
+        "name": "antigravity",
+        "label": "Google Antigravity",
+        "vendor": "Google",
+        "detected": home.is_dir() or app.exists(),
+        "connected": connected,
+        "version": _app_version(app),
+        "binary": str(app) if app.exists() else None,
+        "dirs": [_tilde(home)],
+        "on_disk": len(readable),
+        "recorded": _recorded(conn, "agent = 'antigravity'"),
+        "recovered": 0,
+        "recording": "background sync every 15 min" if connected else "not recording",
+        "checks": [
+            {"label": "Conversation logs", "ok": bool(readable),
+             "detail": f"{_tilde(home)}/brain · {len(readable)} conversations with a step log"},
+            {"label": "Recording", "ok": connected, "detail": "scanned every sync" if connected else "not scanned (connect to start)"},
+            {"label": "MCP server in Antigravity", "ok": _mcp_json_has(mcp_config, "mcpServers"), "detail": _tilde(mcp_config)},
+            {"label": "Conversations without a log", "ok": None, "optional": True,
+             "detail": f"{len(unreadable)} kept only in Antigravity's own encrypted store; these cannot be read"
+                       if unreadable else "none: every conversation has a readable step log"},
+        ],
+        "notes": ["Antigravity records tokens but no prices; sessions on Gemini models show no cost"],
+    }
+
+
+def connect_antigravity(cfg: Config, exe: str) -> list[str]:
+    actions = []
+    home = antigravity_home()
+    if not cfg.antigravity_dirs:
+        set_config_value(cfg, "sources", "antigravity_dirs", json.dumps([_tilde(home)], ensure_ascii=False))
+        actions.append(f"recording {_tilde(home)}")
+    if home.is_dir():
+        actions.append(_mcp_json_set(cfg, antigravity_mcp_config(home), "mcpServers", mcp_server_entry(exe), "Antigravity"))
+    return actions
+
+
+def disconnect_antigravity(cfg: Config) -> list[str]:
+    set_config_value(cfg, "sources", "antigravity_dirs", "[]")
+    actions = ["stopped recording Google Antigravity (recorded sessions are kept)"]
+    path = antigravity_mcp_config(antigravity_home())
+    if _mcp_json_has(path, "mcpServers"):
+        actions.append(_mcp_json_set(cfg, path, "mcpServers", None, "Antigravity"))
+    return actions
+
+
 # ------------------------------------------------------------------ MCP-only clients
 # Tools Chronicle does not record but can give its MCP server to. Each keeps a JSON config with a server map.
 APPLICATIONS = Path("/Applications")
@@ -488,6 +562,7 @@ CONNECTORS = {
     "codex-cloud": (codex_cloud_status, connect_codex_cloud, disconnect_codex_cloud),
     "copilot": (copilot_status, connect_copilot, disconnect_copilot),
     "bob": (bob_status, connect_bob, disconnect_bob),
+    "antigravity": (antigravity_status, connect_antigravity, disconnect_antigravity),
 }
 
 

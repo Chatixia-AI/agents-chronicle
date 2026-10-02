@@ -3,7 +3,7 @@
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
 Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) のサーバーが付いていて、MCP クライアントなら何でも
-過去のセッションとナレッジを検索できます。Claude Code、Codex、Copilot、Bob、Claude Desktop、Cursor、Windsurf、Gemini CLI、
+過去のセッションとナレッジを検索できます。Claude Code、Codex、Copilot、Bob、Antigravity、Claude Desktop、Cursor、Windsurf、Gemini CLI、
 そのほか MCP に対応したものすべてです。たとえば *「このエラー、前にも出た？」* *「なぜ冪等性を Postgres でやることにしたんだっけ？」*
 *「billing-api はどうデプロイする？」* のように尋ねられます。
 
@@ -38,6 +38,7 @@ Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) の�
 | Codex | `~/.codex/config.toml`、`codex mcp add` で（`chronicle connect codex`） |
 | GitHub Copilot | VS Code の `User/mcp.json` と `~/.copilot/mcp-config.json`（`chronicle connect copilot`） |
 | IBM Bob | `~/.bob/settings/mcp_settings.json`（`chronicle connect bob`） |
+| Google Antigravity | `~/.gemini/config/mcp_config.json`（`chronicle connect antigravity`） |
 
 **ほかのクライアント**にはサーバーだけを追加します。Chronicle はそのセッションを記録しません。**Settings › MCP ›
 Other MCP clients** から、またはコマンドラインで追加します：
