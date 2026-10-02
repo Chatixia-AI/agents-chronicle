@@ -3,28 +3,12 @@
 [← Chronicle](README.md) · [Changelog](CHANGELOG.md) · 日本語: [ROADMAP.ja.md](ROADMAP.ja.md)
 
 What is coming to Chronicle, roughly in the order it will be worked on. Nothing here has a date. Items move between
-sections as plans change, and finished work moves to the [changelog](CHANGELOG.md). Last updated 2026-10-01, at
-version 0.5.1.
+sections as plans change, and finished work moves to the [changelog](CHANGELOG.md). Last updated 2026-10-02, at
+version 0.6.1.
 
 Three rules shape everything below. Chronicle stays local: no server of ours, no telemetry, no account. Analysis
 runs through your own Claude Code or Codex login, never a key we hold. And Chronicle should say what it doesn't
 know rather than guess.
-
-## Ready for the next release (0.6.0)
-
-Already on `main`, listed under **Unreleased** in the changelog:
-
-- **Knowledge earns its trust.** Every item has a stage (*tentative*, *seen once*, *established*, *canonical*)
-  computed from how many sessions confirmed it and over how long. Search, the MCP tools and the start-of-session
-  notes list the most trusted knowledge first.
-- **Every waiting session says why** it isn't analyzed yet, and the queue counts sessions that will never run
-  without a change as *held* rather than *queued*.
-- **Context and plan usage from the status line** (optional): peak context per Claude Code session and how far the
-  5-hour and 7-day limits moved, recorded without changing how your status line looks.
-- **What goes wrong, and suggestions to approve.** The failures that keep coming back across your sessions, with
-  noise kept apart, and one queue of proposed fixes: lines for `CLAUDE.md` and `AGENTS.md`, a Playwright MCP config
-  change, and setup steps you run yourself. Nothing is written until you approve, and every change can be undone
-  ([Suggestions and What goes wrong](docs/suggestions.md)).
 
 ## Now
 
