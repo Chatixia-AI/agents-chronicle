@@ -6,7 +6,8 @@ Both exports are a .zip with conversations.json; the format is recognized from i
 chats that changed and adds new ones.
 
 Imported chats are not analyzed automatically (years of chats would use up the Claude plan's limits in one go):
-analyze one with **Analyze now**, or import with `--analyze` to queue them all.
+screen them (screen.py) to queue the ones worth it, analyze one with **Analyze now**, or import with `--analyze` to
+queue them all.
 """
 
 from __future__ import annotations
@@ -240,9 +241,10 @@ def import_export(cfg, conn, path: Path, *, analyze: bool = False, progress=None
             if cfg.is_excluded(ps.project_path):
                 counts["excluded"] += 1
                 continue
+            queued = conn.execute("SELECT 1 FROM sessions WHERE id = ? AND analysis_status = 'pending'", (sid,)).fetchone()
             result = store_parsed(conn, cfg, ps, claude_dir=dst, project_dir=None, transcript_path=archive,
                                   archive_path=archive, files_sig=sig, agent=fmt.agent, source=fmt.source)
-            if not analyze:
+            if not analyze and not queued:  # a chat already queued for analysis (screen --queue) stays queued
                 conn.execute("UPDATE sessions SET analysis_status = 'skipped', analysis_reason = ? "
                              "WHERE id = ? AND analysis_status = 'pending'", (fmt.not_analyzed, sid))
             counts["new" if result == "new" else "updated"] += 1
@@ -264,8 +266,9 @@ def summary(counts: dict) -> str:
 
 
 def import_status(conn) -> dict:
-    """Per format: chats imported and analyzed, and the last import."""
+    """Per format: chats imported and analyzed, how screening sorted them, and the last import."""
     from .db import kv_get
+    from .screen import screen_status
 
     out = {}
     for fmt in FORMATS:
@@ -274,5 +277,6 @@ def import_status(conn) -> dict:
             last = json.loads(kv_get(conn, fmt.last_import_key) or "null")
         except ValueError:
             last = None
-        out[fmt.key] = {"label": fmt.label, "agent": fmt.agent, "sessions": r[0] or 0, "analyzed": r[1] or 0, "last_import": last}
+        out[fmt.key] = {"label": fmt.label, "agent": fmt.agent, "sessions": r[0] or 0, "analyzed": r[1] or 0, "last_import": last,
+                        "screen": screen_status(conn, fmt.source)}
     return out

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 9
+SCHEMA_VERSION = 10
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -95,7 +95,14 @@ CREATE TABLE IF NOT EXISTS sessions (
     analysis_json TEXT,
     statusline_json TEXT,                          -- context and plan usage from Claude Code's status line (statusline.py)
     machine_id TEXT,                                -- the computer it ran on (machines.id)
-    machine_path TEXT                               -- project_path as that computer recorded it, when it differs
+    machine_path TEXT,                              -- project_path as that computer recorded it, when it differs
+    -- screening of imported chats: is a full analysis worth it (screen.py)
+    screen_verdict TEXT,                            -- analyze | maybe | skip
+    screen_topic TEXT,
+    screen_reason TEXT,
+    screen_by TEXT,                                 -- 'rules', or the model that screened it
+    screen_sig TEXT,                                -- files_sig when screened: a chat a newer export changed is screened again
+    screened_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_started ON sessions(started_at);
 CREATE INDEX IF NOT EXISTS idx_sessions_project ON sessions(project_path);

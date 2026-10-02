@@ -26,6 +26,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `backend` | `claude` | which agent analyzes sessions, through your own login: `claude` (Claude Code) or `codex` (Codex). Also in **Status › Analysis** |
 | `model` / `effort` | `sonnet` / `medium` | Claude: any `claude --model` alias. `effort` also sets Codex's reasoning effort (`max` becomes `xhigh`) |
 | `codex_model` | `""` | Codex model, e.g. `gpt-5.5`; empty uses Codex's default |
+| `screen_model` | `haiku` | model that screens imported chats (`chronicle screen`); it reads only each chat's opening, 60 chats a call |
 | `max_budget_usd` | `3.0` | spend cap per `claude -p` call, API-equivalent USD (Codex reports tokens only) |
 | `idle_minutes` | `20` | a session must have ended or been idle this long before it is analyzed |
 | `min_prompts` | `1` | sessions with fewer human prompts are skipped |

@@ -235,6 +235,13 @@ function outcomeBadge(outcome, status, source) {
   const cls = status === "error" ? "critical" : status === "running" ? "accent" : "";
   return h("span", { class: `badge ${cls}` }, icon(STATUS_ICON[status] || "dot", status === "running" ? "spin" : ""), STATUS_LABEL[status] || status || "–");
 }
+// Screening of imported chats (screen.py): is a full analysis worth it, read from the chat's opening
+const SCREEN = { analyze: ["good", "Worth analyzing"], maybe: ["warning", "Maybe"], skip: ["", "Not worth it"] };
+function screenNote(x) { // a list row's verdict and why, while the chat is not analyzed
+  if (!SCREEN[x.screen_verdict] || x.analysis_status === "done") return null;
+  const [cls, label] = SCREEN[x.screen_verdict];
+  return h("div", { class: "s" }, h("span", { class: `screen-v ${cls}` }, label), x.screen_reason ? `: ${x.screen_reason}` : null);
+}
 // Maturity: how well an item is established, earned by recurring across sessions (see ladder.py)
 // Plan usage from Claude Code's status line (statusline.py). Absent means not recorded: never shown as zero.
 const LIMIT_LABEL = { five_hour: "5-hour", seven_day: "7-day", spend_limit: "spend" };
@@ -1049,7 +1056,7 @@ function outcomeBreakdown(outcomes) {
 route(/^\/sessions$/, async (params) => {
   const state = { q: params.q || "", project: params.project || "", outcome: params.outcome || "", status: params.status || "",
     days: params.days || "", sort: params.sort || "started_at", order: params.order || "desc", day: params.day || "",
-    agent: params.agent || "" };
+    agent: params.agent || "", screen: params.screen || "" };
   const mode = viewMode("sessions", matchMedia("(max-width: 600px)").matches ? "cards" : "list"); // a phone has no room for the table
   let offset = 0, scale = null, total = 0;
   // ---- selection (list view): pick sessions, then analyze them in one go
@@ -1166,6 +1173,8 @@ route(/^\/sessions$/, async (params) => {
       sel("outcome", [["", "Any outcome"], ["completed", "Completed"], ["partial", "Partial"], ["blocked", "Blocked"], ["abandoned", "Abandoned"], ["exploratory", "Exploratory"], ["unclear", "Unclear"], ["none", "Not analyzed"]]),
       sel("status", [["", "Any status"], ["done", "Analyzed"], ["pending", "Queued"], ["stale", "Needs re-analysis"], ["error", "Failed"], ["skipped", "Skipped"]]),
       sel("agent", [["", "All agents"], ...Object.entries(AGENTS)]),
+      state.screen || ["chatgpt", "claude-ai"].includes(state.agent) // imported chats: as screening sorted them
+        ? sel("screen", [["", "Any screening"], ["analyze", "Worth analyzing"], ["maybe", "Maybe"], ["skip", "Not worth it"], ["none", "Not screened"]]) : null,
       sel("days", [["", "All time"], ["7", "Last 7 days"], ["30", "Last 30 days"], ["90", "Last 90 days"]]),
       sortSel,
       state.day ? h("button", { class: "chip on", type: "button", title: "Clear the day filter", onclick: () => { state.day = ""; refresh(); } }, icon("calendar"), state.day, icon("x")) : null),
@@ -1183,7 +1192,7 @@ function sessionCard(x) {
         x.source === "codex-import" ? h("span", { class: "agent-tag", title: "Claude Code deleted this transcript; recovered from Codex's copy" }, "recovered") : null),
       outcomeBadge(x.outcome, x.analysis_status, x.source)),
     h("div", { class: "m" }, `${x.project_name || "–"} · ${fmtDT(x.started_at)} · ${fmtDur(x.active_s)} active`),
-    x.summary ? h("div", { class: "s" }, x.summary) : null,
+    x.summary ? h("div", { class: "s" }, x.summary) : screenNote(x),
     x.tags?.length ? h("div", { class: "ktags" }, x.tags.slice(0, 5).map((t) => h("span", { class: "tag" }, t))) : null,
     h("div", { class: "scard-stats" },
       stat("prompts", fmtNum(x.n_prompts), x.n_prompts === 1 ? "prompt" : "prompts"),
@@ -1224,7 +1233,7 @@ function sessionRow(x, scale = null, pick = null) {
     h("td", { class: "nowrap" }, h("div", null, fmtDT(x.started_at)), h("div", { class: "muted small" }, ago(x.started_at))),
     h("td", { class: "title-cell" }, h("div", { class: "t" }, x.title || "(untitled)",
       x.source === "codex-import" ? h("span", { class: "agent-tag", title: "Claude Code deleted this transcript; recovered from Codex's copy" }, "recovered") : null),
-      x.summary ? h("div", { class: "s" }, x.summary) : null,
+      x.summary ? h("div", { class: "s" }, x.summary) : screenNote(x),
       x.tags?.length ? h("div", null, x.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null),
     h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(x.project_path || "")}` }, x.project_name || "–")),
     agentCell(x),
@@ -1298,7 +1307,12 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     const reason = sx.source === "history" ? "Only prompts survive for this session (recovered from Claude Code's prompt history)."
       : sx.waiting ? `Not analyzed yet: ${sx.waiting.text}.`
       : `Not analyzed yet (${STATUS_LABEL[sx.analysis_status] || sx.analysis_status}${sx.analysis_reason ? ": " + sx.analysis_reason : ""}).`;
-    summary.append(h("div", { class: "muted" }, reason), sx.first_prompt ? h("div", { class: "subhead" }, "First prompt") : null,
+    const sv = sx.screen_sig === sx.files_sig && SCREEN[sx.screen_verdict];
+    summary.append(h("div", { class: "muted" }, reason),
+      sv ? h("div", { class: "screen-line" }, "Screening: ", h("span", { class: `screen-v ${sv[0]}` }, sv[1]),
+        sx.screen_topic ? ` · ${sx.screen_topic}` : null, sx.screen_reason ? `: ${sx.screen_reason}` : null,
+        h("span", { class: "muted" }, ` (${sx.screen_by === "rules" ? "by rule" : sx.screen_by}, ${ago(sx.screened_at)})`)) : null,
+      sx.first_prompt ? h("div", { class: "subhead" }, "First prompt") : null,
       sx.first_prompt ? h("div", { style: { whiteSpace: "pre-wrap" } }, sx.first_prompt.slice(0, 1200)) : null);
   }
   const knowledge = sx.knowledge.length ? h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, `Knowledge (${sx.knowledge.length})`)),
@@ -2919,21 +2933,42 @@ route(/^\/sources$/, async () => {
   // ---- chat exports
   const HOW = { "claude-ai": "claude.ai › Settings › Privacy › Export data", chatgpt: "ChatGPT › Settings › Data controls › Export data" };
   const formatRow = (f) => {
-    const last = lastOf(f);
+    const last = lastOf(f), sc = f.screen || {};
+    const screened = (sc.analyze || 0) + (sc.maybe || 0) + (sc.skip || 0);
+    const verdict = (v, n, label) => h("a", { href: `#/sessions?agent=${f.agent}&screen=${v}`, title: "Show these chats" }, h("b", null, fmtNum(n)), ` ${label}`);
+    const screenBtn = h("button", { class: `btn small${sc.to_queue ? "" : " primary"}`, type: "button", onclick: async () => {
+      screenBtn.disabled = true; screenBtn.textContent = "Starting…";
+      const r = await post("/api/screen", { source: f.key });
+      if (!r.started) { toast(r.error || "Screening is already running"); render(); return; }
+      toast(`Screening ${fmtNum(sc.unscreened)} ${f.label} chats; the status bar shows progress`, 6000);
+      watchJob("screen");
+    } }, `Screen ${fmtNum(sc.unscreened)} chat${sc.unscreened === 1 ? "" : "s"}`);
+    const queueBtn = h("button", { class: "btn small primary", type: "button", onclick: async () => {
+      if (!confirm(`Queue ${fmtNum(sc.to_queue)} chats for analysis? The background agent analyzes a few every 15 minutes, newest first, on your ${analyzer()} login.`)) return;
+      queueBtn.disabled = true;
+      const r = await post("/api/screen/queue", { source: f.key });
+      toast(r.queued ? `Queued ${fmtNum(r.queued)} chats: ${fmtNum(r.per_run)} are analyzed every 15 minutes, newest first` : "Nothing to queue", 7000);
+      render();
+    } }, `Queue ${fmtNum(sc.to_queue)} worth analyzing`);
     const summary = [
       h("span", { class: `src-dot a-${f.agent}`, "aria-hidden": "true" }),
       h("span", { class: "src-title" }, h("b", null, f.label), h("small", null, "from a data export")),
-      h("span", { class: "src-sum" }, f.sessions ? [stat(f.sessions, "chats"), h("span", null, "imported ", h("b", null, last ? ago(last.at) : "never"))] : h("span", null, "nothing imported yet")),
+      h("span", { class: "src-sum" }, f.sessions ? [stat(f.sessions, "chats"), screened ? stat(sc.analyze, "worth analyzing") : null,
+        h("span", null, "imported ", h("b", null, last ? ago(last.at) : "never"))] : h("span", null, "nothing imported yet")),
       f.sessions ? badge("good", "Imported") : badge("", "Not imported")];
     const body = [
       h("div", { class: "src-stats" }, stat(f.sessions, "chats"), stat(f.analyzed, "analyzed"),
+        sc.queued ? stat(sc.queued, "queued") : null,
         last ? h("span", { class: "muted" }, `last: ${last.file}, ${fmtNum(last.new)} new, ${fmtNum(last.updated)} updated`) : null),
+      screened ? h("div", { class: "src-stats screen-stats" }, h("span", { class: "muted" }, "Screened:"),
+        verdict("analyze", sc.analyze, "worth analyzing"), verdict("maybe", sc.maybe, "maybe"), verdict("skip", sc.skip, "not worth it"),
+        sc.unscreened ? verdict("none", sc.unscreened, "not screened") : null) : null,
       h("div", { class: "src-note" }, "Export from ", h("b", null, HOW[f.agent] || f.label), "; the email's link downloads a .zip to import here or with ",
         h("code", null, "chronicle import <zip>"), ". Import newer exports any time: only new and changed chats are added."),
-      h("div", { class: "src-foot" }, h("span", { class: "muted" }, "Not analyzed automatically: tick the chats to analyze in the Sessions list and choose Analyze."),
+      h("div", { class: "src-foot" }, h("span", { class: "muted" }, "Not analyzed automatically. Screening reads only each chat's opening (title, first and last prompt) to sort out the ones worth analyzing; nothing is analyzed until you queue them."),
         h("div", { class: "src-actions" }, f.sessions ? h("a", { class: "btn small", href: `#/sessions?agent=${f.agent}` }, "Sessions") : null,
-          f.sessions > f.analyzed ? h("a", { class: "btn small primary", href: `#/sessions?agent=${f.agent}&status=skipped` }, "Pick chats to analyze") : null))];
-    return srcRow(`chat:${f.key}`, summary, body);
+          sc.unscreened ? screenBtn : null, sc.to_queue ? queueBtn : null))];
+    return srcRow(`chat:${f.key}`, summary, body, { open: !!(sc.unscreened || sc.to_queue) });
   };
 
   const section = listSection;
@@ -4143,7 +4178,7 @@ function jobLabel(name) {
   const [kind, arg] = name.split(/:(.*)/);
   const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
   return {
-    sync: "Sync", import: "Importing chats", update: "Updating Chronicle", themes: "Grouping glossary themes",
+    sync: "Sync", import: "Importing chats", screen: "Screening imported chats", update: "Updating Chronicle", themes: "Grouping glossary themes",
     analyze: arg === "selection" ? "Analyzing selected sessions" : `Analyzing session ${(arg || "").slice(0, 8)}`,
     glossary: arg ? `Glossary: ${tail(arg)}` : "Glossary", review: "Weekly review",
     synthesize: arg === "__global__" ? "Global playbook" : `Knowledge base: ${tail(arg)}`,

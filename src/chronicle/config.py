@@ -63,6 +63,8 @@ claude_bin = ""
 codex_model = ""
 # Path to the codex executable (auto-detected when empty).
 codex_bin = ""
+# Model that screens imported chats (`chronicle screen`): it reads only each chat's opening.
+screen_model = "haiku"
 
 [synthesis]
 # Consolidate per-project knowledge bases once enough new knowledge accumulates.
@@ -136,6 +138,7 @@ class AnalysisConfig:
     claude_bin: str = ""
     codex_model: str = ""
     codex_bin: str = ""
+    screen_model: str = "haiku"  # `chronicle screen`: sorts imported chats, reading only their openings
 
 
 @dataclass

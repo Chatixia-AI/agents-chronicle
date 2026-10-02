@@ -63,11 +63,36 @@ moved away from are left out. Import a newer export any time: new and changed ch
 skipped. Only the chats are read and archived (`conversations.json`, and claude.ai's `projects.json` for project
 names); the account files (`users.json`, `user.json`) and ChatGPT's `chat.html` are never opened, and a zip uploaded
 from the dashboard is deleted once imported. Imported chats are **not analyzed automatically**, since years of chats
-would use up your plan's limits at once: tick the chats you want in the Sessions list and choose **Analyze**
-(**Select all matching** takes every chat the filters show), open one and choose **Analyze now**, or import with
-`--analyze` to queue them all. The exports have no token counts, so chats show no cost. Claude Code on the web sessions are not
-in the claude.ai export; `claude --teleport <id>` brings one onto your Mac as an ordinary Claude Code transcript.
-Codex Cloud tasks are a separate source (above).
+would use up your plan's limits at once: screen them (below) and queue the ones worth it, tick the chats you want
+in the Sessions list and choose **Analyze** (**Select all matching** takes every chat the filters show), open one and
+choose **Analyze now**, or import with `--analyze` to queue them all. The exports have no token counts, so chats show
+no cost. Claude Code on the web sessions are not in the claude.ai export; `claude --teleport <id>` brings one onto your
+Mac as an ordinary Claude Code transcript. Codex Cloud tasks are a separate source (above).
+
+### Screening imported chats
+
+Most of a chat history is lookups, rewrites and everyday questions that analysis would turn into nothing. Screening
+sorts the chats into **worth analyzing**, **maybe** and **not worth it**, with a topic and a one-line reason each,
+so the analysis goes where it pays. Choose **Screen N chats** on the export's card (Sources › Chat exports), or run
+`chronicle screen` (`--sample 200` tries it on a random 200 first, `--dry-run` only counts).
+
+- It reads only each chat's opening: title, date, the first and last prompt and the start of the first reply,
+  redacted like everything sent for analysis.
+- Rules settle what is certain without a model call: no reply in the export (usually an image request), too little
+  to analyze, or a one- or two-prompt request to translate, summarize or proofread pasted text.
+- The rest goes to `analysis.screen_model` (Haiku by default), 60 chats a call. It is told what analysis keeps
+  (fixes, decisions, facts about your own projects and work, preferences) and which projects you work on, taken from
+  your recorded coding sessions, so chats about your own systems, employer or clients rank above generic questions.
+  A chat wrongly skipped would never be analyzed, so the model is told to keep anything about your work at least
+  *maybe*.
+- About 3,400 ChatGPT chats take some 60 calls; with Claude the reported cost is a few dollars at API list price, drawn
+  from your plan.
+
+Nothing is analyzed by screening. **Queue N worth analyzing** (or `chronicle screen --queue`, `--maybe` for the maybes
+too) puts them in the background queue, which analyzes a few every 15 minutes, newest first. The verdicts link to the
+Sessions list (filter *Screening*), where each chat shows its verdict and reason until it is analyzed; review the
+maybes there and **Analyze** the ones you want. `chronicle screen --list analyze|maybe|skip` shows the same on the
+command line. A chat is screened once, and again when a newer export changes it; a queued chat stays queued.
 
 Claude Desktop, Cursor, Windsurf and Gemini CLI aren't recorded, but they can use the MCP server too. See
 [MCP server](mcp.md).

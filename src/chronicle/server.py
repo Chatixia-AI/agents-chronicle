@@ -60,7 +60,8 @@ SESSION_LIST_COLS = (
     "id, source, agent, title, project_name, project_path, started_at, ended_at, duration_s, active_s, n_prompts, "
     "n_tool_calls, n_tool_errors, n_subagents, n_compactions, n_interrupts, lines_added, lines_removed, n_files, "
     "input_tokens + output_tokens + cache_read_tokens + cache_write_tokens AS tokens, est_cost_usd, primary_model, "
-    "git_branch, outcome, sentiment, analysis_status, analysis_reason, tags_json, summary, source_present, peak_context"
+    "git_branch, outcome, sentiment, analysis_status, analysis_reason, tags_json, summary, source_present, peak_context, "
+    "CASE WHEN screen_sig = files_sig THEN screen_verdict END screen_verdict, screen_topic, screen_reason"
 )
 SORTABLE = {"started_at", "ended_at", "active_s", "duration_s", "n_prompts", "n_tool_calls", "tokens", "est_cost_usd",
             "title", "project_name", "agent", "lines_added", "n_tool_errors"}
@@ -312,6 +313,15 @@ class App:
         if q.get("agent"):
             where.append("agent = ?")
             params.append(q["agent"])
+        if q.get("screen") in ("analyze", "maybe", "skip"):  # imported chats, as screening sorted them (screen.py)
+            where.append("screen_verdict = ? AND screen_sig = files_sig")
+            params.append(q["screen"])
+        elif q.get("screen") == "none":
+            from .screen import SOURCES
+
+            where.append(f"source IN ({','.join('?' * len(SOURCES))}) AND analysis_status != 'done' "
+                         "AND (screen_sig IS NULL OR screen_sig != files_sig)")
+            params += SOURCES
         since = q.get("since") or self._since_from_days(q.get("days"))
         if since:
             where.append("started_at >= ?")
@@ -776,6 +786,27 @@ class App:
 
         return self.jobs.start("import", job)
 
+    def action_screen(self, source: str | None, redo: bool = False) -> bool:
+        """Screen imported chats in the background: which are worth analyzing (screen.py)."""
+        from .screen import screen_chats
+
+        def job(progress):
+            conn = connect(self.cfg.db_path)
+            try:
+                report = screen_chats(self.cfg, conn, source=source, redo=redo, progress=progress)
+            finally:
+                conn.close()
+            if report.left and not report.screened:
+                raise RuntimeError(report.error or "nothing could be screened")
+            return report.summary()
+
+        return self.jobs.start("screen", job)
+
+    def action_screen_queue(self, source: str | None, maybe: bool = False) -> dict:
+        from .screen import queue
+
+        return {"queued": queue(self.conn, source=source, maybe=maybe), "per_run": self.cfg.analysis.max_per_run}
+
     def action_update(self) -> dict:
         from .update import run_update
 
@@ -1230,6 +1261,10 @@ def make_handler(app: App, port: int):
                     return self._json(app.action_update())
                 if p == "/api/sessions/analyze":
                     return self._json(app.action_analyze_many(list(body.get("ids") or [])))
+                if p == "/api/screen":
+                    return self._json({"started": app.action_screen(body.get("source") or None, bool(body.get("redo")))})
+                if p == "/api/screen/queue":
+                    return self._json(app.action_screen_queue(body.get("source") or None, bool(body.get("maybe"))))
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/analyze", p)
                 if m:
                     return self._json({"started": app.action_analyze(m.group(1))})

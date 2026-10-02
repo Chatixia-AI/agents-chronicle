@@ -46,7 +46,7 @@ def test_schema_has_the_suggestions_table(tmp_path):
     raw.commit()
     raw.close()
     conn = connect(db)
-    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION == 9
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
     cols = {r[1] for r in conn.execute("PRAGMA table_info(suggestions)")}
     assert {"key", "kind", "origin", "target_path", "text", "evidence_json", "warnings_json", "status", "seen_at",
             "applied_text", "dismissed_reason"} <= cols

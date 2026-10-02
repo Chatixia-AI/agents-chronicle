@@ -1359,9 +1359,80 @@ def cmd_import(args) -> int:
         print(f"error: {exc}", file=sys.stderr)
         return 1
     print(summary(counts))
+    if args.screen and not args.analyze:
+        return _screen_run(cfg, conn, source=None, redo=False, limit=None, sample=False)
     if counts["new"] + counts["updated"]:
         print("queued for analysis (`chronicle work` runs it now)" if args.analyze
-              else "not analyzed: open a chat and choose Analyze now, or re-run with --analyze to queue them all")
+              else "not analyzed: `chronicle screen` sorts out which chats are worth analyzing (reading only their "
+                   "openings); or open one and choose Analyze now, or re-run with --analyze to queue them all")
+    return 0
+
+
+def _screen_run(cfg, conn, *, source, redo, limit, sample) -> int:
+    from .screen import SOURCES, screen_chats, screen_status
+    from .util import human_cost
+
+    report = screen_chats(cfg, conn, source=source, redo=redo, limit=limit, sample=sample,
+                          progress=lambda m: print(m, file=sys.stderr))
+    print(report.summary() + (f" · screening cost {human_cost(report.cost_usd)}" if report.calls else ""))
+    worth = sum(screen_status(conn, s)["to_queue"] for s in SOURCES)
+    if worth:
+        print(f"next: `chronicle screen --list analyze` shows them, `chronicle screen --queue` queues the {worth:,} worth "
+              "analyzing (add --maybe for the maybes too)")
+    return 1 if report.left and not report.screened else 0
+
+
+def cmd_screen(args) -> int:
+    from .screen import BATCH, candidates, queue, rule_verdict
+
+    cfg = _cfg()
+    conn = _conn(cfg)
+    if args.queue:
+        n = queue(conn, source=args.source, maybe=args.maybe)
+        print(f"queued {n:,} chat{'' if n == 1 else 's'} for analysis: the background agent analyzes "
+              f"{cfg.analysis.max_per_run} every 15 minutes, newest first (`chronicle analyze --pending` runs them now)"
+              if n else "nothing to queue: screen the chats first (`chronicle screen`), or they are queued already")
+        return 0
+    if args.list:
+        return _screen_list(conn, args)
+    if args.dry_run:
+        rows = candidates(conn, source=args.source, redo=args.redo, limit=args.sample or args.limit, sample=bool(args.sample))
+        ruled = sum(rule_verdict(r) is not None for r in rows)
+        rest = len(rows) - ruled
+        print(f"{len(rows):,} chats to screen: {ruled:,} settled by rules, {rest:,} for {cfg.analysis.screen_model} in "
+              f"{-(-rest // BATCH)} call{'' if -(-rest // BATCH) == 1 else 's'}; nothing sent (dry run)")
+        return 0
+    return _screen_run(cfg, conn, source=args.source, redo=args.redo, limit=args.sample or args.limit, sample=bool(args.sample))
+
+
+def _screen_list(conn, args) -> int:
+    from rich import box
+    from rich.table import Table
+
+    from .screen import VERDICT_LABEL, source_filter
+
+    where, params = source_filter(args.source)
+    rows = conn.execute(
+        f"SELECT id, started_at, n_prompts, title, screen_topic, screen_reason, analysis_status FROM sessions "
+        f"WHERE {where} AND screen_verdict = ? AND screen_sig = files_sig ORDER BY started_at DESC LIMIT ?",
+        [*params, args.list, args.limit or 100_000]).fetchall()
+    if args.json:
+        print(json.dumps([dict(r) for r in rows], ensure_ascii=False, indent=1))
+        return 0
+    if not rows:
+        print(f"no chats screened as {args.list}")
+        return 0
+    console = _console()
+    t = Table(header_style="bold", box=box.SIMPLE_HEAD, pad_edge=False)
+    for col in ("id", "date", "prompts", "chat", "why"):
+        t.add_column(col, justify="right" if col == "prompts" else "left", no_wrap=col in ("id", "date"),
+                     overflow="fold" if col in ("chat", "why") else "ellipsis")
+    for r in rows:
+        title = escape_markup(r["title"] or "(untitled)") + (f" [dim]· {escape_markup(r['screen_topic'])}[/]" if r["screen_topic"] else "")
+        t.add_row(r["id"][:8], (r["started_at"] or "")[:10], str(r["n_prompts"] or 0), title,
+                  escape_markup(r["screen_reason"] or "") + (" [green](analyzed)[/]" if r["analysis_status"] == "done" else ""))
+    console.print(t)
+    print(f"{len(rows):,} chat{'' if len(rows) == 1 else 's'} screened as {args.list} ({VERDICT_LABEL[args.list]})")
     return 0
 
 
@@ -1831,7 +1902,21 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("import", help="import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or conversations.json)")
     s.add_argument("path")
     s.add_argument("--analyze", action="store_true", help="queue the imported chats for analysis (uses your Claude plan)")
+    s.add_argument("--screen", action="store_true", help="then screen them: which are worth analyzing (`chronicle screen`)")
     s.set_defaults(fn=cmd_import)
+
+    s = sub.add_parser("screen", help="sort imported chats into worth analyzing, maybe and not worth it, reading only "
+                                      "their openings; nothing is analyzed until you queue them")
+    s.add_argument("--source", choices=["chatgpt", "claude-ai"], help="only this export (default: both)")
+    s.add_argument("--limit", type=int, help="screen (or list) at most N chats, newest first")
+    s.add_argument("--sample", type=int, metavar="N", help="screen N chats picked at random, to try it first")
+    s.add_argument("--redo", action="store_true", help="screen chats again that were screened already")
+    s.add_argument("--dry-run", action="store_true", help="count what would be screened; nothing is sent")
+    s.add_argument("--list", choices=["analyze", "maybe", "skip"], help="show the chats screened as this, with why")
+    s.add_argument("--json", action="store_true", help="with --list: as JSON")
+    s.add_argument("--queue", action="store_true", help="queue the chats worth analyzing for the background analysis")
+    s.add_argument("--maybe", action="store_true", help="with --queue: the maybes too")
+    s.set_defaults(fn=cmd_screen)
 
     s = sub.add_parser("context", help="print the knowledge digest a new session in this directory would get")
     s.add_argument("--cwd")
