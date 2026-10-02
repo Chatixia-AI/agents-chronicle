@@ -198,11 +198,11 @@ h3 { font-size: 14px; }
 .no-sidebar .titlestrip { width: 52px; }
 .brand { display: flex; align-items: center; gap: 9px; font-weight: 650; color: var(--vib-ink); font-size: 14px; white-space: nowrap; }
 .brand:hover { text-decoration: none; }
-.brand svg { width: 22px; height: 22px; flex: none; }
+.brand img { width: 22px; height: 22px; flex: none; }
 .no-sidebar .brand span { display: none; }
 /* in the app the traffic lights sit where the logo would be; the name moves past them */
 .in-app .titlestrip { padding-left: 90px; }
-.in-app .brand svg { display: none; }
+.in-app .brand img { display: none; }
 .in-app.no-sidebar .brand { display: none; }
 
 .rail { grid-column: 1; grid-row: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 58px 0 8px; }

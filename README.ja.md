@@ -1,4 +1,4 @@
-<p align="center"><img src="packaging/macos/icon.png" width="128" height="128" alt="Chronicle のアプリアイコン：ガラスのセッションカードの束"></p>
+<p align="center"><img src="packaging/macos/icon.png" width="128" height="128" alt="Chronicle のアプリアイコン：紺色のタイルに重なる琥珀色と空色のセッションページ"></p>
 
 <h1 align="center">Chronicle</h1>
 

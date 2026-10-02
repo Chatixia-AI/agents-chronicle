@@ -18,7 +18,9 @@ in the bundle, such as Open at Login, are hidden). `./packaging/macos/build.sh` 
 app (no arguments) and the CLI (any arguments), which is how hooks and MCP servers run it. Unsigned builds are ad-hoc
 signed and run on the Mac that built them; to distribute, set `CHRONICLE_CODESIGN_IDENTITY` (a Developer ID
 Application certificate) and `NOTARY_KEYCHAIN_PROFILE` (from `xcrun notarytool store-credentials`), and the script
-signs, notarizes and staples the DMG. `packaging/macos/make_icon.py` redraws the icon (the `.icns`, and `web/icon.png`, which the dashboard and a from-source app window use). `desktop.py` extends
+signs, notarizes and staples the DMG. `uv run --group build python packaging/macos/make_icon.py` exports the committed
+`packaging/macos/icon-blueprint.webp` artwork to the macOS `.icns`, README icon, dashboard logo, favicon and phone
+home-screen icons. PNGs can be regenerated on any platform; the `.icns` export needs macOS's `iconutil`. `desktop.py` extends
 pywebview's Cocoa app delegate, hence the `<7` pin on pywebview.
 
 ## Continuous integration
