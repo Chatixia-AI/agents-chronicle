@@ -3876,7 +3876,7 @@ function renderRail() {
   };
   const settings = SECTIONS.find((x) => x.key === "settings");
   rail.replaceChildren(...SECTIONS.filter((x) => x !== settings).map(link),
-    link({ key: "search", label: "Search", href: "#/search", hint: "Full text of every session (⌘K jumps anywhere)" }),
+    link({ key: "search", label: "Search all sessions", href: "#/search", hint: "Full text of every session (⌘K jumps anywhere)" }),
     h("div", { class: "spacer" }), link(settings));
   drawUnseen(unseenCount);
 }
