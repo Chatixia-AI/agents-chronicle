@@ -5,7 +5,7 @@
 ## テストとローカルへのインストール
 
 ```bash
-uv sync && uv run pytest -q        # 128 tests, ~18 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
+uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot and Bob stores
 # redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
@@ -20,6 +20,13 @@ uv tool install --force --reinstall --python 3.13 . && chronicle install   # ins
 Application 証明書）と `NOTARY_KEYCHAIN_PROFILE`（`xcrun notarytool store-credentials` で作成）を設定すると、スクリプトが
 DMG の署名・公証・ステープルまで行います。`packaging/macos/make_icon.py` でアイコン（`.icns` と、ダッシュボードとソースから起動したアプリのウインドウが使う `web/icon.png`）を再描画できます。`desktop.py` は
 pywebview の Cocoa アプリデリゲートを拡張しているため、pywebview を `<7` に固定しています。
+
+## 継続的インテグレーション
+
+`.github/workflows/ci.yml` は、すべてのプルリクエストと `main` へのプッシュで動きます。テストスイート（`test`。`main` の
+必須チェック）と、ロックした依存関係への `pip-audit`（`audit`）です。Dependabot が `uv.lock` とワークフローのアクションの更新を
+毎週提案します。アクションはコミットハッシュで固定しています（バージョンは横のコメントにあります）。リポジトリの設定で、
+GitHub のシークレットスキャン、プッシュ保護、CodeQL のコードスキャンを有効にしています。
 
 ## リリース
 
