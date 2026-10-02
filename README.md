@@ -1,4 +1,4 @@
-<p align="center"><img src="packaging/macos/icon.png" width="128" height="128" alt="Chronicle app icon: a stack of glass session cards"></p>
+<p align="center"><img src="packaging/macos/icon.png" width="128" height="128" alt="Chronicle app icon: amber and sky-blue session pages on a navy tile"></p>
 
 <h1 align="center">Chronicle</h1>
 
