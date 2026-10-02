@@ -24,9 +24,18 @@ pywebview's Cocoa app delegate, hence the `<7` pin on pywebview.
 ## Continuous integration
 
 `.github/workflows/ci.yml` runs on every pull request and every push to `main`: the test suite (`test`, a required
-check on `main`) and `pip-audit` over the locked dependencies (`audit`). Dependabot proposes weekly updates for
+check on `main`), the pre-commit hooks (`lint`) and `pip-audit` over the locked dependencies (`audit`). Dependabot proposes weekly updates for
 `uv.lock` and the workflows' actions, which are pinned to commit hashes (the version is in a comment beside each).
 GitHub's secret scanning, push protection and CodeQL code scanning are on in the repository settings.
+
+### Pre-commit hooks
+
+`uvx pre-commit install` once, and `.pre-commit-config.yaml` checks each commit: merge markers, YAML and TOML,
+files over 600 KB, private keys and other secrets (gitleaks), trailing whitespace and final newlines, `ruff check`,
+`uv.lock` matching `pyproject.toml`, the workflows (zizmor) and that the dashboard's JavaScript parses
+(`node --check`). Ruff looks for likely bugs only (pyflakes and bugbear); the code keeps its own layout, so nothing
+reformats it. `uvx pre-commit run --all-files` runs everything by hand. A test that needs a fake key marks its line
+`# gitleaks:allow`.
 
 ## Releasing
 

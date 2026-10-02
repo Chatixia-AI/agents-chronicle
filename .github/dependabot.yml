@@ -1,10 +1,13 @@
 # Weekly updates for the locked Python dependencies and the pinned GitHub Actions (security updates come sooner).
+# A new release waits 7 days before it is proposed, so a compromised one is usually caught and pulled first.
 version: 2
 updates:
   - package-ecosystem: uv
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       python:
         patterns: ["*"]
@@ -12,6 +15,8 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
     groups:
       actions:
         patterns: ["*"]

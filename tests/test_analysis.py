@@ -32,7 +32,7 @@ def test_digest_chunks_long_sessions(synced):
 
 def test_analyze_session_stores_overview_and_knowledge(synced):
     conn, cfg = synced["conn"], synced["cfg"]
-    data = analyze_session(conn, cfg, SID)
+    analyze_session(conn, cfg, SID)
     s = conn.execute("SELECT * FROM sessions WHERE id=?", (SID,)).fetchone()
     assert s["analysis_status"] == "done" and s["outcome"] == "completed"
     assert s["title"] == "Fixed login token expiry bug"
@@ -126,7 +126,7 @@ def test_normalize_analysis_defaults():
 
 
 def test_redaction_patterns():
-    text = ("key sk-ant-api03-abcdefghijklmnopqrstuvwxyz ghp_" + "a" * 36 + " AKIAABCDEFGHIJKLMNOP "
+    text = ("key sk-ant-api03-abcdefghijklmnopqrstuvwxyz ghp_" + "a" * 36 + " AKIAABCDEFGHIJKLMNOP "  # gitleaks:allow (a fake key the test needs)
             "postgres://user:hunter2pass@db:5432/x password=supersecret1 dapi" + "0" * 32 + " Bearer abcdefghijklmnopqrstuvwxyz123")
     out = redact(text)
     for leaked in ("sk-ant-api03", "ghp_aaaa", "AKIAABCD", "hunter2pass", "supersecret1", "dapi0000", "abcdefghijklmnopqrstuvwxyz123"):

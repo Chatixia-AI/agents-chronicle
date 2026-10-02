@@ -24,9 +24,17 @@ pywebview の Cocoa アプリデリゲートを拡張しているため、pywebv
 ## 継続的インテグレーション
 
 `.github/workflows/ci.yml` は、すべてのプルリクエストと `main` へのプッシュで動きます。テストスイート（`test`。`main` の
-必須チェック）と、ロックした依存関係への `pip-audit`（`audit`）です。Dependabot が `uv.lock` とワークフローのアクションの更新を
+必須チェック）、pre-commit のフック（`lint`）、ロックした依存関係への `pip-audit`（`audit`）です。Dependabot が `uv.lock` とワークフローのアクションの更新を
 毎週提案します。アクションはコミットハッシュで固定しています（バージョンは横のコメントにあります）。リポジトリの設定で、
 GitHub のシークレットスキャン、プッシュ保護、CodeQL のコードスキャンを有効にしています。
+
+### pre-commit のフック
+
+一度 `uvx pre-commit install` を実行すると、`.pre-commit-config.yaml` がコミットごとに確認します。マージの印、YAML と TOML、
+600 KB を超えるファイル、秘密鍵などのシークレット（gitleaks）、行末の空白と最後の改行、`ruff check`、`uv.lock` と
+`pyproject.toml` の一致、ワークフロー（zizmor）、ダッシュボードの JavaScript が読めること（`node --check`）です。Ruff は
+バグになりそうな箇所だけを見ます（pyflakes と bugbear）。コードは独自のレイアウトを保つので、整形はしません。
+`uvx pre-commit run --all-files` ですべてを手動で実行できます。偽のキーが必要なテストは、その行に `# gitleaks:allow` を付けます。
 
 ## リリース
 

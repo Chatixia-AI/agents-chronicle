@@ -601,7 +601,6 @@ class _Thread:
 
     # -------------------------------------------------------------- assistant
     def _assistant(self, d: dict, ts: str | None) -> None:
-        ps = self.ps
         msg = d.get("message") or {}
         model = msg.get("model")
         msg_id = msg.get("id") or d.get("requestId") or d.get("uuid")

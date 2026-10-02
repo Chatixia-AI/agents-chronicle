@@ -696,8 +696,6 @@ def _notify_choice(cfg, conn, args, *, ask, background_sync: bool) -> bool | Non
 
 
 def cmd_install(args) -> int:
-    import platform
-
     from .connectors import connect, disconnect
     from .db import kv_get, kv_set
     from .ingest import sync

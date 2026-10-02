@@ -19,7 +19,7 @@ from chronicle import hub
 from chronicle.config import load_config
 from chronicle.db import connect, kv_set
 
-from conftest import CWD, FAKE_CLAUDE, PROJECT_DIR, SID, fake_log, write_fake_claude_tree
+from conftest import CWD, PROJECT_DIR, SID, fake_log, write_fake_claude_tree
 
 SPOKE_SID = "99999999-8888-7777-6666-555555555555"
 SPOKE_CWD = "/home/test/code/demo-app"

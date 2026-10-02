@@ -1,6 +1,7 @@
 name: CI
 
-# Every pull request and every push to main: the test suite, and known vulnerabilities in the locked dependencies.
+# Every pull request and every push to main: the test suite, known vulnerabilities in the locked dependencies, and
+# the pre-commit hooks (.pre-commit-config.yaml).
 # `test` is a required check on main.
 
 on:
@@ -25,6 +26,15 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - run: uv run --locked pytest -q
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+      - run: uvx pre-commit run --all-files --show-diff-on-failure
 
   audit:
     runs-on: ubuntu-latest

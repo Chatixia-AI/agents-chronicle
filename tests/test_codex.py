@@ -151,6 +151,6 @@ def test_set_config_value_keeps_layout(env):
     assert "# my notes" in text and "# keep me" in text and text.count("[sources]") == 1
     loaded = load_config(cfg.home)
     assert loaded.codex_dirs == [Path("~/.codex").expanduser()] and loaded.analysis.model == "opus" and loaded.server_port == 9000
-    with pytest.raises(Exception):
+    with pytest.raises(ValueError):  # tomllib.TOMLDecodeError
         set_config_value(cfg, "sources", "codex_dirs", "[unterminated")
     assert load_config(cfg.home).server_port == 9000  # a bad value never reaches the file

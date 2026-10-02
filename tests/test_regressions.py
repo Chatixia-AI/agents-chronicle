@@ -150,7 +150,7 @@ def test_newly_excluded_project_is_not_analyzed(synced):
 
 
 def test_mid_week_review_does_not_block_the_weekly_one(synced):
-    conn, cfg = synced["conn"], synced["cfg"]
+    conn = synced["conn"]
     key, start, end = week_bounds("2026-W38")
     conn.execute("INSERT INTO sessions(id, source, project_path, started_at, analysis_status) VALUES "
                  "('w1','transcript','/p','2026-09-15T10:00:00Z','done'), ('w2','transcript','/p','2026-09-16T10:00:00Z','done')")

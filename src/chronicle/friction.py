@@ -749,4 +749,3 @@ def sessions_since(cause: dict, when: str | None) -> int:
     if not start:
         return 0
     return sum(1 for ts in (cause.get("_last_by_session") or {}).values() if (parse_ts(ts) or start) > start)
-

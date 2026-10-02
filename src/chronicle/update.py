@@ -119,7 +119,7 @@ def checkout_changes(source: str, since: float) -> dict:
     files = sorted((p for p in _checkout_files(source) if p.exists() and p.stat().st_mtime > since),
                    key=lambda p: p.stat().st_mtime, reverse=True)
     log = _git(source, "log", f"--since=@{int(since)}", "--format=%h%x09%ct%x09%s", "-n", "30") or ""
-    commits = [dict(zip(("sha", "at", "subject"), line.split("\t", 2))) for line in log.splitlines() if line.count("\t") >= 2]
+    commits = [dict(zip(("sha", "at", "subject"), line.split("\t", 2), strict=True)) for line in log.splitlines() if line.count("\t") >= 2]
     return {"files": [str(p.relative_to(root)) for p in files], "commits": [{**c, "at": int(c["at"])} for c in commits]}
 
 

@@ -39,7 +39,7 @@ def _gradient(size: int) -> Image.Image:
     gd = ImageDraw.Draw(grad)
     for y in range(size):
         t = y / (size - 1)
-        gd.line([(0, y), (size, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TOP, BOTTOM)) + (255,))
+        gd.line([(0, y), (size, y)], fill=tuple(round(a + (b - a) * t) for a, b in zip(TOP, BOTTOM, strict=True)) + (255,))
     return grad
 
 
