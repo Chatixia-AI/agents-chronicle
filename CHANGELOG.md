@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.6.0 (2026-10-02)
 
 - **Screen imported chats before analyzing them:** years of claude.ai and ChatGPT chats are mostly lookups, rewrites
   and everyday questions, and analyzing all of them would take your plan's limits for days. **Screen N chats** on the
