@@ -1,0 +1,525 @@
+"""Suggestions: one approval queue of proposed fixes, from the friction catalog and from trusted knowledge.
+
+refresh() rebuilds the queue after a sync: every recurring, still-happening friction cause proposes its fixes (an
+instruction line, a config change, or a setup step for you to run), and knowledge worth an instruction line proposes
+one. Nothing is written until a suggestion is applied. A dismissed suggestion never comes back, text you edited
+before applying is kept, and a proposal whose cause stopped happening goes stale instead of nagging.
+
+Applying writes only inside Chronicle's block of an instruction file (instructions.py), or adds the missing
+Playwright MCP arguments to ~/.claude.json. Environment steps are shown, never run: you mark them done.
+"""
+
+from __future__ import annotations
+
+import difflib
+import hashlib
+import json
+import logging
+import os
+import re
+import sqlite3
+from pathlib import Path
+
+from . import friction, instructions
+from .config import Config
+from .util import dumps, loads, one_line, utcnow_iso
+
+log = logging.getLogger("chronicle.suggest")
+
+STATUSES = ("new", "applied", "dismissed", "stale", "done")
+COLUMNS = ("key", "kind", "origin", "cause_id", "knowledge_id", "project_path", "agent", "target_path", "title", "text",
+           "evidence_json", "warnings_json", "score")
+_CONFIG_CHANGE = re.compile(r"^\s*mcpServers\.([\w.@/-]+?)\.args\s*\+=\s*(\[.*\])\s*$", re.S)
+
+
+# ---------------------------------------------------------------- reading
+def _row(r) -> dict:
+    d = dict(r)
+    d["evidence"] = loads(d.pop("evidence_json", None), {}) or {}
+    d["warnings"] = loads(d.pop("warnings_json", None), {}) or {}
+    return d
+
+
+def get(conn: sqlite3.Connection, sid: int) -> dict | None:
+    r = conn.execute("SELECT * FROM suggestions WHERE id = ?", (int(sid),)).fetchone()
+    return _row(r) if r else None
+
+
+def list_suggestions(conn: sqlite3.Connection, status: str | None = None, project: str | None = None) -> list[dict]:
+    sql, params = "SELECT * FROM suggestions WHERE 1 = 1", []
+    if status:
+        sql += " AND status = ?"
+        params.append(status)
+    if project:
+        sql += " AND project_path = ?"
+        params.append(project)
+    return [_row(r) for r in conn.execute(sql + " ORDER BY score DESC, id", params)]
+
+
+def counts(conn: sqlite3.Connection) -> dict[str, int]:
+    out = {s: 0 for s in STATUSES}
+    for r in conn.execute("SELECT status, COUNT(*) FROM suggestions GROUP BY status"):
+        out[r[0]] = r[1]
+    return out
+
+
+def count_unseen(conn: sqlite3.Connection) -> int:
+    return conn.execute("SELECT COUNT(*) FROM suggestions WHERE status = 'new' AND seen_at IS NULL").fetchone()[0]
+
+
+def mark_seen(conn: sqlite3.Connection) -> int:
+    cur = conn.execute("UPDATE suggestions SET seen_at = ? WHERE status = 'new' AND seen_at IS NULL", (utcnow_iso(),))
+    conn.commit()
+    return cur.rowcount
+
+
+# ---------------------------------------------------------------- building proposals
+def claude_json_path() -> Path:
+    """Claude Code's user config (MCP servers): $CLAUDE_CONFIG_DIR/.claude.json when set, else ~/.claude.json."""
+    custom = os.environ.get("CLAUDE_CONFIG_DIR")
+    if custom and (Path(custom).expanduser() / ".claude.json").exists():
+        return Path(custom).expanduser() / ".claude.json"
+    return Path("~/.claude.json").expanduser()
+
+
+def playwright_output_dir() -> str:
+    return str(Path("~/.cache/playwright-mcp").expanduser())
+
+
+def _evidence_line(cause: dict) -> str:
+    n, p = cause["sessions"], len(cause["projects"])
+    parts = [f"seen in {n} session{'s' if n != 1 else ''}" + (f" across {p} projects" if p > 1 else "")]
+    parts.append("still happening" if cause["still_happening"] else "not seen lately")
+    if cause["last_seen"]:
+        parts.append(f"last {cause['last_seen']}")
+    return " · ".join(parts)
+
+
+def _friction_evidence(cause: dict, text: str) -> dict:
+    return {
+        "line": _evidence_line(cause), "sessions": cause["sessions"], "occurrences": cause["occurrences"],
+        "immediate_repeats": cause["immediate_repeats"], "projects": len(cause["projects"]),
+        "project_names": cause["projects"][:5], "agents": cause["agents"], "first_seen": cause["first_seen"],
+        "last_seen": cause["last_seen"], "still_happening": cause["still_happening"], "rate": cause["rate"],
+        "weekly": cause["weekly"], "examples": cause["examples"], "cause": cause["name"], "generated_text": text,
+    }
+
+
+def _file_label(target: Path) -> str:
+    return "claude" if target.name == "CLAUDE.md" else "codex"
+
+
+def _read(path: Path | None) -> str:
+    try:
+        return path.read_text() if path else ""
+    except OSError:
+        return ""
+
+
+def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
+                        project_agents: dict[str, list[str]] | None = None) -> list[dict]:
+    out = []
+    cid = cause["id"]
+    seen_agents = [a for a in cause["agents"] if a in ("claude", "codex", "copilot", "bob")]
+    score = round(cause["sessions"] + 0.5 * len(cause["projects"]) + 0.25 * cause["immediate_repeats"], 3)
+    base = {"origin": "friction", "cause_id": cid, "knowledge_id": None, "score": score}
+    for fix in cause["fixes"]:
+        kind = fix["kind"]
+        text = fix["text"].replace("{playwright_output_dir}", playwright_output_dir())
+        if kind == "environment":
+            out.append({**base, "key": f"friction:{cid}:all:user:environment", "kind": kind, "project_path": None,
+                        "agent": "all", "target_path": None, "title": fix["title"], "text": text,
+                        "warnings": {"sensitive": instructions.sensitive(text), "public_repo": False, "untracked": False,
+                                     "overlap": False}})
+            continue
+        if kind == "config":
+            if "claude" not in seen_agents or config_state(claude_json_path(), text) != "pending":
+                continue  # Playwright MCP not configured here, or the arguments are already there
+            out.append({**base, "key": f"friction:{cid}:claude:user:config", "kind": kind, "project_path": None,
+                        "agent": "claude", "target_path": str(claude_json_path()), "title": fix["title"], "text": text,
+                        "warnings": {"sensitive": [], "public_repo": False, "untracked": False, "overlap": False}})
+            continue
+        agents = seen_agents if "all" in fix["agents"] else [a for a in fix["agents"] if a in seen_agents]
+        if not agents:
+            continue
+        spread = len(cause["projects"]) >= 3
+        scope = "project" if fix["scope"] == "project" else ("user" if spread else "project")
+        targets: dict[tuple[Path, str | None], list[str]] = {}
+        if scope == "user":
+            for a in agents:
+                t = instructions.target_for(a, "user", None, cfg)
+                if t:
+                    targets.setdefault((t, None), []).append(a)
+        else:
+            paths = cause.get("project_paths") or []
+            chosen = [p["path"] for p in paths if p["sessions"] >= 2][:5] if fix["scope"] == "project" else []
+            for path in chosen or [p["path"] for p in paths[:1]]:
+                here = (project_agents or {}).get(path)
+                for a in [a for a in agents if not here or a in here]:
+                    t = instructions.target_for(a, "project", path, cfg)
+                    if t:
+                        targets.setdefault((t, path), []).append(a)
+        for (target, project), who in targets.items():
+            if instructions.overlap(text, _read(target)):
+                continue  # the file already says this
+            out.append({**base, "key": f"friction:{cid}:{_file_label(target)}:{project or 'user'}", "kind": "instruction",
+                        "project_path": project, "agent": who[0] if len(who) == 1 else "all",
+                        "target_path": str(target), "title": fix["title"], "text": text,
+                        "warnings": instructions.warnings_for(text, target, project, conn)})
+    here = {p["path"]: p["sessions"] for p in cause.get("project_paths") or []}
+    for p in out:
+        p["evidence"] = _friction_evidence(cause, p["text"])
+        if p["project_path"] and len(here) > 1:
+            n = here.get(p["project_path"], 0)
+            p["evidence"]["project_sessions"] = n
+            p["evidence"]["line"] += f" · {n} in this project"
+    return out
+
+
+def proposals(conn: sqlite3.Connection, cfg: Config) -> tuple[list[dict], dict[str, dict]]:
+    """(every suggestion the data supports right now, the scanned causes by id)."""
+    causes = {c["id"]: c for c in friction._scan(conn)}
+    project_agents = instructions._project_agents(conn)
+    out: list[dict] = []
+    for c in causes.values():
+        if c["noise"] or c["category"] == "other" or not c["fixes"]:
+            continue
+        if not c["still_happening"] or not (c["sessions"] >= 3 or len(c["projects"]) >= 2):
+            continue
+        out.extend(_friction_proposals(conn, cfg, c, project_agents))
+    for k in instructions.candidates(conn, cfg):
+        out.append({**k, "warnings": k.get("warnings") or {}})
+    seen: set[str] = set()
+    return [p for p in out if not (p["key"] in seen or seen.add(p["key"]))], causes
+
+
+def refresh(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
+    """Upsert every current proposal by key; mark proposals the data no longer supports stale."""
+    found, causes = proposals(conn, cfg)
+    now = utcnow_iso()
+    existing = {r["key"]: dict(r) for r in conn.execute("SELECT * FROM suggestions")}
+    report = {"new": 0, "updated": 0, "stale": 0}
+    for p in found:
+        evidence, warnings = dumps(p["evidence"]), dumps(p["warnings"])
+        old = existing.get(p["key"])
+        if old is None and _decided_lesson(existing.values(), p):
+            continue  # the same lesson, under another member's id, was already dismissed or applied here
+        if old is None:
+            conn.execute(
+                f"INSERT INTO suggestions({', '.join(COLUMNS)}, status, created_at, updated_at) "
+                f"VALUES ({', '.join('?' * len(COLUMNS))}, 'new', ?, ?)",
+                (p["key"], p["kind"], p["origin"], p["cause_id"], p["knowledge_id"], p["project_path"], p["agent"],
+                 p["target_path"], p["title"], p["text"], evidence, warnings, p["score"], now, now))
+            report["new"] += 1
+            continue
+        if old["status"] == "dismissed":  # never resurrected; only its cluster is kept current for _decided_lesson
+            ev = loads(old["evidence_json"], {}) or {}
+            ids = sorted({*(ev.get("knowledge_ids") or []), *(p["evidence"].get("knowledge_ids") or [])})
+            if ids and ev.get("knowledge_ids") != ids:
+                conn.execute("UPDATE suggestions SET evidence_json = ? WHERE id = ?", (dumps({**ev, "knowledge_ids": ids}), old["id"]))
+            continue
+        status, seen_at = old["status"], old["seen_at"]
+        if status == "stale":
+            status, seen_at = "new", None
+            report["new"] += 1
+        generated = (loads(old["evidence_json"], {}) or {}).get("generated_text")
+        edited = generated is not None and old["text"] != generated
+        text = old["text"] if edited or old["status"] in ("applied", "done") else p["text"]
+        if status == "applied" and old["origin"] == "friction":
+            cause = causes.get(old["cause_id"] or "")
+            if cause:
+                p["evidence"]["sessions_since_applied"] = friction.sessions_since(cause, old["applied_at"])
+                evidence = dumps(p["evidence"])
+        # an applied line stays where it was written: undo must find it there, whatever the routing says now
+        agent, target = (old["agent"], old["target_path"]) if status in ("applied", "done") else (p["agent"], p["target_path"])
+        changed = (text, evidence, warnings, p["score"], status, p["title"], agent, target) != (
+            old["text"], old["evidence_json"], old["warnings_json"], old["score"], old["status"], old["title"],
+            old["agent"], old["target_path"])
+        if changed:
+            conn.execute(
+                "UPDATE suggestions SET text = ?, title = ?, evidence_json = ?, warnings_json = ?, score = ?, status = ?, "
+                "seen_at = ?, agent = ?, target_path = ?, updated_at = ? WHERE id = ?",
+                (text, p["title"], evidence, warnings, p["score"], status, seen_at, agent, target, now, old["id"]))
+            if old["status"] != "stale":
+                report["updated"] += 1
+    keys = {p["key"] for p in found}
+    for key, old in existing.items():
+        if key in keys:
+            continue
+        if old["status"] == "new":
+            conn.execute("UPDATE suggestions SET status = 'stale', updated_at = ? WHERE id = ?", (now, old["id"]))
+            report["stale"] += 1
+        elif old["status"] == "applied" and old["origin"] == "friction":
+            cause = causes.get(old["cause_id"] or "")  # no longer proposed (fixed?): keep counting what follows
+            if cause:
+                ev = loads(old["evidence_json"], {}) or {}
+                ev["sessions_since_applied"] = friction.sessions_since(cause, old["applied_at"])
+                ev["still_happening"] = cause["still_happening"]
+                conn.execute("UPDATE suggestions SET evidence_json = ? WHERE id = ?", (dumps(ev), old["id"]))
+    conn.commit()
+    return report
+
+
+def _decided_lesson(rows, p: dict) -> bool:
+    """A knowledge proposal for a lesson already dismissed or applied for the same file: one of its knowledge items
+    was in that suggestion's cluster, or its title is a near-duplicate of that suggestion's title."""
+    if p["origin"] != "knowledge":
+        return False
+    ids = set(p["evidence"].get("knowledge_ids") or [])
+    title = instructions.tokens(p["title"])
+    for r in rows:
+        if r["origin"] != "knowledge" or r["status"] not in ("dismissed", "applied") or r["target_path"] != p["target_path"]:
+            continue
+        theirs = {r["knowledge_id"], *((loads(r["evidence_json"], {}) or {}).get("knowledge_ids") or [])}
+        if ids & theirs or instructions.jaccard(title, instructions.tokens(r["title"])) >= instructions.JACCARD_DUPLICATE:
+            return True
+    return False
+
+
+def after_sync(conn: sqlite3.Connection, cfg: Config) -> dict[str, int] | None:
+    """The background run's hook: refresh when enabled, and notify about new suggestions when asked to."""
+    if not cfg.suggestions_enabled:
+        return None
+    try:
+        report = refresh(conn, cfg)
+    except Exception:  # never let suggestions break a sync
+        log.exception("suggestions refresh failed")
+        return None
+    if cfg.suggestions_notify and report["new"] > 0:
+        from .notify import post
+
+        post("Chronicle", f"{report['new']} new suggestion{'s' if report['new'] != 1 else ''}. "
+                          "Open the dashboard > Suggestions")
+    return report
+
+
+# ---------------------------------------------------------------- config changes (~/.claude.json)
+# the only config change Chronicle makes: these flags, on a Playwright MCP server (an edited text cannot widen it)
+CONFIG_FLAGS = {"--isolated": False, "--output-dir": True}  # flag -> takes a value
+
+
+def parse_config_change(text: str) -> tuple[str, list[str]]:
+    """'mcpServers.<name>.args += [...]' -> (server name, args to add). Raises ValueError otherwise."""
+    m = _CONFIG_CHANGE.match(text or "")
+    if not m:
+        raise ValueError("expected: mcpServers.<name>.args += [\"--flag\", ...]")
+    try:
+        args = json.loads(m.group(2))
+    except ValueError:
+        raise ValueError("the arguments must be a JSON list of strings") from None
+    if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
+        raise ValueError("the arguments must be a JSON list of strings")
+    if "playwright" not in m.group(1).lower():
+        raise ValueError("Chronicle only changes the Playwright MCP server's arguments")
+    i = 0
+    while i < len(args):
+        if args[i] not in CONFIG_FLAGS:
+            raise ValueError(f"Chronicle does not set {args[i]!r}; only " + ", ".join(CONFIG_FLAGS))
+        if CONFIG_FLAGS[args[i]]:
+            i += 1
+            if i >= len(args) or not args[i].startswith("/"):
+                raise ValueError(f"{args[i - 1]} needs an absolute path")
+        i += 1
+    return m.group(1), args
+
+
+def _groups(args: list[str]) -> list[list[str]]:
+    """Split ['--isolated', '--output-dir', 'x'] into [['--isolated'], ['--output-dir', 'x']]."""
+    out: list[list[str]] = []
+    for a in args:
+        if a.startswith("-") or not out:
+            out.append([a])
+        else:
+            out[-1].append(a)
+    return out
+
+
+def missing_args(current: list[str], wanted: list[str]) -> list[str]:
+    """The groups of `wanted` whose flag `current` lacks (a flag already set is left as it is)."""
+    have = set(current)
+    return [a for g in _groups(wanted) if g[0] not in have for a in g]
+
+
+def _load_json(path: Path) -> tuple[str, dict]:
+    old = path.read_text()
+    data = json.loads(old) if old.strip() else {}
+    if not isinstance(data, dict):
+        raise ValueError(f"{path} is not a JSON object")
+    return old, data
+
+
+def config_text(name: str, args: list[str]) -> str:
+    return f"mcpServers.{name}.args += {json.dumps(args)}"
+
+
+def config_state(path: Path, text: str) -> str:
+    """'pending' (the change would do something), 'satisfied', 'no-server', 'no-file' or 'invalid'."""
+    try:
+        name, wanted = parse_config_change(text)
+        _old, data = _load_json(path)
+    except FileNotFoundError:
+        return "no-file"
+    except (OSError, ValueError):
+        return "invalid"
+    server = (data.get("mcpServers") or {}).get(name)
+    if not isinstance(server, dict):
+        return "no-server"
+    return "pending" if missing_args(list(server.get("args") or []), wanted) else "satisfied"
+
+
+def plan_config(path: Path, text: str, *, remove: bool = False) -> tuple[str, str]:
+    """(old file text, new file text) for adding (or removing) the arguments; every other key is kept.
+
+    Undo passes only the groups apply added (applied_text), so flags you had set yourself stay.
+    """
+    name, wanted = parse_config_change(text)
+    old, data = _load_json(path)
+    server = (data.get("mcpServers") or {}).get(name)
+    if not isinstance(server, dict):
+        raise ValueError(f"no MCP server named {name!r} in {path}")
+    args = list(server.get("args") or [])
+    if remove:
+        for g in _groups(wanted):
+            for i in range(len(args) - len(g) + 1):
+                if args[i:i + len(g)] == g:
+                    del args[i:i + len(g)]
+                    break
+    else:
+        args += missing_args(args, wanted)
+    server["args"] = args
+    new = json.dumps(data, indent=2, ensure_ascii=False)
+    return old, new + "\n" if old.endswith("\n") else new  # keep the file's own last line as it was
+
+
+# ---------------------------------------------------------------- preview / apply
+def _diff(old: str, new: str, path: Path) -> str:
+    return "".join(difflib.unified_diff(old.splitlines(keepends=True), new.splitlines(keepends=True),
+                                        fromfile=str(path), tofile=str(path)))
+
+
+def marker(s: dict) -> str:
+    """The id written into the file next to the line: short and free of paths (the full key holds the project path,
+    which has no business in a committed CLAUDE.md). Unique within one file: one line per cause or lesson."""
+    ident = s["cause_id"] if s["origin"] == "friction" else s["knowledge_id"]
+    if ident is not None and str(ident).strip() and not re.search(r"[\s/]", str(ident)):
+        return f"{s['origin']}:{ident}"
+    return "s-" + hashlib.sha1(s["key"].encode()).hexdigest()[:12]
+
+
+def _plan(s: dict, text: str, *, remove: bool = False) -> tuple[Path, str, str]:
+    path = Path(s["target_path"])
+    if s["project_path"] and not Path(s["project_path"]).is_dir():
+        raise ValueError(f"the project {s['project_path']} no longer exists")
+    if s["kind"] == "instruction":
+        old = _read(path) if path.exists() else ""
+        mark = marker(s)
+        new = instructions.merge_file(path, old, [] if remove else [(mark, text)], {mark, s["key"]} if remove else set())
+        return path, old, new
+    if s["kind"] == "config":
+        old, new = plan_config(path, text, remove=remove)
+        return path, old, new
+    raise ValueError(f"{s['kind']} suggestions are not written by Chronicle")
+
+
+def preview(conn: sqlite3.Connection, cfg: Config, sid: int, text: str | None = None) -> dict:
+    """The unified diff applying would make, written nowhere. Environment steps return their command instead."""
+    s = get(conn, sid)
+    if s is None:
+        return {"ok": False, "error": "no such suggestion"}
+    text = (text if text is not None else s["text"]).strip()
+    # ~/.claude.json is never committed or shared, so a home path there is not a leak
+    warnings = {**(s["warnings"] or {}), "sensitive": [] if s["kind"] == "config" else instructions.sensitive(text)}
+    if s["kind"] == "environment":
+        return {"ok": True, "diff": "", "path": None, "command": text, "warnings": warnings}
+    try:
+        path, old, new = _plan(s, text)
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": str(exc), "diff": "", "path": s["target_path"], "warnings": warnings}
+    return {"ok": True, "diff": _diff(old, new, path), "path": str(path), "warnings": warnings}
+
+
+def apply(conn: sqlite3.Connection, cfg: Config, sid: int, text: str | None = None) -> dict:
+    """Write the suggestion (backing the file up first) and mark it applied. Returns {ok, path, diff}."""
+    s = get(conn, sid)
+    if s is None:
+        return {"ok": False, "error": "no such suggestion"}
+    if s["kind"] == "environment":
+        return {"ok": False, "error": "Chronicle does not run setup steps: run the command yourself, then mark it done"}
+    text = one_line(text, 2000) if text is not None and s["kind"] == "instruction" else (text or s["text"]).strip()
+    applied = text
+    evidence = dict(s["evidence"])
+    try:
+        path, old, new = _plan(s, text)
+        if s["kind"] == "instruction" and s["status"] != "applied":  # applying again keeps what the first apply found
+            evidence["created_file"] = not Path(os.path.realpath(path)).exists()
+        if s["kind"] == "config":  # remember only what was added, so undo leaves your own flags alone
+            name, wanted = parse_config_change(text)
+            server = ((json.loads(old) if old.strip() else {}).get("mcpServers") or {}).get(name) or {}
+            applied = config_text(name, missing_args(list(server.get("args") or []), wanted))
+        if new != old:
+            instructions.write_atomic(path, new, cfg=cfg, mkdir=not s["project_path"])
+    except (OSError, ValueError) as exc:
+        return {"ok": False, "error": str(exc), "path": s["target_path"], "diff": ""}
+    now = utcnow_iso()
+    conn.execute("UPDATE suggestions SET status = 'applied', text = ?, applied_text = ?, applied_at = ?, updated_at = ?, "
+                 "seen_at = COALESCE(seen_at, ?), evidence_json = ? WHERE id = ?",
+                 (text, applied, now, now, now, dumps(evidence), sid))
+    conn.commit()
+    return {"ok": True, "path": str(path), "diff": _diff(old, new, path), "applied_text": applied}
+
+
+def unapply(conn: sqlite3.Connection, cfg: Config, sid: int) -> dict:
+    """Take an applied suggestion back out of its file (or an environment step out of 'done'); it returns to 'new'."""
+    s = get(conn, sid)
+    if s is None:
+        return {"ok": False, "error": "no such suggestion"}
+    diff, path = "", None
+    gone = bool(s["project_path"]) and not Path(s["project_path"]).is_dir()  # the line went with the project
+    if s["kind"] != "environment" and s["status"] == "applied" and not gone:
+        try:
+            path, old, new = _plan(s, s["applied_text"] or s["text"], remove=True)
+            if not new.strip() and s["evidence"].get("created_file") and s["kind"] == "instruction":
+                instructions.write_atomic(path, new, cfg=cfg, mkdir=False)  # backs it up first
+                Path(os.path.realpath(path)).unlink(missing_ok=True)  # Chronicle made this file: leave none behind
+            elif new != old:
+                instructions.write_atomic(path, new, cfg=cfg, mkdir=not s["project_path"])
+            diff = _diff(old, new, path)
+        except (OSError, ValueError) as exc:
+            return {"ok": False, "error": str(exc)}
+    conn.execute("UPDATE suggestions SET status = 'new', applied_at = NULL, applied_text = NULL, updated_at = ? "
+                 "WHERE id = ?", (utcnow_iso(), sid))
+    conn.commit()
+    return {"ok": True, "path": str(path) if path else None, "diff": diff}
+
+
+def edit_text(conn: sqlite3.Connection, sid: int, text: str) -> dict:
+    """Keep an edited proposal text; refresh will not overwrite it."""
+    text = (text or "").strip()
+    if not text:
+        return {"ok": False, "error": "empty text"}
+    cur = conn.execute("UPDATE suggestions SET text = ?, updated_at = ? WHERE id = ? AND status IN ('new', 'stale')",
+                       (text, utcnow_iso(), sid))
+    conn.commit()
+    return {"ok": cur.rowcount == 1}
+
+
+def dismiss(conn: sqlite3.Connection, sid: int, reason: str | None = None) -> dict:
+    s = get(conn, sid)
+    if s is not None and s["status"] == "applied":
+        return {"ok": False, "error": "this one is applied: undo it first, so its line leaves the file"}
+    cur = conn.execute("UPDATE suggestions SET status = 'dismissed', dismissed_reason = ?, updated_at = ? WHERE id = ?",
+                       ((reason or "").strip() or None, utcnow_iso(), sid))
+    conn.commit()
+    return {"ok": cur.rowcount == 1}
+
+
+def mark_done(conn: sqlite3.Connection, sid: int) -> dict:
+    """You ran an environment step yourself."""
+    s = get(conn, sid)
+    if s is None or s["kind"] != "environment":
+        return {"ok": False, "error": "only environment steps are marked done"}
+    now = utcnow_iso()
+    conn.execute("UPDATE suggestions SET status = 'done', applied_at = ?, applied_text = text, updated_at = ? WHERE id = ?",
+                 (now, now, sid))
+    conn.commit()
+    return {"ok": True}

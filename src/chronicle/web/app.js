@@ -93,6 +93,7 @@ const ICONS = {
   // knowledge kinds
   fix: ["M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"],
   gotcha: ["m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3", "M12 9v4", "M12 17h.01"],
+  suggestions: ["M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5", "M9 18h6", "M10 22h4"],
   learning: ["M15 14c.2-1 .7-1.7 1.5-2.5 1-.9 1.5-2.2 1.5-3.5A6 6 0 0 0 6 8c0 1 .2 2.2 1.5 3.5.7.7 1.3 1.5 1.5 2.5", "M9 18h6", "M10 22h4"],
   decision: ["M12 3v3", "M12 13v8", "M5 6h11l3 3.5-3 3.5H5z"],
   pattern: ["M8.3 10a.7.7 0 0 1-.63-1.02l3.7-6a.7.7 0 0 1 1.26 0l3.7 6A.7.7 0 0 1 15.7 10z", ["rect", { x: 3, y: 14, width: 7, height: 7, rx: 1 }], ["circle", { cx: 17.5, cy: 17.5, r: 3.5 }]],
@@ -738,6 +739,8 @@ function navKey(path) {
   if (path.startsWith("/devices")) return "devices";
   if (path.startsWith("/appearance")) return "appearance";
   if (path.startsWith("/search")) return "search";
+  if (path.startsWith("/suggestions")) return "suggestions";
+  if (path.startsWith("/friction")) return "friction";
   if (path === "/" || path === "") return "overview";
   return "";
 }
@@ -945,6 +948,8 @@ route(/^\/?$/, async (params) => {
   const know = h("section", { class: "card" }, cardHead("Latest knowledge", { iconName: "knowledge", tools: h("a", { href: "#/knowledge/all", class: "hint link-arrow" }, "Browse", icon("arrow")) }),
     knowledgeList(data.knowledge.slice(0, 8)));
   const since = t.first_at ? `since ${fmtDateY(t.first_at)}` : "";
+  const sgBox = h("div"); // filled in when the queue has something to review; Home does not wait for it
+  suggestionsHomeCard(sgBox, project);
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, "Home"),
       h("div", { class: "sub" }, `${fmtNum(t.sessions)} sessions across ${fmtNum(t.projects)} projects ${since}`)),
@@ -954,6 +959,7 @@ route(/^\/?$/, async (params) => {
           .map((a) => [a, agentName(a)])], agent, (v) => update({ agent: v })),
         h("select", { "aria-label": "Project", onchange: (e) => update({ project: e.target.value }) }, await projectOptions(project)))),
     tiles,
+    sgBox,
     h("div", { class: "grid cols-main section-gap" }, dailyCard, outcomesCard),
     h("div", { class: "grid cols-2 section-gap" }, cal, hours),
     h("div", { class: "grid cols-3 section-gap" }, projCard, toolCard, modelCard),
@@ -3306,6 +3312,433 @@ route(/^\/devices$/, async () => {
 });
 
 // =====================================================================================
+// Suggestions (one approval queue of proposed fixes) and What goes wrong (recurring failure causes)
+// =====================================================================================
+const SG_KIND = { instruction: ["Instruction", "prompts"], config: ["Config change", "settings"], environment: ["Setup step", "command"] };
+const SG_STATUS = [["new", "To review"], ["applied", "Applied"], ["done", "Done"], ["stale", "Stale"], ["dismissed", "Dismissed"]];
+const SG_STATUS_ICON = { new: "suggestions", applied: "completed", done: "completed", stale: "history", dismissed: "x" };
+const FR_CATEGORY = { "tool-misuse": "Tool use", "mcp-config": "MCP setup", environment: "Environment", "agent-behaviour": "Agent behaviour",
+  permissions: "Permissions", noise: "Noise", other: "Other" };
+const baseName = (p) => String(p || "").replace(/\/+$/, "").split("/").pop();
+const homePath = (p) => shortPath(p).replace(/^\/home\/[^/]+/, "~");
+const compactPath = (p) => { const x = homePath(p); return x.startsWith("~") ? x : `…/${x.split("/").slice(-2).join("/")}`; }; // for one-line rows
+function sgKindChip(kind) {
+  const [label, ic] = SG_KIND[kind] || [kind, "dot"];
+  return h("span", { class: "kind-chip" }, icon(ic), label);
+}
+function sgTarget(x) { // where a suggestion goes, in a few words
+  if (x.kind === "environment") return "your shell (you run it)";
+  if (!x.project_path) return compactPath(x.target_path);
+  return `${baseName(x.project_path)}/${baseName(x.target_path)}`;
+}
+function sgGroupOf(x) { // [key, title, subtitle] of the file a suggestion changes
+  if (x.kind === "environment") return ["__env__", "Setup steps", "Chronicle shows the command; you run it and mark it done"];
+  if (x.kind === "config") return [x.target_path, homePath(x.target_path), "Claude Code's MCP servers"];
+  const reader = /AGENTS\.md$/.test(x.target_path) ? "Codex and other agents that read AGENTS.md" : "Claude Code";
+  if (!x.project_path) return [x.target_path, homePath(x.target_path), `Read by every ${reader} session`];
+  return [x.target_path, sgTarget(x), `${homePath(x.target_path)} · read by ${reader} in this project`];
+}
+function sgEvidence(x) {
+  const e = x.evidence || {};
+  const since = x.status === "applied" && e.sessions_since_applied != null
+    ? ` · ${e.sessions_since_applied ? `seen in ${fmtNum(e.sessions_since_applied)} session${e.sessions_since_applied === 1 ? "" : "s"} since applied` : "not seen since applied"}` : "";
+  return (e.line || "") + since;
+}
+function sgHasWarnings(w, kind) { // anything that should be read before a one-click write
+  w = w || {};
+  return !!(w.public_repo || w.untracked || w.overlap || (kind === "instruction" && (w.sensitive || []).length));
+}
+function sgWarnings(w, kind) {
+  w = w || {};
+  const out = [];
+  if (w.public_repo) out.push(h("span", { class: "badge critical", title: "Anyone can read this repository, so anyone can read this line" }, h("span", { class: "sdot" }), "Public repository"));
+  if (kind === "instruction" && (w.sensitive || []).length) {
+    out.push(h("span", { class: "badge serious", title: w.sensitive.join("\n") }, h("span", { class: "sdot" }), `Looks sensitive: ${w.sensitive.slice(0, 2).join(", ")}${w.sensitive.length > 2 ? "…" : ""}`));
+  }
+  if (w.untracked) out.push(h("span", { class: "badge warning", title: "git does not track this file, so the line stays on this computer" }, h("span", { class: "sdot" }), "File not tracked by git"));
+  if (w.overlap) out.push(h("span", { class: "badge muted-badge" }, h("span", { class: "sdot" }), "Already covered in this file"));
+  return out.length ? h("div", { class: "sg-warn" }, out) : null;
+}
+function diffEl(text) {
+  if (!text) return h("div", { class: "sg-diff empty-diff" }, "No change: the file already says this.");
+  const lines = text.replace(/\n$/, "").split("\n");
+  return h("pre", { class: "sg-diff", "aria-label": "Changes to the file" }, lines.map((l) => {
+    const cls = /^(\+\+\+|---)/.test(l) ? "dh" : l.startsWith("@@") ? "dhunk" : l[0] === "+" ? "dadd" : l[0] === "-" ? "ddel" : "";
+    return h("span", { class: cls }, `${l}\n`);
+  }));
+}
+
+let unseenCount = 0;
+async function pollUnseen() {
+  try { drawUnseen((await api("/api/suggestions/unseen")).unseen || 0); } catch (e) { /* an older server, or restarting */ }
+}
+function drawUnseen(n) {
+  unseenCount = n;
+  const a = $('#rail a[data-section="suggestions"]');
+  if (!a) return;
+  let badge = a.querySelector(".rail-badge");
+  const label = n ? `Suggestions, ${n} new` : "Suggestions";
+  a.title = label;
+  a.setAttribute("aria-label", label);
+  if (!n) { badge?.remove(); return; }
+  if (!badge) a.append((badge = h("span", { class: "rail-badge", "aria-hidden": "true" })));
+  badge.textContent = n > 99 ? "99+" : String(n);
+}
+function suggestionsChanged() { // counts in the sidebar and the rail follow an action
+  if (shellSection === "suggestions") buildSidebar("suggestions");
+  pollUnseen();
+}
+
+// The actions on one suggestion; each returns true when it worked (and says so)
+const sgAct = {
+  async apply(x, text) {
+    const r = await post(`/api/suggestions/${x.id}/apply`, text != null ? { text } : {});
+    if (!r.ok) { toast(`Not applied: ${r.error || "unknown error"}`, 6000); return false; }
+    Object.assign(x, { status: "applied", applied_at: new Date().toISOString(), applied_text: r.applied_text ?? text ?? x.text, text: text ?? x.text });
+    toast(`Added to ${homePath(r.path)} (the previous file is backed up)`);
+    return true;
+  },
+  async undo(x) {
+    const r = await post(`/api/suggestions/${x.id}/unapply`);
+    if (!r.ok) { toast(`Could not undo: ${r.error || "unknown error"}`, 6000); return false; }
+    const was = x.status;
+    Object.assign(x, { status: "new", applied_at: null, applied_text: null, dismissed_reason: null });
+    toast(was === "applied" ? `Taken back out of ${homePath(r.path || x.target_path)}` : "Back in the queue");
+    return true;
+  },
+  async dismiss(x) {
+    const r = await post(`/api/suggestions/${x.id}/dismiss`);
+    if (!r.ok) { toast(`Could not dismiss: ${r.error || "unknown error"}`, 6000); return false; }
+    x.status = "dismissed";
+    return true;
+  },
+  async done(x) {
+    const r = await post(`/api/suggestions/${x.id}/done`);
+    if (!r.ok) { toast(r.error || "Could not mark it done", 6000); return false; }
+    Object.assign(x, { status: "done", applied_at: new Date().toISOString() });
+    return true;
+  },
+};
+async function busy(btn, label, fn) { // disable a button while its request runs
+  const was = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = label;
+  try { return await fn(); } finally { if (btn.isConnected) { btn.disabled = false; btn.textContent = was; } }
+}
+
+// One suggestion: what it is, why, where it goes, the editable text, and Preview / Apply / Dismiss
+function suggestionCard(x, { onStatus } = {}) {
+  const e = x.evidence || {};
+  const open = x.status === "new" || x.status === "stale";
+  let warnBox = sgWarnings(x.warnings, x.kind);
+  const diffBox = h("div", { class: "sg-diffbox", hidden: true });
+  const rows = Math.min(8, Math.max(2, Math.ceil(String(x.text || "").length / 86)));
+  const editor = x.kind === "instruction" && open
+    ? h("textarea", { class: "input sg-text", rows, "aria-label": `Line to add: ${x.title}`, spellcheck: "true" }, x.text) : null;
+  const current = () => (editor ? editor.value.trim() : x.text);
+  const generated = e.generated_text || x.text;
+  let checked = generated; // the text the warnings on show were worked out for (refresh checks the proposed text)
+  const showWarnings = (w) => {
+    const fresh = sgWarnings({ ...x.warnings, ...w }, x.kind);
+    if (warnBox) warnBox.replaceWith(fresh || h("span")); else if (fresh) diffBox.before(fresh);
+    warnBox = fresh;
+  };
+  // Edited text is checked before it is written: new sensitive hits are shown, and a second Apply confirms them
+  const checkBeforeApply = async () => {
+    const text = current();
+    if (!editor || text === checked) return true;
+    const r = await api(`/api/suggestions/${x.id}/preview`, { text }).catch((err) => ({ error: err.message }));
+    if (!r.ok) { toast(`Not applied: ${r.error || "could not check the text"}`, 6000); return false; }
+    checked = text;
+    showWarnings(r.warnings);
+    if (!(r.warnings?.sensitive || []).length) return true;
+    toast("Your text looks sensitive: read the warning, then Apply again to write it", 6000);
+    return false;
+  };
+  const reset = h("button", { class: "link-btn", type: "button", hidden: !editor || x.text === generated, onclick: async () => {
+    editor.value = generated;
+    await post(`/api/suggestions/${x.id}/edit`, { text: generated });
+    x.text = generated;
+    reset.hidden = true;
+    diffBox.hidden = true;
+  } }, "Reset to the proposed text");
+  editor?.addEventListener("change", async () => { // keep your wording, so the next refresh does not replace it
+    const text = current();
+    if (!text || text === x.text) return;
+    const r = await post(`/api/suggestions/${x.id}/edit`, { text });
+    if (r.ok) { x.text = text; reset.hidden = text === generated; }
+    diffBox.hidden = true;
+  });
+  const redraw = (prev) => {
+    const next = suggestionCard(x, { onStatus });
+    card.replaceWith(next);
+    onStatus?.(prev, x.status);
+    suggestionsChanged();
+  };
+  const act = (verb, label, cls = "btn small") => {
+    const b = h("button", { class: cls, type: "button", onclick: () => busy(b, label, async () => {
+      const prev = x.status;
+      if (verb === "apply" && !(await checkBeforeApply())) return;
+      if (await sgAct[verb](x, verb === "apply" && editor ? current() : undefined)) redraw(prev);
+    }) }, { apply: "Apply", undo: x.status === "dismissed" ? "Restore" : "Undo", dismiss: "Dismiss", done: "Mark done" }[verb]);
+    return b;
+  };
+  const preview = h("button", { class: "btn small", type: "button", "aria-expanded": "false", onclick: () => {
+    if (!diffBox.hidden) { diffBox.hidden = true; preview.setAttribute("aria-expanded", "false"); preview.textContent = "Preview"; return; }
+    return busy(preview, "Loading…", async () => {
+      const r = await api(`/api/suggestions/${x.id}/preview`, editor ? { text: current() } : null).catch((err) => ({ error: err.message }));
+      diffBox.replaceChildren(r.ok ? diffEl(r.diff) : h("div", { class: "warn-line" }, icon("gotcha"), ` ${r.error || "Could not preview"}`));
+      if (r.ok && x.kind === "instruction") { // the warnings follow the text as you edit it
+        showWarnings(r.warnings);
+        if (editor) checked = current();
+      }
+      diffBox.hidden = false;
+    }).then(() => { if (!diffBox.hidden) { preview.textContent = "Hide preview"; preview.setAttribute("aria-expanded", "true"); } });
+  } }, "Preview");
+  let body;
+  if (x.kind === "environment") {
+    const copy = h("button", { class: "btn small", type: "button", onclick: () => copyText(x.text, copy) }, "Copy");
+    body = h("div", { class: "sg-cmd" }, h("pre", { class: "sg-code" }, x.text), open ? copy : null);
+  } else if (editor) body = editor;
+  else body = h("pre", { class: "sg-code" }, x.status === "applied" ? x.applied_text || x.text : x.text);
+  let actions;
+  if (x.status === "applied" || x.status === "done") {
+    actions = [h("span", { class: "muted" }, `${x.status === "done" ? "Marked done" : "Applied"} ${ago(x.applied_at)}`), act("undo", "Undoing…")];
+  } else if (x.status === "dismissed") {
+    actions = [h("span", { class: "muted" }, `Dismissed${x.dismissed_reason ? `: ${x.dismissed_reason}` : ""}`), act("undo", "Restoring…")];
+  } else if (x.kind === "environment") {
+    actions = [act("done", "Saving…", "btn small primary"), act("dismiss", "Dismissing…")];
+  } else {
+    actions = [preview, act("apply", "Applying…", "btn small primary"), act("dismiss", "Dismissing…")];
+  }
+  const examples = (e.examples || []).slice(0, 2);
+  const card = h("article", { class: `sg-card st-${x.status}`, id: `sg-${x.id}` },
+    h("div", { class: "sg-head" }, sgKindChip(x.kind),
+      h("span", { class: "tag" }, x.origin === "knowledge" ? "from knowledge" : "from what goes wrong"),
+      x.agent && x.agent !== "all" ? agentTag(x.agent) : null,
+      x.status === "stale" ? h("span", { class: "badge muted-badge", title: "The cause has not been seen lately" }, h("span", { class: "sdot" }), "not seen lately") : null),
+    h("div", { class: "sg-title" }, x.title),
+    h("div", { class: "sg-evidence" }, sgEvidence(x)),
+    examples.length ? h("ul", { class: "sg-examples one-line" }, examples.map((ex) => h("li", { title: ex.note || null },
+      h("a", { href: `#/session/${ex.session_id}` }, ex.title || ex.session_id.slice(0, 8)),
+      ex.note ? h("span", { class: "muted" }, ` · ${ex.note}`) : null))) : null,
+    warnBox, body, open ? reset : null, diffBox,
+    h("div", { class: "sg-actions" }, actions));
+  return card;
+}
+
+// A compact row of the Home card: the top few, approved or dismissed in place
+function suggestionRow(x) {
+  const row = h("div", { class: "sg-row" });
+  const kindIcon = () => h("span", { class: "sg-row-icon", title: SG_KIND[x.kind]?.[0] }, icon(SG_KIND[x.kind]?.[1] || "dot"));
+  const draw = (note) => {
+    row.classList.toggle("settled", !!note);
+    if (note) {
+      row.replaceChildren(kindIcon(), h("div", { class: "sg-row-main" }, h("div", { class: "t" }, x.title), h("div", { class: "m" }, note)),
+        h("div", { class: "sg-row-act" }, x.status === "applied" || x.status === "dismissed" ? h("button", { class: "link-btn", type: "button", onclick: async () => {
+          if (await sgAct.undo(x)) { draw(); suggestionsChanged(); }
+        } }, x.status === "applied" ? "Undo" : "Restore") : null));
+      return;
+    }
+    const act = (verb, label, cls) => {
+      const b = h("button", { class: cls, type: "button", onclick: () => busy(b, `${label}…`, async () => {
+        if (!(await sgAct[verb](x))) return;
+        draw(verb === "apply" ? `Applied to ${homePath(x.target_path)}` : verb === "done" ? "Marked done" : "Dismissed");
+        suggestionsChanged();
+      }) }, label);
+      return b;
+    };
+    const copy = h("button", { class: "btn small", type: "button", onclick: () => copyText(x.text, copy) }, "Copy command");
+    // a warning (public repo, sensitive text, untracked file) is read on the full card before anything is written
+    const warned = sgHasWarnings(x.warnings, x.kind);
+    const approve = warned ? h("a", { class: "btn small primary", href: `#/suggestions?focus=${x.id}`, title: "Read the warnings and the change first" }, "Review")
+      : act("apply", "Approve", "btn small primary");
+    row.replaceChildren(kindIcon(),
+      h("div", { class: "sg-row-main" }, h("a", { class: "t", href: `#/suggestions?focus=${x.id}` }, x.title),
+        h("div", { class: "m" }, `${sgTarget(x)} · ${x.evidence?.line || ""}`), warned ? sgWarnings(x.warnings, x.kind) : null),
+      h("div", { class: "sg-row-act" }, x.kind === "environment" ? copy : approve, act("dismiss", "Dismiss", "btn small")));
+  };
+  draw();
+  return row;
+}
+async function suggestionsHomeCard(box, project) {
+  let data;
+  // the top 3 are all Home shows; a project page filters in the browser, so it takes the whole list
+  try { data = await api("/api/suggestions", project ? { status: "new" } : { status: "new", limit: 3 }); } catch (e) { return; }
+  const items = data.suggestions.filter((x) => !project || !x.project_path || x.project_path === project);
+  if (!items.length) return;
+  const total = project ? items.length : (data.total ?? items.length);
+  box.classList.add("section-gap");
+  box.replaceChildren(h("section", { class: "card sg-home" },
+    cardHead("Suggestions", { iconName: "suggestions", hint: `${fmtNum(total)} to review · nothing is written until you approve`,
+      tools: h("a", { href: "#/suggestions", class: "hint link-arrow" }, "All suggestions", icon("arrow")) }),
+    h("div", { class: "sg-rows" }, items.slice(0, 3).map((x) => suggestionRow(x)))));
+}
+
+route(/^\/suggestions$/, async (params) => {
+  const status = params.status || "new", scope = params.scope || "", cause = params.cause || "", focus = +params.focus || 0;
+  const data = await api("/api/suggestions", { status });
+  post("/api/suggestions/seen").then(() => drawUnseen(0)).catch(() => {});
+  const counts = data.counts;
+  const update = (patch) => { setParams({ status: status === "new" ? "" : status, scope, cause, ...patch }); render(); };
+  const items = data.suggestions.filter((x) => (!cause || x.cause_id === cause)
+    && (!scope || (scope === "user" ? !x.project_path : x.project_path === scope)));
+  const projects = [...new Set(data.suggestions.map((x) => x.project_path).filter(Boolean))].sort((a, b) => baseName(a).localeCompare(baseName(b)));
+  const chipCount = {};
+  const chips = h("div", { class: "filters sg-filters", role: "group", "aria-label": "Status" }, SG_STATUS.map(([v, label]) => {
+    chipCount[v] = h("span", { class: "count" }, fmtNum(counts[v] || 0));
+    return h("button", { type: "button", class: `chip ${v === status ? "on" : ""}`, "aria-pressed": String(v === status), onclick: () => update({ status: v === "new" ? "" : v }) }, label, chipCount[v]);
+  }), h("span", { class: "spacer" }),
+  projects.length ? h("select", { "aria-label": "Where", onchange: (ev) => update({ scope: ev.target.value }) },
+    h("option", { value: "" }, "Everywhere"), h("option", { value: "user", selected: scope === "user" }, "User level (every project)"),
+    projects.map((p) => h("option", { value: p, selected: p === scope }, baseName(p)))) : null);
+  const onStatus = (prev, next) => { // keep the status counts honest as cards change in place
+    counts[prev] = Math.max(0, (counts[prev] || 0) - 1);
+    counts[next] = (counts[next] || 0) + 1;
+    for (const [v] of SG_STATUS) chipCount[v].textContent = fmtNum(counts[v] || 0);
+  };
+  const refreshBtn = h("button", { class: "btn", type: "button", title: "Look at the latest sessions and knowledge for new suggestions", onclick: () => busy(refreshBtn, "Checking…", async () => {
+    const r = await post("/api/suggestions/refresh");
+    toast(r.error ? `Could not check: ${r.error}` : `${fmtNum(r.new)} new, ${fmtNum(r.updated)} updated, ${fmtNum(r.stale)} no longer happening`);
+    suggestionsChanged();
+    render();
+  }) }, "Check again");
+  const groups = new Map();
+  for (const x of items) {
+    const [key, title, sub] = sgGroupOf(x);
+    if (!groups.has(key)) groups.set(key, { title, sub, items: [] });
+    groups.get(key).items.push(x);
+  }
+  const titles = {};
+  for (const g of groups.values()) titles[g.title] = (titles[g.title] || 0) + 1;
+  for (const [key, g] of groups) if (titles[g.title] > 1) g.title = homePath(key); // two projects with one name: the whole path
+  const groupCard = (g) => {
+    const shown = g.items.some((x, i) => i >= 4 && x.id === focus) ? g.items.length : 4; // the one opened from Home is never folded away
+    const list = h("div", { class: "sg-list" }, g.items.slice(0, shown).map((x) => suggestionCard(x, { onStatus })));
+    const more = g.items.length > shown ? h("button", { class: "link-btn sg-more", type: "button", onclick: () => {
+      list.append(...g.items.slice(4).map((x) => suggestionCard(x, { onStatus })));
+      more.remove();
+    } }, `Show ${g.items.length - 4} more`) : null;
+    return h("section", { class: "card sg-group" },
+      h("div", { class: "sg-ghead" }, h("div", { style: { minWidth: 0 } }, h("h2", { title: g.title }, g.title), h("div", { class: "muted" }, g.sub)),
+        h("span", { class: "hint" }, `${fmtNum(g.items.length)} suggestion${g.items.length === 1 ? "" : "s"}`)),
+      list, more);
+  };
+  if (focus) setTimeout(() => { // opened from Home: show that card
+    const card = document.getElementById(`sg-${focus}`);
+    if (!card) return;
+    setParams({ status: status === "new" ? "" : status, scope, cause });
+    card.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" });
+    card.classList.add("flash");
+    setTimeout(() => card.classList.remove("flash"), 1600);
+  }, 60);
+  const statusName = SG_STATUS.find(([v]) => v === status)?.[1].toLowerCase() || status;
+  const empty = h("div", { class: "card empty sg-empty" },
+    !counts.new && !counts.applied && !counts.dismissed && !counts.done && !counts.stale
+      ? ["Nothing to suggest yet. After a sync, Chronicle proposes a fix once a failure keeps coming back, or once knowledge is confirmed often enough to belong in an instruction file."]
+      : [`Nothing ${statusName}${cause || scope ? " here" : ""}.`, cause || scope ? [" ", h("a", { href: "#/suggestions" }, "Show everything")] : null]);
+  return h("div", { class: "sg-page" },
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "Suggestions"),
+      h("div", { class: "sub" }, "Fixes for what keeps going wrong, and knowledge worth telling your agents. Nothing is written until you apply it; the file is backed up first.")),
+      h("div", { class: "head-actions" }, h("a", { class: "btn", href: "#/friction" }, "What goes wrong"), refreshBtn)),
+    chips,
+    cause ? h("div", { class: "sg-scope muted" }, `Only the fixes for “${items[0]?.evidence?.cause || cause}”. `, h("a", { href: "#/suggestions" }, "Show all")) : null,
+    groups.size ? h("div", { class: "sg-groups" }, [...groups.values()].map(groupCard)) : empty);
+});
+
+// What goes wrong: recurring causes, trends, and the tools that fail most
+function causeDetail(c) {
+  const ex = c.examples || [];
+  return h("div", { class: "fr-detail" },
+    h("div", { class: "fr-facts" },
+      fact("of sessions in those projects", pctText(c.rate || 0, 1)),
+      fact("occurrences", fmtNum(c.occurrences)),
+      c.immediate_repeats ? fact("retried the same way", fmtNum(c.immediate_repeats)) : null,
+      fact("first seen", c.first_seen || "–")),
+    c.agents?.length ? h("div", { class: "fr-line" }, h("span", { class: "muted" }, "Agents "), c.agents.map((a) => h("span", { class: "tag" }, agentShort(a)))) : null,
+    c.projects?.length ? h("div", { class: "fr-line" }, h("span", { class: "muted" }, "Projects "), c.projects.slice(0, 12).map((p) => h("span", { class: "tag" }, p)),
+      c.projects.length > 12 ? h("span", { class: "muted" }, ` +${c.projects.length - 12}`) : null) : null,
+    ex.length ? [h("div", { class: "subhead" }, "Examples"), h("ul", { class: "sg-examples" }, ex.slice(0, 5).map((x) => h("li", null,
+      h("a", { href: `#/session/${x.session_id}` }, x.title || x.session_id.slice(0, 8)), x.note ? h("span", { class: "muted" }, ` · ${x.note}`) : null)))] : null,
+    c.fixes?.length ? [h("div", { class: "subhead" }, "Fixes"), h("ul", { class: "fr-fixes" }, c.fixes.map((f) => h("li", null, sgKindChip(f.kind), " ", f.title)))] : null);
+}
+function causesTable(causes, links) {
+  const max = Math.max(1, ...causes.map((c) => c.sessions));
+  const trendOf = (c) => (c.weekly || []).map((w) => w.sessions);
+  return localTable(causes, [
+    { key: "name", label: "Cause", value: (c) => c.name },
+    { key: "sessions", label: "Sessions", num: true, desc: true, value: (c) => c.sessions },
+    { key: "projects", label: "Projects", num: true, desc: true, value: (c) => c.projects.length },
+    { key: "trend", label: "Last 12 weeks" },
+    { key: "last", label: "Last seen", desc: true, value: (c) => c.last_seen || "" },
+    { key: "fix", label: "Fix" },
+  ], (c) => {
+    const n = links[c.id] || { open: 0, applied: 0 };
+    const trend = trendOf(c);
+    const fix = c.noise ? h("span", { class: "muted", title: "Expected failures need no fix" }, "–") : n.open ? h("a", { href: `#/suggestions?cause=${encodeURIComponent(c.id)}` }, `${n.open} to review`)
+      : n.applied ? h("a", { href: `#/suggestions?status=applied&cause=${encodeURIComponent(c.id)}` }, "applied")
+      : h("span", { class: "muted", title: c.category === "other" ? "Recurring, but there is no known fix to propose" : "Not frequent enough to propose a fix" }, "–");
+    return expandable(h("tr", null,
+      h("td", { class: "title-cell" }, h("div", { class: "t" }, c.name),
+        h("div", { class: "fr-sub" }, h("span", { class: "tag" }, FR_CATEGORY[c.category] || c.category),
+          c.still_happening && !c.noise ? h("span", { class: "badge serious" }, h("span", { class: "sdot" }), "still happening") : h("span", { class: "badge muted-badge" }, h("span", { class: "sdot" }), c.noise ? "expected" : "quiet lately"))),
+      barCell(fmtNum(c.sessions), c.sessions, max),
+      h("td", { class: "num" }, fmtNum(c.projects.length)),
+      h("td", { class: "fr-trend", title: `Sessions per week: ${trend.join(", ")}` }, sparkEl(trend, { height: 26 })),
+      h("td", { class: "nowrap" }, c.last_seen ? fmtDate(c.last_seen + "T12:00:00") : "–"),
+      h("td", { class: "nowrap" }, fix)), 6, () => causeDetail(c));
+  }, { empty: "No recurring causes in this period" });
+}
+route(/^\/friction$/, async (params) => {
+  const days = params.days || "90", project = params.project || "", noise = params.noise === "1";
+  const [data, sg] = await Promise.all([
+    api("/api/friction", { days: days === "all" ? "" : days, project, noise: 1 }),
+    api("/api/suggestions").catch(() => ({ suggestions: [] })),
+  ]);
+  const update = (patch) => { setParams({ days, project, noise: noise ? "1" : "", ...patch }); render(); };
+  const links = {};
+  for (const x of sg.suggestions) {
+    if (!x.cause_id) continue;
+    const n = (links[x.cause_id] ||= { open: 0, applied: 0 });
+    if (x.status === "new" || x.status === "stale") n.open++;
+    if (x.status === "applied" || x.status === "done") n.applied++;
+  }
+  const waste = data.causes.filter((c) => !c.noise), noiseCauses = data.causes.filter((c) => c.noise);
+  const ns = data.noise_summary || {};
+  const live = waste.filter((c) => c.still_happening && c.category !== "other").length;
+  const toolMax = Math.max(1, ...data.tool_errors.map((t) => t.errors));
+  const toolName = (t) => t.replace(/^mcp__(.+?)__/, (m, srv) => `${srv.replace(/^claude_ai_/, "")} · `);
+  const tools = h("section", { class: "card" }, cardHead("Tools that fail most", { iconName: "zap", hint: "failed calls, duplicates counted once" }),
+    localTable(data.tool_errors, [
+      { key: "tool", label: "Tool", value: (t) => t.tool },
+      { key: "calls", label: "Calls", num: true, desc: true, value: (t) => t.calls },
+      { key: "errors", label: "Failed", num: true, desc: true, value: (t) => t.errors },
+      { key: "rate", label: "Rate", num: true, desc: true, value: (t) => t.rate },
+    ], (t) => h("tr", null, h("td", { class: "mono fr-tool", title: t.tool }, toolName(t.tool)), h("td", { class: "num" }, fmtNum(t.calls)),
+      barCell(fmtNum(t.errors), t.errors, toolMax), h("td", { class: "num" }, pctText(t.errors, t.calls))), { empty: "No failed tool calls" }));
+  const noiseBody = h("div", { hidden: !noise }, causesTable(noiseCauses, links));
+  const noiseBtn = h("button", { class: "link-btn", type: "button", "aria-expanded": String(noise), onclick: () => {
+    noiseBody.hidden = !noiseBody.hidden;
+    noiseBtn.textContent = noiseBody.hidden ? "Show" : "Hide";
+    noiseBtn.setAttribute("aria-expanded", String(!noiseBody.hidden));
+    setParams({ days, project, noise: noiseBody.hidden ? "" : "1" });
+  } }, noise ? "Hide" : "Show");
+  const noiseCard = h("section", { class: "card" }, cardHead("Noise", { iconName: "skipped", hint: "expected failures, left out above", tools: noiseCauses.length ? noiseBtn : null }),
+    h("p", { class: "fr-noise muted" }, ns.occurrences
+      ? `${fmtNum(ns.occurrences)} failures in ${fmtNum(ns.sessions)} sessions were expected: tests failing inside a dev loop, read-only command chains that ended non-zero, provider outages and tool calls you turned down.`
+      : "No expected failures in this period."),
+    noiseBody);
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, "What goes wrong"),
+      h("div", { class: "sub" }, `Recurring failure causes across your sessions, noise kept apart. ${live ? `${live} still happening; ` : ""}fixes wait in `, h("a", { href: "#/suggestions" }, "Suggestions"), ".")),
+      h("div", { class: "head-actions" },
+        segControl([["30", "30d"], ["90", "90d"], ["180", "180d"], ["all", "All"]], days, (v) => update({ days: v })),
+        h("select", { "aria-label": "Project", onchange: (e) => update({ project: e.target.value }) }, await projectOptions(project)))),
+    h("section", { class: "card" }, cardHead("Causes", { iconName: "gotcha", hint: "click a row for examples and fixes" }), causesTable(waste, links)),
+    h("div", { class: "section-gap" }, tools), h("div", { class: "section-gap" }, noiseCard));
+});
+
+// =====================================================================================
 // Appearance: theme and transparency, remembered in this browser
 // =====================================================================================
 route(/^\/appearance$/, async () => {
@@ -3345,11 +3778,12 @@ const SECTIONS = [
   { key: "sessions", label: "Sessions", href: "#/sessions" },
   { key: "knowledge", label: "Knowledge", href: "#/knowledge" },
   { key: "projects", label: "Projects", href: "#/projects" },
+  { key: "suggestions", label: "Suggestions", href: "#/suggestions" },
   { key: "settings", label: "Settings", href: "#/status" },
 ];
 const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
-  projects: "projects", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings" };
-const PAGE_LABEL = { glossary: "Glossary", map: "Map", reviews: "Weekly reviews", status: "Status", sources: "Sources", mcp: "MCP", devices: "Devices", appearance: "Appearance" };
+  projects: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings" };
+const PAGE_LABEL = { friction: "What goes wrong", glossary: "Glossary", map: "Map", reviews: "Weekly reviews", status: "Status", sources: "Sources", mcp: "MCP", devices: "Devices", appearance: "Appearance" };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 
 function sectionOf(path, params) {
@@ -3383,8 +3817,10 @@ function renderRail() {
   const rail = $("#rail");
   const link = (sx) => h("a", { href: sx.href, "data-section": sx.key, title: sx.label, "aria-label": sx.label,
     onclick: () => { if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.key === "home" ? "home" : sx.key));
-  rail.replaceChildren(...SECTIONS.slice(0, 4).map(link), link({ key: "search", label: "Search all sessions", href: "#/search" }),
-    h("div", { class: "spacer" }), link(SECTIONS[4]));
+  const settings = SECTIONS.find((x) => x.key === "settings");
+  rail.replaceChildren(...SECTIONS.filter((x) => x !== settings).map(link), link({ key: "search", label: "Search all sessions", href: "#/search" }),
+    h("div", { class: "spacer" }), link(settings));
+  drawUnseen(unseenCount);
 }
 
 // ------------------------------------------------------------------ sidebar
@@ -3482,6 +3918,15 @@ async function projectsSidebar(box) {
       oninput: (e) => { sbState.projectQ = e.target.value; draw(); } })), list);
   draw();
 }
+async function suggestionsSidebar(box) {
+  const { counts } = await api("/api/suggestions", { status: "done" }); // the smallest list that still carries every count
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, "Suggestions"), h("span", null, fmtNum(counts.new || 0))),
+    h("div", { class: "sb-scroll" },
+      SG_STATUS.map(([v, label]) => sbRow(label, v === "new" ? "#/suggestions" : `#/suggestions?status=${v}`, SG_STATUS_ICON[v],
+        counts[v] || 0, ["/suggestions", "status", v === "new" ? "" : v])),
+      h("div", { class: "sb-group" }, "Understand"),
+      sbRow("What goes wrong", "#/friction", "gotcha", null, ["/friction"])));
+}
 function settingsSidebar(box) {
   box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, "Settings")),
     h("div", { class: "sb-scroll" },
@@ -3499,6 +3944,7 @@ async function buildSidebar(section) {
     else if (section === "sessions") await sessionsSidebar(box, "Sessions");
     else if (section === "knowledge") await knowledgeSidebar(box);
     else if (section === "projects") await projectsSidebar(box);
+    else if (section === "suggestions") await suggestionsSidebar(box);
     else settingsSidebar(box);
   } catch (e) {
     box.replaceChildren(h("div", { class: "sb-empty" }, `Could not load: ${e.message}`));
@@ -3551,6 +3997,7 @@ function paletteCommands() {
     nav("Home", "#/", "home"), nav("Sessions", "#/sessions", "sessions"), nav("Knowledge", "#/knowledge", "knowledge"), nav("All knowledge", "#/knowledge/all", "knowledge"),
     nav("Glossary", "#/glossary", "glossary"), nav("Map", "#/map", "map"), nav("Projects", "#/projects", "projects"),
     nav("Global playbook", `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav("Weekly reviews", "#/reviews", "reviews"),
+    nav("Suggestions", "#/suggestions", "suggestions", "fixes to approve"), nav("What goes wrong", "#/friction", "gotcha", "recurring failures"),
     nav("Status", "#/status", "status"), nav("Sources", "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", "connect other agents"), nav("Devices", "#/devices", "devices", "phone, other computers"), nav("Appearance", "#/appearance", "appearance"),
     { group: "Commands", label: "Sync now", icon: "sync", hint: "", run: syncNow },
     { group: "Commands", label: "Toggle sidebar", icon: "sidebar", hint: "⌘B", run: toggleSidebar },
@@ -3676,6 +4123,7 @@ async function pollStatus() {
       : st.last_sync ? `Synced ${ago(st.last_sync)}` : "Not synced yet";
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
     showUpdate(st.update, st.version);
+    pollUnseen();
     for (const name of [...watched]) {
       const j = jobs[name];
       if (j && j.state !== "running") {

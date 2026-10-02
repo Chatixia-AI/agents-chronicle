@@ -49,6 +49,15 @@
 | `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |
 | `updates.notify` | `false` | バックグラウンド同期が 1 日 1 回 pypi.org に問い合わせ、新しいリリースごとに 1 回デスクトップ通知を表示する（Status › Updates、または `chronicle install --notify-updates`） |
 
+## `[suggestions]`
+
+繰り返し起きる失敗への修正案（[提案と「うまくいかないこと」](suggestions.md)）。
+
+| キー | 既定値 | |
+| --- | --- | --- |
+| `enabled` | `true` | バックグラウンド同期のたびに提案を更新する（モデルは呼び出しません）。適用するまで何も書き込みません。**Check again** と `chronicle suggest refresh` はどちらの場合も使えます |
+| `notify` | `false` | バックグラウンド同期で新しい提案が見つかったら、デスクトップ通知を表示する |
+
 ## `[hub]`
 
 複数のコンピューターで 1 つのアーカイブ（[スマートフォンとほかのコンピューター](devices.md#ほかのコンピューター)）。

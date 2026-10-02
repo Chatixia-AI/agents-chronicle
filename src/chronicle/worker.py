@@ -26,6 +26,7 @@ class WorkReport:
     synthesized: list[str] = field(default_factory=list)
     reviews: list[str] = field(default_factory=list)
     exported: int = 0
+    suggestions: int = 0  # new suggestions this run's refresh found
     cost_usd: float = 0.0
     paused_until: str | None = None
     note: str | None = None
@@ -33,6 +34,8 @@ class WorkReport:
     def summary(self) -> str:
         parts = [f"{len(self.analyzed)} analyzed", f"{len(self.skipped)} skipped", f"{len(self.failed)} failed",
                  f"{len(self.synthesized)} knowledge bases", f"{len(self.reviews)} reviews", f"{self.exported} notes exported"]
+        if self.suggestions:
+            parts.append(f"{self.suggestions} new suggestion{'s' if self.suggestions != 1 else ''}")
         if self.paused_until:
             parts.append(f"paused until {self.paused_until}")
         if self.note:
@@ -191,6 +194,17 @@ def _run_locked(cfg: Config, conn, report: WorkReport, *, session_ids, max_analy
         except Exception:  # export problems must never block analysis
             conn.rollback()
             log.exception("markdown export failed")
+    if not session_ids:  # a background or `chronicle work` run, not one asked for specific sessions
+        _suggestions(cfg, conn, report)
+
+
+def _suggestions(cfg: Config, conn, report: WorkReport) -> None:
+    """Rebuild the suggestions queue (deterministic, no LLM) and notify about new ones when [suggestions] notify."""
+    from .suggest import after_sync
+
+    got = after_sync(conn, cfg)  # never raises; None when [suggestions] enabled = false
+    if got and got["new"]:
+        report.suggestions = got["new"]
 
 
 def _analyze_many(cfg: Config, ids: list[str], runner: Runner, report: WorkReport, *, model=None, progress=None):

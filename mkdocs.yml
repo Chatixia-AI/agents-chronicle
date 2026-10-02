@@ -66,6 +66,7 @@ nav:
       - Sources: sources.md
       - Dashboard, glossary and Map: dashboard.md
       - Command line: cli.md
+      - Suggestions and What goes wrong: suggestions.md
       - MCP server: mcp.md
       - Phone and other computers: devices.md
   - Reference:
@@ -80,6 +81,7 @@ nav:
       - ソース: ja/sources.md
       - ダッシュボード、用語集、マップ: ja/dashboard.md
       - コマンドライン: ja/cli.md
+      - 提案と「うまくいかないこと」: ja/suggestions.md
       - MCP サーバー: ja/mcp.md
       - スマートフォンとほかのコンピューター: ja/devices.md
       - 記録される内容と分析の仕組み: ja/analysis.md

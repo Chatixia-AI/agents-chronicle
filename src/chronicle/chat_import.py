@@ -16,7 +16,9 @@ import hashlib
 import json
 import logging
 import re
+import struct
 import zipfile
+import zlib
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -26,6 +28,7 @@ from .util import utcnow_iso
 log = logging.getLogger("chronicle.chat_import")
 
 _CONVERSATIONS_RE = re.compile(r"^conversations(?:-\d+)?\.json$")  # large exports may be split
+_LOCAL_HEADER = struct.Struct("<4s5H3I2H")  # signature, version, flags, method, time, date, crc, sizes, name/extra lengths
 
 
 @dataclass(frozen=True)
@@ -65,24 +68,97 @@ class Export:
     format: Format
     conversations: list[dict]
     files: dict[str, bytes]  # what gets archived: the conversations file(s), claude.ai's projects.json
+    note: str | None = None  # read from a zip cut off after its chats
 
 
-def _files(path: Path) -> dict[str, bytes]:
-    """The chat files of an export .zip, its unpacked folder, or a conversations.json."""
+def _wanted(name: str) -> bool:
+    return bool(_CONVERSATIONS_RE.match(name)) or name == "projects.json"
+
+
+def _files(path: Path, name: str) -> tuple[dict[str, bytes], str | None]:
+    """The chat files of an export .zip, its unpacked folder, or a conversations.json, and a note when the zip was cut off."""
     path = Path(path).expanduser()
-    wanted = lambda name: bool(_CONVERSATIONS_RE.match(name)) or name == "projects.json"
     if zipfile.is_zipfile(path):
         with zipfile.ZipFile(path) as z:
             names = {Path(n).name: n for n in z.namelist() if not n.startswith("__MACOSX/")}
-            return {name: z.read(full) for name, full in sorted(names.items()) if wanted(name)}
+            return {n: z.read(full) for n, full in sorted(names.items()) if _wanted(n)}, None
     if path.is_dir():
-        return {p.name: p.read_bytes() for p in sorted(path.iterdir()) if p.is_file() and wanted(p.name)}
+        return {p.name: p.read_bytes() for p in sorted(path.iterdir()) if p.is_file() and _wanted(p.name)}, None
     if path.suffix == ".json" and path.is_file():
         sibling = path.with_name("projects.json")
-        return {"conversations.json": path.read_bytes(), **({"projects.json": sibling.read_bytes()} if sibling.is_file() else {})}
+        return {"conversations.json": path.read_bytes(), **({"projects.json": sibling.read_bytes()} if sibling.is_file() else {})}, None
+    if path.is_file():
+        with open(path, "rb") as f:
+            if f.read(4) == b"PK\x03\x04":
+                return _cut_off_zip(path, name)
     if path.exists():
-        raise ExportError(f"{path.name} is not a chat export: give the .zip, its unpacked folder, or conversations.json")
+        raise ExportError(f"{name} is not a chat export: give the .zip, its unpacked folder, or conversations.json")
     raise ExportError(f"{path} not found")
+
+
+def _zip64_size(extra: bytes) -> int:
+    """The compressed size from a local header's zip64 extra field (original size first, then compressed)."""
+    i = 0
+    while i + 4 <= len(extra):
+        tag, n = struct.unpack_from("<HH", extra, i)
+        if tag == 1 and n >= 16:
+            return struct.unpack_from("<Q", extra, i + 12)[0]
+        i += 4 + n
+    return 0xFFFFFFFF
+
+
+def _cut_off_zip(path: Path, name: str) -> tuple[dict[str, bytes], str]:
+    """The chat files of a zip without its end, as an interrupted download leaves it, read entry by entry.
+
+    `zipfile` needs the central directory, the last thing in a zip, so a partial download looks like no zip at all
+    even when every chat is there: ChatGPT puts conversations-*.json near the start and gigabytes of attachments
+    after them. The chats are accepted only when the cut falls in a later file Chronicle does not read.
+    """
+    size = path.stat().st_size
+    files: dict[str, bytes] = {}
+    cut_in = None  # the entry the file ends in
+    redownload = f"{name} is an incomplete download ({size / 1e9:.2f} GB, the end of the zip is missing)"
+    with open(path, "rb") as f:
+        while True:
+            head = f.read(_LOCAL_HEADER.size)
+            if head[:4] == b"PK\x01\x02":  # the central directory: every entry was read, only the zip's end is damaged
+                cut_in = ""
+                break
+            if len(head) < _LOCAL_HEADER.size or head[:4] != b"PK\x03\x04":
+                break
+            _, _, flags, method, _, _, crc, csize, _, nlen, xlen = _LOCAL_HEADER.unpack(head)
+            raw, extra = f.read(nlen), f.read(xlen)
+            entry = Path(raw.decode("utf-8", "replace")).name
+            if len(raw) < nlen or len(extra) < xlen:
+                cut_in = entry
+                break
+            if flags & 0x9:  # encrypted, or the size only follows the data: the next entry cannot be found
+                break
+            if csize == 0xFFFFFFFF:
+                csize = _zip64_size(extra)
+            if f.tell() + csize > size:
+                cut_in = entry
+                break
+            if not (_wanted(entry) and not raw.startswith(b"__MACOSX/")):
+                f.seek(csize, 1)
+                continue
+            data = f.read(csize)
+            try:
+                data = data if method == 0 else zlib.decompress(data, -15) if method == 8 else None
+            except zlib.error:
+                data = None
+            if data is None or zlib.crc32(data) != crc:
+                raise ExportError(f"{redownload}, and {entry} in it is damaged: download the export again")
+            files[entry] = data
+    shards = [n for n in files if _CONVERSATIONS_RE.match(n)]
+    if cut_in is None or not shards or _wanted(cut_in):
+        where = f"inside {cut_in}" if cut_in and _wanted(cut_in) else "before all its chats could be read"
+        raise ExportError(f"{redownload}: it is cut off {where}. Download the export again")
+    note = ("the end of the zip is damaged, but every chat was read" if not cut_in else
+            f"incomplete download, cut off at {size / 1e9:.2f} GB in {cut_in}, after the chats: all {len(shards)} "
+            f"conversations file{'s' if len(shards) > 1 else ''} read")
+    log.warning("%s: %s", name, note)
+    return files, note
 
 
 def _folders(path: Path) -> set[str]:
@@ -95,7 +171,7 @@ def _folders(path: Path) -> set[str]:
 
 def read_export(path: Path, name: str | None = None) -> Export:
     name = name or Path(path).name
-    files = _files(path)
+    files, note = _files(path, name)
     shards = [n for n in files if _CONVERSATIONS_RE.match(n)]
     if not shards and "projects" in _folders(path):
         raise ExportError(f"{name} holds your claude.ai projects, not chats, and the export does not say which project a "
@@ -119,7 +195,7 @@ def read_export(path: Path, name: str | None = None) -> Export:
         raise ExportError("conversations.json is neither a claude.ai nor a ChatGPT export")
     if fmt is CHATGPT:
         files.pop("projects.json", None)
-    return Export(fmt, conversations, files)
+    return Export(fmt, conversations, files, note)
 
 
 def import_export(cfg, conn, path: Path, *, analyze: bool = False, progress=None, name: str | None = None) -> dict:
@@ -142,7 +218,7 @@ def import_export(cfg, conn, path: Path, *, analyze: bool = False, progress=None
             with gzip.open(dst / f"{fname}.gz", "wb") as f:
                 f.write(raw)
     counts = {"format": fmt.label, "conversations": len(export.conversations), "new": 0, "updated": 0, "unchanged": 0,
-              "empty": 0, "excluded": 0}
+              "empty": 0, "excluded": 0, **({"note": export.note} if export.note else {})}
     with file_lock(cfg.locks_dir / "ingest.lock", timeout=900) as got:
         if not got:
             raise ExportError("a sync is running; try again when it finishes")
@@ -183,7 +259,8 @@ def summary(counts: dict) -> str:
         parts.append(f"{counts['empty']} empty")
     if counts.get("excluded"):
         parts.append(f"{counts['excluded']} excluded")
-    return f"{counts['format']} export: {counts['conversations']} chats · " + ", ".join(parts)
+    note = f" ({counts['note']})" if counts.get("note") else ""
+    return f"{counts['format']} export: {counts['conversations']} chats · " + ", ".join(parts) + note
 
 
 def import_status(conn) -> dict:

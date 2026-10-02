@@ -5,9 +5,9 @@
 ![The session page: transcript with one-line tool calls, the knowledge it produced, and the outline of prompts](images/session.png)
 
 **Dashboard:** a simplified VS Code layout in Apple's Liquid Glass style. An icon rail on the left switches between
-**Home**, **Sessions**, **Knowledge**, **Projects** and **Settings**, and the sidebar beside it lists that section:
+**Home**, **Sessions**, **Knowledge**, **Projects**, **Suggestions** and **Settings**, and the sidebar beside it lists that section:
 recent sessions grouped by the day they were last active, with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
-and Weekly reviews, projects, or Status, Sources, MCP, Devices and Appearance. **⌘K** (also ⌘P or `/`) opens a palette that jumps
+and Weekly reviews, projects, suggestions by status plus What goes wrong, or Status, Sources, MCP, Devices and Appearance. **⌘K** (also ⌘P or `/`) opens a palette that jumps
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
 themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
 last sync and, once one is found, an available update ([Updating](install.md#updating)).
@@ -51,6 +51,25 @@ mentions highlighted in transcript order; **Show all** lists every one, and clic
 there with the terms still marked. Glossary
 terms are underlined wherever they appear (transcripts, knowledge, summaries): hover for the definition, click for
 the entry. Every chart has a table view; light and dark themes.
+
+## Suggestions and What goes wrong
+
+**Suggestions** (the lightbulb in the rail; its badge counts suggestions you haven't seen yet) is the queue of fixes
+Chronicle proposes: lines for your `CLAUDE.md` or `AGENTS.md`, a change to the Playwright MCP server in
+`~/.claude.json`, and setup steps for you to run. Status chips switch between **To review**, **Applied**, **Done**,
+**Stale** and **Dismissed**, and a menu narrows to user-level suggestions or one project. Cards are grouped by the
+file they change; each shows its evidence ("seen in 31 sessions across 17 projects · still happening · last
+2026-10-01"), example sessions, warnings (public repository, looks sensitive, file not tracked by git) and the line,
+which you can edit. **Preview** shows the diff, **Apply** writes it (the file is backed up first), **Dismiss** drops
+it for good, and an applied card has **Undo**. Setup steps show their command with **Copy** and **Mark done**;
+Chronicle never runs them. **Check again** looks at the latest sessions now. When something is waiting, **Home**
+shows the top 3 with **Approve** and **Dismiss**.
+
+**What goes wrong** lists the failures that keep coming back across your sessions, for 30, 90 or 180 days or all
+time and any project: sessions and projects hit, a 12-week trend, last seen and whether it is still happening, and
+a link to its suggestions. Click a cause for examples and fixes. Below are the tools that fail most, and a **Noise**
+card for expected failures (tests failing in a dev loop, provider outages), collapsed. See
+[Suggestions and What goes wrong](suggestions.md).
 
 ## Glossary
 

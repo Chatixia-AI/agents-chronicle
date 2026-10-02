@@ -249,8 +249,8 @@ def store_parsed(
 ) -> str:
     """Replace a session's derived rows and upsert its metadata. Returns 'new' or 'updated'."""
     prev = conn.execute(
-        "SELECT analysis_status, analyzed_prompts, ended_flag, ended_at, llm_title, analysis_reason, source, n_prompts "
-        "FROM sessions WHERE id = ?",
+        "SELECT analysis_status, analyzed_prompts, ended_flag, ended_at, llm_title, analysis_reason, source, n_prompts, "
+        "parser_version FROM sessions WHERE id = ?",
         (ps.id,),
     ).fetchone()
     sid = ps.id
@@ -310,11 +310,16 @@ def store_parsed(
 
     # analysis state machine
     grew = prev is not None and (ps.ended_at or "") > (prev["ended_at"] or "")
+    analyzed = prev["analyzed_prompts"] if prev is not None else None
+    # a newer parser dropped duplicated prompts the analysis had counted: it still covered every real one
+    recounted = bool(analyzed) and ps.n_prompts < analyzed and prev["parser_version"] != PARSER_VERSION
+    if recounted:
+        analyzed = ps.n_prompts
     if prev is None or prev["source"] == "history":
         status, reason = "pending", None  # new, or a history-only stub whose transcript has now appeared
     else:
         status, reason = prev["analysis_status"], prev["analysis_reason"]
-        if status == "done" and ps.n_prompts > (prev["analyzed_prompts"] or 0):
+        if status == "done" and (ps.n_prompts > (analyzed or 0) or (recounted and grew)):
             status, reason = "stale", "session continued after analysis"
         elif status == "skipped" and reason in ("too few prompts", "too little content", "excluded project") \
                 and ps.n_prompts > (prev["n_prompts"] or 0):
@@ -391,6 +396,8 @@ def store_parsed(
         "machine_id": machine or local_machine_id(cfg),
         "machine_path": recorded_path if recorded_path != project_path else None,
     }
+    if prev is not None and analyzed != prev["analyzed_prompts"]:
+        row["analyzed_prompts"] = analyzed
     row["title"] = best_title({"llm_title": prev["llm_title"] if prev else None, "ai_title": row["ai_title"],
                                "first_prompt": row["first_prompt"]})
     cols = list(row)
@@ -442,6 +449,44 @@ def _ingest_main(conn, cfg, archiver, claude_dir, proj: Path, main: Path, report
     if result == "new":
         report.sessions_new += 1
     else:
+        report.sessions_updated += 1
+
+
+def _reparse_archived(conn, cfg, report: SyncReport, skip: set[str]) -> None:
+    """Re-parse, from the vault's copy, Claude Code sessions an older parser stored whose transcript is gone."""
+    rows = conn.execute(
+        "SELECT id, claude_dir, project_dir, transcript_path, archive_path FROM sessions "
+        "WHERE agent = 'claude' AND source = 'transcript' AND archive_path IS NOT NULL "
+        "AND (parser_version IS NULL OR parser_version != ?)",
+        (PARSER_VERSION,),
+    ).fetchall()
+    for r in rows:
+        main = Path(r["archive_path"])
+        if r["id"] in skip or not main.exists() or (r["transcript_path"] and Path(r["transcript_path"]).exists()):
+            continue  # a live transcript is re-parsed by the normal pass
+        session_dir = session_dir_for(main)
+        conn.commit()
+        try:
+            ps = parse_session(main, session_dir)
+            ps.id = r["id"]
+        except Exception as exc:
+            log.exception("parse failed: %s", main)
+            report.errors.append(f"parse {main}: {exc}")
+            continue
+        if cfg.is_excluded(ps.project_path) or kv_get(conn, f"forget:{ps.id}"):
+            continue
+        try:
+            store_parsed(conn, cfg, ps, claude_dir=Path(r["claude_dir"]), project_dir=r["project_dir"],
+                         transcript_path=Path(r["transcript_path"] or main), archive_path=main,
+                         files_sig=files_signature(main, session_dir))
+            conn.execute("UPDATE sessions SET source_present = 0 WHERE id = ?", (ps.id,))
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()
+            log.exception("store failed: %s", main)
+            report.errors.append(f"store {main}: {exc}")
+            continue
+        report.touched.append(ps.id)
         report.sessions_updated += 1
 
 
@@ -516,6 +561,7 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                             report.errors.append(f"history {hist}: {exc}")
                 conn.commit()
         if not only:
+            _reparse_archived(conn, cfg, report, skip)
             for codex_dir in codex_dirs:
                 try:
                     _sync_codex(cfg, conn, archiver, codex_dir, report, skip, force=force)

@@ -12,7 +12,7 @@ from pathlib import Path
 
 import pytest
 
-from chronicle.chat_import import CHATGPT, CLAUDE_AI, ExportError, import_export, import_status, read_export
+from chronicle.chat_import import CHATGPT, CLAUDE_AI, ExportError, import_export, import_status, read_export, summary
 from chronicle.chatgpt_export import parse_conversation as parse_chatgpt
 from chronicle.claude_export import parse_conversation
 from chronicle.db import connect as db_connect
@@ -202,6 +202,33 @@ def test_import_chatgpt_export(env):
     assert [p.name for p in (cfg.archive_dir / "chatgpt").glob("*/*")] == ["conversations.json.gz"]  # not user.json or chat.html
     assert import_export(cfg, conn, env["tmp"] / "chatgpt.zip")["unchanged"] == 1
     assert import_status(conn)["chatgpt"]["sessions"] == 1
+
+
+def test_cut_off_download_keeps_the_chats_before_the_cut(env):
+    """A large ChatGPT export puts its conversations first and gigabytes of attachments after them, so an interrupted
+    download lacks only the zip's end (its directory), which `zipfile` cannot do without."""
+    full = env["tmp"] / "full.zip"
+    second = {**GPT, "conversation_id": "gpt-2", "id": "gpt-2", "title": "Second"}
+    with zipfile.ZipFile(full, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("conversations-000.json", json.dumps([GPT]))
+        z.writestr("conversations-001.json", json.dumps([second]))
+        z.writestr("file_0001.dat", bytes(range(256)) * 400, compress_type=zipfile.ZIP_STORED)
+        z.writestr("user.json", json.dumps({"email": "ada@example.com"}))
+    raw = full.read_bytes()
+    cut = env["tmp"] / "cut.zip"
+    cut.write_bytes(raw[:raw.index(b"file_0001.dat") + 50_000])
+    assert not zipfile.is_zipfile(cut)
+
+    export = read_export(cut)
+    assert export.format is CHATGPT and len(export.conversations) == 2
+    assert "cut off" in export.note and "file_0001.dat" in export.note
+    counts = import_export(env["cfg"], db_connect(env["cfg"].db_path), cut)
+    assert counts["new"] == 2 and "incomplete download" in summary(counts)
+
+    inside = env["tmp"] / "inside.zip"
+    inside.write_bytes(raw[:raw.index(b"conversations-001.json") + 40])
+    with pytest.raises(ExportError, match="incomplete download.*inside conversations-001.json.*Download the export again"):
+        read_export(inside, "chatgpt-export.zip")
 
 
 def test_claude_keeps_the_branch_shown():

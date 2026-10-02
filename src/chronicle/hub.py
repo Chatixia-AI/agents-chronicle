@@ -719,6 +719,8 @@ def apply_analyses(cfg: Config, conn) -> int:
             if s["analysis_status"] in ("done", "running"):
                 continue  # the hub's own analysis wins
             values = {c: rec.get(c) for c in ANALYSIS_COLS}
+            if values["analyzed_prompts"] and (s["n_prompts"] or 0) < values["analyzed_prompts"]:
+                values["analyzed_prompts"] = s["n_prompts"]  # counted by an older parser that saw replayed prompts twice
             if (s["n_prompts"] or 0) > (values["analyzed_prompts"] or 0):
                 values["analysis_status"], values["analysis_reason"] = "stale", "session continued after analysis"
             values["title"] = best_title({"llm_title": values["llm_title"], "ai_title": s["ai_title"],

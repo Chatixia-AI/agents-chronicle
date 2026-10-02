@@ -21,6 +21,10 @@ Already on `main`, listed under **Unreleased** in the changelog:
   without a change as *held* rather than *queued*.
 - **Context and plan usage from the status line** (optional): peak context per Claude Code session and how far the
   5-hour and 7-day limits moved, recorded without changing how your status line looks.
+- **What goes wrong, and suggestions to approve.** The failures that keep coming back across your sessions, with
+  noise kept apart, and one queue of proposed fixes: lines for `CLAUDE.md` and `AGENTS.md`, a Playwright MCP config
+  change, and setup steps you run yourself. Nothing is written until you approve, and every change can be undone
+  ([Suggestions and What goes wrong](docs/suggestions.md)).
 
 ## Now
 

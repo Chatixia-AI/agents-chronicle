@@ -1113,6 +1113,215 @@ def cmd_review(args) -> int:
     return 0
 
 
+def _project_arg(conn, value: str | None) -> str | None:
+    """-p accepts a project's path or its name."""
+    if not value:
+        return None
+    row = conn.execute("SELECT project_path FROM sessions WHERE project_path = ? OR project_name = ? LIMIT 1",
+                       (value, value)).fetchone()
+    return row[0] if row else value
+
+
+def escape_markup(text: str) -> str:
+    from rich.markup import escape
+
+    return escape(text or "")
+
+
+def _home_short(path: str | None) -> str:
+    from pathlib import Path
+
+    if not path:
+        return "-"
+    home = str(Path.home())
+    return "~" + path[len(home):] if path == home or path.startswith(home + "/") else path
+
+
+def _warning_bits(w: dict) -> list[str]:
+    bits = []
+    if w.get("public_repo"):
+        bits.append("public repo")
+    if w.get("untracked"):
+        bits.append("file not tracked by git")
+    if w.get("overlap"):
+        bits.append("already covered")
+    bits += [f"sensitive: {h}" for h in w.get("sensitive") or []]
+    return bits
+
+
+def _print_diff(console, diff: str) -> None:
+    from rich.text import Text
+
+    for line in diff.splitlines():
+        style = ("bold" if line.startswith(("+++", "---")) else "green" if line.startswith("+")
+                 else "red" if line.startswith("-") else "cyan" if line.startswith("@@") else "")
+        console.print(Text(line, style=style), highlight=False, soft_wrap=True)
+
+
+def _show_suggestion(console, s: dict, pv: dict) -> None:
+    console.print(f"[bold]#{s['id']}[/] [cyan]{s['kind']}[/] {escape_markup(s['title'])}", highlight=False, soft_wrap=True)
+    if pv.get("command") is not None:
+        console.print("  run it yourself, then `chronicle suggest done " + str(s["id"]) + "`:", highlight=False, soft_wrap=True)
+        console.print(f"    {pv['command']}", highlight=False, markup=False, soft_wrap=True)
+    elif not pv.get("ok"):
+        console.print(f"  [red]cannot apply:[/] {escape_markup(str(pv.get('error')))}", highlight=False, soft_wrap=True)
+    elif pv["diff"]:
+        _print_diff(console, pv["diff"])
+    else:
+        console.print(f"  {_home_short(pv.get('path'))} already has it (nothing to change)", highlight=False, soft_wrap=True)
+    for bit in _warning_bits(pv.get("warnings") or {}):
+        console.print(f"  [yellow]! {escape_markup(bit)}[/]", highlight=False, soft_wrap=True)
+
+
+def cmd_suggest(args) -> int:
+    from . import suggest
+    from .util import setup_logging
+
+    cfg = _cfg()
+    setup_logging(cfg.logs_dir)
+    conn = _conn(cfg)
+    console = _console()
+    action, ids = args.action or "list", args.ids
+    if action == "refresh":
+        got = suggest.refresh(conn, cfg)
+        print(f"suggestions: {got['new']} new, {got['updated']} updated, {got['stale']} stale")
+        return 0
+    if action == "list":
+        if ids:
+            print("to look at one suggestion: chronicle suggest show ID", file=sys.stderr)
+            return 2
+        rows = suggest.list_suggestions(conn, status=None if args.all else "new", project=_project_arg(conn, args.project))
+        if args.json:
+            print(json.dumps(rows, ensure_ascii=False, indent=1, default=str))
+            return 0
+        for s in rows:
+            status = "" if s["status"] == "new" else f" [dim]({s['status']})[/]"
+            console.print(f"[green]#{s['id']}[/] [cyan]{s['kind']}[/] [bold]{escape_markup(s['title'])}[/]{status} "
+                          f"[dim]→ {escape_markup(_home_short(s['target_path']) if s['target_path'] else 'run yourself')}[/]",
+                          highlight=False, soft_wrap=True)
+            line = (s["evidence"] or {}).get("line")
+            if line:
+                console.print(f"    [dim]{escape_markup(line)}[/]", highlight=False, soft_wrap=True)
+            for bit in _warning_bits(s["warnings"] or {}):
+                console.print(f"    [yellow]! {escape_markup(bit)}[/]", highlight=False, soft_wrap=True)
+        if not rows:
+            print("no suggestions" + ("" if args.all else " waiting (--all for applied and dismissed ones)"))
+        else:
+            print("\nchronicle suggest show ID · apply ID · dismiss ID · done ID (setup steps)")
+        return 0
+    if not ids:
+        print(f"usage: chronicle suggest {action} ID", file=sys.stderr)
+        return 2
+    failed = 0
+    for sid in ids:
+        s = suggest.get(conn, sid)
+        if s is None:
+            print(f"no suggestion #{sid}", file=sys.stderr)
+            failed += 1
+            continue
+        if action == "show":
+            _show_suggestion(console, s, suggest.preview(conn, cfg, sid))
+            continue
+        if action == "dismiss":
+            suggest.dismiss(conn, sid, args.reason)
+            print(f"#{sid} dismissed; it will not be proposed again")
+            continue
+        if action == "done":
+            got = suggest.mark_done(conn, sid)
+            print(f"#{sid} marked done" if got["ok"] else f"#{sid}: {got['error']}", file=sys.stdout if got["ok"] else sys.stderr)
+            failed += not got["ok"]
+            continue
+        if action == "undo":
+            got = suggest.unapply(conn, cfg, sid)
+            if got["ok"]:
+                print(f"#{sid} taken back out" + (f" of {_home_short(got['path'])}" if got.get("path") else "")
+                      + "; it is waiting again")
+            else:
+                print(f"#{sid}: {got['error']}", file=sys.stderr)
+                failed += 1
+            continue
+        # apply
+        pv = suggest.preview(conn, cfg, sid)
+        _show_suggestion(console, s, pv)
+        if s["kind"] == "environment" or not pv.get("ok"):
+            failed += 1
+            continue
+        if not args.yes:
+            try:
+                answer = input(f"Apply #{sid} to {_home_short(pv['path'])}? [y/N] ")
+            except EOFError:
+                answer = ""
+            if answer.strip().lower() not in ("y", "yes"):
+                print(f"#{sid} skipped")
+                continue
+        got = suggest.apply(conn, cfg, sid)
+        if got["ok"]:
+            print(f"#{sid} applied to {_home_short(got['path'])} (undo: chronicle suggest undo {sid})")
+        else:
+            print(f"#{sid}: {got['error']}", file=sys.stderr)
+            failed += 1
+    return 1 if failed else 0
+
+
+SPARK = "▁▂▃▄▅▆▇█"
+
+
+def _spark(weekly: list[dict]) -> str:
+    vals = [w["sessions"] for w in weekly or []]
+    top = max(vals, default=0)
+    return "".join(" " if not v else SPARK[min(len(SPARK) - 1, (v * len(SPARK) - 1) // top)] for v in vals) if top else ""
+
+
+def cmd_friction(args) -> int:
+    from rich import box
+    from rich.table import Table
+
+    from .friction import report
+
+    cfg = _cfg()
+    conn = _conn(cfg)
+    got = report(conn, days=args.days, project=_project_arg(conn, args.project), noise=args.noise)
+    if args.json:
+        print(json.dumps(got, ensure_ascii=False, indent=1, default=str))
+        return 0
+    console = _console()
+
+    def causes_table(title: str, causes: list[dict], caption: str | None = None):
+        t = Table(header_style="bold", title=title, title_justify="left", box=box.SIMPLE_HEAD, caption=caption,
+                  caption_justify="left", pad_edge=False)
+        for col, width in (("cause", None), ("sessions", 8), ("projects", 8), ("last seen", 10), ("now", 3), ("trend", 12)):
+            t.add_column(col, justify="right" if col in ("sessions", "projects") else "left", no_wrap=True,
+                         overflow="ellipsis", min_width=width, max_width=max(22, console.width - 58) if width is None else None)
+        for c in causes:
+            name = c["id"] if c["category"] != "other" else f"other: {c['name']}"
+            t.add_row(escape_markup(name), str(c["sessions"]), str(len(c["projects"])), c["last_seen"] or "-",
+                      "[red]yes[/]" if c["still_happening"] else "[dim]no[/]", _spark(c["weekly"]))
+        console.print(t)
+
+    wasteful = [c for c in got["causes"] if not c["noise"]]
+    if wasteful:
+        causes_table("What goes wrong", wasteful, "now: still happening (last 14 days) · trend: sessions a week, last 12 weeks")
+    else:
+        print("no recurring failures found")
+    noise = [c for c in got["causes"] if c["noise"]]
+    if noise:
+        causes_table("Noise (expected failures, not wasted work)", noise)
+    if got["tool_errors"]:
+        e = Table(header_style="bold", title="Tool error rates", title_justify="left", box=box.SIMPLE_HEAD)
+        for col in ("tool", "calls", "errors", "rate"):
+            e.add_column(col, justify="left" if col == "tool" else "right")
+        for r in got["tool_errors"]:
+            e.add_row(escape_markup(r["tool"]), str(r["calls"]), str(r["errors"]), f"{r['rate'] * 100:.1f}%")
+        console.print(e)
+    ns = got["noise_summary"]
+    if not args.noise and ns["occurrences"]:
+        print(f"filtered as noise: {ns['occurrences']} failure{'s' if ns['occurrences'] != 1 else ''} in {ns['sessions']} "
+              f"session{'s' if ns['sessions'] != 1 else ''} (expected test failures, "
+              "read-only checks, provider hiccups); --noise shows them")
+    print("fixes for these: chronicle suggest")
+    return 0
+
+
 def cmd_sources(args) -> int:
     from .connectors import all_status, mcp_clients_status
     from .util import local_str
@@ -1576,6 +1785,26 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("week", nargs="?", help="ISO week like 2026-W39, 'current' or 'last'")
     s.add_argument("--regenerate", action="store_true")
     s.set_defaults(fn=cmd_review)
+
+    s = sub.add_parser("suggest", aliases=["suggestions"],
+                       help="proposed fixes (instruction lines, config changes, setup steps); nothing is written until you apply one")
+    s.add_argument("action", nargs="?", choices=["list", "show", "apply", "dismiss", "done", "undo", "refresh"],
+                   help="list (default), show ID (the diff), apply ID..., dismiss ID, done ID (a setup step you ran), "
+                        "undo ID (take an applied one back out), refresh")
+    s.add_argument("ids", nargs="*", type=int, metavar="ID")
+    s.add_argument("-p", "--project", help="only this project's suggestions (path or name)")
+    s.add_argument("--all", action="store_true", help="also applied, dismissed, stale and done ones")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("-y", "--yes", action="store_true", help="with apply: don't ask before writing")
+    s.add_argument("--reason", help="with dismiss: why (kept for you)")
+    s.set_defaults(fn=cmd_suggest)
+
+    s = sub.add_parser("friction", help="what goes wrong: recurring failure causes across your sessions, and tool error rates")
+    s.add_argument("-p", "--project", help="only this project (path or name)")
+    s.add_argument("--days", type=int, help="only the last N days")
+    s.add_argument("--json", action="store_true")
+    s.add_argument("--noise", action="store_true", help="also show failures that are expected (test runs, read-only checks, provider hiccups)")
+    s.set_defaults(fn=cmd_friction)
 
     s = sub.add_parser("forget", help="remove a session from the vault for good (e.g. it contained secrets)")
     s.add_argument("session")
