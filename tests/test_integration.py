@@ -7,6 +7,7 @@ import sys
 import threading
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from http.server import ThreadingHTTPServer
 
@@ -111,8 +112,72 @@ def test_http_api(synced):
         req = urllib.request.Request(base + f"/api/knowledge/{kid}", data=b'{"pinned": true}', method="POST",
                                      headers={"X-Chronicle": "1", "Content-Type": "application/json"})
         assert json.loads(urllib.request.urlopen(req, timeout=10).read())["ok"] is True
+        touched = json.loads(get("/api/file?path=" + urllib.parse.quote(f"{CWD}/auth.py"))[1])  # the VS Code extension's view
+        assert [s["id"] for s in touched["sessions"]] == [SID]
+        assert touched["sessions"][0]["file"] == {"reads": 0, "changes": 1, "added": 2, "removed": 1}
+        folder = json.loads(get("/api/files?root=" + urllib.parse.quote(CWD))[1])  # and its file list
+        assert [(f["rel"], f["sessions"]) for f in folder["files"]] == [("auth.py", 1)]
     finally:
         httpd.shutdown()
+
+
+def test_file_sessions_matches_relative_paths(synced):
+    from chronicle.server import App
+
+    conn = synced["conn"]
+    conn.execute("INSERT INTO sessions(id, agent, project_path, started_at) VALUES ('codex-1', 'codex', ?, '2026-09-21T09:00:00Z')",
+                 (CWD,))
+    conn.execute("INSERT INTO sessions(id, agent, project_path, started_at) VALUES ('other-1', 'codex', '/elsewhere', "
+                 "'2026-09-22T09:00:00Z')")
+    conn.executemany("INSERT INTO session_files(session_id, path, reads, edits) VALUES (?,?,?,?)",
+                     [("codex-1", "auth.py", 2, 0), ("other-1", "auth.py", 0, 1)])  # Codex: relative to its folder
+    conn.commit()
+    app = App(synced["cfg"])
+    found = app.file_sessions(f"{CWD}/./auth.py")
+    assert found["path"] == f"{CWD}/auth.py" and found["total"] == 2
+    assert [s["id"] for s in found["sessions"]] == ["codex-1", SID]  # newest first; /elsewhere's auth.py is another file
+    assert found["sessions"][0]["file"] == {"reads": 2, "changes": 0, "added": 0, "removed": 0}
+    assert app.file_sessions("auth.py") == {"path": "", "total": 0, "sessions": []}  # only absolute paths
+    assert app.file_sessions(f"{CWD}/nothing.py")["sessions"] == []
+
+
+def test_folder_files_lists_touched_files(synced, tmp_path):
+    from chronicle.server import App
+
+    conn = synced["conn"]
+    proj = tmp_path / "proj"
+    (proj / "src").mkdir(parents=True)
+    (proj / "src" / "app.py").write_text("x")
+    conn.execute("INSERT INTO sessions(id, agent, project_path, started_at) VALUES ('c-old', 'claude', ?, '2026-09-01T09:00:00Z')",
+                 (str(proj),))
+    conn.execute("INSERT INTO sessions(id, agent, project_path, started_at) VALUES ('x-new', 'codex', ?, '2026-09-05T09:00:00Z')",
+                 (str(proj / "src"),))
+    conn.executemany("INSERT INTO session_files(session_id, path, reads, edits) VALUES (?,?,?,?)", [
+        ("c-old", f"{proj}/src/app.py", 0, 2),
+        ("c-old", f"{proj}/gone.png", 1, 0),
+        ("c-old", f"{proj}-sibling/app.py", 0, 1),  # a sibling folder sharing the prefix is not inside it
+        ("x-new", "app.py", 3, 0),  # Codex, relative to proj/src
+    ])
+    conn.commit()
+    app = App(synced["cfg"])
+    listed = app.folder_files(str(proj))
+    assert [(f["rel"], f["sessions"], f["changed"]) for f in listed["files"]] == [("src/app.py", 2, 1), ("gone.png", 1, 0)]
+    assert listed["files"][0]["last"] == "2026-09-05T09:00:00Z"
+    assert listed["files"][0]["session_ids"] == ["c-old", "x-new"] and listed["files"][0]["changed_ids"] == ["c-old"]
+    assert [f["rel"] for f in app.folder_files(str(proj), existing=True)["files"]] == ["src/app.py"]
+    assert [f["rel"] for f in app.folder_files(str(proj / "src"))["files"]] == ["app.py"]
+    assert [f["rel"] for f in app.folder_files(CWD)["files"]] == ["auth.py"]
+    assert app.folder_files("/")["files"] == [] and app.folder_files("proj")["files"] == []
+    assert app.folder_files(str(proj), ignored=False)["total"] == 2  # not a git repository: nothing to leave out
+
+    # in a git repository, ignored=False leaves out what .gitignore covers
+    (proj / "debug.log").write_text("x")
+    (proj / ".gitignore").write_text("*.log\n")
+    subprocess.run(["git", "init", "-q", str(proj)], check=True)
+    conn.execute("INSERT INTO session_files(session_id, path, reads, edits) VALUES ('c-old', ?, 0, 1)", (f"{proj}/debug.log",))
+    conn.commit()
+    assert [f["rel"] for f in app.folder_files(str(proj), existing=True)["files"]] == ["src/app.py", "debug.log"]
+    assert [f["rel"] for f in app.folder_files(str(proj), existing=True, ignored=False)["files"]] == ["src/app.py"]
 
 
 def test_install_hooks_preserves_existing_settings(env, tmp_path):

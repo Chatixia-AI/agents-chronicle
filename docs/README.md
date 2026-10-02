@@ -10,6 +10,7 @@
 | [Command line](cli.md) | Every `chronicle` command and the Markdown vault |
 | [Suggestions and What goes wrong](suggestions.md) | Recurring failures across your sessions, and the fixes Chronicle proposes for your instruction files and config: what it reads and writes, approving, backups, undo |
 | [MCP server](mcp.md) | The tools your agents get, connecting Claude Desktop, Cursor, Windsurf, Gemini CLI or any other MCP client |
+| [VS Code extension](vscode.md) | The sessions behind the open file and every file agents worked on, in VS Code's Explorer |
 | [Phone and other computers](devices.md) | The dashboard on your phone through Tailscale, and one archive for several computers (a hub) |
 | [What gets recorded and how analysis works](analysis.md) | Session data, knowledge kinds, the analysis pipeline and its cost |
 | [Configuration](configuration.md) | Every `config.toml` setting |

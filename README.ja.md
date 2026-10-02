@@ -49,6 +49,8 @@ Chronicle は終わったセッションを読み、残す価値のあること�
   ひと目でわかる週次の振り返り。⌘K でどこへでも移動できます。
 - **スマートフォンとほかのコンピューターでも。** Tailscale 経由でスマートフォンからダッシュボードを開き、すべてのコンピューターの
   セッションを 1 つのアーカイブにまとめて、分析は 1 回だけ（[スマートフォンとほかのコンピューター](docs/ja/devices.md)）。
+- **VS Code で、コードのすぐ横に。** [拡張機能](docs/ja/vscode.md)が、開いているファイルの背後にあるセッションと、
+  ワークスペースでエージェントが作業したすべてのファイルを表示します。
 - **ただのファイルとしても。** Obsidian 互換の Markdown 保管庫と `chronicle` CLI。
 
 ## クイックスタート
@@ -142,7 +144,8 @@ Windows にはまだ対応していません。
 ## ドキュメント
 
 [インストール](docs/ja/install.md) · [ソース](docs/ja/sources.md) · [ダッシュボード・用語集・マップ](docs/ja/dashboard.md) ·
-[コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [スマートフォンとほかのコンピューター](docs/ja/devices.md) ·
+[コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [VS Code 拡張機能](docs/ja/vscode.md) ·
+[スマートフォンとほかのコンピューター](docs/ja/devices.md) ·
 [記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
 [データとプライバシー](docs/ja/privacy.md) · [トラブルシューティング](docs/ja/troubleshooting.md) · [開発](docs/ja/development.md)
 

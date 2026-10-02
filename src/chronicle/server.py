@@ -11,8 +11,10 @@ import errno
 import json
 import logging
 import mimetypes
+import os
 import re
 import shlex
+import subprocess
 import threading
 import time
 import webbrowser
@@ -109,6 +111,21 @@ class Jobs:
     def snapshot(self) -> dict:
         with self.lock:
             return {k: dict(v) for k, v in self.jobs.items()}
+
+
+def git_ignored(root: str, paths: list[str]) -> set[str]:
+    """The paths git ignores in the repository holding root; none when it isn't one, or git fails."""
+    if not paths:
+        return set()
+    try:
+        out = subprocess.run(["git", "-C", root, "check-ignore", "-z", "--stdin"], input="\0".join(paths) + "\0",
+                             capture_output=True, text=True, timeout=10)
+    except (OSError, subprocess.SubprocessError):
+        return set()
+    if out.returncode not in (0, 1):  # 1 means nothing is ignored; 128 is not a repository, or a path outside it
+        log.debug("git check-ignore in %s: %s", root, out.stderr.strip())
+        return set()
+    return {p for p in out.stdout.split("\0") if p}
 
 
 class App:
@@ -489,6 +506,68 @@ class App:
                 "FROM session_files f JOIN sessions s ON s.id = f.session_id WHERE s.project_path = ? AND (f.edits + f.writes) > 0 "
                 "GROUP BY f.path ORDER BY edits DESC LIMIT 25", (path,))],
         }
+
+    def file_sessions(self, path: str, limit: int = 50) -> dict:
+        """The sessions that read or changed one file, newest first (the VS Code extension's per-file history)."""
+        path = os.path.normpath(path) if path.startswith("/") else ""
+        if not path:
+            return {"path": path, "total": 0, "sessions": []}
+        c = self.conn
+        # most agents record absolute paths; Codex sometimes records them relative to the session's folder
+        where, params = ["f.path = ?"], [path]
+        for (root,) in c.execute("SELECT DISTINCT project_path FROM sessions WHERE project_path LIKE '/%'"):
+            base = root.rstrip("/") + "/"
+            if path.startswith(base):
+                where.append("(s.project_path = ? AND f.path = ?)")
+                params += [root, path[len(base):]]
+        stats = {r["session_id"]: dict(r) for r in c.execute(
+            "SELECT f.session_id, SUM(f.reads) reads, SUM(f.edits + f.writes) changes, SUM(f.lines_added) added, "
+            "SUM(f.lines_removed) removed FROM session_files f JOIN sessions s ON s.id = f.session_id "
+            f"WHERE {' OR '.join(where)} GROUP BY f.session_id", params)}
+        ids = list(stats)[:5000]
+        rows = self._session_rows(f"id IN ({','.join('?' * len(ids))})", ids, "started_at DESC", limit) if ids else []
+        for r in rows:
+            r["file"] = {k: stats[r["id"]][k] for k in ("reads", "changes", "added", "removed")}
+        return {"path": path, "total": len(stats), "sessions": rows}
+
+    def folder_files(self, root: str, limit: int = 200, existing: bool = False, ignored: bool = True) -> dict:
+        """The files under a folder that sessions read or changed, most recently touched first (the extension's file list)."""
+        root = os.path.normpath(root) if root.startswith("/") else ""
+        if root in ("", "/"):
+            return {"root": root, "total": 0, "files": []}
+        base, c = root + "/", self.conn
+        cols = "f.path, f.session_id, f.edits + f.writes changes, s.started_at"
+        # a range on the indexed path ('0' sorts right after '/'), so a big archive isn't scanned
+        rows = [dict(r) for r in c.execute(
+            f"SELECT {cols} FROM session_files f JOIN sessions s ON s.id = f.session_id WHERE f.path >= ? AND f.path < ?",
+            (base, root + "0"))]
+        # Codex sometimes records paths relative to the session's folder: a folder inside this one, or one containing it
+        for (folder,) in c.execute("SELECT DISTINCT project_path FROM sessions WHERE project_path LIKE '/%'"):
+            if not (folder + "/").startswith(base) and not base.startswith(folder.rstrip("/") + "/"):
+                continue
+            for r in c.execute(f"SELECT {cols} FROM session_files f JOIN sessions s ON s.id = f.session_id "
+                               "WHERE s.project_path = ? AND f.path NOT LIKE '/%'", (folder,)):
+                full = os.path.normpath(os.path.join(folder, r["path"]))
+                if full.startswith(base):
+                    rows.append({**dict(r), "path": full})
+        files: dict[str, dict] = {}
+        for r in rows:
+            f = files.setdefault(r["path"], {"sessions": set(), "changed": set(), "last": ""})
+            f["sessions"].add(r["session_id"])
+            if r["changes"]:
+                f["changed"].add(r["session_id"])
+            f["last"] = max(f["last"], r["started_at"] or "")
+        paths = sorted(files, key=lambda p: (files[p]["last"], len(files[p]["sessions"])), reverse=True)
+        if existing:  # leave out files since deleted, and the scratch paths agents wrote along the way
+            paths = [p for p in paths if os.path.isfile(p)]
+        if not ignored:  # and what git ignores: screenshots, build output, caches
+            hidden = git_ignored(root, paths)
+            paths = [p for p in paths if p not in hidden]
+        # the ids let a folder tree count each session once across the files beneath it
+        return {"root": root, "total": len(paths), "files": [
+            {"path": p, "rel": p[len(base):], "sessions": len(files[p]["sessions"]), "changed": len(files[p]["changed"]),
+             "last": files[p]["last"], "session_ids": sorted(files[p]["sessions"]),
+             "changed_ids": sorted(files[p]["changed"])} for p in paths[:limit]]}
 
     def knowledge(self, q: dict) -> dict:
         rows = search_knowledge(self.conn, q.get("q") or None, project=q.get("project") or None, kind=q.get("kind") or None,
@@ -1157,6 +1236,12 @@ def make_handler(app: App, port: int):
                 if p == "/api/project":
                     proj = app.project(unquote(q.get("path", "")))
                     return self._json(proj) if proj else self._json({"error": "not found"}, 404)
+                if p == "/api/file":  # parse_qs has decoded the path already: a second unquote would mangle a literal %
+                    return self._json(app.file_sessions(q.get("path", ""), min(int(q.get("limit") or 50), 500)))
+                if p == "/api/files":
+                    return self._json(app.folder_files(q.get("root", ""), min(int(q.get("limit") or 200), 2000),
+                                                       existing=q.get("existing") == "1",
+                                                       ignored=q.get("ignored") != "0"))
                 if p == "/api/knowledge":
                     return self._json(app.knowledge(q))
                 if p == "/api/knowledge/hub":
