@@ -211,6 +211,15 @@ h3 { font-size: 14px; }
 .rail a:hover { background: var(--hover); color: var(--vib-ink); text-decoration: none; }
 .rail a.on { background: var(--glass-strong); color: var(--accent); box-shadow: var(--glass-shadow), inset 0 0 0 0.5px var(--glass-rim); }
 .rail .spacer { flex: 1; }
+.rail-tip {
+  position: fixed; z-index: 60; transform: translateY(-50%); pointer-events: none; max-width: 280px;
+  display: flex; flex-direction: column; gap: 1px; padding: 6px 10px; border-radius: 8px;
+  background: var(--surface); color: var(--ink); border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.14); font-size: 12.5px; line-height: 1.35;
+}
+.rail-tip b { font-weight: 600; font-size: 13px; }
+.rail-tip span { color: var(--ink-2); }
+.rail-tip .rail-tip-extra { color: var(--accent-ink); font-weight: 500; }
 
 .sidebar { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding-top: 52px; font-size: 13px; }
 .no-sidebar .sidebar { visibility: hidden; }
@@ -1459,6 +1468,12 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .rail-badge { position: absolute; top: 1px; right: 0; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: var(--accent); color: #fff;
   font-size: 10px; font-weight: 650; line-height: 16px; text-align: center; font-variant-numeric: tabular-nums; box-shadow: 0 0 0 1.5px var(--page); pointer-events: none; }
 .sg-filters { margin-bottom: 14px; }
+/* one row when it fits; on a phone the segments tile, and the shadows draw the lines between rows too */
+.sg-status { flex-wrap: wrap; max-width: 100%; }
+.sg-status button { flex: 1 0 auto; box-shadow: -1px -1px 0 var(--border); }
+.sg-status button + button { border-left: 0; }
+.seg .count { margin-left: 5px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.sg-why { margin-right: 6px; font-size: 13.5px; }
 .sg-scope { margin: -4px 0 14px; font-size: 13px; }
 .sg-groups { display: grid; gap: 16px; }
 .sg-ghead { display: flex; align-items: flex-start; justify-content: space-between; gap: 10px; margin-bottom: 12px; }
@@ -1492,6 +1507,7 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .sg-diff.empty-diff { display: block; padding: 8px 12px; color: var(--muted); font-size: 12.5px; }
 .sg-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
 .sg-actions .muted { font-size: 12.5px; margin-right: auto; }
+.sg-actions .sg-move { margin-left: auto; }
 .sg-rows { display: grid; gap: 2px; }
 .sg-row { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 12px; padding: 8px; border-radius: 10px; }
 .sg-row:hover { background: var(--surface-2); }

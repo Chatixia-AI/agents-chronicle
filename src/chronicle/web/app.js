@@ -3412,9 +3412,7 @@ function drawUnseen(n) {
   const a = $('#rail a[data-section="suggestions"]');
   if (!a) return;
   let badge = a.querySelector(".rail-badge");
-  const label = n ? `Suggestions, ${n} new` : "Suggestions";
-  a.title = label;
-  a.setAttribute("aria-label", label);
+  a.setAttribute("aria-label", n ? `Suggestions, ${n} new` : "Suggestions");
   if (!n) { badge?.remove(); return; }
   if (!badge) a.append((badge = h("span", { class: "rail-badge", "aria-hidden": "true" })));
   badge.textContent = n > 99 ? "99+" : String(n);
@@ -3546,6 +3544,21 @@ function suggestionCard(x, { onStatus } = {}) {
   } else {
     actions = [preview, act("apply", "Applying…", "btn small primary"), act("dismiss", "Dismissing…")];
   }
+  // where the line goes: your user-level file, read in every project, or the files of the projects it came from
+  if (x.status === "new" && x.kind === "instruction" && (x.origin === "friction" || x.origin === "knowledge")) {
+    const toUser = !!x.project_path, names = e.project_names || [];
+    const move = h("button", { class: "link-btn sg-move", type: "button",
+      title: toUser ? "Put it in your user-level file instead, which every project reads"
+        : "Put it in the file of each project it came from instead (up to 5)",
+      onclick: () => busy(move, "Moving…", async () => {
+        const r = await post(`/api/suggestions/${x.id}/move`, { to: toUser ? "user" : "project" });
+        if (!r.ok) { toast(`Could not move it: ${r.error || "unknown error"}`, 6000); return; }
+        toast(r.moved ? `Moved to ${r.targets.map(homePath).join(", ")}` : "Moved, but it was dismissed or applied there before", 5000);
+        suggestionsChanged();
+        render();
+      }) }, toUser ? "Move to every project" : e.projects === 1 && names[0] ? `Move to ${names[0]} only` : "Move to its projects");
+    actions.push(move);
+  }
   const examples = (e.examples || []).slice(0, 2);
   const card = h("article", { class: `sg-card st-${x.status}`, id: `sg-${x.id}` },
     h("div", { class: "sg-head" }, sgKindChip(x.kind),
@@ -3620,10 +3633,11 @@ route(/^\/suggestions$/, async (params) => {
     && (!scope || (scope === "user" ? !x.project_path : x.project_path === scope)));
   const projects = [...new Set(data.suggestions.map((x) => x.project_path).filter(Boolean))].sort((a, b) => baseName(a).localeCompare(baseName(b)));
   const chipCount = {};
-  const chips = h("div", { class: "filters sg-filters", role: "group", "aria-label": "Status" }, SG_STATUS.map(([v, label]) => {
+  // one joined control, like the period pickers: it reads as "pick one view", not as five more buttons
+  const chips = h("div", { class: "filters sg-filters" }, h("div", { class: "seg sg-status", role: "group", "aria-label": "Status" }, SG_STATUS.map(([v, label]) => {
     chipCount[v] = h("span", { class: "count" }, fmtNum(counts[v] || 0));
-    return h("button", { type: "button", class: `chip ${v === status ? "on" : ""}`, "aria-pressed": String(v === status), onclick: () => update({ status: v === "new" ? "" : v }) }, label, chipCount[v]);
-  }), h("span", { class: "spacer" }),
+    return h("button", { type: "button", class: v === status ? "on" : "", "aria-pressed": String(v === status), onclick: () => update({ status: v === "new" ? "" : v }) }, label, chipCount[v]);
+  })), h("span", { class: "spacer" }),
   projects.length ? h("select", { "aria-label": "Where", onchange: (ev) => update({ scope: ev.target.value }) },
     h("option", { value: "" }, "Everywhere"), h("option", { value: "user", selected: scope === "user" }, "User level (every project)"),
     projects.map((p) => h("option", { value: p, selected: p === scope }, baseName(p)))) : null);
@@ -3675,7 +3689,7 @@ route(/^\/suggestions$/, async (params) => {
   return h("div", { class: "sg-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, "Suggestions"),
       h("div", { class: "sub" }, "Fixes for what keeps going wrong, and knowledge worth telling your agents. Nothing is written until you apply it; the file is backed up first.")),
-      h("div", { class: "head-actions" }, h("a", { class: "btn", href: "#/friction" }, "What goes wrong"), refreshBtn)),
+      h("div", { class: "head-actions" }, h("a", { class: "link-arrow sg-why", href: "#/friction" }, "What goes wrong", icon("arrow")), refreshBtn)),
     chips,
     cause ? h("div", { class: "sg-scope muted" }, `Only the fixes for “${items[0]?.evidence?.cause || cause}”. `, h("a", { href: "#/suggestions" }, "Show all")) : null,
     groups.size ? h("div", { class: "sg-groups" }, [...groups.values()].map(groupCard)) : empty);
@@ -3808,13 +3822,13 @@ route(/^\/appearance$/, async () => {
 // =====================================================================================
 // Shell: rail, section sidebar, toolbar, status bar, command palette
 // =====================================================================================
-const SECTIONS = [
-  { key: "home", label: "Home", href: "#/" },
-  { key: "sessions", label: "Sessions", href: "#/sessions" },
-  { key: "knowledge", label: "Knowledge", href: "#/knowledge" },
-  { key: "projects", label: "Projects", href: "#/projects" },
-  { key: "suggestions", label: "Suggestions", href: "#/suggestions" },
-  { key: "settings", label: "Settings", href: "#/status" },
+const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
+  { key: "home", label: "Home", href: "#/", hint: "Activity at a glance and recent sessions" },
+  { key: "sessions", label: "Sessions", href: "#/sessions", hint: "Every recorded conversation" },
+  { key: "knowledge", label: "Knowledge", href: "#/knowledge", hint: "Glossary, map, playbook, weekly reviews" },
+  { key: "projects", label: "Projects", href: "#/projects", hint: "A knowledge base for each project" },
+  { key: "suggestions", label: "Suggestions", href: "#/suggestions", hint: "Fixes to approve, and what goes wrong" },
+  { key: "settings", label: "Settings", href: "#/status", hint: "Status, sources, MCP, devices, appearance" },
 ];
 const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings" };
@@ -3850,13 +3864,35 @@ function defaultCrumbs(path, params) {
 
 function renderRail() {
   const rail = $("#rail");
-  const link = (sx) => h("a", { href: sx.href, "data-section": sx.key, title: sx.label, "aria-label": sx.label,
-    onclick: () => { if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.key === "home" ? "home" : sx.key));
+  const link = (sx) => {
+    const a = h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label, "aria-describedby": "rail-tip",
+      onclick: () => { hideRailTip(); if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.key === "home" ? "home" : sx.key));
+    // a tooltip of our own: the native one comes late, and not at all in the app window
+    a.addEventListener("mouseenter", () => { if (matchMedia("(hover: hover)").matches) showRailTip(a, sx); });
+    a.addEventListener("focus", () => { if (a.matches(":focus-visible")) showRailTip(a, sx); });
+    a.addEventListener("mouseleave", hideRailTip);
+    a.addEventListener("blur", hideRailTip);
+    return a;
+  };
   const settings = SECTIONS.find((x) => x.key === "settings");
-  rail.replaceChildren(...SECTIONS.filter((x) => x !== settings).map(link), link({ key: "search", label: "Search all sessions", href: "#/search" }),
+  rail.replaceChildren(...SECTIONS.filter((x) => x !== settings).map(link),
+    link({ key: "search", label: "Search", href: "#/search", hint: "Full text of every session (⌘K jumps anywhere)" }),
     h("div", { class: "spacer" }), link(settings));
   drawUnseen(unseenCount);
 }
+function showRailTip(a, sx) {
+  if (matchMedia("(max-width: 600px)").matches) return; // the rail is a bar along the bottom there
+  let t = $("#rail-tip");
+  if (!t) document.body.append((t = h("div", { id: "rail-tip", class: "rail-tip", role: "tooltip", hidden: true })));
+  const extra = sx.key === "suggestions" && unseenCount ? `${fmtNum(unseenCount)} new`
+    : sx.key === "settings" && document.documentElement.classList.contains("has-update") ? "An update is ready" : null;
+  t.replaceChildren(...[h("b", null, sx.label), h("span", null, sx.hint), extra ? h("span", { class: "rail-tip-extra" }, extra) : null].filter(Boolean));
+  const r = a.getBoundingClientRect();
+  t.style.left = `${r.right + 10}px`;
+  t.style.top = `${r.top + r.height / 2}px`;
+  t.hidden = false;
+}
+function hideRailTip() { const t = $("#rail-tip"); if (t) t.hidden = true; }
 
 // ------------------------------------------------------------------ sidebar
 const sbState = { q: "", agent: "", offset: 0, total: 0, projectQ: "" };

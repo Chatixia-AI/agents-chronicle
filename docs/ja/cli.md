@@ -24,6 +24,7 @@
 | `chronicle friction [-p project] [--days N] [--json] [--noise]` | うまくいかないこと：セッションで繰り返す失敗の原因（セッション数、プロジェクト数、最後に見た日、まだ起きているか、推移）と、失敗の多いツール。`--noise` で想定内の失敗も表示（[提案](suggestions.md#うまくいかないこと)） |
 | `chronicle suggest [-p project] [--all] [--json]` | 確認待ちの修正案：指示ファイルの行、設定の変更、セットアップ手順。適用するまで何も書き込みません（[提案](suggestions.md)） |
 | `chronicle suggest show\|apply\|dismiss\|done\|undo ID… [--yes] [--reason R]` | 差分を表示、適用（`--yes` がなければ確認し、ファイルをバックアップ）、二度と提案しない、実行したセットアップ手順を完了にする、適用したものを取り消す |
+| `chronicle suggest move ID --to user\|project` | 確認待ちの行をユーザーレベルのファイルに、または元のプロジェクトのファイルに移す。教訓や原因ごとに記憶します（[行を移す](suggestions.md#行を移す)） |
 | `chronicle suggest refresh` | 最新のセッションとナレッジから今すぐ提案を探す（バックグラウンド同期も実行のたびに行います） |
 | `chronicle forget <id> [--delete-transcript]` | セッションを保管庫から完全に削除（再取り込みされません） |
 | `chronicle sources` | 接続中のエージェントと、その記録方法 |

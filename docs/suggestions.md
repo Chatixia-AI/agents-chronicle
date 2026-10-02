@@ -64,7 +64,7 @@ you give `--days`, and prints one line on how much noise was left out; `--noise`
 or more projects. Its instruction lines go to your user-level files when it hit 3 or more projects, otherwise to the
 project where it happened most. `concurrent-sessions` always goes to the project files, for up to 5 projects where
 it hit 2 or more sessions. Lines are proposed only for the agents that ran into the cause: Claude Code's file, Codex's
-file, or both.
+file, or both. A cause you [moved](#moving-a-line) goes where you put it.
 
 **From knowledge.** An item becomes a suggestion when it is:
 
@@ -74,11 +74,15 @@ file, or both.
 - worded as a rule ("never…", "use X, not Y", "requires…"), not a changelog entry ("Fixed…", "Added…", "X now
   does Y"). An item seen in one session only also has to be a command, a preference, or a firm rule.
 
-Items with near-identical titles are treated as one lesson, and the most trusted one is proposed. A lesson found in 3
-or more projects becomes one line in your user-level file instead of one per project. A lesson the catalog above
-already covers is left to it. The line is the item's title in bold and the first sentence of its body, up to 240
+Items with near-identical titles are treated as one lesson, and the most trusted one is proposed. A lesson becomes one
+line in your user-level file instead of one per project when it was found in 3 or more projects, or when it is a
+preference the analysis marked *global*: how you like to work, not how the project works. Other global items (a
+gotcha about a tool, a command) stay in the file of the project they came from, since the user-level file is read
+in every session. A lesson you [moved](#moving-a-line) goes where you put it. A lesson the catalog above already
+covers is left to it. The line is the item's title in bold and the first sentence of its body, up to 240
 characters. At most 8 knowledge lines are proposed per file, the best first: a higher stage, more sessions behind it and more
-recent use rank higher.
+recent use rank higher. Lines you dismissed or applied don't take one of the 8 places, and neither do lessons you
+moved. The rest wait, and come up as places free; they are not shown as stale.
 
 A suggestion is not made when a line outside Chronicle's block in that file already says much the same thing.
 
@@ -149,7 +153,7 @@ may only add `--isolated` and `--output-dir <absolute path>`. Undo removes only 
 ## Reviewing and applying
 
 **In the dashboard:** **Suggestions** in the rail, with a badge counting suggestions you haven't seen. Opening the
-page clears it. The sidebar and the chips at the top switch between **To review**, **Applied**, **Done**,
+page clears it. The sidebar and the switch at the top move between **To review**, **Applied**, **Done**,
 **Stale** and **Dismissed**; a menu narrows to user-level suggestions or one project. Suggestions are grouped by the
 file they change, with setup steps in their own group. Each card shows:
 
@@ -164,6 +168,15 @@ file they change, with setup steps in their own group. Each card shows:
 it out of the queue. A setup step shows its command with **Copy**, and **Mark done** once you have run it.
 **Check again** looks at the latest sessions and knowledge now.
 
+### Moving a line
+
+A waiting instruction line can go somewhere else than Chronicle chose. On a project's card, **Move to every
+project** puts it in your user-level file instead. On a user-level card, **Move to *project* only** (or **Move to
+its projects**, when it came from several) puts it back in the files of the projects it came from; for a recurring
+failure, up to 5 projects where it hit 2 or more sessions. Chronicle remembers the choice for that lesson or cause:
+every waiting card of it moves along (two project cards become one user-level card), your edited wording comes with
+it, and later refreshes keep it there. Lines already applied stay where they were written.
+
 The **Home** page shows a **Suggestions** card with the top 3 waiting, when there are any, with **Approve** and
 **Dismiss** (setup steps get **Copy command**). Its title opens the full card.
 
@@ -177,6 +190,7 @@ The **Home** page shows a **Suggestions** card with the top 3 waiting, when ther
 | `chronicle suggest dismiss ID [--reason R]` | Never propose it again (an applied one must be undone first) |
 | `chronicle suggest done ID` | You ran a setup step |
 | `chronicle suggest undo ID` | Take an applied line or config change back out, or put a dismissed or done one back in the queue |
+| `chronicle suggest move ID --to user\|project` | [Move](#moving-a-line) a waiting line to your user-level file, or back to the files of its projects |
 | `chronicle suggest refresh` | Look at the latest sessions and knowledge now |
 
 **Backups:** before any write, the current file is copied to `~/.claude-chronicle/backups/<name>.<time>.bak`, for

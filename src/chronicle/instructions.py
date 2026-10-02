@@ -24,6 +24,8 @@ from collections import defaultdict
 from datetime import timedelta
 from pathlib import Path
 
+from collections.abc import Callable
+
 from .config import Config
 from .util import dumps, loads, one_line, parse_ts, utcnow
 
@@ -537,8 +539,27 @@ def _project_agents(conn: sqlite3.Connection) -> dict[str, list[str]]:
     return out
 
 
-def candidates(conn: sqlite3.Connection, cfg: Config | None = None) -> list[dict]:
-    """Suggestion dicts for knowledge worth an instruction line, best first, at most 8 per target file."""
+def scope_choices(conn: sqlite3.Connection) -> dict[str, tuple[str, str]]:
+    """Where you moved a lesson or a cause, over the automatic choice: {subject: (when, "user" | "project")}."""
+    return {r["subject"]: (r["updated_at"] or "", r["scope"]) for r in conn.execute("SELECT * FROM suggestion_scopes")}
+
+
+def chosen_scope(choices: dict[str, tuple[str, str]], subjects) -> str | None:
+    """Your latest choice for any of these subjects (a lesson's items, a cause), or None."""
+    got = [choices[x] for x in subjects if x in choices]
+    return max(got)[1] if got else None
+
+
+def about_you(members: list[dict]) -> bool:
+    """A preference the analysis judged useful beyond its project: how you work, not how the project works."""
+    return any(m["kind"] == "preference" and m["scope"] == "global" for m in members)
+
+
+def candidates(conn: sqlite3.Connection, cfg: Config | None = None, decided: Callable[[dict], bool] | None = None,
+               waiting: list[dict] | None = None) -> list[dict]:
+    """Suggestion dicts for knowledge worth an instruction line, best first, at most 8 per target file. A candidate
+    `decided` says was dismissed or applied already is still returned, so its record keeps following the lesson, but
+    it takes none of the 8 places, and neither does a lesson you moved. Those left over go to `waiting`."""
     from .friction import match_note
     from .ladder import STAGE_RANK, confirmations
 
@@ -552,11 +573,13 @@ def candidates(conn: sqlite3.Connection, cfg: Config | None = None) -> list[dict
     titles = {r["session_id"]: r["title"] for r in conn.execute(
         "SELECT id AS session_id, COALESCE(llm_title, title, ai_title) AS title FROM sessions")}
     agents_by_project = _project_agents(conn)
+    choices = scope_choices(conn)
     groups = _clusters(items)
 
     out: list[dict] = []
     for group in groups:
         members = [items[i] for i in group]
+        choice = chosen_scope(choices, [f"knowledge:{m['id']}" for m in members])
         sessions: set[str] = set()
         for m in members:
             sessions.update(confirmations(m))
@@ -575,13 +598,15 @@ def candidates(conn: sqlite3.Connection, cfg: Config | None = None) -> list[dict
         text = line_text(best["title"], best["body"])
         # the key names the oldest member, not the best: a lesson relearned later (a newer, higher-scoring duplicate)
         # must keep the identity a dismissal or an approval was recorded under
-        if len(projects) >= THEME_PROJECTS:
+        # one line in the user-level file for a lesson relearned across projects or a preference about you; you can move it
+        user_level = choice == "user" if choice else (len(projects) >= THEME_PROJECTS or about_you(members))
+        if user_level:
             agents = sorted({m["agent"] or "claude" for m in members} & {"claude", "codex"}) or ["claude"]
             anchor = min(m["id"] for m in members)
             for agent in agents:
                 target = target_for(agent, "user", None, cfg)
                 if target:
-                    out.append(_candidate(best, text, target, None, agent, evidence, anchor))
+                    out.append({**_candidate(best, text, target, None, agent, evidence, anchor), "chosen": bool(choice)})
             continue
         for project in projects:
             mine = [m for m in members if m["project_path"] == project]
@@ -595,7 +620,7 @@ def candidates(conn: sqlite3.Connection, cfg: Config | None = None) -> list[dict
             anchor = min(m["id"] for m in mine)
             for target, agents in by_target.items():
                 agent = agents[0] if len(agents) == 1 else "all"
-                out.append(_candidate(pick, line, target, project, agent, evidence, anchor))
+                out.append({**_candidate(pick, line, target, project, agent, evidence, anchor), "chosen": bool(choice)})
 
     # overlap with what the file already says, the per-file cap, then warnings for what is left
     files: dict[Path, str] = {}
@@ -608,9 +633,14 @@ def candidates(conn: sqlite3.Connection, cfg: Config | None = None) -> list[dict
                 files[target] = target.read_text()
             except OSError:
                 files[target] = ""
-        if overlap(c["text"], files[target]) or per_file[c["target_path"]] >= MAX_PER_FILE:
+        if overlap(c["text"], files[target]):
             continue
-        per_file[c["target_path"]] += 1
+        if not (c["chosen"] or (decided and decided(c))):
+            if per_file[c["target_path"]] >= MAX_PER_FILE:
+                if waiting is not None:
+                    waiting.append(c)
+                continue
+            per_file[c["target_path"]] += 1
         c["warnings"] = warnings_for(c["text"], target, c["project_path"], conn)
         kept.append(c)
     return kept

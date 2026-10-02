@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 10
+SCHEMA_VERSION = 11
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -367,6 +367,12 @@ CREATE TABLE IF NOT EXISTS suggestions (
     dismissed_reason TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_suggestions_status ON suggestions(status);
+
+CREATE TABLE IF NOT EXISTS suggestion_scopes (
+    subject TEXT PRIMARY KEY,                      -- knowledge:<id> (every item of the lesson) | cause:<friction.CATALOG id>
+    scope TEXT NOT NULL,                           -- user | project: where you moved it, over the automatic choice
+    updated_at TEXT
+);
 
 CREATE TABLE IF NOT EXISTS files_state (
     path TEXT PRIMARY KEY,
