@@ -11,7 +11,7 @@ knowledge on your own machine.</p>
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS app and CLI">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
-  <a href="https://pypistats.org/packages/agents-chronicle"><img src="https://img.shields.io/pypi/dm/agents-chronicle?label=downloads" alt="Monthly downloads"></a>
+  <a href="https://pepy.tech/projects/agents-chronicle"><img src="https://static.pepy.tech/badge/agents-chronicle" alt="Total downloads"></a>
 </p>
 <p align="center">
   <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
