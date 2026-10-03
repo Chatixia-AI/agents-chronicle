@@ -36,9 +36,10 @@ Pages: Home (active-time headline with active days and longest run; stat tiles w
 until a full prior period exists to compare against; daily chart with a 7-day average; outcome breakdown; activity
 calendar with streaks; busiest hour; projects, tools with failed calls, models and agents), a sortable, filterable
 session list, project cards with 12 weeks of activity, session pages (headline figures, the summary and the knowledge
-it produced up top, then **Transcript**: the conversation with one-line tool calls that expand to their input and
-output, and subagent threads; or **Details**: goal, highlights, open threads, the knowledge items, context-window
-chart with compactions, tools, files, subagents, PRs; on wide windows an **Outline** of the prompts and changed files
+it produced up top, then **Details**, where a session opens: goal, highlights, open threads, the knowledge items,
+context-window chart with compactions, tools, files, subagents, PRs; or **Transcript**, where a search result opens:
+the conversation with one-line tool calls that expand to their input and output, and subagent threads; on wide
+windows an **Outline** of the prompts and changed files
 sits beside the transcript and follows your scroll), a Knowledge overview (one card each for the Map, All knowledge,
 the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
 [stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it), project knowledge

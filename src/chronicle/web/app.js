@@ -1353,10 +1353,11 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       h("div", { title: f.path }, h("span", null, f.path.split("/").pop()), f.lines_added || f.lines_removed ? h("em", null, `+${fmtCompact(f.lines_added)}`) : null)),
       changed.length > 12 ? h("div", { class: "muted" }, `and ${changed.length - 12} more`) : null)] : null);
   const tabs = { transcript: null, details: null };
+  const defaultTab = params.seq || params.agent || params.q ? "transcript" : "details"; // a Search link points into the transcript
   const showTab = (name, record = true) => {
     for (const [k, el] of Object.entries(tabs)) el.hidden = k !== name;
     tabBar.querySelectorAll("button").forEach((b) => { const on = b.dataset.tab === name; b.classList.toggle("on", on); b.setAttribute("aria-pressed", String(on)); });
-    if (record) setParams({ ...params, tab: name === "details" ? "details" : "" });
+    if (record) setParams({ ...params, tab: name === defaultTab ? "" : name });
   };
   const onPrompt = (ev, target) => {
     if (!ev) { promptList.replaceChildren(); return; }
@@ -1397,7 +1398,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       h("div", { class: "s-tabbar" }, tabBar, outlineBtn),
       tabs.transcript, tabs.details),
     outline);
-  showTab(params.tab === "details" ? "details" : "transcript", false);
+  showTab(Object.hasOwn(tabs, params.tab || "") ? params.tab : defaultTab, false);
   trackOutline(promptList);
   return page;
 });
