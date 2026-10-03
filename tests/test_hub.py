@@ -307,6 +307,131 @@ def test_hub_add_folder_refuses_another_projects_repository(env, monkeypatch, ca
     assert load_config(env["home"]).hub_folders == {}
 
 
+def _analyzed_on_spoke(spoke, *, title: str, at: str, lessons: list[tuple[str, str, str]]):
+    """Record the spoke's own session there and give it an analysis, as its own Claude Code would."""
+    from chronicle.ingest import sync
+
+    sconn = connect(spoke.db_path)
+    sync(spoke, sconn)
+    sconn.execute("UPDATE sessions SET analysis_status = 'done', analyzed_at = ?, llm_title = ?, summary = 'What happened', "
+                  "analyzed_prompts = n_prompts WHERE id = ?", (at, title, SPOKE_SID))
+    sconn.execute("DELETE FROM knowledge WHERE session_id = ?", (SPOKE_SID,))
+    for fp, scope, kind in lessons:
+        sconn.execute("INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, scope, confidence, "
+                      "source, fingerprint, created_at, updated_at) VALUES (?, ?, 'demo-app', ?, ?, 'body', ?, 'high', "
+                      "'analysis', ?, ?, ?)", (SPOKE_SID, SPOKE_CWD, kind, f"lesson {fp}", scope, fp, at, at))
+    sconn.commit()
+    sconn.close()
+
+
+def test_knowledge_only_sharing(hubenv):
+    """[hub] share = "knowledge": the spoke analyzes its own sessions and sends the hub only details, the analysis
+    and project lessons; no transcript arrives, the hub never re-analyzes it, and folders still decide the project."""
+    from chronicle.analyze import AnalysisSkipped, analyze_session
+    from chronicle.ingest import mark_missing_sources, sync
+    from chronicle.worker import count_pending, pending_sessions
+
+    cfg, conn, spoke = hubenv["cfg"], hubenv["conn"], hubenv["spoke"]
+    spoke.hub_share = "knowledge"
+    assert spoke.shares_knowledge and not spoke.sends_files
+    spoke_id = hub.local_machine(spoke)["id"]
+    _analyzed_on_spoke(spoke, title="Shared title", at="2026-09-20T12:00:00Z",
+                       lessons=[("p-gotcha", "project", "gotcha"), ("p-pref", "project", "preference"),
+                                ("g-gotcha", "global", "gotcha")])
+
+    report = hub.push(spoke)
+    assert report.kind == "knowledge" and report.sent == 1 and not report.errors
+    assert "1 session shared" in report.summary()
+    assert hubenv["ingest_requests"], "the hub was not asked to build its knowledge"
+    assert not list(cfg.machines_dir.rglob("*.jsonl")), "a transcript left the spoke"
+    row = conn.execute("SELECT * FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert (row["source"], row["machine_id"], row["project_path"], row["analysis_status"]) == \
+        ("remote", spoke_id, SPOKE_CWD, "done")
+    assert row["title"] == "Shared title" and row["summary"] == "What happened" and row["n_prompts"] == 2
+    assert row["first_prompt"] is None and row["transcript_path"] is None and row["last_prompt"] is None
+    lessons = [r[0] for r in conn.execute("SELECT fingerprint FROM knowledge WHERE session_id = ?", (SPOKE_SID,))]
+    assert lessons == ["p-gotcha"]  # lessons about the person stay on the spoke
+
+    assert SPOKE_SID not in pending_sessions(conn, cfg, 100)
+    ready = count_pending(conn, cfg)["ready"]
+    conn.execute("UPDATE sessions SET analysis_status = 'pending' WHERE id = ?", (SPOKE_SID,))  # e.g. a "re-analyze all"
+    assert SPOKE_SID not in pending_sessions(conn, cfg, 100) and count_pending(conn, cfg)["ready"] == ready
+    with pytest.raises(AnalysisSkipped, match="keeps its transcript"):
+        analyze_session(conn, cfg, SPOKE_SID)
+    mark_missing_sources(conn)
+    assert conn.execute("SELECT source_present FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == 1
+    conn.execute("UPDATE sessions SET analysis_status = 'done' WHERE id = ?", (SPOKE_SID,))
+    conn.commit()
+    sync(cfg, conn)  # the hub's own sync leaves it alone
+    assert conn.execute("SELECT source FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == "remote"
+
+    again = hub.push(spoke)
+    assert again.sent == 0 and again.unchanged == 1
+
+    _analyzed_on_spoke(spoke, title="Better title", at="2026-09-21T09:00:00Z", lessons=[("p-fix", "project", "fix")])
+    assert hub.push(spoke).sent == 1  # analyzed again there: the hub's copy is replaced, lessons and all
+    assert conn.execute("SELECT title FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == "Better title"
+    assert [r[0] for r in conn.execute("SELECT fingerprint FROM knowledge WHERE session_id = ?", (SPOKE_SID,))] == ["p-fix"]
+
+    spoke.hub_folders = {SPOKE_CWD: CWD}  # an added folder files shared sessions too
+    hub.push(spoke)
+    row = conn.execute("SELECT project_path, machine_path FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert (row["project_path"], row["machine_path"]) == (CWD, SPOKE_CWD)
+    assert conn.execute("SELECT project_path FROM knowledge WHERE fingerprint = 'p-fix'").fetchone()[0] == CWD
+    seen = {m["id"]: m for m in hub.machines(conn, cfg)}[spoke_id]
+    assert seen["share"] == "knowledge" and seen["last_push"] and seen["sessions"] == 1
+
+
+def test_hub_keeps_its_own_record_of_a_session_it_has(hubenv):
+    """A session whose transcript the hub already has (sent before the spoke switched to knowledge only) keeps the
+    hub's record; bad records are ignored."""
+    from chronicle.ingest import sync
+
+    cfg, conn, spoke = hubenv["cfg"], hubenv["conn"], hubenv["spoke"]
+    hub.push(spoke)  # everything: the transcript arrives
+    sync(cfg, conn)
+    spoke.hub_share = "knowledge"
+    _analyzed_on_spoke(spoke, title="From the spoke", at="2026-09-20T12:00:00Z", lessons=[("p1", "project", "fact")])
+    hub.push(spoke)
+    row = conn.execute("SELECT source, title FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert row["source"] == "transcript" and row["title"] != "From the spoke"
+
+    body = gzip.compress(json.dumps({"sessions": [{"id": "../x", "agent": "claude"}, {"id": "ok-1", "agent": "chatgpt"},
+                                                  {"id": "ok-2", "agent": "claude", "tools_json": {"Bash": 1},
+                                                   "knowledge": [{"kind": "fact", "title": "t", "scope": "global"}]}]}).encode())
+    params = f"machine={hub.local_machine(spoke)['id']}"
+    req = urllib.request.Request(f"{hubenv['url']}/api/hub/sessions?{params}", data=body, method="POST",
+                                 headers={"Authorization": f"Bearer {hubenv['token']}"})
+    assert json.loads(urllib.request.urlopen(req, timeout=10).read())["stored"] == 1
+    assert conn.execute("SELECT COUNT(*) FROM sessions WHERE id IN ('../x', 'ok-1')").fetchone()[0] == 0
+    assert conn.execute("SELECT tools_json FROM sessions WHERE id = 'ok-2'").fetchone()[0] == '{"Bash": 1}'
+    assert conn.execute("SELECT COUNT(*) FROM knowledge WHERE session_id = 'ok-2'").fetchone()[0] == 0
+
+
+def test_knowledge_mode_records_and_analyzes_here(env, monkeypatch):
+    """A knowledge-only computer keeps its own Chronicle running: the hook ingests here instead of pushing files,
+    and the worker runs, then tries to share (an unreachable hub is just noted)."""
+    from chronicle import hooks
+    from chronicle.config import set_config_value
+    from chronicle.worker import run_worker
+
+    cfg = load_config(env["home"])
+    set_config_value(cfg, "hub", "url", '"http://127.0.0.1:9"')
+    set_config_value(cfg, "hub", "share", '"knowledge"')
+    hub.write_token(cfg, "t")
+    cfg = load_config(env["home"])
+    assert cfg.shares_knowledge and not cfg.sends_files
+
+    spawned = []
+    monkeypatch.setattr(hooks, "spawn_detached", lambda args, log: spawned.append(args))
+    hooks._on_session_end({"transcript_path": "/x.jsonl"}, ended=True)
+    assert "ingest-session" in spawned[0] and "push" not in spawned[0]
+
+    report = run_worker(cfg, analyze=False, synthesize=False, export=False)
+    assert report.note is None or "hub" not in report.note
+    assert report.shared and report.shared.startswith("not sent")
+
+
 def test_hub_ignores_bad_folders():
     assert hub.clean_folders({"relative/x": "/a", "/ok/": "/p/", "/b": "relative", 3: "/c"}) == {"/ok": "/p"}
     assert hub.clean_folders(["/a"]) == {}

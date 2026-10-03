@@ -1309,7 +1309,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     toast(r.started ? t("Analysis started (via {agent}). This page refreshes when it finishes.", { agent: analyzer() }) : t("Analysis already running"));
     watchJob(`analyze:${sx.id}`);
   } }, sx.analysis_status === "done" ? t("Re-analyze") : t("Analyze now"));
-  if (sx.source === "history") analyzing.hidden = true;
+  if (sx.source === "history" || sx.source === "remote") analyzing.hidden = true; // remote: analyzed where its transcript is
   const head = h("div", { class: "session-head" },
     h("div", { style: { minWidth: 0, flex: "1 1 320px" } },
       h("h1", null, sx.title || t("(untitled session)")),
@@ -1322,6 +1322,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
         sx.primary_model ? h("span", null, h("code", null, sx.primary_model)) : null,
         sx.cc_version ? h("span", { class: "muted" }, `${agentName(sx.agent)} ${sx.cc_version}`) : null,
         sx.source_present === 0 && sx.source !== "history" ? h("span", { class: "badge", title: t("The agent deleted the original; Chronicle's archive keeps it") }, t("original deleted · archived")) : null,
+        sx.source === "remote" ? h("span", { class: "badge", title: t("Analyzed on the computer it ran on, which keeps its transcript") }, t("transcript on {machine}", { machine: sx.machine_name || t("another machine") })) : null,
         sx.source === "codex-import" ? h("span", { class: "badge accent", title: t("Claude Code deleted this transcript; Chronicle recovered it from the copy Codex Desktop imported") }, h("span", { class: "sdot" }), t("recovered via Codex")) : null)),
     h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source),
       exportMenu(() => [sx.id], { raw: RAW_SOURCES.includes(sx.source) }), analyzing));
@@ -1421,7 +1422,9 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     const after = [...promptList.children].find((x) => +x.dataset.seq > ev.seq);
     promptList.insertBefore(li, after || null);
   };
-  const transcript = transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "", onPrompt, queryTerms(params.q));
+  const transcript = sx.source === "remote"
+    ? h("section", { class: "card" }, h("p", { class: "muted" }, t("This session was analyzed on {machine}, which keeps its transcript. Only its summary and project lessons were shared.", { machine: sx.machine_name || t("another machine") })))
+    : transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "", onPrompt, queryTerms(params.q));
   tabs.transcript = transcript;
   tabs.details = h("div", { class: "grid cols-main" },
     h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
@@ -3715,7 +3718,9 @@ route(/^\/devices$/, async () => {
   const role = {
     single: t("Records and analyzes its own sessions."),
     hub: t("The hub: records and analyzes its own sessions and the ones your other computers send it."),
-    spoke: t("Sends its sessions to a hub, which records and analyzes them. This dashboard shows what this computer had before it joined."),
+    spoke: dv.share === "knowledge"
+      ? t("Records and analyzes its own sessions, and shares each session's summary and project lessons with a hub. Transcripts stay here.")
+      : t("Sends its sessions to a hub, which records and analyzes them. This dashboard shows what this computer had before it joined."),
   }[dv.role];
   const thisCard = h("section", { class: "card" }, cardHead(t("This computer"), { iconName: "devices" }),
     h("p", null, h("b", null, dv.this.name), ` · ${role}`),
@@ -3748,7 +3753,8 @@ route(/^\/devices$/, async () => {
     const table = h("div", { class: "table-wrap" }, h("table", { class: "data" },
       h("thead", null, h("tr", null, ...[t("Computer"), t("Platform"), t("Sessions"), t("Latest session"), t("Last sent")].map((x, i) => h("th", { class: i === 2 ? "num" : "" }, x)))),
       h("tbody", null, ...dv.machines.map((m) => h("tr", null,
-        h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, t(" (this one)")) : null),
+        h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, t(" (this one)")) : null,
+          m.share === "knowledge" ? h("span", { class: "muted", title: t("Analyzes its own sessions and sends only summaries and project lessons") }, t(" · knowledge only")) : null),
         h("td", null, m.platform || "–"),
         h("td", { class: "num" }, fmtNum(m.sessions)),
         h("td", null, m.last_session ? ago(m.last_session) : "–"),
