@@ -10,11 +10,12 @@ from __future__ import annotations
 import json
 from collections import Counter
 
+from . import artifacts
 from .copilot_parser import _Builder, finish_session
 from .parser import ParsedSession
 from .util import parse_ts, safe_text, to_iso
 
-CLAUDE_AI_PARSER_VERSION = 2  # 2: only the branch shown, pasted images
+CLAUDE_AI_PARSER_VERSION = 3  # 3: artifacts (claude.ai artifacts, files presented); 2: only the branch shown, pasted images
 AGENT = "claude-ai"
 SOURCE = "claude-ai-export"
 
@@ -84,7 +85,7 @@ def parse_conversation(conv: dict, projects: dict[str, str]) -> ParsedSession | 
     ps.project_path = f"claude.ai/{name}" if name else "claude.ai"
     ps.entrypoint = "claude.ai"
     ps.custom_title = safe_text(conv.get("name") or "") or None
-    b = _Builder(ps)
+    b = _Builder(ps, where="claude.ai")
     b.stamps += [t for t in (_iso(conv.get("created_at")), _iso(conv.get("updated_at"))) if t]
     for m in msgs:
         ts = _iso(m.get("created_at"))
@@ -119,6 +120,10 @@ def parse_conversation(conv: dict, projects: dict[str, str]) -> ParsedSession | 
                 inp = bl.get("input") if isinstance(bl.get("input"), dict) else {}
                 b.tool(bts, bl.get("id"), bl.get("name") or "tool", inp, result=_result_text(match) if match else None,
                        is_error=bool(match and match.get("is_error")))
+                if bl.get("name") == "artifacts":
+                    artifacts.claude_ai_artifact(ps, inp, ts=bts, tool_use_id=bl.get("id"))
+                elif bl.get("name") == "present_files" and match and not match.get("is_error"):
+                    artifacts.claude_ai_presented(ps, match.get("content"), ts=bts, tool_use_id=bl.get("id"))
     if conv.get("model"):
         ps.models[conv["model"]] += 1
     return finish_session(ps, b.stamps)

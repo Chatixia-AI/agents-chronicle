@@ -48,6 +48,8 @@ from the [demo data](docs/development.md#demo-data):
   Gemini CLI can connect too.
 - **A dashboard to browse it all.** Sessions with their full transcripts, statistics, a glossary of your own
   vocabulary drawn as a mindmap, and a weekly review you can take in at a glance. ⌘K jumps anywhere.
+- **What your agents made, in one place.** The documents, pages, diagrams, decks, pull requests and commits from every
+  session, each linked to the session that made it and marked when the file has changed or is gone.
 - **On your phone and your other computers.** Open the dashboard on your phone through Tailscale, and keep every
   computer's sessions in one archive, analyzed once ([Phone and other computers](docs/devices.md)).
 - **In VS Code, next to your code.** The [extension](docs/vscode.md) lists the sessions behind the file you have

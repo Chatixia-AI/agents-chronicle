@@ -401,6 +401,7 @@ class App:
         s["analyses"] = [dict(r) for r in self.conn.execute(
             "SELECT kind, started_at, finished_at, model, status, error, input_chars, chunks, cost_usd, duration_ms "
             "FROM analyses WHERE target = ? ORDER BY id DESC LIMIT 10", (real,))]
+        s["outputs"] = self._artifacts(session_id=real)[0]
         s["agents"] = [{"agent_id": "", "label": tr("Main thread")}] + [
             {"agent_id": a["agent_id"], "label": f"{a.get('agent_type') or 'agent'}: {a.get('description') or a['agent_id']}"}
             for a in s["subagents"]]
@@ -507,6 +508,7 @@ class App:
             "stats": dict(stats),
             "kb": dict(kb) if kb else None,
             "diagram": for_kb(kb["kb_json"]) if kb else None,
+            "artifacts": self._artifact_summary(path),
             "sessions": self._session_rows("project_path = ?", [path], "started_at DESC", 200),
             "knowledge": [self._k(dict(r)) for r in c.execute(
                 "SELECT k.*, s.title session_title FROM knowledge k LEFT JOIN sessions s ON s.id = k.session_id "
@@ -581,6 +583,49 @@ class App:
             {"path": p, "rel": p[len(base):], "sessions": len(files[p]["sessions"]), "changed": len(files[p]["changed"]),
              "last": files[p]["last"], "session_ids": sorted(files[p]["sessions"]),
              "changed_ids": sorted(files[p]["changed"])} for p in paths[:limit]]}
+
+    def _artifacts(self, **filters) -> tuple[list[dict], dict[str, int]]:
+        from .artifacts import query
+        from .ingest import local_machine_id
+
+        return query(self.conn, local_machine=local_machine_id(self.cfg), **filters)
+
+    def _artifact_summary(self, project: str) -> dict:
+        items, counts = self._artifacts(project=project)
+        return {"total": len(items), "counts": counts, "recent": items[:8]}
+
+    def artifacts(self, q: dict) -> dict:
+        """The artifacts gallery: what sessions made, newest first, filtered by kind, project, agent, words and status."""
+        items, counts = self._artifacts(kind=q.get("kind") or None, project=q.get("project") or None,
+                                        agent=q.get("agent") or None, q=(q.get("q") or "").strip() or None)
+        if q.get("hide_gone") == "1":
+            items = [i for i in items if i["status"] != "gone"]
+        limit, offset = min(int(q.get("limit") or 100), 500), int(q.get("offset") or 0)
+        projects = [dict(r) for r in self.conn.execute(
+            "SELECT s.project_path, MAX(s.project_name) project_name, COUNT(DISTINCT a.key) n FROM artifacts a "
+            "JOIN sessions s ON s.id = a.session_id GROUP BY s.project_path ORDER BY n DESC")]
+        labels = project_labels(self.conn)
+        for p in projects:
+            p["label"] = labels.get(p["project_path"], p["project_name"])
+        return {"total": len(items), "counts": counts, "items": items[offset:offset + limit], "projects": projects}
+
+    def artifact_open(self, artifact_id: int) -> dict | None:
+        from .artifacts import open_file
+        from .ingest import local_machine_id
+
+        return open_file(self.conn, artifact_id, local_machine_id(self.cfg))
+
+    def artifact_reveal(self, artifact_id: int, how: str) -> str | None:
+        from .artifacts import reveal
+        from .ingest import local_machine_id
+
+        return reveal(self.conn, artifact_id, how, local_machine_id(self.cfg))
+
+    def artifact_file(self, artifact_id: int) -> tuple[bytes, str] | None:
+        from .artifacts import preview_file
+        from .ingest import local_machine_id
+
+        return preview_file(self.conn, artifact_id, local_machine_id(self.cfg), cache_dir=self.cfg.home / "thumbs")
 
     def knowledge(self, q: dict) -> dict:
         rows = search_knowledge(self.conn, q.get("q") or None, project=q.get("project") or None, kind=q.get("kind") or None,
@@ -1164,6 +1209,34 @@ def make_handler(app: App, port: int):
                 return True  # this computer itself
             return (self.headers.get("Tailscale-User-Login") or "") in users
 
+        def _local(self) -> str | None:
+            """"mac" or "linux" when the request comes from this computer itself (not through Tailscale Serve, not from
+            another device) and Chronicle can open files here; None otherwise. Gates "Open on this Mac"."""
+            import sys
+
+            proxied = self.headers.get("X-Forwarded-For") is not None or self.headers.get("Tailscale-User-Login") is not None
+            if proxied or self.client_address[0] not in ("127.0.0.1", "::1") or self._host() not in local_hosts:
+                return None
+            return "mac" if sys.platform == "darwin" else "linux" if sys.platform.startswith("linux") else None
+
+        def _open_file(self, f: dict):
+            from urllib.parse import quote
+
+            ascii_name = f["name"].encode("ascii", "replace").decode().replace("?", "_").replace('"', "'")
+            self.send_response(200)
+            self.send_header("Content-Type", f["ctype"])
+            self.send_header("Content-Disposition", f"{'inline' if f['inline'] else 'attachment'}; filename=\"{ascii_name}\"; "
+                                                    f"filename*=UTF-8''{quote(f['name'])}")
+            self.send_header("Content-Length", str(len(f["body"])))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Referrer-Policy", "no-referrer")
+            if f["policy"]:
+                self.send_header("Content-Security-Policy", f["policy"])
+            self.send_header("X-Chronicle-Source", f["source"])  # "disk", or "archive": as the agent wrote it, now gone
+            self.end_headers()
+            self.wfile.write(f["body"])
+
         def _hub_api(self, p: str):
             """Another computer sending its sessions (hub.py). Authenticated by the hub token, not a browser header."""
             from . import hub
@@ -1209,6 +1282,17 @@ def make_handler(app: App, port: int):
             self.send_header("Cache-Control", "no-store")
             self.send_header("X-Content-Type-Options", "nosniff")
             self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def _image(self, body: bytes, ctype: str):
+            self.send_response(200)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "private, max-age=300")
+            self.send_header("X-Content-Type-Options", "nosniff")
+            # an SVG is a document that can carry script: opened on its own, it renders in a sandbox that allows nothing
+            self.send_header("Content-Security-Policy", "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox")
             self.end_headers()
             self.wfile.write(body)
 
@@ -1271,7 +1355,7 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/sessions/([\w-]+)", p)
                 if m:
                     s = app.session(m.group(1))
-                    return self._json(s) if s else self._json({"error": tr("not found")}, 404)
+                    return self._json({**s, "local": self._local()}) if s else self._json({"error": tr("not found")}, 404)
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/events", p)
                 if m:
                     return self._json(app.events(m.group(1), q))
@@ -1280,9 +1364,19 @@ def make_handler(app: App, port: int):
                     return self._json(app.matches(m.group(1), q))
                 if p == "/api/projects":
                     return self._json(app.projects())
+                if p == "/api/artifacts":
+                    return self._json({**app.artifacts(q), "local": self._local()})
+                m = re.fullmatch(r"/api/artifacts/(\d+)/open", p)
+                if m:  # the file itself, in a new tab: from disk, or as the agent wrote it once it is gone
+                    f = app.artifact_open(int(m.group(1)))
+                    return self._open_file(f) if f else self._json({"error": tr("this file can no longer be opened")}, 404)
+                m = re.fullmatch(r"/api/artifacts/(\d+)/file", p)
+                if m:  # an image or diagram an agent made, still on disk: shown as a thumbnail
+                    f = app.artifact_file(int(m.group(1)))
+                    return self._image(*f) if f else self._json({"error": tr("not available")}, 404)
                 if p == "/api/project":
                     proj = app.project(unquote(q.get("path", "")))
-                    return self._json(proj) if proj else self._json({"error": tr("not found")}, 404)
+                    return self._json({**proj, "local": self._local()}) if proj else self._json({"error": tr("not found")}, 404)
                 if p == "/api/diagram":  # a download: the project's architecture sketch as an .excalidraw file
                     f = app.diagram_file(q.get("path", ""))
                     return self._download(*f) if f else self._json({"error": tr("no architecture sketch for this project")}, 404)
@@ -1386,6 +1480,12 @@ def make_handler(app: App, port: int):
             try:
                 if p == "/api/sync":
                     return self._json({"started": app.action_sync()})
+                m = re.fullmatch(r"/api/artifacts/(\d+)/reveal", p)
+                if m:  # open the file in its own app, or show it in Finder: only from this computer
+                    if not self._local():
+                        return self._json({"error": tr("files open only on the computer Chronicle runs on")}, 403)
+                    err = app.artifact_reveal(int(m.group(1)), "reveal" if body.get("how") == "reveal" else "open")
+                    return self._json({"error": err}, 400) if err else self._json({"ok": True})
                 if p == "/api/update/check":  # a POST: with the daily check off, the dashboard's only call to PyPI
                     return self._json(app.update_info(remote=True))
                 if p == "/api/analysis/backend":

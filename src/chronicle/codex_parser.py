@@ -31,12 +31,13 @@ from .parser import (
     clean_prompt,
     parse_command,
 )
+from . import artifacts
 from .pricing import normalize_model, openai_cost
 from .util import iter_jsonl, one_line, parse_ts, safe_text, truncate
 
 log = logging.getLogger("chronicle.codex")
 
-CODEX_PARSER_VERSION = 3
+CODEX_PARSER_VERSION = 4  # 4: artifacts (files created, PRs, commits, generated images)
 ROLLOUT_RE = re.compile(r"^rollout-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})-([0-9a-f-]{36})\.jsonl(\.gz)?$")
 _UUID_RE = re.compile(r"^[0-9a-f-]{36}$")
 _IDE_REQUEST_RE = re.compile(r"^## My request( for Codex)?:[ \t]*$", re.M)
@@ -325,8 +326,8 @@ class _CodexThread:
         self.tc_calls: list[ApiCall] = []     # from event_msg/token_count (older Codex), used only as a fallback
         self.last_total = 0
         # file edits: newer Codex reports them as FileChange items, older as apply_patch calls; never count both
-        self.patch_ops: list[tuple[str, str, int, int]] = []
-        self.change_ops: list[tuple[str, str, int, int]] = []
+        self.patch_ops: list[tuple[str, str, int, int, ToolCall]] = []  # + the call, to skip a patch that failed
+        self.change_ops: list[tuple[str, str, int, int, str | None, str | None]] = []  # + when, and a new file's content
         self.cells: dict[str, tuple[ToolCall, str | None]] = {}  # code-mode cell id -> the call whose script still runs
 
     # ---------- helpers
@@ -507,7 +508,7 @@ class _CodexThread:
         if mcp:
             ps.mcp_servers[mcp] += 1
         for path, (op, added, removed) in file_ops.items():
-            self.patch_ops.append((path, op.lower(), added, removed))
+            self.patch_ops.append((path, op.lower(), added, removed, call))
         for path in reads:
             ps.files.setdefault(path, FileStat()).reads += 1
         if call_id:
@@ -581,6 +582,7 @@ class _CodexThread:
     def _tool_result(self, p: dict, ts: str | None) -> None:
         call_id = p.get("call_id") or p.get("id")
         text, images, err = _output_text(p.get("output") if p.get("type") != "tool_search_output" else p.get("tools"))
+        self.ps.n_result_images += images
         call, started = self.pending.pop(call_id, (None, None))
         is_error = bool(err)
         if call:
@@ -600,6 +602,9 @@ class _CodexThread:
                         owner.duration_ms = max(int((end - origin_start).total_seconds() * 1000), 0)
             if is_error:
                 self._fail(owner)
+            elif not cell:
+                artifacts.from_tool(self.ps, owner.name, owner.input, text, ts=ts, agent_id=self.agent_id,
+                                    tool_use_id=owner.tool_use_id, command=owner.command)
         self._event(ts, "user", "tool_result", text, limit_key="tool_error" if is_error else "tool_result",
                     tool_name=call.name if call else None, tool_use_id=call_id, is_error=is_error)
 
@@ -616,7 +621,7 @@ class _CodexThread:
         elif pt == "patch_apply_end" and p.get("call_id") in self.pending and p.get("success") is False:
             self._fail(self.pending[p["call_id"]][0])
         elif pt == "item_completed" and isinstance(p.get("item"), dict):
-            self._item_completed(p["item"])
+            self._item_completed(p["item"], ts)
         elif pt == "token_count" and isinstance(p.get("info"), dict):
             info = p["info"]
             total = info.get("total_token_usage") if isinstance(info.get("total_token_usage"), dict) else {}
@@ -626,7 +631,7 @@ class _CodexThread:
                 self.last_total = tt
                 self.tc_calls.append(self._api_call(last, f"tc#{len(self.tc_calls) + 1}", ts))
 
-    def _item_completed(self, item: dict) -> None:
+    def _item_completed(self, item: dict, ts: str | None = None) -> None:
         """Newer Codex: FileChange items carry the edits, CommandExecution items the real exit codes."""
         kind = item.get("type")
         if kind == "FileChange" and isinstance(item.get("changes"), dict):
@@ -648,7 +653,7 @@ class _CodexThread:
                 elif isinstance(change.get("content"), str):
                     lines = change["content"].count("\n") + (0 if change["content"].endswith("\n") else 1)
                     added, removed = (lines, 0) if op == "add" else (0, lines if op == "delete" else 0)
-                self.change_ops.append((path, op, added, removed))
+                self.change_ops.append((path, op, added, removed, ts, change.get("content") if op == "add" else None))
         elif kind == "CommandExecution":
             self._command_result(item)
 
@@ -683,7 +688,11 @@ class _CodexThread:
 
     def finish(self) -> None:
         ps = self.ps
-        for path, op, added, removed in self.change_ops or self.patch_ops:
+        for path, op, added, removed, *how in self.change_ops or self.patch_ops:
+            if op == "add" and len(how) == 2:  # a FileChange: applied, with the new file's content
+                artifacts.file_written(ps, path, content=how[1], ts=how[0], agent_id=self.agent_id)
+            elif op == "add" and not how[0].is_error:
+                artifacts.file_written(ps, path, ts=how[0].ts, agent_id=self.agent_id, tool_use_id=how[0].tool_use_id)
             fs = ps.files.setdefault(path, FileStat())
             if op == "add":
                 fs.writes += 1

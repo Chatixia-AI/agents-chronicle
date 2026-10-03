@@ -127,7 +127,20 @@ const ICONS = {
   organization: [["rect", { x: 4, y: 2, width: 16, height: 20, rx: 2 }], "M9 22v-4h6v4", "M8 6h.01", "M12 6h.01", "M16 6h.01", "M8 10h.01", "M12 10h.01", "M16 10h.01", "M8 14h.01", "M12 14h.01", "M16 14h.01"],
   service: [["rect", { x: 2, y: 3, width: 20, height: 8, rx: 2 }], ["rect", { x: 2, y: 13, width: 20, height: 8, rx: 2 }], "M6 7h.01", "M6 17h.01"],
   acronym: ["M4 7V4h16v3", "M9 20h6", "M12 4v16"],
+  // artifacts: what sessions made
+  artifacts: ["M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z",
+    "M12 22V12", "m3.3 7 7.7 4.7a2 2 0 0 0 2 0L20.7 7", "m7.5 4.27 9 5.15"],
+  page: [["rect", { x: 3, y: 4, width: 18, height: 16, rx: 2 }], "M3 9h18", "M7 6.5h.01", "M10 6.5h.01"],
+  diagram: [["rect", { x: 3, y: 3, width: 6, height: 6, rx: 1 }], ["rect", { x: 15, y: 15, width: 6, height: 6, rx: 1 }], "M6 9v3a3 3 0 0 0 3 3h6"],
+  deck: ["M2 3h20", "M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3", "m7 21 5-5 5 5"],
+  sheet: [["rect", { x: 3, y: 3, width: 18, height: 18, rx: 2 }], "M3 9h18", "M3 15h18", "M9 9v12", "M15 9v12"],
+  image: [["rect", { x: 3, y: 3, width: 18, height: 18, rx: 2 }], ["circle", { cx: 9, cy: 9, r: 2 }], "m21 15-3.1-3.1a2 2 0 0 0-2.8 0L6 21"],
+  published: [C10, "M2 12h20", "M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"],
+  pr: [["circle", { cx: 18, cy: 18, r: 3 }], ["circle", { cx: 6, cy: 6, r: 3 }], "M13 6h3a2 2 0 0 1 2 2v7", "M6 9v12"],
+  commit: [["circle", { cx: 12, cy: 12, r: 3 }], "M3 12h6", "M15 12h6"],
+  copy: [["rect", { x: 8, y: 8, width: 14, height: 14, rx: 2 }], "M4 16c-1.1 0-2-.9-2-2V4c0-1.1.9-2 2-2h10c1.1 0 2 .9 2 2"],
 };
+ICONS.doc = ICONS.file;
 ICONS.person = ICONS.preference;
 ICONS.other = ICONS.dot;
 function icon(name, cls = "") {
@@ -780,6 +793,7 @@ function navKey(path) {
   if (path.startsWith("/search")) return "search";
   if (path.startsWith("/suggestions")) return "suggestions";
   if (path.startsWith("/friction")) return "friction";
+  if (path.startsWith("/artifacts")) return "artifacts";
   if (path === "/" || path === "") return "overview";
   return "";
 }
@@ -1287,6 +1301,7 @@ function sessionRow(x, scale = null, pick = null) {
 route(/^\/session\/([\w-]+)$/, async (params, id) => {
   const token = renderSeq;
   const sx = await api(`/api/sessions/${id}`);
+  ART_LOCAL = sx.local;
   const analyzing = h("button", { class: "btn primary", type: "button", onclick: async () => {
     analyzing.disabled = true;
     analyzing.textContent = t("Analyzing…");
@@ -1343,12 +1358,12 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
       : sx.analysis_reason ? t("Not analyzed yet ({status}: {reason}).", { status: STATUS_LABEL[sx.analysis_status] || sx.analysis_status, reason: sx.analysis_reason })
       : t("Not analyzed yet ({status}).", { status: STATUS_LABEL[sx.analysis_status] || sx.analysis_status });
     const sv = sx.screen_sig === sx.files_sig && SCREEN[sx.screen_verdict];
-    summary.append(h("div", { class: "muted" }, reason),
+    append(summary, [h("div", { class: "muted" }, reason), // the DOM's own append would print a missing part as "null"
       sv ? h("div", { class: "screen-line" }, t("Screening: "), h("span", { class: `screen-v ${sv[0]}` }, sv[1]),
         sx.screen_topic ? ` · ${sx.screen_topic}` : null, sx.screen_reason ? `: ${sx.screen_reason}` : null,
         h("span", { class: "muted" }, ` (${sx.screen_by === "rules" ? t("by rule") : sx.screen_by}, ${ago(sx.screened_at)})`)) : null,
       sx.first_prompt ? h("div", { class: "subhead" }, t("First prompt")) : null,
-      sx.first_prompt ? h("div", { style: { whiteSpace: "pre-wrap" } }, sx.first_prompt.slice(0, 1200)) : null);
+      sx.first_prompt ? h("div", { style: { whiteSpace: "pre-wrap" } }, sx.first_prompt.slice(0, 1200)) : null]);
   }
   const knowledge = sx.knowledge.length ? h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, t("Knowledge ({n})", { n: sx.knowledge.length }))),
     h("div", { class: "grid" }, sx.knowledge.map((k) => { const c = knowledgeCard(k, { hideSession: true }); c.id = `k-${k.id}`; return c; }))) : null;
@@ -1369,8 +1384,9 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   if (sx.subagents.length) extras.push(h("div", { class: "subhead" }, t("Subagents")), h("div", { class: "table-scroll" }, h("table", { class: "table-view" },
     h("tbody", null, sx.subagents.map((a) => h("tr", null, h("td", null, h("b", null, a.agent_type || "agent"), " ", a.description || a.agent_id),
       h("td", { class: "num" }, tn(a.n_tool_calls, "{n} tool", "{n} tools")), h("td", { class: "num" }, fmtCost(a.est_cost_usd))))))));
-  if (sx.prs.length) extras.push(h("div", { class: "subhead" }, t("Pull requests")), h("ul", { class: "bullets" }, sx.prs.map((p) => h("li", null, extLink(p.url, `${p.repo}#${p.number}`)))));
-  if (sx.artifacts.length) extras.push(h("div", { class: "subhead" }, t("Artifacts")), h("ul", { class: "bullets" }, sx.artifacts.map((a) => h("li", null, extLink(a.url, a.title || a.url)))));
+  const made = sx.outputs || [];
+  const madeCard = made.length ? artifactsCard(made, { hint: tn(made.length, "{n} made in this session", "{n} made in this session", { n: fmtNum(made.length) }),
+    project: false, session: false, compact: true }) : null;
   if (sx.workflows.length) extras.push(h("div", { class: "subhead" }, t("Workflows")), h("ul", { class: "bullets" }, sx.workflows.map((w) => h("li", null, h("b", null, w.name || w.id),
     ` · ${w.status || ""} · ${tn(w.agents || 0, "{n} agent", "{n} agents")} · ${t("{n} tokens", { n: fmtCompact(w.tokens) })}`, w.summary ? h("div", { class: "muted" }, w.summary) : null))));
   const chipsOf = (obj, label) => Object.keys(obj || {}).length ? [h("div", { class: "subhead" }, label), h("div", null, Object.entries(obj).map(([k, v]) => h("span", { class: "tag" }, `${k}${v > 1 ? " ×" + v : ""}`)))] : [];
@@ -1382,6 +1398,11 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   const promptList = h("ol", { class: "ol-prompts" });
   const outline = h("aside", { class: "s-outline", "aria-label": t("Session outline") },
     sx.n_prompts ? [h("h4", null, t("Prompts")), promptList] : null, // none: a Codex Cloud task, say; the list would say "Loading…" forever
+    made.length ? [h("h4", null, t("Made")), h("div", { class: "ol-files ol-made" }, made.slice(0, 10).map((a) =>
+      h("a", { href: a.url && a.seq == null ? a.url : artifactSessionHref(a), title: a.title || a.path || a.url || "",
+        target: a.url && a.seq == null ? "_blank" : null, rel: a.url && a.seq == null ? "noopener" : null },
+        icon(a.kind), h("span", null, a.title || artifactWhere(a)))),
+      made.length > 10 ? h("div", { class: "muted" }, t("and {n} more", { n: made.length - 10 })) : null)] : null,
     changed.length ? [h("h4", null, t("Files changed")), h("div", { class: "ol-files" }, changed.slice(0, 12).map((f) =>
       h("div", { title: f.path }, h("span", null, f.path.split("/").pop()), f.lines_added || f.lines_removed ? h("em", null, `+${fmtCompact(f.lines_added)}`) : null)),
       changed.length > 12 ? h("div", { class: "muted" }, t("and {n} more", { n: changed.length - 12 })) : null)] : null);
@@ -1404,7 +1425,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   tabs.transcript = transcript;
   tabs.details = h("div", { class: "grid cols-main" },
     h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
-    h("div", { class: "grid", style: { alignContent: "start" } }, ctxCard, toolsCard, filesCard, extrasCard));
+    h("div", { class: "grid", style: { alignContent: "start" } }, madeCard, ctxCard, toolsCard, filesCard, extrasCard));
   const tabBar = h("div", { class: "seg s-tabs", role: "group", "aria-label": t("Session view") },
     h("button", { type: "button", "data-tab": "transcript", onclick: () => showTab("transcript") }, t("Transcript")),
     h("button", { type: "button", "data-tab": "details", onclick: () => showTab("details") }, t("Details")));
@@ -2066,6 +2087,7 @@ route(/^\/project$/, async (params) => {
   const path = params.path || "";
   const token = renderSeq;
   const p = await api("/api/project", { path });
+  ART_LOCAL = p.local;
   const isGlobal = path === "__global__";
   setCrumbs(isGlobal ? [[t("Knowledge"), "#/knowledge"], [t("Global playbook")]] : [[t("Projects"), "#/projects"], [p.label || shortPath(path)]], token);
   const synth = h("button", { class: "btn primary", type: "button", onclick: async () => {
@@ -2094,6 +2116,9 @@ route(/^\/project$/, async (params) => {
       h("h1", null, p.label), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)), synth),
     tiles,
     h("div", { class: "section-gap" }, kbCard),
+    p.artifacts?.total ? h("div", { class: "section-gap" }, artifactsCard(p.artifacts.recent, { project: false,
+      hint: ART_KINDS.filter(([k]) => p.artifacts.counts[k]).map(([k, plural]) => `${plural} ${fmtNum(p.artifacts.counts[k])}`).join(" · "),
+      all: `#/artifacts?project=${encodeURIComponent(path)}` })) : null,
     p.files && p.files.length ? h("div", { class: "section-gap" }, filesCard) : null,
     p.glossary && p.glossary.length ? [
       h("h2", { style: { margin: "22px 0 10px" } }, t("Glossary ({n})", { n: p.glossary.length }), " ",
@@ -2105,6 +2130,206 @@ route(/^\/project$/, async (params) => {
     h("div", { class: "kgrid" }, p.knowledge.map((k) => knowledgeCard(k, { compact: true }))),
     h("h2", { style: { margin: "22px 0 10px" } }, t("Sessions ({n})", { n: p.sessions.length })), sessions);
 });
+
+// =====================================================================================
+// Artifacts: what sessions made (documents, pages, diagrams, decks, images, published links, PRs, commits)
+// =====================================================================================
+const ART_KINDS = [["doc", t("Documents"), t("document")], ["page", t("Pages"), t("page")], ["diagram", t("Diagrams"), t("diagram")],
+  ["deck", t("Decks"), t("deck")], ["sheet", t("Sheets"), t("sheet")], ["image", t("Images"), t("image")],
+  ["published", t("Published"), t("published link")], ["pr", t("Pull requests"), t("pull request")], ["commit", t("Commits"), t("commit")]];
+const ART_KIND = Object.fromEntries(ART_KINDS.map(([k, plural, one]) => [k, { plural, one }]));
+let ART_LOCAL = null; // "mac" or "linux" when this browser is on the computer Chronicle runs on (files can open there)
+const ART_STATUS = { present: [t("on disk"), "good", t("The file is on disk as the agent wrote it")],
+  changed: [t("changed since"), "warning", t("The file is on disk, but changed after the agent wrote it")],
+  gone: [t("gone"), "muted", t("The file is no longer on disk; the session's transcript still holds what was written")],
+  chat: [t("in the chat"), "accent", t("Made in a claude.ai chat; it lives there, not on this machine")],
+  elsewhere: [t("another machine"), "muted", t("Made on another of your machines")] };
+function artifactWhere(a) {
+  if (a.url) { try { const u = new URL(a.url); return u.host + u.pathname.replace(/\/$/, ""); } catch (e) { return a.url; } }
+  if (a.path) return shortPath(a.path, a.project_path);
+  return a.meta?.sha ? `${a.meta.branch ? a.meta.branch + " · " : ""}${a.meta.sha.slice(0, 7)}` : "";
+}
+function artifactSessionHref(a) {
+  const q = a.seq != null ? `?seq=${a.seq}${a.agent_id ? `&agent=${encodeURIComponent(a.agent_id)}` : ""}` : "";
+  return `#/session/${a.session_id}${q}`;
+}
+function artifactRow(a, { project = true, session = true, compact = false } = {}) {
+  const st = ART_STATUS[a.status];
+  const title = a.title || artifactWhere(a) || ART_KIND[a.kind]?.one || a.kind;
+  const openHint = a.status === "gone" ? t("Gone from disk: open it as the agent wrote it") : t("Open the file in a new tab");
+  const chat = artifactChatUrl(a);
+  const main = a.url ? extLink(a.url, title)
+    : a.openable ? h("a", { href: artifactOpenUrl(a), target: "_blank", rel: "noopener", title: openHint }, title)
+    : chat ? h("a", { href: chat, target: "_blank", rel: "noopener", title: t("It lives in this claude.ai chat: open it there") }, title)
+    : h("a", { href: artifactSessionHref(a), title: t("Open where the session made it") }, title);
+  const open = compact ? null
+    : a.openable ? h("a", { class: "btn small", href: artifactOpenUrl(a), target: "_blank", rel: "noopener", title: openHint }, t("Open"))
+    : chat ? h("a", { class: "btn small", href: chat, target: "_blank", rel: "noopener", title: t("It lives in this claude.ai chat: open it there to download it") }, "claude.ai ↗")
+    : null;
+  const more = !compact ? artifactMenu(a, title) : null;
+  const sub = [
+    st ? h("span", { class: `ar-status t-${st[1]}`, title: st[2] }, st[0]) : null,
+    artifactWhere(a) ? h("span", { class: "mono", title: a.url || a.path || "" }, artifactWhere(a)) : null,
+    project && a.project_name ? h("a", { href: `#/project?path=${encodeURIComponent(a.project_path || "")}` }, a.project_name) : null,
+    a.agent && a.agent !== "claude" ? agentTag(a.agent) : null,
+    h("span", { title: fmtDT(a.ts) }, ago(a.ts)),
+    a.versions > 1 ? h("span", null, tn(a.versions, "{n} version", "{n} versions")) : null,
+    a.sessions > 1 ? h("span", null, tn(a.sessions, "{n} session", "{n} sessions")) : null,
+  ].filter(Boolean);
+  const lead = a.preview ? h("button", { class: "ar-thumb", type: "button", title: t("View"), "aria-label": t("View {title}", { title }), onclick: () => lightbox(a) },
+    h("img", { src: artifactFileUrl(a), alt: "", loading: "lazy", decoding: "async" }))
+    : h("span", { class: "ar-icon", title: ART_KIND[a.kind]?.one || a.kind }, icon(a.kind));
+  return h("div", { class: `ar-row k-${a.kind}${a.status === "gone" ? " is-gone" : ""}${compact ? " compact" : ""}${a.preview ? " has-thumb" : ""}` },
+    lead,
+    h("div", { class: "ar-main" },
+      h("div", { class: "ar-title" }, main),
+      h("div", { class: "ar-sub" }, sub.flatMap((x, i) => (i && !(i === 1 && st) ? [h("i", { "aria-hidden": "true" }, "·"), x] : [x])))),
+    h("div", { class: "ar-acts" }, open, more,
+      session ? h("a", { class: "btn small", href: artifactSessionHref(a), title: a.session_title || t("The session that made it") }, t("Session")) : null));
+}
+function artifactFileUrl(a) { return `/api/artifacts/${a.id}/file`; }
+function artifactOpenUrl(a) { return `/api/artifacts/${a.id}/open`; }
+// A file made in a claude.ai chat stays there (the export leaves it out): the chat is where to get it
+function artifactChatUrl(a) { return a.status === "chat" && a.agent === "claude-ai" && /^[\w-]+$/.test(a.session_id) ? `https://claude.ai/chat/${a.session_id}` : null; }
+// More ways to reach a file: in its own app or in Finder (only on this computer, while it is on disk), or its path
+function artifactMenu(a, title) {
+  const onDisk = a.status === "present" || a.status === "changed";
+  const items = [];
+  const item = (label, hint, run) => items.push(h("button", { type: "button", role: "menuitem", onclick: () => { menu.open = false; run(); } },
+    h("b", null, label), h("span", null, hint)));
+  if (ART_LOCAL && onDisk) {
+    item(ART_LOCAL === "mac" ? t("Open on this Mac") : t("Open on this computer"), t("In the app that opens this kind of file"), () => revealArtifact(a, "open"));
+    item(ART_LOCAL === "mac" ? t("Show in Finder") : t("Show in its folder"), shortPath(a.path), () => revealArtifact(a, "reveal"));
+  }
+  if (a.path && a.status !== "chat") item(t("Copy the path"), shortPath(a.path), () => copyPath(a.path));
+  if (!items.length) return null;
+  const menu = h("details", { class: "menu ar-menu" },
+    h("summary", { class: "btn small", title: t("More"), "aria-label": t("More for {title}", { title }) }, "⋯"),
+    h("div", { class: "menu-list", role: "menu" }, items));
+  return menu;
+}
+async function revealArtifact(a, how) {
+  const r = await post(`/api/artifacts/${a.id}/reveal`, { how });
+  if (r.error) toast(r.error, 6000);
+  else if (how === "reveal") toast(ART_LOCAL === "mac" ? t("Shown in Finder") : t("Opened its folder"));
+}
+// A tile for the image and diagram views: the picture first (when it is still on disk), then what and where
+function artifactTile(a) {
+  const st = ART_STATUS[a.status];
+  const title = a.title || artifactWhere(a) || ART_KIND[a.kind]?.one || a.kind;
+  const media = a.preview
+    ? h("button", { class: "ar-tile-media", type: "button", "aria-label": t("View {title}", { title }), onclick: () => lightbox(a) },
+      h("img", { src: artifactFileUrl(a), alt: "", loading: "lazy", decoding: "async" }))
+    : artifactChatUrl(a) ? h("a", { class: "ar-tile-media empty", href: artifactChatUrl(a), target: "_blank", rel: "noopener", title: t("Open the claude.ai chat it lives in") },
+      icon(a.kind), h("span", null, t("In claude.ai ↗")))
+    : h("div", { class: "ar-tile-media empty" }, icon(a.kind), h("span", null, a.status === "gone" ? t("No longer on disk") : st ? st[0] : ""));
+  return h("div", { class: `ar-tile k-${a.kind}` }, media,
+    h("div", { class: "ar-tile-body" },
+      h("a", { class: "ar-tile-title", href: artifactSessionHref(a), title: a.session_title ? t("Made in: {title}", { title: a.session_title }) : title }, title),
+      h("div", { class: "ar-sub" }, st ? h("span", { class: `ar-status t-${st[1]}`, title: st[2] }, st[0]) : null,
+        a.project_name ? h("span", null, a.project_name) : null, h("span", { title: fmtDT(a.ts) }, ago(a.ts)))));
+}
+// Full size, over the page: Esc, a click outside or the close button puts it away
+function lightbox(a) {
+  closeLightbox();
+  const url = artifactFileUrl(a);
+  const close = h("button", { class: "icon-btn", type: "button", "aria-label": t("Close"), onclick: closeLightbox }, icon("x"));
+  const box = h("div", { id: "lightbox", class: "lightbox", role: "dialog", "aria-modal": "true", "aria-label": a.title || t("Image"),
+    onclick: (e) => { if (e.target === box) closeLightbox(); } },
+    h("figure", null, h("img", { src: url, alt: a.title || "" }),
+      h("figcaption", null, h("b", null, a.title || ""), h("span", { class: "mono", title: a.path || "" }, artifactWhere(a)),
+        h("a", { href: artifactSessionHref(a), onclick: closeLightbox }, t("Session")),
+        h("a", { href: artifactOpenUrl(a), target: "_blank", rel: "noopener" }, t("Open original")),
+        ART_LOCAL ? h("button", { class: "link-btn", type: "button", onclick: () => revealArtifact(a, "open") }, ART_LOCAL === "mac" ? t("Open on this Mac") : t("Open on this computer")) : null,
+        close)));
+  lightbox.returnTo = document.activeElement;
+  document.body.append(box);
+  close.focus();
+}
+function closeLightbox() {
+  const box = $("#lightbox");
+  if (!box) return;
+  box.remove();
+  lightbox.returnTo?.focus?.();
+}
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && $("#lightbox")) { e.stopPropagation(); closeLightbox(); } }, true);
+window.addEventListener("hashchange", closeLightbox);
+async function copyPath(path) {
+  try { await navigator.clipboard.writeText(path); toast(t("Path copied")); } catch (e) { toast(path, 6000); }
+}
+function artifactKindChips(counts, current, hrefFor) {
+  const total = Object.values(counts || {}).reduce((x, y) => x + y, 0);
+  return h("div", { class: "ar-chips", role: "group", "aria-label": t("Kind") },
+    h("a", { class: `kb-chip${!current ? " on" : ""}`, href: hrefFor("") }, t("All"), h("b", null, fmtNum(total))),
+    ART_KINDS.filter(([k]) => counts?.[k]).map(([k, plural]) =>
+      h("a", { class: `kb-chip k-${k}${current === k ? " on" : ""}`, href: hrefFor(k) }, icon(k), plural, h("b", null, fmtNum(counts[k])))));
+}
+
+route(/^\/artifacts$/, async (params) => {
+  const token = renderSeq;
+  const filters = { kind: params.kind || "", project: params.project || "", q: params.q || "", hide_gone: params.hide_gone || "" };
+  const data = await api("/api/artifacts", { ...filters, limit: 100 });
+  ART_LOCAL = data.local;
+  const hrefWith = (changes) => {
+    const p = Object.fromEntries(Object.entries({ ...filters, ...changes }).filter(([, v]) => v));
+    const qs = new URLSearchParams(p).toString();
+    return `#/artifacts${qs ? "?" + qs : ""}`;
+  };
+  const projectName = data.projects.find((p) => p.project_path === filters.project)?.label;
+  setCrumbs([[t("Artifacts"), "#/artifacts"], ...(projectName ? [[projectName]] : []), ...(filters.kind ? [[ART_KIND[filters.kind]?.plural || filters.kind]] : [])], token);
+  const search = h("input", { class: "input", type: "search", value: filters.q, placeholder: t("Search titles, paths and links…"), "aria-label": t("Search artifacts") });
+  let debounce;
+  search.addEventListener("input", () => { clearTimeout(debounce); debounce = setTimeout(() => go(hrefWith({ q: search.value.trim() })), 350); });
+  const projectSel = h("select", { "aria-label": t("Project"), onchange: () => go(hrefWith({ project: projectSel.value })) },
+    h("option", { value: "" }, t("All projects")),
+    data.projects.map((p) => h("option", { value: p.project_path, selected: p.project_path === filters.project }, `${p.label || shortPath(p.project_path)} (${p.n})`)));
+  const hide = h("label", { class: "ar-toggle" }, h("input", { type: "checkbox", checked: filters.hide_gone === "1",
+    onchange: (e) => go(hrefWith({ hide_gone: e.target.checked ? "1" : "" })) }), t("Hide files that are gone"));
+  const tiles = ["image", "diagram", "deck"].includes(filters.kind); // pictures (and first slides) read better as a grid
+  const list = h("div", { class: tiles ? "ar-tiles" : "ar-list" });
+  let shown = 0, lastGroup = null;
+  const add = (items) => {
+    for (const a of items) {
+      const g = dayGroup(a.ts);
+      if (g !== lastGroup) { list.append(h("div", { class: "ar-group" }, g)); lastGroup = g; }
+      list.append(tiles ? artifactTile(a) : artifactRow(a));
+    }
+    shown += items.length;
+  };
+  add(data.items);
+  const more = h("button", { class: "btn", type: "button", hidden: shown >= data.total, onclick: async () => {
+    more.disabled = true;
+    const next = await api("/api/artifacts", { ...filters, limit: 100, offset: shown });
+    add(next.items);
+    more.disabled = false;
+    more.hidden = shown >= next.total;
+  } }, t("Show more"));
+  const empty = !data.total ? h("section", { class: "card empty" }, filters.q || filters.kind || filters.project
+    ? t("Nothing matches these filters.") : t("No artifacts yet. They are recorded as sessions sync: files an agent creates, pages it publishes, PRs it opens and commits it makes.")) : null;
+  return h("div", null,
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Artifacts")),
+      h("div", { class: "sub" }, t("What your agents made, each linked to the session that made it, and whether it is still where they left it")))),
+    artifactKindChips(data.counts, filters.kind, (k) => hrefWith({ kind: k })),
+    h("div", { class: "ar-tools" }, search, projectSel, hide, h("span", { class: "muted" }, t("{n} shown", { n: fmtNum(data.total) }))),
+    empty || h("section", { class: "card ar-card" }, list, h("div", { class: "ar-more" }, more)));
+});
+async function artifactsSidebar(box) {
+  const data = await api("/api/artifacts", { limit: 0 });
+  const total = Object.values(data.counts).reduce((x, y) => x + y, 0);
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Artifacts")), h("span", null, fmtNum(total))),
+    h("div", { class: "sb-scroll" },
+      sbRow(t("Everything"), "#/artifacts", "artifacts", total, ["/artifacts", "kind", ""]),
+      h("div", { class: "sb-group" }, t("Kinds")),
+      ART_KINDS.filter(([k]) => data.counts[k]).map(([k, plural]) => sbRow(plural, `#/artifacts?kind=${k}`, k, data.counts[k], ["/artifacts", "kind", k])),
+      data.projects.length ? h("div", { class: "sb-group" }, t("Projects")) : null,
+      data.projects.slice(0, 30).map((p) => sbRow(p.label || shortPath(p.project_path), `#/artifacts?project=${encodeURIComponent(p.project_path)}`, "projects", p.n,
+        ["/artifacts", "project", p.project_path]))));
+}
+function artifactsCard(items, { title = t("Artifacts"), hint, all, project = true, session = true, compact = false } = {}) {
+  return h("section", { class: "card ar-card" },
+    cardHead(title, { iconName: "artifacts", hint, tools: all ? h("a", { class: "hint", href: all }, t("All →")) : null }),
+    h("div", { class: "ar-list" }, items.map((a) => artifactRow(a, { project, session, compact }))));
+}
 
 // =====================================================================================
 // Search
@@ -4021,11 +4246,12 @@ const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
   { key: "home", label: t("Home"), href: "#/", hint: t("Activity at a glance and recent sessions") },
   { key: "sessions", label: t("Sessions"), href: "#/sessions", hint: t("Every recorded conversation") },
   { key: "knowledge", label: t("Knowledge"), href: "#/knowledge", hint: t("Glossary, map, playbook, weekly reviews") },
+  { key: "artifacts", label: t("Artifacts"), href: "#/artifacts", hint: t("Documents, pages, PRs and commits your agents made") },
   { key: "projects", label: t("Projects"), href: "#/projects", hint: t("A knowledge base for each project") },
   { key: "suggestions", label: t("Suggestions"), href: "#/suggestions", hint: t("Fixes to approve, and what goes wrong") },
   { key: "settings", label: t("Settings"), href: "#/status", hint: t("Status, sources, MCP, devices, appearance") },
 ];
-const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
+const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings" };
 const PAGE_LABEL = { friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
@@ -4210,6 +4436,7 @@ async function buildSidebar(section) {
     else if (section === "sessions") await sessionsSidebar(box, t("Sessions"));
     else if (section === "knowledge") await knowledgeSidebar(box);
     else if (section === "projects") await projectsSidebar(box);
+    else if (section === "artifacts") await artifactsSidebar(box);
     else if (section === "suggestions") await suggestionsSidebar(box);
     else settingsSidebar(box);
   } catch (e) {
@@ -4262,7 +4489,7 @@ function paletteCommands() {
   const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, run: () => go(href) });
   return [
     nav(t("Home"), "#/", "home"), nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
-    nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"),
+    nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
     nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),

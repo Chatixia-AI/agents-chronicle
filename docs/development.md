@@ -83,7 +83,7 @@ Excalidraw VS Code extension (`pomdtr.excalidraw-editor`) or on excalidraw.com; 
 sessions + VS Code chat logs), `bob_parser.py` (Bob tasks), `antigravity_parser.py` (Antigravity step logs), `agents.py` (agent names), `connectors.py` (Sources),
 `ingest.py` (archive + store), `digest.py` / `analyze.py` /
 `llm.py` (analysis), `synthesize.py` (knowledge bases), `diagram.py` (architecture sketch: layout, Excalidraw and
-Mermaid export), `glossary.py`, `reviews.py`, `worker.py` (queue), `server.py` + `web/`
+Mermaid export), `artifacts.py` (what sessions made, and where each stands), `glossary.py`, `reviews.py`, `worker.py` (queue), `server.py` + `web/`
 (dashboard), `mcp_server.py`, `export_md.py`, `hooks.py` / `install.py`, `desktop.py` (macOS app), `cli.py`; `packaging/macos/` builds the app.
 
 ## Demo data

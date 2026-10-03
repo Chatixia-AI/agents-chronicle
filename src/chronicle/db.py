@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 11
+SCHEMA_VERSION = 12
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -59,6 +59,7 @@ CREATE TABLE IF NOT EXISTS sessions (
     n_api_errors INTEGER DEFAULT 0,
     n_subagents INTEGER DEFAULT 0,
     n_images INTEGER DEFAULT 0,
+    n_result_images INTEGER DEFAULT 0,
     n_files INTEGER DEFAULT 0,
     n_events INTEGER DEFAULT 0,
     lines_added INTEGER DEFAULT 0,
@@ -373,6 +374,28 @@ CREATE TABLE IF NOT EXISTS suggestion_scopes (
     scope TEXT NOT NULL,                           -- user | project: where you moved it, over the automatic choice
     updated_at TEXT
 );
+
+CREATE TABLE IF NOT EXISTS artifacts (          -- what a session made (artifacts.py): files, pages, PRs, commits
+    id INTEGER PRIMARY KEY,
+    session_id TEXT NOT NULL,
+    agent_id TEXT NOT NULL DEFAULT '',
+    tool_use_id TEXT,
+    seq INTEGER,                                   -- the tool call's event, for a link into the transcript
+    ts TEXT,
+    key TEXT NOT NULL,                             -- the same file, link or commit across sessions
+    kind TEXT NOT NULL,                            -- doc page diagram deck sheet image published pr commit
+    action TEXT,                                   -- created rewritten updated published opened committed generated presented
+    title TEXT,
+    path TEXT,
+    url TEXT,
+    size INTEGER,
+    sha256 TEXT,                                   -- of the content as the agent wrote it, when the transcript has it
+    versions INTEGER NOT NULL DEFAULT 1,
+    meta_json TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);
+CREATE INDEX IF NOT EXISTS idx_artifacts_key ON artifacts(key, ts);
+CREATE INDEX IF NOT EXISTS idx_artifacts_kind ON artifacts(kind, ts);
 
 CREATE TABLE IF NOT EXISTS files_state (
     path TEXT PRIMARY KEY,
