@@ -24,11 +24,11 @@
 | キー | 既定値 | |
 | --- | --- | --- |
 | `auto` | `true` | アイドルになったセッションを自動で分析する |
-| `backend` | `claude` | セッションを分析するエージェント（あなた自身のログインを使用）：`claude`（Claude Code）または `codex`（Codex）。**Status › Analysis** でも変更できます |
+| `backend` | `claude` | セッションを分析するエージェント（あなた自身のログインを使用）：`claude`（Claude Code）または `codex`（Codex）。**ステータス › 分析**（Status › Analysis）でも変更できます |
 | `model` / `effort` | `sonnet` / `medium` | Claude：`claude --model` の任意のエイリアス。`effort` は Codex の推論の強さにも使われます（`max` は `xhigh` になります） |
 | `codex_model` | `""` | Codex のモデル。例：`gpt-5.5`。空の場合は Codex の既定のモデルを使います |
 | `screen_model` | `haiku` | 取り込んだチャットを選別するモデル（`chronicle screen`）。各チャットの冒頭だけを、1 回の呼び出しで 60 件ずつ読みます |
-| `language` | `en` | Chronicle が書く言語：要約、ナレッジ、ナレッジベース、プレイブック、用語集の定義、週次の振り返り、選別の理由、`CLAUDE.md` / `AGENTS.md` に提案する行。`en` または `ja`。変更したあとに分析するものから反映されます。**Status › Analysis** でも変更できます。ダッシュボード自体の言語は、ダッシュボードでブラウザーごとに選びます |
+| `language` | `en` | Chronicle が書く言語：要約、ナレッジ、ナレッジベース、プレイブック、用語集の定義、週次の振り返り、選別の理由、`CLAUDE.md` / `AGENTS.md` に提案する行。`en` または `ja`。変更したあとに分析するものから反映されます。**ステータス › 分析**でも変更できます。ダッシュボード自体の言語は、ダッシュボードでブラウザーごとに選びます |
 | `max_budget_usd` | `3.0` | `claude -p` の呼び出し 1 回あたりの費用上限（API 換算の USD。Codex はトークン数だけを報告します） |
 | `idle_minutes` | `20` | 分析されるには、セッションが終了しているか、この時間アイドルである必要があります |
 | `min_prompts` | `1` | 人間のプロンプトがこれより少ないセッションはスキップされます |
@@ -49,8 +49,8 @@
 | `server.allowed_hosts` | `[]` | 127.0.0.1 と localhost のほかにダッシュボードが応答する名前。Tailscale の名前など。`chronicle tailnet on` が設定します（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `server.allowed_users` | `[]` | それらの名前で Tailscale Serve 経由でアクセスしたとき、通す Tailscale ログイン（空の場合は tailnet の全員）。`chronicle tailnet on` があなたのログインを設定します |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
-| `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |
-| `updates.notify` | `false` | バックグラウンド同期が 1 日 1 回 pypi.org に問い合わせ、新しいリリースごとに 1 回デスクトップ通知を表示する（Status › Updates、または `chronicle install --notify-updates`） |
+| `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（ステータス › アップデート（Status › Updates）） |
+| `updates.notify` | `false` | バックグラウンド同期が 1 日 1 回 pypi.org に問い合わせ、新しいリリースごとに 1 回デスクトップ通知を表示する（ステータス › アップデート、または `chronicle install --notify-updates`） |
 
 ## `[suggestions]`
 
@@ -58,7 +58,7 @@
 
 | キー | 既定値 | |
 | --- | --- | --- |
-| `enabled` | `true` | バックグラウンド同期のたびに提案を更新する（モデルは呼び出しません）。適用するまで何も書き込みません。**Check again** と `chronicle suggest refresh` はどちらの場合も使えます |
+| `enabled` | `true` | バックグラウンド同期のたびに提案を更新する（モデルは呼び出しません）。適用するまで何も書き込みません。**もう一度確認**（Check again）と `chronicle suggest refresh` はどちらの場合も使えます |
 | `notify` | `false` | バックグラウンド同期で新しい提案が見つかったら、デスクトップ通知を表示する |
 
 ## `[hub]`

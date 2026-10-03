@@ -3829,7 +3829,7 @@ route(/^\/suggestions$/, async (params) => {
     return h("button", { type: "button", class: v === status ? "on" : "", "aria-pressed": String(v === status), onclick: () => update({ status: v === "new" ? "" : v }) }, label, chipCount[v]);
   })), h("span", { class: "spacer" }),
   projects.length ? h("select", { "aria-label": t("Where"), onchange: (ev) => update({ scope: ev.target.value }) },
-    h("option", { value: "" }, t("Everywhere")), h("option", { value: "user", selected: scope === "user" }, t("User level (every project)")),
+    h("option", { value: "" }, tc("filter", "Everywhere")), h("option", { value: "user", selected: scope === "user" }, t("User level (every project)")),
     projects.map((p) => h("option", { value: p, selected: p === scope }, baseName(p)))) : null);
   const onStatus = (prev, next) => { // keep the status counts honest as cards change in place
     counts[prev] = Math.max(0, (counts[prev] || 0) - 1);

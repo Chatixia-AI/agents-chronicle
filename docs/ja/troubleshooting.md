@@ -2,7 +2,7 @@
 
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-まずは `chronicle status`（またはダッシュボードの **Settings › Status**）を実行してください。フック、バックグラウンドエージェント、
+まずは `chronicle status`（またはダッシュボードの**設定 › ステータス**（Settings › Status））を実行してください。フック、バックグラウンドエージェント、
 MCP サーバー、`claude` CLI を確認し、最近の分析の失敗を一覧表示します。ログは `~/.claude-chronicle/logs/` にあります
 （すべてのログは `chronicle.log`、セッション終了フックのログは `hooks.log`）。
 
@@ -11,7 +11,7 @@ MCP サーバー、`claude` CLI を確認し、最近の分析の失敗を一覧
 **macOS に「“Chronicle”は開けません」や「開発元を検証できません」と表示される。** そのリリースは公証されていません。
 **システム設定 → プライバシーとセキュリティ** を開き、Chronicle のメッセージの横にある **このまま開く** をクリックして確認してください。
 
-**アプリを使っているのに、Status と Sources で *Background sync* が停止中と表示される。** これらはコマンドライン版のインストールが
+**アプリを使っているのに、ステータスの *バックグラウンドのエージェント*（Background agent）とソース（Sources）の *バックグラウンド同期*（Background sync）が停止中と表示される。** これらはコマンドライン版のインストールが
 設定する launchd エージェントしか確認しません。アプリは自身で 15 分ごとの同期を行っており、最終同期時刻はメニューバーのメニューで確認できます。
 
 **アプリで `analysis.backfill = false` が効かない。** アプリの Connect は、`chronicle install` が記録するインストール日を記録しないため、
@@ -29,7 +29,7 @@ DMG 版では常に Chronicle と表示されます。
 
 **`chronicle ui` が「Address already in use」で失敗する、または再インストール後もダッシュボードが古いまま。** コマンドライン版の
 launchd エージェントがすでに :8765 でダッシュボードを提供しており、起動時のコードのまま動き続けています。
-`launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui` で再起動するか、**設定 › Status › Updates** からアップデートしてください
+`launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui` で再起動するか、**設定 › ステータス › アップデート**（Settings › Status › Updates）からアップデートしてください
 （自動で再起動します。[アップデート](install.md#アップデート)）。別のダッシュボードを動かすには `chronicle ui --port <n>` を使います。
 
 ## 記録
@@ -39,20 +39,20 @@ launchd エージェントがすでに :8765 でダッシュボードを提供�
 Codex にはセッション終了フックがないため、Codex のセッションはしばらくアイドルになってから表示されます。
 
 **古い Claude Code のセッションがない。** Claude Code は 30 日でトランスクリプトを削除します。Chronicle は一度見たものはすべて保存し、
-それより古いセッションについては `~/.claude/history.jsonl` からプロンプト（のみ）を復元して、*history* として表示します。
+それより古いセッションについては `~/.claude/history.jsonl` からプロンプト（のみ）を復元して、*履歴*（history）として表示します。
 
 **記録したくないプロジェクトがある。** 設定の `sources.exclude_projects` に glob を追加するか、`chronicle forget <id>` で
 セッションを完全に削除してください。
 
 ## 分析
 
-**何も分析されない。** セッションを開くと、要約の下に待っている理由が表示されます。**Status › Analysis**（または
+**何も分析されない。** セッションを開くと、要約の下に待っている理由が表示されます。**ステータス › 分析**（Status › Analysis。または
 `chronicle status`）では理由ごとの件数がわかります。分析には、ログイン済みの `claude` CLI が必要です。`chronicle status` で `claude` がどこで見つかったかを
 確認できます。アプリはログインシェルの PATH を読み込むため、npm や Homebrew でインストールした `claude` も見つかります。
 セッションは、終了するか `analysis.idle_minutes` の間アイドルになると分析されます。
 
 **「usage limit」で分析が止まった。** Claude が使用量の上限や認証のエラーを返すと、Chronicle は分析を 1 時間停止し、その後自動で
-再開します。その他の失敗は間隔を空けて再試行します（30 分、2 時間、8 時間）。セッションページの **Analyze now** で、すぐに再試行できます。
+再開します。その他の失敗は間隔を空けて再試行します（30 分、2 時間、8 時間）。セッションページの**今すぐ分析**（Analyze now）で、すぐに再試行できます。
 
 **未分析分にかかる費用を先に確認したい。** `chronicle analyze --pending --dry-run` はトークンを使わずにキューの規模を確認します。
 `analysis.max_budget_usd` で 1 回の呼び出しの上限を設定でき、`analysis.auto = false` で自動分析を止められます。

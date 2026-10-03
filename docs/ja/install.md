@@ -2,7 +2,7 @@
 
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-Chronicle は macOS で動作し、分析を行うためにログイン済みの [Claude Code](https://claude.com/claude-code)（`claude`）または [Codex](https://github.com/openai/codex)（`codex`）が必要です。セットアップは Claude Code がインストールされていればそれを使い、なければ Codex を提案します。**Status › Analysis** または `chronicle config set analysis.backend codex` でいつでも切り替えられます。使い方は 2 通りあり、どちらも `~/.claude-chronicle` の同じデータを使うため、併用できます。
+Chronicle は macOS で動作し、分析を行うためにログイン済みの [Claude Code](https://claude.com/claude-code)（`claude`）または [Codex](https://github.com/openai/codex)（`codex`）が必要です。セットアップは Claude Code がインストールされていればそれを使い、なければ Codex を提案します。**ステータス › 分析**（Status › Analysis）または `chronicle config set analysis.backend codex` でいつでも切り替えられます。使い方は 2 通りあり、どちらも `~/.claude-chronicle` の同じデータを使うため、併用できます。
 
 ## デスクトップアプリ
 
@@ -30,7 +30,7 @@ Intel 版はまだありません。Intel Mac ではコマンドラインでイ�
 | Install Command-Line Tool | アプリ内蔵の `chronicle` コマンドを `~/.local/bin` にリンク（既に存在する場合は何もしません） |
 | Open Data Folder | `~/.claude-chronicle` |
 
-Codex、Copilot、Bob、Antigravity はダッシュボードの **Sources** ページから接続します。フックと MCP の登録は
+Codex、Copilot、Bob、Antigravity はダッシュボードの**ソース**（Sources）ページから接続します。フックと MCP の登録は
 `~/.claude-chronicle/bin/chronicle` を指しています。これはアプリが起動のたびに書き直す小さなスクリプトなので、
 アプリを移動・更新しても壊れません。アプリを終了すると、次に起動するまで同期は止まります。終了で中断された分析は、
 次の同期で改めて実行されます。
@@ -95,7 +95,7 @@ Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ
 に保存してから、もともと使っていたステータスラインを同じ入力で実行するため、表示は以前と変わりません。元の設定は
 `~/.claude-chronicle/statusline/wrapped.json` に保存されます。ステータスラインを使っていなかった場合はモデル、コンテキスト、
 上限を表示し、Claude Code はフッターのキー操作のヒントの大半を表示しなくなります。同期のたびに各セッションの数値がデータベースに
-取り込まれます（セッションのページと **Status**）。`chronicle uninstall` で元のステータスラインに戻ります。
+取り込まれます（セッションのページと**ステータス**）。`chronicle uninstall` で元のステータスラインに戻ります。
 
 すべてを削除するには `chronicle uninstall` を実行します（データは残ります。`--purge` でデータも削除）。`--statusline` で
 ステータスラインを包んでいた場合は、元のステータスラインも復元します。
@@ -106,16 +106,16 @@ Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ
 
 ## アップデート
 
-**設定 › Status › Updates** に Chronicle のインストール方法が表示され、同じ方法でアップデートできます。
+**設定 › ステータス › アップデート**（Settings › Status › Updates）に Chronicle のインストール方法が表示され、同じ方法でアップデートできます。
 
 | インストール方法 | アップデートボタンが実行するもの |
 | --- | --- |
-| `uv tool install agents-chronicle` | **Check for updates** で新しいリリースが見つかったあと、`uv tool upgrade agents-chronicle` |
+| `uv tool install agents-chronicle` | **アップデートを確認**（Check for updates）で新しいリリースが見つかったあと、`uv tool upgrade agents-chronicle` |
 | `uv tool install .`（チェックアウトから） | インストール後にチェックアウトのファイルが変わったとき、`uv tool upgrade --reinstall agents-chronicle`（ネットワーク確認なし） |
 | `pipx` または `pip` | `pipx upgrade agents-chronicle` または `pip install --upgrade agents-chronicle` |
-| デスクトップアプリ | 実行しません。**Download** で最新リリースを開き、アプリケーションフォルダにドラッグします |
+| デスクトップアプリ | 実行しません。**… をダウンロード**（Download …）で最新リリースを開き、アプリケーションフォルダにドラッグします |
 
-ネットワークに接続するのは **Check for updates**（pypi.org）だけです。同じカードの **Check for updates daily** をオンにすると、ダッシュボードを開いている間 1 日 1 回確認します。**Notify me about new versions**（`chronicle install` でも尋ねます）をオンにすると、ダッシュボードを開いていなくてもバックグラウンド同期が 1 日 1 回確認し、リリースごとに 1 回、アップデート方法を書いたデスクトップ通知を表示します（macOS は通知センター、Linux は `notify-send`）。macOS では通知を Chronicle の代わりに Script Editor が出すため、クリックすると Script Editor が開きます。アップデート先は通知の本文に書かれています。最後の結果は再起動後も残ります。アップデートが見つかると通知が表示され（リリースごと、チェックアウトなら新しいコミットごとに 1 回。**Later** で閉じられます）、Settings にドットが付き、ステータスバーに **Update to …** が出ます。チェックアウトの Updates カードには、再インストールで入るコミットと変更ファイルが並びます。
+ネットワークに接続するのは**アップデートを確認**（pypi.org）だけです。同じカードの**毎日アップデートを確認**（Check for updates daily）をオンにすると、ダッシュボードを開いている間 1 日 1 回確認します。**新しいバージョンを通知**（Notify me about new versions。`chronicle install` でも尋ねます）をオンにすると、ダッシュボードを開いていなくてもバックグラウンド同期が 1 日 1 回確認し、リリースごとに 1 回、アップデート方法を書いたデスクトップ通知を表示します（macOS は通知センター、Linux は `notify-send`）。macOS では通知を Chronicle の代わりに Script Editor が出すため、クリックすると Script Editor が開きます。アップデート先は通知の本文に書かれています。最後の結果は再起動後も残ります。アップデートが見つかると通知が表示され（リリースごと、チェックアウトなら新しいコミットごとに 1 回。**後で**（Later）を押すと閉じられます）、設定にドットが付き、ステータスバーに **… にアップデート**（Update to …）が出ます。チェックアウトの場合、アップデートのカードには、再インストールで入るコミットと変更ファイルが並びます。
 `chronicle ui`（またはその launchd エージェント）で動くダッシュボードはアップデート後に自動で再起動し、開いているタブも再読み込みされます。
 コマンドラインの `chronicle app` は終了して開き直してください。同期や分析の実行中は、終わるまでボタンは待ちます。
 ターミナルからは同じコマンドを直接実行できます。

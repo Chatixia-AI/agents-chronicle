@@ -74,7 +74,7 @@ JA: dict[str, str] = {
     "seen in {n} sessions": "{n} セッションで発生",
     "seen in {n} sessions across {p} projects": "{p} プロジェクトの {n} セッションで発生",
     "still happening": "まだ起きている",
-    "not seen lately": "最近は起きていない",
+    "not seen lately": "最近は発生なし",
     "last {date}": "最終 {date}",
     "{n} in this project": "このプロジェクトで {n}",
     "confirmed in {n} sessions across {p} projects": "{p} プロジェクトの {n} セッションで確認",

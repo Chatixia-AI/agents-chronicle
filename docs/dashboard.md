@@ -10,10 +10,11 @@ it holds), and the sidebar beside it lists that section:
 recent sessions grouped by the day they were last active, with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
 and Weekly reviews, projects, suggestions by status plus What goes wrong, or Status, Sources, MCP, Devices and Appearance. **⌘K** (also ⌘P or `/`) opens a palette that jumps
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
-themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
+themes, switch theme or language); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
 last sync and, once one is found, an available update ([Updating](install.md#updating)).
 Glass is kept to the navigation layer (rail, sidebar, toolbar, palette, the Map's floating controls);
-pages sit on a solid surface. **Settings › Appearance** picks the theme and turns on *Reduce transparency*; the app
+pages sit on a solid surface. **Settings › Appearance** picks the theme and the [language](#language) and turns on
+*Reduce transparency*; the app
 also follows the macOS setting of that name. **Settings › Devices** shows whether this computer is a hub or sends to
 one, and how to open the dashboard on your phone. On a phone the rail becomes a tab bar at the bottom, the page takes
 the whole width, and the dashboard can be added to the Home Screen like an app
@@ -29,6 +30,21 @@ the whole width, and the dashboard can be added to the Home Screen like an app
 | Esc | Close the palette, or the sidebar on a narrow window |
 
 Ctrl replaces ⌘ outside macOS. In the macOS app, drag the window by its toolbar; double-click the toolbar to zoom.
+
+## Language
+
+The dashboard is in English or Japanese. **日本語** in the status bar, next to the theme toggle, switches to Japanese
+(**EN** switches back), and so does the palette's *日本語に切り替え*. **Settings › Appearance › Language** picks
+System, English or 日本語; System follows the browser's preferred language. The page reloads to switch.
+
+The choice belongs to the browser, so the dashboard on your phone can be in one language and the one on your Mac in
+the other. Everything on the page follows it: labels, charts, toasts, dates and durations, and the text the server
+writes for the page, such as why a session is waiting, the causes on What goes wrong and the evidence on a
+suggestion. Session titles, summaries, knowledge and glossary terms are shown as they were written.
+
+What Chronicle *writes* is a separate setting: **Status › Analysis › Knowledge language** (`[analysis] language`)
+decides the language of summaries, knowledge, reviews and the lines proposed for `CLAUDE.md` and `AGENTS.md`
+([Language](analysis.md#language)). The command line and the MCP server stay in English.
 
 ## Pages
 

@@ -6,7 +6,7 @@
 分析用に選んだエージェントに、あなた自身のログインを通じて送られます：Claude Code（`claude -p`、既定）なら Anthropic に、
 Codex（`codex exec`）なら OpenAI に送られます。
 Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかの接続の 1 つは
-アップデート確認です。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** か **Notify me about new versions** をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、
+アップデート確認です。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。ステータス（Status）ページで**アップデートを確認**（Check for updates）を押したときに実行され、同じ場所の**毎日アップデートを確認**（Check for updates daily）か**新しいバージョンを通知**（Notify me about new versions）をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、
 同期のたびに `codex cloud` CLI も実行され、Codex のログインで OpenAI からあなた自身のタスクを取得します。こちらから何かを送ることはありません。
 claude.ai や ChatGPT のエクスポートを取り込むときはチャットだけを読み、アカウントのファイル（`users.json`、`user.json`）は開きません。
 提案した行が公開リポジトリに入る前に警告するため、GitHub のリモートがあるプロジェクトでは、あなた自身の `gh` のログインで
@@ -43,8 +43,8 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
   ズーム）だけです。Tailscale Serve 経由では `[server] allowed_hosts` の名前にだけ応答し、`[server] allowed_users` の
   Tailscale ログインだけを通します（このヘッダーは同じコンピューターの Serve から来たものだけを信用します）。ハブがほかの
   コンピューターのファイルを受け取るのは、そのトークンがあるときだけです（`chronicle hub enable --rotate` で作り直せます）。
-- **書き出し**（セッションページの Export、または Sessions の一覧で選んだセッションの Export）は、Markdown と JSON では
-  ダッシュボードの表示と同じく機密情報を伏せ字にします。**Original transcript** はエージェント自身のファイルをそのまま渡すため
+- **書き出し**（セッションページのエクスポート（Export）、またはセッション（Sessions）の一覧で選んだセッションのエクスポート）は、Markdown と JSON では
+  ダッシュボードの表示と同じく機密情報を伏せ字にします。**元のトランスクリプト**（Original transcript）はエージェント自身のファイルをそのまま渡すため
   伏せ字になりません。共有する前に確認してください。
 - **MCP ツール**はデータベースを読んで stdio で答えるだけで、ネットワークで待ち受けるものはありません。その結果はクライアントの会話に
   加わるため、そのクライアントのモデルに届きます（要約と同じく機密情報は伏せ字にします）。セッションを見せてもよいモデル提供元の
@@ -54,7 +54,7 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
   バックアップします。
 - **指示ファイルと `~/.claude.json` に書き込むのは、提案を適用したときだけです。** Chronicle は `CLAUDE.md` や `AGENTS.md` の
   自分の `<!-- BEGIN chronicle -->` ブロックの中だけに 1 行を加えるか、`~/.claude.json` に足りない Playwright MCP の引数を
-  加えます。どのファイルも事前に `~/.claude-chronicle/backups/` にバックアップし、**Undo** で変更を取り消せます。セットアップ
+  加えます。どのファイルも事前に `~/.claude-chronicle/backups/` にバックアップし、**元に戻す**（Undo）で変更を取り消せます。セットアップ
   手順は表示するだけで、Chronicle が実行したり、シェルの起動ファイルを編集したりすることはありません。
   [提案](suggestions.md)を参照してください。
 - **削除。** `chronicle forget <id> [--delete-transcript]` でセッションを完全に削除できます。`chronicle uninstall

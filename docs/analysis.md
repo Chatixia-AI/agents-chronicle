@@ -81,8 +81,8 @@ weekly reviews and screening reasons are written in Japanese. Identifiers, comma
 stay as they were, and so do tags and the codes Chronicle reads back (kinds, outcomes, verdicts). The setting applies
 to what is analyzed or synthesized from then on; earlier sessions keep their language until they are analyzed again.
 Synthesis treats items in different languages that state the same lesson as duplicates, so they merge and confirm
-each other. The dashboard's own words follow the language chosen in the dashboard, per browser, whatever this
-setting says.
+each other. The dashboard's own words follow the [language chosen in the dashboard](dashboard.md#language), per
+browser, whatever this setting says.
 
 ## How knowledge earns trust
 
