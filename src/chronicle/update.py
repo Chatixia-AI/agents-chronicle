@@ -24,6 +24,7 @@ from urllib.parse import unquote, urlparse
 from urllib.request import Request, urlopen
 
 from . import __version__
+from .i18n import tr
 
 DIST = "agents-chronicle"
 PYPI_JSON = f"https://pypi.org/pypi/{DIST}/json"
@@ -139,28 +140,33 @@ def check(remote: bool = False, detail: bool = False) -> dict:
             "can_update": m["command"] is not None, "command": shlex.join(m["command"]) if m["command"] else None,
             "restartable": RESTARTABLE, "checked_at": None, "error": None, "releases_url": RELEASES_URL}
     if m["kind"] == "source":
-        info["note"] = "Running from a source checkout: git pull to update."
+        info["note"] = tr("Running from a source checkout: git pull to update.")
         return info
     if m.get("local"):  # checked locally, no network
         info["latest"] = _checkout_version(m["source"])
         info["available"] = _checkout_changed(m["source"], m["installed_at"])
         info["installed_at"] = m["installed_at"]
-        info["note"] = None if info["available"] else "Matches the checkout."
+        info["note"] = None if info["available"] else tr("Matches the checkout.")
         if detail and info["available"]:
             info["changes"] = checkout_changes(m["source"], m["installed_at"])
         return info
     if m.get("source"):  # git or URL: nothing to compare against, reinstalling fetches it again
-        info["note"] = f"Installed from {m['source']}; updating reinstalls from there."
+        info["note"] = tr("Installed from {source}; updating reinstalls from there.", source=m["source"])
         return info
     if remote:
         fetch_latest()
-    info.update(latest=_remote.get("latest"), checked_at=_remote.get("checked_at"), error=_remote.get("error"))
+    error = re.fullmatch(r"Could not reach PyPI \((\w+)\)", _remote.get("error") or "")  # kept in English: say it here
+    info.update(latest=_remote.get("latest"), checked_at=_remote.get("checked_at"),
+                error=tr(PYPI_ERROR, error=error.group(1)) if error else _remote.get("error"))
     info["available"] = bool(info["latest"]) and _vkey(info["latest"]) > _vkey(__version__)
     if info["available"]:
         info["notes_url"] = f"https://github.com/Chatixia-AI/agents-chronicle/releases/tag/v{info['latest']}"
     if m["kind"] == "app":
-        info["note"] = "Download the new version and drag it into Applications."
+        info["note"] = tr("Download the new version and drag it into Applications.")
     return info
+
+
+PYPI_ERROR = "Could not reach PyPI ({error})"
 
 
 def fetch_latest() -> None:
@@ -170,7 +176,7 @@ def fetch_latest() -> None:
         with urlopen(req, timeout=8) as r:
             _remote.update(latest=json.load(r)["info"]["version"], checked_at=time.time(), error=None)
     except Exception as exc:  # offline, proxy, PyPI down: shown on the page
-        _remote.update(checked_at=time.time(), error=f"Could not reach PyPI ({exc.__class__.__name__})")
+        _remote.update(checked_at=time.time(), error=PYPI_ERROR.format(error=exc.__class__.__name__))
 
 
 def compares_online() -> bool:

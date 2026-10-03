@@ -15,9 +15,11 @@ canonical item that is overturned (not merely merged as a duplicate) is listed i
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from datetime import datetime
 
+from .i18n import lang, tr
 from .util import dumps, loads, utcnow_iso
 
 STAGES = ("wip", "provisional", "established", "canonical")
@@ -74,6 +76,20 @@ def compute_stage(conn: sqlite3.Connection, row) -> tuple[str, str]:
     if _get(row, "confidence") == "low":
         return "wip", "one session, low confidence"
     return "provisional", "one session"
+
+
+def reason_text(reason: str | None) -> str | None:
+    """A stored stage reason (compute_stage writes it in English) in the dashboard viewer's language (i18n)."""
+    if not reason or lang.get() == "en":
+        return reason
+    m = re.fullmatch(r"confirmed in (\d+) sessions over (\d+) days \((.+)\)", reason)
+    if m:
+        return tr("confirmed in {n} sessions over {days} days ({when})", n=m.group(1), days=m.group(2), when=m.group(3))
+    m = re.fullmatch(r"confirmed in (\d+) sessions(?: \((.+)\))?", reason)
+    if m:
+        return (tr("confirmed in {n} sessions ({when})", n=m.group(1), when=m.group(2)) if m.group(2)
+                else tr("confirmed in {n} sessions", n=m.group(1)))
+    return tr(reason)  # pinned by you, added by you, one session, ...
 
 
 def initial_stage(item: dict, *, source: str = "analysis") -> str:

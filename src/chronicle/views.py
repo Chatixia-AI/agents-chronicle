@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import re
 import sqlite3
 from collections import Counter
 
 from .redact import redact
 from .agents import full_name
+from .i18n import lang, tr
 from .util import human_cost, human_count, human_duration, local_str, loads, one_line
 
 OUTCOME_ICON = {
@@ -16,6 +18,22 @@ KIND_ICON = {
     "fix": "🐛", "gotcha": "⚠️", "learning": "💡", "decision": "🧭", "pattern": "🧩", "command": "⌨️",
     "fact": "📌", "preference": "🙋", "reference": "🔗", "todo": "☑️",
 }
+
+
+# why a session was not analyzed, as ingest, analyze and chat_import store it (the analyzer's own errors aside)
+ANALYSIS_REASONS = ("too little content", "too few prompts", "excluded project", "session continued during analysis",
+                    "session continued after analysis", "history only (transcript deleted before Chronicle)")
+NOT_ANALYZED_CHAT = "imported {label} chat: not analyzed automatically (Analyze now, or import with --analyze)"
+
+
+def reason_text(reason: str | None) -> str | None:
+    """A stored analysis_reason in the dashboard viewer's language (i18n), when it is one Chronicle writes itself."""
+    if not reason or lang.get() == "en":
+        return reason
+    m = re.fullmatch(r"imported (.+) chat: not analyzed automatically \(Analyze now, or import with --analyze\)", reason)
+    if m:
+        return tr(NOT_ANALYZED_CHAT, label=m.group(1))
+    return tr(reason) if reason in ANALYSIS_REASONS else reason
 
 
 def resolve_session_id(conn: sqlite3.Connection, ref: str) -> str | None:

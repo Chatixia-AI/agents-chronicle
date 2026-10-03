@@ -28,6 +28,7 @@
 | `model` / `effort` | `sonnet` / `medium` | Claude：`claude --model` の任意のエイリアス。`effort` は Codex の推論の強さにも使われます（`max` は `xhigh` になります） |
 | `codex_model` | `""` | Codex のモデル。例：`gpt-5.5`。空の場合は Codex の既定のモデルを使います |
 | `screen_model` | `haiku` | 取り込んだチャットを選別するモデル（`chronicle screen`）。各チャットの冒頭だけを、1 回の呼び出しで 60 件ずつ読みます |
+| `language` | `en` | Chronicle が書く言語：要約、ナレッジ、ナレッジベース、プレイブック、用語集の定義、週次の振り返り、選別の理由、`CLAUDE.md` / `AGENTS.md` に提案する行。`en` または `ja`。変更したあとに分析するものから反映されます。**Status › Analysis** でも変更できます。ダッシュボード自体の言語は、ダッシュボードでブラウザーごとに選びます |
 | `max_budget_usd` | `3.0` | `claude -p` の呼び出し 1 回あたりの費用上限（API 換算の USD。Codex はトークン数だけを報告します） |
 | `idle_minutes` | `20` | 分析されるには、セッションが終了しているか、この時間アイドルである必要があります |
 | `min_prompts` | `1` | 人間のプロンプトがこれより少ないセッションはスキップされます |

@@ -11,7 +11,8 @@ from . import ladder
 from .config import Config
 from .digest import build_digest
 from .ingest import best_title
-from .llm import BudgetExceededError, LLMError, LLMResult, Runner, SleepInterruptedError, UsageLimitError, make_runner
+from .llm import (BudgetExceededError, LLMError, LLMResult, Runner, SleepInterruptedError, UsageLimitError, make_runner,
+                  written_in)
 from .redact import redact
 from .util import dumps, fingerprint, to_iso, utcnow, utcnow_iso
 
@@ -124,6 +125,13 @@ A routine session may have few or no knowledge items; that is a correct answer.
 Use scope "global" for items useful beyond this project (tools, languages, platforms, the developer's working \
 preferences), otherwise "project". Write in English, but keep identifiers, error messages and quotes verbatim, \
 whatever their language."""
+WRITE_ENGLISH = "Write in English, but keep identifiers, error messages and quotes verbatim, whatever their language."
+
+
+def system_prompt(cfg: Config) -> str:
+    """SYSTEM_PROMPT in the language Chronicle writes in ([analysis] language)."""
+    return written_in(cfg, SYSTEM_PROMPT, WRITE_ENGLISH, "Tags stay short lowercase English terms, so sessions group by "
+                      "topic whichever language they were analyzed in.")
 
 
 def _session_prompt(header: str, digest: str) -> str:
@@ -242,21 +250,22 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
         conn.commit()
         raise AnalysisSkipped("too little content")
     total_cost = 0.0
+    system = system_prompt(cfg)
     try:
         if len(digest.chunks) == 1:
-            res = runner.run(_session_prompt(header, digest.chunks[0]), ANALYSIS_SCHEMA, system=SYSTEM_PROMPT, model=model)
+            res = runner.run(_session_prompt(header, digest.chunks[0]), ANALYSIS_SCHEMA, system=system, model=model)
             total_cost += res.cost_usd
             data = normalize_analysis(res.data)
         else:
             notes = []
             for i, chunk in enumerate(digest.chunks, 1):
-                part = runner.run(_chunk_prompt(header, chunk, i, len(digest.chunks)), CHUNK_SCHEMA, system=SYSTEM_PROMPT, model=model)
+                part = runner.run(_chunk_prompt(header, chunk, i, len(digest.chunks)), CHUNK_SCHEMA, system=system, model=model)
                 total_cost += part.cost_usd
                 _log_run(conn, "chunk", session_id, part, status="done", input_chars=len(chunk), started=started)
                 notes.append({**part.data, "knowledge": normalize_knowledge(part.data.get("knowledge"))})
             res = runner.run(
                 _reduce_prompt(header, notes, digest.chunks[0][:6000], digest.chunks[-1][-6000:]),
-                ANALYSIS_SCHEMA, system=SYSTEM_PROMPT, model=model,
+                ANALYSIS_SCHEMA, system=system, model=model,
             )
             total_cost += res.cost_usd
             data = normalize_analysis(res.data)

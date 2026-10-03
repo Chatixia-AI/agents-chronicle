@@ -11,7 +11,7 @@ from . import ladder
 from .diagram import DIAGRAM_SCHEMA, normalize_diagram, to_mermaid
 from .config import Config
 from .ladder import STAGE_ORDER_SQL, SUPERSEDE_REASONS, TRUSTED
-from .llm import Runner, make_runner
+from .llm import Runner, make_runner, written_in
 from .util import dumps, local_str, loads, one_line, truncate, utcnow_iso
 
 log = logging.getLogger("chronicle.synthesize")
@@ -121,6 +121,15 @@ sections (use only those with content): "Working preferences for Claude", "Tooli
 and those that are outdated or contradicted (by = the newer item, or null). Merely related items are not duplicates.
 Do not invent anything that the items do not support."""
 
+# with [analysis] language = "ja", besides llm.JAPANESE: section names the dashboard can recognize, and duplicates
+# across languages
+DUPLICATES_ACROSS_LANGUAGES = "Items written in different languages that state the same lesson are duplicates."
+PROJECT_JA = ("Name the sections in Japanese; the suggested ones are 「アーキテクチャと主な事実」, 「実行・テスト・デプロイ」, "
+              "「落とし穴と修正」, 「決定とその理由」, 「規約と好み」, 「便利なコマンド」 and 「未解決の事項」. Diagram node labels keep "
+              "the project's own names. " + DUPLICATES_ACROSS_LANGUAGES)
+GLOBAL_JA = ("Name the sections in Japanese; the suggested ones are 「Claude への作業の好み」, 「ツールとプラットフォームの落とし穴」, "
+             "「再利用できるパターンとコマンド」, 「気づき」 and 「繰り返す問題」. " + DUPLICATES_ACROSS_LANGUAGES)
+
 # The playbook differs from a project's knowledge base in what its overview describes, and draws no architecture
 GLOBAL_SCHEMA = copy.deepcopy(KB_SCHEMA)
 GLOBAL_SCHEMA["properties"]["overview"]["description"] = "At most 3 plain sentences: how this developer works and on what"
@@ -218,8 +227,8 @@ def synthesize_project(conn: sqlite3.Connection, cfg: Config, project_path: str,
     if prev and prev["markdown"]:
         parts.append(f"<previous_version>\n{truncate(prev['markdown'], 20000)}\n</previous_version>")
     parts.append("Write the updated knowledge base." if not is_global else "Write the updated playbook.")
-    res = runner.run("\n\n".join(parts), GLOBAL_SCHEMA if is_global else KB_SCHEMA, system=GLOBAL_SYSTEM if is_global else PROJECT_SYSTEM,
-                     model=cfg.synthesis.model)
+    system = written_in(cfg, GLOBAL_SYSTEM, note=GLOBAL_JA) if is_global else written_in(cfg, PROJECT_SYSTEM, note=PROJECT_JA)
+    res = runner.run("\n\n".join(parts), GLOBAL_SCHEMA if is_global else KB_SCHEMA, system=system, model=cfg.synthesis.model)
     valid_ids = {k["id"] for k in items}
     data = normalize_kb(res.data, valid_ids)
     if is_global:

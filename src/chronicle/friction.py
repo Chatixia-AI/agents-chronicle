@@ -17,6 +17,7 @@ import sqlite3
 from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 
+from .i18n import tr
 from .util import loads, one_line, parse_ts, utcnow
 
 STILL_HAPPENING_DAYS = 14
@@ -45,7 +46,9 @@ CATALOG: list[dict] = [
                               r"file:// ?(navigation|url|urls|preview)?.{0,30}(blocked|denied)",
                               r"(blocked|denied).{0,30}file://", r"\.playwright-mcp",
                               r"playwright.{0,60}screenshot.{0,60}(path|root|denied|blocked|saved)",
-                              r"screenshot.{0,40}(outside|wrong (path|folder|directory)|repo root)", r"許可.{0,10}ルート"],
+                              r"screenshot.{0,40}(outside|wrong (path|folder|directory)|repo root)", r"許可.{0,10}ルート",
+                              r"スクリーンショット.{0,40}(保存|パス|出力).{0,30}(拒否|許可|できな|失敗|範囲外)",
+                              r"file://.{0,30}(ブロック|拒否|開けな|使えな)", r"(ブロック|拒否).{0,20}file://"],
         "fixes": [
             {"kind": "config", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Give Playwright MCP its own output directory and an isolated browser profile",
@@ -53,7 +56,10 @@ CATALOG: list[dict] = [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Save Playwright screenshots by bare filename; preview over http, not file://",
              "text": "Pass browser_take_screenshot a bare filename (it is saved in the Playwright MCP output directory); never "
-                     "an absolute scratchpad path. Preview local HTML over http://localhost (`python3 -m http.server`), not file://."},
+                     "an absolute scratchpad path. Preview local HTML over http://localhost (`python3 -m http.server`), not file://.",
+             "text_ja": "browser_take_screenshot にはファイル名だけを渡す（Playwright MCP "
+                        "の出力ディレクトリに保存される）。スクラッチパッドの絶対パスは渡さない。ローカルの HTML は "
+                        "file:// ではなく http://localhost（`python3 -m http.server`）でプレビューする。"},
         ],
     },
     {
@@ -65,7 +71,7 @@ CATALOG: list[dict] = [
         "error_patterns": [r"browser is already in use"],
         "friction_patterns": [r"browser is already in use", r"(browser|chrome|profile).{0,40}(already in use|locked|held by)",
                               r"(mcp )?browser.{0,30}in use by (the )?(other|another)", r"singletonlock",
-                              r"ブラウザ.{0,20}使用中"],
+                              r"ブラウザ.{0,20}使用中", r"(プロファイル|ブラウザ).{0,20}(ロック|占有)"],
         "fixes": [
             {"kind": "config", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Run Playwright MCP with --isolated so parallel sessions get their own browser",
@@ -73,7 +79,10 @@ CATALOG: list[dict] = [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Stop on 'Browser is already in use' instead of retrying",
              "text": "If Playwright MCP says the browser is already in use, do not retry or delete lock files: another "
-                     "session holds it. Tell me, or use a headless Playwright script for this check."},
+                     "session holds it. Tell me, or use a headless Playwright script for this check.",
+             "text_ja": "Playwright MCP がブラウザーは使用中（browser is already in use）だと言ったら、"
+                        "再試行もロックファイルの削除もしない。別のセッションが使っている。私に伝えるか、"
+                        "この確認にはヘッドレスの Playwright スクリプトを使う。"},
         ],
     },
     {
@@ -86,13 +95,20 @@ CATALOG: list[dict] = [
                            {"text": r"(locator\.\w+|waiting for).{0,40}timeout \d+ms exceeded|timeout \d+ms exceeded",
                             "tool": r"playwright|browser_"}],
         "friction_patterns": [r"ref\b.{0,30}not found", r"strict[- ]mode", r"stale (element )?refs?", r"outdated snapshot",
-                              r"execution context was destroyed", r"ambiguous (selector|locator)s?"],
+                              r"execution context was destroyed", r"ambiguous (selector|locator)s?",
+                              r"(古い|最新でない|以前の)スナップショット", r"スナップショット.{0,30}(取り直|再取得|古く)",
+                              r"(?<![a-z])ref(?![a-z]).{0,20}(見つから|無効)",
+                              r"(セレクター?|ロケーター?).{0,20}(曖昧|あいまい|複数.{0,10}一致)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Take a fresh Playwright snapshot before using refs",
              "text": "Playwright: take a fresh browser_snapshot after any navigation, reload or re-rendering click and use "
                      "only refs from it; after navigating, browser_wait_for a known text before browser_evaluate. In "
-                     "scripts use getByRole(role, {name, exact: true}) or a scoped locator, never bare text= selectors."},
+                     "scripts use getByRole(role, {name, exact: true}) or a scoped locator, never bare text= selectors.",
+             "text_ja": "Playwright：ページ遷移、再読み込み、再描画を起こすクリックのあとは browser_snapshot "
+                        "を取り直し、その ref だけを使う。遷移したら browser_evaluate の前に browser_wait_for "
+                        "で既知のテキストを待つ。スクリプトでは getByRole(role, {name, exact: true}) "
+                        "か範囲を絞ったロケーターを使い、text= だけのセレクターは使わない。"},
         ],
     },
     {
@@ -105,13 +121,18 @@ CATALOG: list[dict] = [
         "friction_patterns": [r"failed to find expected lines", r"string to replace not found", r"modified since (it was )?read",
                               r"stale (file )?context", r"apply_patch.{0,40}(fail|mismatch|verification)",
                               r"(patch|hunk|edit)es?.{0,30}(did not|didn't|failed to) (match|apply)",
-                              r"パッチ.{0,20}(失敗|適用でき)"],
+                              r"パッチ.{0,20}(失敗|適用でき)", r"(編集|置換|Edit).{0,20}(失敗|できなかった|できず)",
+                              r"ファイルが.{0,20}(変更|更新)されていた", r"(読み込|読ん)だ(後|あと)に.{0,20}(変更|更新|変わ)",
+                              r"(一致する|該当する|想定した|対象の)(行|文字列|箇所)が.{0,10}(見つから|な[いかく])"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Re-read the exact lines right before every edit",
              "text": "Re-read the exact lines (Read, or `sed -n 'a,bp' file`) in the same turn before every edit and copy "
                      "context from that output, never from memory. Keep patches small with unique anchors and one "
-                     "operation per file. After a failed edit, re-read the file before retrying."},
+                     "operation per file. After a failed edit, re-read the file before retrying.",
+             "text_ja": "編集のたびに、同じターンの中で直前に該当行を読み直し（Read か `sed -n 'a,bp' file`）、"
+                        "文脈は記憶ではなくその出力からコピーする。パッチは小さく一意なアンカーで、1 ファイルにつき "
+                        "1 操作にする。編集が失敗したら、再試行の前にファイルを読み直す。"},
         ],
     },
     {
@@ -121,7 +142,7 @@ CATALOG: list[dict] = [
         "noise": False,
         "error_patterns": [r"no matches found:"],
         "friction_patterns": [r"no matches found", r"zsh.{0,40}glob", r"glob.{0,40}zsh", r"unquoted glob", r"--include=\*",
-                              r"グロブ"],
+                              r"グロブ", r"(glob|ワイルドカード).{0,20}(一致|マッチ|展開).{0,10}(せず|しな|できな|失敗)"],
         "fixes": [
             {"kind": "environment", "scope": "user", "agents": ["all"],
              "title": "Let unmatched globs pass through in zsh, as bash does",
@@ -129,7 +150,9 @@ CATALOG: list[dict] = [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Quote every glob: the shell is zsh",
              "text": "The shell is zsh: quote every glob argument (`grep -rn --include='*.py'`, `ls 'out*.png'`) or use "
-                     "`rg -g '*.py'`."},
+                     "`rg -g '*.py'`.",
+             "text_ja": "シェルは zsh：glob の引数はすべて引用符で囲む（`grep -rn --include='*.py'`、`ls 'out*.png'`）"
+                        "か、`rg -g '*.py'` を使う。"},
         ],
     },
     {
@@ -138,14 +161,17 @@ CATALOG: list[dict] = [
         "category": "environment",
         "noise": False,
         "error_patterns": [r"(^|\n|:\s?)=+\S* not found"],
-        "friction_patterns": [r"=== ?not found", r"echo ={3,}", r"equals expansion"],
+        "friction_patterns": [r"=== ?not found", r"echo ={3,}", r"equals expansion", r"=\s?で始まる.{0,20}(展開|語|単語)",
+                              r"区切り(線|行).{0,30}(展開|エラー|失敗)"],
         "fixes": [
             {"kind": "environment", "scope": "user", "agents": ["all"],
              "title": "Turn off zsh's '=command' expansion",
              "text": "echo 'unsetopt EQUALS' >> ~/.zshrc"},
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Quote separator lines in zsh",
-             "text": "In zsh, print separators quoted (`echo '=== name ==='`) or as `echo ---`; never a bare `====`."},
+             "text": "In zsh, print separators quoted (`echo '=== name ==='`) or as `echo ---`; never a bare `====`.",
+             "text_ja": "zsh では区切り線を引用符で囲んで出力する（`echo '=== name ==='`）か `echo ---` にする。裸の "
+                        "`====` は使わない。"},
         ],
     },
     {
@@ -155,12 +181,17 @@ CATALOG: list[dict] = [
         "noise": False,
         "error_patterns": [r"read-only variable: status", r"bad (math expression|substitution|pattern)"],
         "friction_patterns": [r"read-only variable", r"zsh.{0,60}(word[- ]split|history[- ]modifier|read-only)",
-                              r"(word[- ]split|history[- ]modifier).{0,40}zsh", r"zsh (semantics|dialect|quirk)"],
+                              r"(word[- ]split|history[- ]modifier).{0,40}zsh", r"zsh (semantics|dialect|quirk)",
+                              r"読み取り専用の?変数", r"zsh.{0,40}(単語分割|ワード分割|履歴修飾)", r"(単語分割|ワード分割).{0,40}zsh",
+                              r"bash.{0,30}(書き方|構文|イディオム).{0,30}zsh", r"zsh.{0,30}bash.{0,10}と(は|の)?.{0,6}(違|異な)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Write zsh, not bash, in shell commands",
              "text": "The shell is zsh: never name a variable `status`, write `${var}` before a `:`, keep multi-word "
-                     "options in an array rather than a string variable, and wrap bash-only snippets in `bash -c '...'`."},
+                     "options in an array rather than a string variable, and wrap bash-only snippets in `bash -c '...'`.",
+             "text_ja": "シェルは zsh：変数名に `status` を使わない、`:` の前は `${var}` と書く、"
+                        "複数語のオプションは文字列の変数ではなく配列に入れる、bash 専用のスニペットは `bash -c "
+                        "'...'` で包む。"},
         ],
     },
     {
@@ -169,12 +200,15 @@ CATALOG: list[dict] = [
         "category": "tool-misuse",
         "noise": False,
         "error_patterns": [r"blocked: sleep"],
-        "friction_patterns": [r"blocked: sleep", r"sleep \d+\s*(;|&&)", r"chained .?sleep", r"sleep.{0,40}(blocked|rejected)"],
+        "friction_patterns": [r"blocked: sleep", r"sleep \d+\s*(;|&&)", r"chained .?sleep", r"sleep.{0,40}(blocked|rejected)",
+                              r"sleep.{0,40}(ブロック|拒否|禁止|使えな)", r"(ブロック|拒否)された.{0,10}sleep"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Wait with run_in_background or Monitor, never 'sleep N; cmd'",
              "text": "Never chain `sleep N` before a command to wait. Start long commands with run_in_background and wait "
-                     "for the completion notice, or use Monitor with `until <check>; do sleep 2; done`."},
+                     "for the completion notice, or use Monitor with `until <check>; do sleep 2; done`.",
+             "text_ja": "待つためにコマンドの前に `sleep N` をつなげない。長いコマンドは run_in_background "
+                        "で始めて完了の通知を待つか、Monitor で `until <check>; do sleep 2; done` を使う。"},
         ],
     },
     {
@@ -185,7 +219,8 @@ CATALOG: list[dict] = [
         "error_patterns": [r"command not found: timeout", r"timeout: command not found",
                            {"text": r"exit code 127|exited with code 127", "target": r"(^|[;&|(]\s*)timeout\s+\d"}],
         "friction_patterns": [r"`?timeout`?.{0,30}(command )?(not found|missing|unavailable|isn't available|absent|exit 127)",
-                              r"command not found: timeout", r"\bgtimeout\b"],
+                              r"command not found: timeout", r"\bgtimeout\b",
+                              r"timeout`?\s?(コマンド)?(が|は)?(見つから|存在しな|インストールされていな|使えな|な[いく])"],
         "fixes": [
             {"kind": "environment", "scope": "user", "agents": ["all"],
              "title": "Install GNU coreutils so 'timeout' exists",
@@ -194,7 +229,9 @@ CATALOG: list[dict] = [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Bound commands with the Bash timeout parameter, not 'timeout'",
              "text": "This Mac has no `timeout` command: bound a command with the Bash tool's timeout parameter or "
-                     "run_in_background, or the tool's own --timeout flag."},
+                     "run_in_background, or the tool's own --timeout flag.",
+             "text_ja": "この Mac には `timeout` コマンドがない。コマンドの実行時間は Bash ツールの timeout "
+                        "パラメーターか run_in_background、またはそのツール自身の --timeout フラグで区切る。"},
         ],
     },
     {
@@ -207,12 +244,18 @@ CATALOG: list[dict] = [
                            r"command not found: python\b", r"python: command not found"],
         "friction_patterns": [r"modulenotfounderror", r"no module named", r"(system|bare|global) python", r"command not found: python\b",
                               r"(python-pptx|openpyxl|pillow|\bpil\b|pptx|requests).{0,40}not (installed|available)",
-                              r"not installed in (the )?system python"],
+                              r"not installed in (the )?system python", r"(システム|素|グローバル)の\s?python",
+                              r"python.{0,40}(モジュール|パッケージ).{0,15}(見つから|ない|なく|入っていな|インストールされていな)",
+                              r"python3?\s?(コマンド)?が(見つから|ない|存在しな)",
+                              r"(python-pptx|openpyxl|pillow|pptx|requests).{0,30}(インストールされていな|入っていな|入っておらず)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Run throwaway Python through uv with its packages",
              "text": "For throwaway Python that needs packages, run `uv run --with <pkg> python3 - <<'PY'`; inside a "
-                     "project use `uv run python` or the venv's absolute path. Always `python3`, never `python` or `pip`."},
+                     "project use `uv run python` or the venv's absolute path. Always `python3`, never `python` or `pip`.",
+             "text_ja": "パッケージが必要な使い捨ての Python は `uv run --with <pkg> python3 - <<'PY'` で実行する。"
+                        "プロジェクトの中では `uv run python` か venv の絶対パスを使う。常に `python3` を使い、"
+                        "`python` や `pip` は使わない。"},
         ],
     },
     {
@@ -223,7 +266,9 @@ CATALOG: list[dict] = [
         "error_patterns": [r"overwrite .{1,300}\? \(y/n", r"not overwritten", r"remove .{1,300}\? $"],
         "friction_patterns": [r"\bcp -i\b", r"\brm -i\b", r"\bmv -i\b", r"alias(ed)? .{0,20}\b(cp|rm|mv)\b",
                               r"\b(cp|rm|mv)`? .{0,10}alias",
-                              r"interactive (prompt|confirmation|overwrite)", r"not overwritten", r"エイリアス"],
+                              r"interactive (prompt|confirmation|overwrite)", r"not overwritten", r"エイリアス",
+                              r"上書き.{0,20}(確認|されなかった|されず|スキップ)",
+                              r"対話(的な|式の)?(確認|プロンプト).{0,30}(cp|rm|mv|上書き|削除|止ま)"],
         "fixes": [
             {"kind": "environment", "scope": "user", "agents": ["all"],
              "title": "Keep interactive cp/rm/mv aliases out of agent shells",
@@ -232,7 +277,9 @@ CATALOG: list[dict] = [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Bypass interactive aliases with 'command'",
              "text": "cp, rm and mv are aliased to interactive versions: use `command cp -f`, `command rm -f` and "
-                     "`command mv -f` in shell commands."},
+                     "`command mv -f` in shell commands.",
+             "text_ja": "cp、rm、mv は対話式の版にエイリアスされている。シェルのコマンドでは `command cp -f`、"
+                        "`command rm -f`、`command mv -f` を使う。"},
         ],
     },
     {
@@ -247,13 +294,19 @@ CATALOG: list[dict] = [
                               r"(served|serving) (a )?(stale|old|cached) ", r"(old|stale) (code|build|bundle|assets?) .{0,20}served",
                               r"port :?\d{4,5}.{0,60}(unrelated|another|other|different) (app|project|session)",
                               r"port :?\d{4,5} (collision|conflict)", r"(dev )?server was actually serving",
-                              r"ポート.{0,20}(使用中|競合)"],
+                              r"ポート.{0,20}(使用中|競合)", r"ポート.{0,20}(既に|すでに).{0,10}(使われ|使用され|占有)",
+                              r"アドレスは?(既に|すでに)使用", r"(古い|以前の|残っていた|起動したままの)(開発)?サーバ",
+                              r"サーバー?が.{0,20}(古い|以前の)(コード|ビルド)", r"(孤立|ゾンビ).{0,10}(プロセス|サーバ)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Check who owns a port before a live check",
              "text": "Before a live check, run `lsof -nP -iTCP:<port> -sTCP:LISTEN` and confirm the process is a server you "
                      "started in this session. Start servers on a free port, restart them after backend or .env edits, "
-                     "and stop the ones you started before you finish."},
+                     "and stop the ones you started before you finish.",
+             "text_ja": "動作確認の前に `lsof -nP -iTCP:<port> -sTCP:LISTEN` を実行し、"
+                        "そのプロセスがこのセッションで起動したサーバーか確かめる。"
+                        "サーバーは空いているポートで起動し、バックエンドや .env を編集したら再起動し、"
+                        "終える前に自分で起動したものを止める。"},
         ],
     },
     {
@@ -265,12 +318,17 @@ CATALOG: list[dict] = [
                            r"cd: .{1,200}: no such file or directory"],
         "friction_patterns": [r"\bcwd\b", r"wrong (working )?directory", r"working directory (did not|didn't) persist",
                               r"cd (backend|frontend|src)\b.{0,40}(fail|already)", r"no such file or directory: (backend|frontend)",
-                              r"relative `?cd\b", r"relative[- ]path (issue|confusion|problem)s?", r"カレントディレクトリ"],
+                              r"relative `?cd\b", r"relative[- ]path (issue|confusion|problem)s?", r"カレントディレクトリ",
+                              r"作業ディレクトリ.{0,30}(違|ずれ|間違|戻|リセット|保持|残)",
+                              r"(別の|違う|誤った|間違った)ディレクトリ(から|で)", r"相対(パス|的な ?cd).{0,30}(失敗|間違|ずれ)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": SHELL_AGENTS,
              "title": "Use absolute paths instead of a relative cd",
              "text": "The shell's working directory persists between commands: use absolute paths or directory flags "
-                     "(`cd /abs/path && ...`, `git -C`, `uv --directory`, `pnpm -C`), never a relative `cd sub &&`."},
+                     "(`cd /abs/path && ...`, `git -C`, `uv --directory`, `pnpm -C`), never a relative `cd sub &&`.",
+             "text_ja": "シェルの作業ディレクトリはコマンドの間で保たれる。"
+                        "絶対パスかディレクトリを指定するフラグ（`cd /abs/path && ...`、`git -C`、`uv --directory`、"
+                        "`pnpm -C`）を使い、相対パスの `cd sub &&` は使わない。"},
         ],
     },
     {
@@ -282,12 +340,17 @@ CATALOG: list[dict] = [
         "error_patterns": [r"denied by the claude code auto mode classifier", r"auto mode classifier"],
         "friction_patterns": [r"classifier.{0,80}(repeated|again|twice|retr|rephras|multiple)",
                               r"(repeated|again|twice|multiple).{0,60}classifier",
-                              r"auto[- ]mode.{0,60}(blocked|denied).{0,60}(again|twice|repeated)"],
+                              r"auto[- ]mode.{0,60}(blocked|denied).{0,60}(again|twice|repeated)",
+                              r"(分類器|クラシファイア|classifier).{0,60}(再試行|繰り返|何度も|もう一度|言い換え|再度)",
+                              r"(再試行|繰り返|何度も|再度).{0,60}(分類器|クラシファイア)",
+                              r"オートモード.{0,60}(拒否|ブロック).{0,60}(再|繰り返|何度)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Stop and ask when the auto-mode classifier denies an action",
              "text": "When the auto-mode classifier denies an action, do not retry it, rephrase it or wrap it in a script: "
-                     "stop and ask me to run or approve the exact command."},
+                     "stop and ask me to run or approve the exact command.",
+             "text_ja": "オートモードの分類器が操作を拒否したら、再試行も言い換えもスクリプトで包むこともしない。"
+                        "止まって、そのコマンドをそのまま私に実行か承認してもらう。"},
         ],
     },
     {
@@ -298,12 +361,16 @@ CATALOG: list[dict] = [
         "error_patterns": [r"command timed out after"],
         "friction_patterns": [r"timed out (at|after) \d+ ?(s|sec|seconds|m|min|minutes)\b", r"(hit|exceeded) (the|its) .{0,25}timeout",
                               r"\b\d+ ?(s|sec|seconds|-?minutes?|min) (background )?(command )?timeout",
-                              r"(bash|background|shell) (commands?|tasks?).{0,30}timed out", r"\bfind\b.{0,40}timed out"],
+                              r"(bash|background|shell) (commands?|tasks?).{0,30}timed out", r"\bfind\b.{0,40}timed out",
+                              r"(bash|シェル|バックグラウンド|コマンド|find).{0,30}タイムアウト", r"\d+ ?(秒|分).{0,15}タイムアウト",
+                              r"タイムアウト(の)?(上限|制限)に(達|かか)"],
         "fixes": [
             {"kind": "instruction", "scope": "user", "agents": CLAUDE_ONLY,
              "title": "Background anything that may run longer than a minute",
              "text": "Run anything that may exceed 60 seconds with run_in_background and have it write results to a file "
-                     "as it goes. Never `find /` or `find ~`; scope searches to the project or use `mdfind -name`."},
+                     "as it goes. Never `find /` or `find ~`; scope searches to the project or use `mdfind -name`.",
+             "text_ja": "60 秒を超えそうなものは run_in_background で実行し、結果を逐次ファイルに書かせる。`find /` "
+                        "や `find ~` は使わず、検索はプロジェクトの中に絞るか `mdfind -name` を使う。"},
         ],
     },
     {
@@ -315,13 +382,18 @@ CATALOG: list[dict] = [
         "friction_patterns": [r"(concurrent|parallel|another|other|second) (claude |codex |agent )?(code )?sessions?",
                               r"sessions? (running|editing|working) (in parallel|concurrently|at the same time)",
                               r"git add (-a|\.).{0,60}(swept|picked up|included).{0,40}(other|another|unrelated)",
-                              r"別の?セッション", r"並行(して|の)?セッション"],
+                              r"別の?セッション", r"並行(して|の)?セッション", r"(他|ほか)の(エージェントの?)?セッション",
+                              r"(並行|並列|同時)(に|して)?(動|実行|作業)(いて|して|中).{0,10}(セッション|エージェント)",
+                              r"git add (-a|\.).{0,60}(他|ほか|別|無関係)"],
         "fixes": [
             {"kind": "instruction", "scope": "project", "agents": SHELL_AGENTS,
              "title": "Assume other agent sessions may share this tree",
              "text": "Other agent sessions may be editing this working tree: stage explicit paths (never `git add -A` or "
                      "`git add .`), re-read files right before editing them, and use a separate git worktree for "
-                     "parallel tasks."},
+                     "parallel tasks.",
+             "text_ja": "ほかのエージェントのセッションがこの作業ツリーを編集していることがある。"
+                        "ステージするパスは明示し（`git add -A` や `git add .` は使わない）、"
+                        "編集の直前にファイルを読み直し、並行する作業には別の git worktree を使う。"},
         ],
     },
     # ---- noise: shown as context, never turned into suggestions
@@ -360,7 +432,8 @@ CATALOG: list[dict] = [
         "friction_patterns": [r"\b529\b", r"overloaded", r"econnreset", r"connection (lost|reset|dropped)",
                               r"(usage|session|credit) limits?", r"oauth.{0,30}expired", r"providererror", r"api error",
                               r"(computer|machine|laptop) (went to )?(sleep|asleep)",
-                              r"\basleep\b", r"使用(量)?制限"],
+                              r"\basleep\b", r"使用(量)?制限", r"過負荷", r"接続が(切れ|リセットされ|失われ)",
+                              r"(OAuth|ログイン|認証).{0,20}(期限切れ|切れ)", r"(マシン|Mac|PC|パソコン)が?スリープ"],
         "fixes": [],
     },
     {
@@ -376,6 +449,7 @@ CATALOG: list[dict] = [
 
 BY_ID = {c["id"]: c for c in CATALOG}
 CONTENTION = ("edit-stale-context", "stale-dev-server", "playwright-browser-in-use")
+CONCURRENT_NOTE = "while session {sid} was active here: {text}"
 
 
 def _compile(entry: dict) -> dict:
@@ -621,7 +695,7 @@ def _concurrency_hits(conn: sqlite3.Connection, sessions: dict, hits: dict) -> l
                 "AND o.source = 'transcript' LIMIT 1", (lo, hi, h["session_id"], s["project_path"])).fetchone()
             if other and (h["session_id"], h["ts"]) not in seen:
                 seen.add((h["session_id"], h["ts"]))
-                out.append({**h, "repeat": False, "text": f"while session {other[0][:8]} was active here: {h['text']}"})
+                out.append({**h, "repeat": False, "text": CONCURRENT_NOTE.format(sid=other[0][:8], text=h["text"])})
     return out
 
 
@@ -719,6 +793,22 @@ def report(conn: sqlite3.Connection, *, days: int | None = None, project: str | 
     for c in raw:
         _strip(c)
     return {"causes": causes, "tool_errors": tool_error_rates(conn, days=days, project=project), "noise_summary": summary}
+
+
+def display(cause: dict) -> dict:
+    """A cause as the dashboard shows it, in the viewer's language (i18n): catalog names and fix titles, and the note
+    Chronicle wrote about overlapping sessions. Notes from sessions are shown as they were written."""
+    out = {**cause, "fixes": [{**f, "title": tr(f["title"])} for f in cause.get("fixes") or []],
+           "examples": [{**e, "note": display_note(e.get("note"))} for e in cause.get("examples") or []]}
+    if cause.get("id") in BY_ID:
+        out["name"] = tr(cause["name"])
+    return out
+
+
+def display_note(note: str | None) -> str | None:
+    """An example's note in the viewer's language, when it is Chronicle's own (CONCURRENT_NOTE)."""
+    m = re.match(r"while session (\S+) was active here: (.*)", note or "", re.S)
+    return tr(CONCURRENT_NOTE, sid=m.group(1), text=m.group(2)) if m else note
 
 
 def tool_error_rates(conn: sqlite3.Connection, days: int | None = None, *, project: str | None = None,

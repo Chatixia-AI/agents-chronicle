@@ -26,7 +26,7 @@ from dataclasses import dataclass, field
 
 from .chat_import import FORMATS
 from .config import Config
-from .llm import LLMError, Runner, UsageLimitError, make_runner
+from .llm import LLMError, Runner, UsageLimitError, make_runner, written_in
 from .redact import redact
 from .util import one_line, utcnow_iso
 
@@ -90,6 +90,11 @@ reusable; anything about their own work, employer, clients or products is at lea
 chore; between analyze and maybe, choose maybe when unsure. Chats over two years old about a stack they no longer use \
 (compare the projects below) are at most maybe, unless they record a decision about ongoing work. Chats are in any \
 language; write topic and reason in English. Return one entry per chat number, each number exactly once."""
+WRITE_ENGLISH = "Chats are in any language; write topic and reason in English."
+# a rule's (topic, reason) when Chronicle writes in Japanese
+RULES_JA = {"no reply": ("返信なし", "エクスポートにこのチャットの返信がない"),
+            "too short": ("短すぎる", "分析できる内容がほとんどない"),
+            "text chore": ("テキストの作業", "貼り付けたテキストの翻訳、要約、校正")}
 
 
 @dataclass
@@ -188,7 +193,8 @@ def _ask(cfg: Config, runner: Runner, context: str, batch: list) -> tuple[dict[i
     cards = "\n\n".join(_card(i, r) for i, r in enumerate(batch, 1))
     prompt = (f"<developer>\n{context or 'No recorded projects yet.'}\n</developer>\n\n"
               f"<chats count=\"{len(batch)}\">\n{cards}\n</chats>\n\nScreen these {len(batch)} chats.")
-    res = runner.run(prompt, SCREEN_SCHEMA, system=SYSTEM_PROMPT, model=cfg.analysis.screen_model, effort="low")
+    system = written_in(cfg, SYSTEM_PROMPT, WRITE_ENGLISH, "Chats are in any language; write topic and reason in Japanese.")
+    res = runner.run(prompt, SCREEN_SCHEMA, system=system, model=cfg.analysis.screen_model, effort="low")
     out = {}
     for c in res.data.get("chats") or []:
         if not isinstance(c, dict):
@@ -216,6 +222,8 @@ def screen_chats(cfg: Config, conn: sqlite3.Connection, *, source: str | None = 
     rest = []
     for r in candidates(conn, source=source, redo=redo, limit=limit, sample=sample):
         ruled = rule_verdict(r)
+        if ruled and cfg.analysis.language == "ja":
+            ruled = RULES_JA.get(ruled[0], ruled)
         if ruled:
             _store(conn, r, "skip", *ruled, "rules")
             report.counts["skip"] += 1

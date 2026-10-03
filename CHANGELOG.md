@@ -2,6 +2,18 @@
 
 ## Unreleased
 
+- **The dashboard in Japanese:** every page, menu, chart, toast and the ⌘K palette can be shown in Japanese, with
+  dates, times and durations written the Japanese way. **日本語** in the status bar (next to the theme toggle) switches
+  over, and **Settings › Appearance › Language** picks System, English or 日本語; System follows the browser. Text the
+  server writes, such as why a session is waiting, What goes wrong and suggestion evidence, follows the same choice.
+  Each browser keeps its own language, so the dashboard on your phone can differ from the one on your Mac.
+- **Knowledge in Japanese:** `[analysis] language = "ja"` (or **Status › Analysis › Knowledge language**) has
+  Chronicle write summaries, knowledge, knowledge bases, the playbook, glossary definitions, weekly reviews and
+  screening reasons in Japanese, and propose Japanese lines for `CLAUDE.md` and `AGENTS.md`. Identifiers, commands,
+  file paths and error messages stay as they were, and so do tags, so sessions still group by topic. It applies to
+  sessions analyzed from then on; what is already written stays in its language. A line whose marker is already in
+  the file is not proposed again in the other language, and What goes wrong recognizes friction notes written in
+  Japanese. [Language](docs/analysis.md#language)
 - **Session pages open on Details:** the summary, knowledge, context chart, tools and files come first, and
   **Transcript** is one click away. A search result still opens the transcript at the match, and `?tab=transcript`
   or `?tab=details` in a link picks one.

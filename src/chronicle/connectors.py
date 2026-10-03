@@ -15,6 +15,7 @@ import tomllib
 from pathlib import Path
 
 from .config import Config, set_config_value
+from .i18n import tr
 
 _VERSION_CACHE: dict[str, tuple[float, str | None]] = {}
 
@@ -72,19 +73,25 @@ def claude_status(cfg: Config, conn: sqlite3.Connection) -> dict:
         "on_disk": on_disk,
         "recorded": rec,
         "recovered": recovered["sessions"],
-        "recording": ("SessionEnd hook + background sync every 15 min" if hooks.get("SessionEnd") else "background sync every 15 min")
-        if connected else "not recording",
+        "recording": (tr("SessionEnd hook + background sync every 15 min") if hooks.get("SessionEnd")
+                      else tr("background sync every 15 min")) if connected else tr("not recording"),
         "checks": [
-            {"label": "Transcripts", "ok": on_disk > 0, "detail": f"{', '.join(_tilde(d) + '/projects' for d in scan_dirs)} · {on_disk} on disk"},
-            {"label": "Recording", "ok": connected, "detail": "scanned every sync" if connected else "not scanned (disconnected)"},
-            {"label": "SessionEnd hook", "ok": bool(hooks.get("SessionEnd")), "detail": "archives and analyzes each session as it ends"},
-            {"label": "MCP server in Claude Code", "ok": mcp_registered(), "detail": "Claude can search your sessions and knowledge"},
-            {"label": "Knowledge injection", "ok": bool(hooks.get("SessionStart")), "optional": True,
-             "detail": "SessionStart hook adds the project's knowledge base to new sessions"},
-            {"label": "Background sync", "ok": bool(sync.get("loaded")),
-             "detail": f"{'systemd' if uses_systemd() else 'launchd'}, every 15 minutes"},
+            {"key": "files", "label": tr("Transcripts"), "ok": on_disk > 0,
+             "detail": tr("{where} · {n} on disk", where=", ".join(_tilde(d) + "/projects" for d in scan_dirs),
+                          n=on_disk)},
+            {"key": "recording", "label": tr("Recording"), "ok": connected,
+             "detail": tr("scanned every sync") if connected else tr("not scanned (disconnected)")},
+            {"key": "hook", "label": tr("SessionEnd hook"), "ok": bool(hooks.get("SessionEnd")),
+             "detail": tr("archives and analyzes each session as it ends")},
+            {"key": "mcp", "label": tr("MCP server in Claude Code"), "ok": mcp_registered(),
+             "detail": tr("Claude can search your sessions and knowledge")},
+            {"key": "inject", "label": tr("Knowledge injection"), "ok": bool(hooks.get("SessionStart")), "optional": True,
+             "detail": tr("SessionStart hook adds the project's knowledge base to new sessions")},
+            {"key": "sync", "label": tr("Background sync"), "ok": bool(sync.get("loaded")),
+             "detail": tr("{manager}, every 15 minutes", manager="systemd" if uses_systemd() else "launchd")},
         ],
-        "notes": [f"{recovered['sessions']} older sessions recovered (prompt history / Codex imports)"] if recovered["sessions"] else [],
+        "notes": [tr("{n} older sessions recovered (prompt history / Codex imports)", n=recovered["sessions"])]
+        if recovered["sessions"] else [],
     }
 
 
@@ -94,7 +101,7 @@ def connect_claude(cfg: Config, exe: str) -> list[str]:
     actions = []
     if not cfg.claude_dirs:
         set_config_value(cfg, "sources", "claude_dirs", '["~/.claude"]')
-        actions.append("recording ~/.claude")
+        actions.append(tr("recording {where}", where="~/.claude"))
     actions += install_hooks(cfg, exe, inject=cfg.inject_session_start)
     actions += install_mcp(cfg, exe)
     return actions
@@ -104,7 +111,8 @@ def disconnect_claude(cfg: Config) -> list[str]:
     from .install import uninstall_hooks, uninstall_mcp
 
     set_config_value(cfg, "sources", "claude_dirs", "[]")
-    return ["stopped recording Claude Code (recorded sessions are kept)"] + uninstall_hooks(cfg) + uninstall_mcp(cfg)
+    return ([tr("stopped recording {label} (recorded sessions are kept)", label="Claude Code")] + uninstall_hooks(cfg)
+            + uninstall_mcp(cfg))
 
 
 # ------------------------------------------------------------------ Codex
@@ -153,17 +161,22 @@ def codex_status(cfg: Config, conn: sqlite3.Connection) -> dict:
         "recorded": rec,
         "recovered": recovered["sessions"],
         "imports": len(imports),
-        "recording": "background sync every 15 min" if connected else "not recording",
+        "recording": tr("background sync every 15 min") if connected else tr("not recording"),
         "checks": [
-            {"label": "Rollouts", "ok": bool(files), "detail": f"{_tilde(home)}/sessions · {len(files)} on disk"},
-            {"label": "Recording", "ok": connected, "detail": "scanned every sync" if connected else "not scanned (connect to start)"},
-            {"label": "Session-end hook", "ok": None, "optional": True,
-             "detail": (f"not available: Codex allows one notify program and it is used by {notify_owner}; sessions are picked up by the 15-minute sync"
-                        if notify_owner else "Codex has no session-end hook; sessions are picked up by the 15-minute sync")},
-            {"label": "MCP server in Codex", "ok": mcp, "detail": "Codex can search your sessions and knowledge (Claude's too)"},
-            {"label": "Claude sessions imported by Codex", "ok": None, "optional": True,
-             "detail": f"{len(imports)} in Codex's import registry; {recovered['sessions']} recovered into the vault"
-                       + (" (the rest are duplicates of transcripts already recorded)" if imports else "")},
+            {"key": "files", "label": tr("Rollouts"), "ok": bool(files),
+             "detail": tr("{where} · {n} on disk", where=f"{_tilde(home)}/sessions", n=len(files))},
+            {"key": "recording", "label": tr("Recording"), "ok": connected,
+             "detail": tr("scanned every sync") if connected else tr("not scanned (connect to start)")},
+            {"key": "hook", "label": tr("Session-end hook"), "ok": None, "optional": True,
+             "detail": tr("not available: Codex allows one notify program and it is used by {owner}; sessions are picked "
+                          "up by the 15-minute sync", owner=notify_owner) if notify_owner
+             else tr("Codex has no session-end hook; sessions are picked up by the 15-minute sync")},
+            {"key": "mcp", "label": tr("MCP server in Codex"), "ok": mcp,
+             "detail": tr("Codex can search your sessions and knowledge (Claude's too)")},
+            {"key": "imports", "label": tr("Claude sessions imported by Codex"), "ok": None, "optional": True,
+             "detail": tr("{n} in Codex's import registry; {recovered} recovered into the vault", n=len(imports),
+                          recovered=recovered["sessions"])
+                       + (tr(" (the rest are duplicates of transcripts already recorded)") if imports else "")},
         ],
         "notes": [],
     }
@@ -174,26 +187,26 @@ def connect_codex(cfg: Config, exe: str) -> list[str]:
     actions = []
     if not cfg.codex_dirs:
         set_config_value(cfg, "sources", "codex_dirs", f'["{_tilde(home)}"]')
-        actions.append(f"recording {_tilde(home)}")
+        actions.append(tr("recording {where}", where=_tilde(home)))
     binary = cfg.codex_bin()
     if not binary:
-        return actions + ["MCP registration skipped: codex CLI not found"]
+        return actions + [tr("MCP registration skipped: codex CLI not found")]
     if not codex_mcp_registered(home):
         cmd = [binary, "mcp", "add", "chronicle", "--", *shlex.split(exe), "mcp"]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        actions.append("registered MCP server 'chronicle' in Codex" if proc.returncode == 0
-                       else f"Codex MCP registration failed: {(proc.stderr or proc.stdout).strip()[:300]}")
+        actions.append(tr("registered MCP server 'chronicle' in Codex") if proc.returncode == 0
+                       else tr("Codex MCP registration failed: {error}", error=(proc.stderr or proc.stdout).strip()[:300]))
     return actions
 
 
 def disconnect_codex(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "codex_dirs", "[]")
-    actions = ["stopped recording Codex (recorded sessions are kept)"]
+    actions = [tr("stopped recording {label} (recorded sessions are kept)", label="Codex")]
     binary = cfg.codex_bin()
     if binary and codex_mcp_registered():
         proc = subprocess.run([binary, "mcp", "remove", "chronicle"], capture_output=True, text=True, timeout=60)
-        actions.append("removed MCP server 'chronicle' from Codex" if proc.returncode == 0
-                       else f"Codex MCP removal failed: {(proc.stderr or proc.stdout).strip()[:200]}")
+        actions.append(tr("removed MCP server 'chronicle' from Codex") if proc.returncode == 0
+                       else tr("Codex MCP removal failed: {error}", error=(proc.stderr or proc.stdout).strip()[:200]))
     return actions
 
 
@@ -206,8 +219,9 @@ def codex_cloud_status(cfg: Config, conn: sqlite3.Connection) -> dict:
     last = load_status(conn)
     rec = _recorded(conn, "source = 'codex-cloud'")
     checked = time.strftime("%b %d %H:%M", time.localtime(last["checked_at"])) if last.get("checked_at") else None
-    listing = (f"{last.get('tasks', 0)} tasks at the last sync ({checked})" if last.get("ok")
-               else f"failed at the last sync ({checked}): {last.get('error')}" if checked else "not listed yet")
+    listing = (tr("{n} tasks at the last sync ({when})", n=last.get("tasks", 0), when=checked) if last.get("ok")
+               else tr("failed at the last sync ({when}): {error}", when=checked, error=last.get("error")) if checked
+               else tr("not listed yet"))
     return {
         "name": "codex-cloud",
         "agent": "codex",
@@ -219,17 +233,21 @@ def codex_cloud_status(cfg: Config, conn: sqlite3.Connection) -> dict:
         "binary": binary,
         "dirs": [],
         "on_disk": last.get("tasks", 0) if last.get("ok") else 0,
-        "on_disk_label": "in the cloud",
+        "on_disk_label": tr("in the cloud"),
         "recorded": rec,
         "recovered": 0,
-        "recording": "task list and diffs every sync, through the codex CLI" if connected else "not recording",
+        "recording": tr("task list and diffs every sync, through the codex CLI") if connected else tr("not recording"),
         "checks": [
-            {"label": "Codex CLI", "ok": bool(binary), "detail": "lists tasks with your Codex login (`codex login`)" if binary
-             else "not found: install Codex and run `codex login`"},
-            {"label": "Recording", "ok": connected, "detail": "checked every sync" if connected else "not checked (connect to start)"},
-            {"label": "Task list", "ok": bool(last.get("ok")) if checked else None, "optional": not connected, "detail": listing},
-            {"label": "Conversation", "ok": None, "optional": True,
-             "detail": "not available from the CLI: each task is recorded with its title, repository, changed files and diff"},
+            {"key": "cli", "label": "Codex CLI", "ok": bool(binary),
+             "detail": tr("lists tasks with your Codex login (`codex login`)") if binary
+             else tr("not found: install Codex and run `codex login`")},
+            {"key": "recording", "label": tr("Recording"), "ok": connected,
+             "detail": tr("checked every sync") if connected else tr("not checked (connect to start)")},
+            {"key": "files", "label": tr("Task list"), "ok": bool(last.get("ok")) if checked else None,
+             "optional": not connected, "detail": listing},
+            {"key": "conversation", "label": tr("Conversation"), "ok": None, "optional": True,
+             "detail": tr("not available from the CLI: each task is recorded with its title, repository, changed files "
+                          "and diff")},
         ],
         "notes": [],
     }
@@ -237,15 +255,15 @@ def codex_cloud_status(cfg: Config, conn: sqlite3.Connection) -> dict:
 
 def connect_codex_cloud(cfg: Config, exe: str) -> list[str]:
     set_config_value(cfg, "sources", "codex_cloud", "true")
-    actions = ["recording Codex Cloud tasks"]
+    actions = [tr("recording Codex Cloud tasks")]
     if not cfg.codex_bin():
-        actions.append("codex CLI not found: install Codex and run `codex login`")
+        actions.append(tr("codex CLI not found: install Codex and run `codex login`"))
     return actions
 
 
 def disconnect_codex_cloud(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "codex_cloud", "false")
-    return ["stopped recording Codex Cloud (recorded tasks are kept)"]
+    return [tr("stopped recording Codex Cloud (recorded tasks are kept)")]
 
 
 # ------------------------------------------------------------------ MCP entries in other tools' JSON configs
@@ -257,22 +275,27 @@ def _mcp_json_has(path: Path, key: str) -> bool:
 
 
 def _mcp_json_set(cfg: Config, path: Path, key: str, entry: dict | None, label: str) -> str:
-    """Add (entry) or remove (None) the 'chronicle' server in a JSON MCP config, keeping everything else.
-    The file is backed up first; a file that is not plain JSON (comments) is left alone."""
+    return _mcp_json_write(cfg, path, key, entry, label)[0]
+
+
+def _mcp_json_write(cfg: Config, path: Path, key: str, entry: dict | None, label: str) -> tuple[str, bool]:
+    """Add (entry) or remove (None) the 'chronicle' server in a JSON MCP config, keeping everything else: (what happened,
+    whether the file changed). The file is backed up first; a file that is not plain JSON (comments) is left alone."""
     try:
         data = json.loads(path.read_text()) if path.exists() else {}
     except (OSError, ValueError):
-        return f"{label}: {_tilde(path)} is not plain JSON; add the 'chronicle' MCP server by hand"
+        return tr("{label}: {path} is not plain JSON; add the 'chronicle' MCP server by hand", label=label,
+                  path=_tilde(path)), False
     if not isinstance(data, dict):
-        return f"{label}: unexpected {_tilde(path)} format; left unchanged"
+        return tr("{label}: unexpected {path} format; left unchanged", label=label, path=_tilde(path)), False
     servers = data.setdefault(key, {})
     if entry is None:
         if "chronicle" not in servers:
-            return f"{label}: no chronicle MCP server to remove"
+            return tr("{label}: no chronicle MCP server to remove", label=label), False
         servers.pop("chronicle")
     else:
         if servers.get("chronicle") == entry:
-            return f"{label}: chronicle MCP server already registered"
+            return tr("{label}: chronicle MCP server already registered", label=label), False
         servers["chronicle"] = entry
     if path.exists():
         backup = cfg.home / "backups" / f"{path.name}.{int(time.time())}.{re.sub(r'[^a-z]+', '-', label.lower())}.bak"
@@ -282,7 +305,8 @@ def _mcp_json_set(cfg: Config, path: Path, key: str, entry: dict | None, label: 
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     os.replace(tmp, path)
-    return f"{label}: {'removed' if entry is None else 'registered'} MCP server 'chronicle' ({_tilde(path)})"
+    return (tr("{label}: removed MCP server 'chronicle' ({path})", label=label, path=_tilde(path)) if entry is None
+            else tr("{label}: registered MCP server 'chronicle' ({path})", label=label, path=_tilde(path))), True
 
 
 def _split_exe(exe: str) -> tuple[str, list[str]]:
@@ -330,19 +354,23 @@ def copilot_status(cfg: Config, conn: sqlite3.Connection) -> dict:
         "on_disk": len(agent_sessions) + len(chats),
         "recorded": rec,
         "recovered": 0,
-        "recording": "background sync every 15 min" if connected else "not recording",
+        "recording": tr("background sync every 15 min") if connected else tr("not recording"),
         "checks": [
-            {"label": "Copilot agent sessions", "ok": bool(agent_sessions),
-             "detail": f"{_tilde(home)}/session-state · {len(agent_sessions)} (Copilot CLI and VS Code agent host)"},
-            {"label": "Copilot Chat in VS Code", "ok": bool(chats),
-             "detail": f"{len(chats)} chat logs in VS Code workspace storage (empty chat panels are skipped)"},
-            {"label": "Recording", "ok": connected, "detail": "scanned every sync" if connected else "not scanned (connect to start)"},
-            {"label": "MCP server in VS Code", "ok": mcp_vscode, "detail": "Copilot Chat can search your sessions and knowledge"},
-            {"label": "MCP server in Copilot CLI", "ok": mcp_cli, "optional": True, "detail": f"{_tilde(home)}/mcp-config.json"},
-            {"label": "Session-end hook", "ok": None, "optional": True,
-             "detail": "not used: sessions are picked up by the 15-minute sync"},
+            {"key": "files", "label": tr("Copilot agent sessions"), "ok": bool(agent_sessions),
+             "detail": tr("{where} · {n} (Copilot CLI and VS Code agent host)", where=f"{_tilde(home)}/session-state",
+                          n=len(agent_sessions))},
+            {"key": "chats", "label": tr("Copilot Chat in VS Code"), "ok": bool(chats),
+             "detail": tr("{n} chat logs in VS Code workspace storage (empty chat panels are skipped)", n=len(chats))},
+            {"key": "recording", "label": tr("Recording"), "ok": connected,
+             "detail": tr("scanned every sync") if connected else tr("not scanned (connect to start)")},
+            {"key": "mcp", "label": tr("MCP server in VS Code"), "ok": mcp_vscode,
+             "detail": tr("Copilot Chat can search your sessions and knowledge")},
+            {"key": "mcp", "label": tr("MCP server in Copilot CLI"), "ok": mcp_cli, "optional": True,
+             "detail": f"{_tilde(home)}/mcp-config.json"},
+            {"key": "hook", "label": tr("Session-end hook"), "ok": None, "optional": True,
+             "detail": tr("not used: sessions are picked up by the 15-minute sync")},
         ],
-        "notes": ["Copilot is billed per seat; costs shown are API list-price estimates where token splits are known"],
+        "notes": [tr("Copilot is billed per seat; costs shown are API list-price estimates where token splits are known")],
     }
 
 
@@ -352,7 +380,7 @@ def connect_copilot(cfg: Config, exe: str) -> list[str]:
     dirs = [d for d in (home, *vscode_user_dirs()) if d.is_dir()]
     if not cfg.copilot_dirs and dirs:
         set_config_value(cfg, "sources", "copilot_dirs", json.dumps([_tilde(d) for d in dirs], ensure_ascii=False))
-        actions.append("recording " + ", ".join(_tilde(d) for d in dirs))
+        actions.append(tr("recording {where}", where=", ".join(_tilde(d) for d in dirs)))
     command, args = _split_exe(exe)
     for u in vscode_user_dirs():
         actions.append(_mcp_json_set(cfg, u / "mcp.json", "servers", {"type": "stdio", "command": command, "args": args}, "VS Code"))
@@ -364,7 +392,7 @@ def connect_copilot(cfg: Config, exe: str) -> list[str]:
 
 def disconnect_copilot(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "copilot_dirs", "[]")
-    actions = ["stopped recording GitHub Copilot (recorded sessions are kept)"]
+    actions = [tr("stopped recording {label} (recorded sessions are kept)", label="GitHub Copilot")]
     for u in vscode_user_dirs():
         if _mcp_json_has(u / "mcp.json", "servers"):
             actions.append(_mcp_json_set(cfg, u / "mcp.json", "servers", None, "VS Code"))
@@ -399,14 +427,17 @@ def bob_status(cfg: Config, conn: sqlite3.Connection) -> dict:
         "on_disk": with_prompt,
         "recorded": _recorded(conn, "agent = 'bob'"),
         "recovered": 0,
-        "recording": "background sync every 15 min" if connected else "not recording",
+        "recording": tr("background sync every 15 min") if connected else tr("not recording"),
         "checks": [
-            {"label": "Task database", "ok": bob_db(home).exists(),
-             "detail": f"{_tilde(bob_db(home))} · {len(tasks)} tasks, {with_prompt} with messages"},
-            {"label": "Recording", "ok": connected, "detail": "scanned every sync" if connected else "not scanned (connect to start)"},
-            {"label": "MCP server in Bob", "ok": mcp, "detail": f"{_tilde(home)}/settings/mcp_settings.json"},
-            {"label": "IDE chat history", "ok": None, "optional": True,
-             "detail": "Bob IDE keeps no conversation files on this Mac; only tasks in its task database are recorded"},
+            {"key": "files", "label": tr("Task database"), "ok": bob_db(home).exists(),
+             "detail": tr("{where} · {n} tasks, {messages} with messages", where=_tilde(bob_db(home)), n=len(tasks),
+                          messages=with_prompt)},
+            {"key": "recording", "label": tr("Recording"), "ok": connected,
+             "detail": tr("scanned every sync") if connected else tr("not scanned (connect to start)")},
+            {"key": "mcp", "label": tr("MCP server in Bob"), "ok": mcp,
+             "detail": f"{_tilde(home)}/settings/mcp_settings.json"},
+            {"key": "chats", "label": tr("IDE chat history"), "ok": None, "optional": True,
+             "detail": tr("Bob IDE keeps no conversation files on this Mac; only tasks in its task database are recorded")},
         ],
         "notes": [],
     }
@@ -417,7 +448,7 @@ def connect_bob(cfg: Config, exe: str) -> list[str]:
     home = bob_home()
     if not cfg.bob_dirs:
         set_config_value(cfg, "sources", "bob_dirs", f'["{_tilde(home)}"]')
-        actions.append(f"recording {_tilde(home)}")
+        actions.append(tr("recording {where}", where=_tilde(home)))
     if home.is_dir():
         command, args = _split_exe(exe)
         actions.append(_mcp_json_set(cfg, home / "settings" / "mcp_settings.json", "mcpServers",
@@ -427,7 +458,7 @@ def connect_bob(cfg: Config, exe: str) -> list[str]:
 
 def disconnect_bob(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "bob_dirs", "[]")
-    actions = ["stopped recording IBM Bob (recorded sessions are kept)"]
+    actions = [tr("stopped recording {label} (recorded sessions are kept)", label="IBM Bob")]
     path = bob_home() / "settings" / "mcp_settings.json"
     if _mcp_json_has(path, "mcpServers"):
         actions.append(_mcp_json_set(cfg, path, "mcpServers", None, "IBM Bob"))
@@ -473,17 +504,19 @@ def antigravity_status(cfg: Config, conn: sqlite3.Connection) -> dict:
         "on_disk": len(readable),
         "recorded": _recorded(conn, "agent = 'antigravity'"),
         "recovered": 0,
-        "recording": "background sync every 15 min" if connected else "not recording",
+        "recording": tr("background sync every 15 min") if connected else tr("not recording"),
         "checks": [
-            {"label": "Conversation logs", "ok": bool(readable),
-             "detail": f"{_tilde(home)}/brain · {len(readable)} conversations with a step log"},
-            {"label": "Recording", "ok": connected, "detail": "scanned every sync" if connected else "not scanned (connect to start)"},
-            {"label": "MCP server in Antigravity", "ok": _mcp_json_has(mcp_config, "mcpServers"), "detail": _tilde(mcp_config)},
-            {"label": "Conversations without a log", "ok": None, "optional": True,
-             "detail": f"{len(unreadable)} kept only in Antigravity's own encrypted store; these cannot be read"
-                       if unreadable else "none: every conversation has a readable step log"},
+            {"key": "files", "label": tr("Conversation logs"), "ok": bool(readable),
+             "detail": tr("{where} · {n} conversations with a step log", where=f"{_tilde(home)}/brain", n=len(readable))},
+            {"key": "recording", "label": tr("Recording"), "ok": connected,
+             "detail": tr("scanned every sync") if connected else tr("not scanned (connect to start)")},
+            {"key": "mcp", "label": tr("MCP server in Antigravity"), "ok": _mcp_json_has(mcp_config, "mcpServers"),
+             "detail": _tilde(mcp_config)},
+            {"key": "chats", "label": tr("Conversations without a log"), "ok": None, "optional": True,
+             "detail": tr("{n} kept only in Antigravity's own encrypted store; these cannot be read", n=len(unreadable))
+                       if unreadable else tr("none: every conversation has a readable step log")},
         ],
-        "notes": ["Antigravity records tokens but no prices; sessions on Gemini models show no cost"],
+        "notes": [tr("Antigravity records tokens but no prices; sessions on Gemini models show no cost")],
     }
 
 
@@ -492,7 +525,7 @@ def connect_antigravity(cfg: Config, exe: str) -> list[str]:
     home = antigravity_home()
     if not cfg.antigravity_dirs:
         set_config_value(cfg, "sources", "antigravity_dirs", json.dumps([_tilde(home)], ensure_ascii=False))
-        actions.append(f"recording {_tilde(home)}")
+        actions.append(tr("recording {where}", where=_tilde(home)))
     if home.is_dir():
         actions.append(_mcp_json_set(cfg, antigravity_mcp_config(home), "mcpServers", mcp_server_entry(exe), "Antigravity"))
     return actions
@@ -500,7 +533,7 @@ def connect_antigravity(cfg: Config, exe: str) -> list[str]:
 
 def disconnect_antigravity(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "antigravity_dirs", "[]")
-    actions = ["stopped recording Google Antigravity (recorded sessions are kept)"]
+    actions = [tr("stopped recording {label} (recorded sessions are kept)", label="Google Antigravity")]
     path = antigravity_mcp_config(antigravity_home())
     if _mcp_json_has(path, "mcpServers"):
         actions.append(_mcp_json_set(cfg, path, "mcpServers", None, "Antigravity"))
@@ -546,9 +579,9 @@ def mcp_server_entry(exe: str) -> dict:
 def add_mcp_client(cfg: Config, name: str, exe: str) -> list[str]:
     c = MCP_CLIENTS[name]
     if not _mcp_client_detected(name):
-        return [f"{c['label']} not found on this Mac; nothing changed"]
-    action = _mcp_json_set(cfg, mcp_client_config(name), "mcpServers", mcp_server_entry(exe), c["label"])
-    return [action + (f"; restart {c['label']} to load it" if c.get("restart") and "registered MCP" in action else "")]
+        return [tr("{label} not found on this Mac; nothing changed", label=c["label"])]
+    action, changed = _mcp_json_write(cfg, mcp_client_config(name), "mcpServers", mcp_server_entry(exe), c["label"])
+    return [action + (tr("; restart {label} to load it", label=c["label"]) if c.get("restart") and changed else "")]
 
 
 def remove_mcp_client(cfg: Config, name: str) -> list[str]:

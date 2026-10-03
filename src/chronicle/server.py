@@ -24,15 +24,17 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__
-from .config import Config
+from . import __version__, i18n
+from .config import LANGUAGES, Config
 from .db import connect, kv_get
+from .i18n import tr
+from .ladder import reason_text
 from .ladder import refresh as refresh_stage
 from .llm import BACKENDS, make_runner
 from .search import search_all, search_events, search_knowledge, search_sessions
 from .synthesize import GLOBAL
 from .util import PROGRESS_RE, loads, to_iso, utcnow
-from .views import project_labels, resolve_session_id, session_record
+from .views import project_labels, reason_text as analysis_reason, resolve_session_id, session_record
 
 log = logging.getLogger("chronicle.server")
 MAX_SELECTION = 1000  # sessions one "analyze selected" may cover
@@ -298,6 +300,12 @@ class App:
 
     def _k(self, k: dict) -> dict:
         k["tags"] = loads(k.pop("tags_json", None), []) or []
+        return self._reason(k)
+
+    @staticmethod
+    def _reason(k: dict) -> dict:
+        if k.get("stage_reason"):
+            k["stage_reason"] = reason_text(k["stage_reason"])
         return k
 
     def _session_rows(self, where: str, params: list, order: str, limit: int, offset: int = 0) -> list[dict]:
@@ -307,6 +315,7 @@ class App:
             [*params, limit, offset]):
             d = dict(r)
             d["tags"] = loads(d.pop("tags_json", None), []) or []
+            d["analysis_reason"] = analysis_reason(d.get("analysis_reason"))
             rows.append(d)
         return rows
 
@@ -370,6 +379,8 @@ class App:
         if not real:
             return None
         s = session_record(self.conn, real)
+        s["knowledge"] = [self._reason(k) for k in s["knowledge"]]
+        s["analysis_reason"] = analysis_reason(s.get("analysis_reason"))
         from .worker import waiting_reason
 
         row = self.conn.execute("SELECT * FROM sessions WHERE id = ?", (real,)).fetchone()
@@ -390,7 +401,7 @@ class App:
         s["analyses"] = [dict(r) for r in self.conn.execute(
             "SELECT kind, started_at, finished_at, model, status, error, input_chars, chunks, cost_usd, duration_ms "
             "FROM analyses WHERE target = ? ORDER BY id DESC LIMIT 10", (real,))]
-        s["agents"] = [{"agent_id": "", "label": "Main thread"}] + [
+        s["agents"] = [{"agent_id": "", "label": tr("Main thread")}] + [
             {"agent_id": a["agent_id"], "label": f"{a.get('agent_type') or 'agent'}: {a.get('description') or a['agent_id']}"}
             for a in s["subagents"]]
         return s
@@ -477,7 +488,7 @@ class App:
                 knowledge += [dict(r) for r in c.execute(
                     f"SELECT id, kind, title, project_name, session_id, agent FROM knowledge WHERE id IN ({','.join('?' * len(chunk))})",
                     chunk)]
-            return {"project_path": GLOBAL, "label": "Global playbook", "kb": dict(kb) if kb else None,
+            return {"project_path": GLOBAL, "label": tr("Global playbook"), "kb": dict(kb) if kb else None,
                     "sessions": [], "knowledge": knowledge, "stats": {}}
         stats = c.execute(
             "SELECT project_name, COUNT(*) sessions, SUM(n_prompts) prompts, SUM(active_s) active_s, SUM(est_cost_usd) cost, "
@@ -578,14 +589,15 @@ class App:
             rows = [r for r in rows if r["source"] == q["source"]]
         counts = {r["kind"]: r["n"] for r in self.conn.execute(
             "SELECT kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY kind")}
-        return {"items": rows, "counts": counts}
+        return {"items": [self._reason(r) for r in rows], "counts": counts}
 
     def search(self, q: dict) -> dict:
         query = q.get("q") or ""
         project = q.get("project") or None
         offset = int(q.get("offset") or 0)
         found = search_all(self.conn, query, project=project, sort=q.get("sort") or "hits", offset=offset, limit=25)
-        found["knowledge"] = search_knowledge(self.conn, query, project=project, limit=20) if not offset else []
+        found["knowledge"] = [self._reason(r) for r in search_knowledge(self.conn, query, project=project, limit=20)] \
+            if not offset else []
         return found
 
     def glossary(self, q: dict) -> dict:
@@ -837,14 +849,27 @@ class App:
                    for name in BACKENDS}
         return {"backend": make_runner(self.cfg).name,
                 "choices": [{"name": r.name, "label": r.label, "path": r.bin, "model": r.model_label()}
-                            for r in runners.values()]}
+                            for r in runners.values()],
+                "language": self.cfg.analysis.language,  # what Chronicle writes knowledge in, not the dashboard's language
+                "languages": [{"code": code, "label": label} for code, label in LANGUAGES.items()]}
 
     def action_backend(self, backend: str) -> dict:
         from .config import load_config, set_config_value
 
         if backend not in BACKENDS:
-            return {"error": f"unknown analysis backend {backend!r}"}
+            return {"error": tr("unknown analysis backend {backend!r}", backend=backend)}
         set_config_value(self.cfg, "analysis", "backend", json.dumps(backend))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        return self.analysis_backends()
+
+    def action_language(self, lang: str) -> dict:
+        """[analysis] language: what summaries, knowledge and proposed lines are written in from now on."""
+        from .config import load_config, set_config_value
+
+        if lang not in LANGUAGES:
+            return {"error": tr("unknown language {lang!r}", lang=lang)}
+        set_config_value(self.cfg, "analysis", "language", json.dumps(lang))
         self.cfg = load_config(self.cfg.home)
         self._cfg_sig = self._config_sig()
         return self.analysis_backends()
@@ -893,7 +918,7 @@ class App:
 
         busy = [k for k, j in self.jobs.snapshot().items() if j["state"] == "running" and k != "update"]
         if busy:  # updating restarts the dashboard, which would cut the running job off
-            return {"started": False, "error": f"Wait for {busy[0]} to finish first"}
+            return {"started": False, "error": tr("Wait for {job} to finish first", job=busy[0])}
         return {"started": self.jobs.start("update", run_update)}
 
     def status(self) -> dict:
@@ -916,7 +941,7 @@ class App:
         st["config"] = {"model": make_runner(self.cfg).model_label(), "auto": self.cfg.analysis.auto,
                         "backfill": self.cfg.analysis.backfill, "max_per_run": self.cfg.analysis.max_per_run}
         st["analysis"].update(self.analysis_backends())
-        st["errors"] = [dict(r) for r in c.execute(
+        st["errors"] = [{**dict(r), "analysis_reason": analysis_reason(r["analysis_reason"])} for r in c.execute(
             "SELECT id, title, analysis_reason FROM sessions WHERE analysis_status = 'error' ORDER BY ended_at DESC LIMIT 10")]
         return st
 
@@ -964,7 +989,7 @@ class App:
 
         real = [r for r in (resolve_session_id(self.conn, x.strip()) for x in ids.split(",")[:MAX_SESSIONS] if x.strip()) if r]
         if not real:
-            raise ExportError("no such sessions")
+            raise ExportError(tr("no such sessions"))
         return list(dict.fromkeys(real))
 
     def export(self, ids: str, fmt: str) -> tuple[str, str, bytes]:
@@ -989,12 +1014,12 @@ class App:
         from .session_export import FORMATS, ExportError, has_original
 
         if fmt not in FORMATS:
-            raise ExportError(f"unknown format {fmt!r}")
+            raise ExportError(tr("unknown format {fmt!r}", fmt=fmt))
         real = self._export_ids(ids)
         without = 0 if fmt != "raw" else sum(not has_original(self.conn, sid) for sid in real)
         if without == len(real):
-            raise ExportError("No original transcript to export: claude.ai chats share one export file and "
-                              "prompt-history sessions have none. Export as Markdown or JSON instead.")
+            raise ExportError(tr("No original transcript to export: claude.ai chats share one export file and "
+                                 "prompt-history sessions have none. Export as Markdown or JSON instead."))
         return {"ok": True, "count": len(real), "without_original": without}
 
     def action_analyze_many(self, refs: list) -> dict:
@@ -1008,7 +1033,7 @@ class App:
             if row and row["source"] != "history" and real not in ids:
                 ids.append(real)
         if not ids:
-            return {"started": False, "error": "Nothing in the selection can be analyzed"}
+            return {"started": False, "error": tr("Nothing in the selection can be analyzed")}
 
         def job(progress):
             report = run_worker(self.cfg, session_ids=ids, synthesize=True, export=True, progress=progress, wait=True)
@@ -1019,7 +1044,7 @@ class App:
 
         started = self.jobs.start("analyze:selection", job)
         return {"started": started, "count": len(ids), "dropped": len(refs) - len(ids),
-                **({} if started else {"error": "A batch analysis is already running"})}
+                **({} if started else {"error": tr("A batch analysis is already running")})}
 
     def action_synthesize(self, path: str) -> bool:
         from .synthesize import synthesize_project
@@ -1061,20 +1086,22 @@ class App:
         status = q.get("status") if q.get("status") in suggest.STATUSES else None
         rows = suggest.list_suggestions(self.conn, status=status, project=q.get("project") or None)
         limit = int(q["limit"]) if str(q.get("limit") or "").isdigit() else None  # the Home card needs only the top few
-        return {"suggestions": rows[:limit] if limit else rows, "total": len(rows), "counts": suggest.counts(self.conn)}
+        return {"suggestions": [suggest.display(r) for r in (rows[:limit] if limit else rows)], "total": len(rows),
+                "counts": suggest.counts(self.conn)}
 
     def suggestion_preview(self, sid: int, q: dict) -> tuple[dict, int]:
         from . import suggest
 
-        got = suggest.preview(self.conn, self.cfg, sid, (q.get("text") or "").strip() or None)
-        return got, (404 if got.get("error") == "no such suggestion" else 200)
+        if suggest.get(self.conn, sid) is None:
+            return {"ok": False, "error": tr("no such suggestion")}, 404
+        return suggest.preview(self.conn, self.cfg, sid, (q.get("text") or "").strip() or None), 200
 
     def action_suggestion(self, sid: int, verb: str, body: dict) -> tuple[dict, int]:
         """apply / unapply / dismiss / done / edit / move. A refusal is a 400 carrying the reason; an unknown id a 404."""
         from . import suggest
 
         if suggest.get(self.conn, sid) is None:
-            return {"ok": False, "error": "no such suggestion"}, 404
+            return {"ok": False, "error": tr("no such suggestion")}, 404
         text = body.get("text")
         text = text if isinstance(text, str) and text.strip() else None
         if verb == "apply":
@@ -1092,11 +1119,12 @@ class App:
         return got, (200 if got.get("ok") else 400)
 
     def friction(self, q: dict) -> dict:
-        from .friction import report
+        from .friction import display, report
 
         days = q.get("days")
         days = int(days) if days and days.isdigit() and int(days) > 0 else None
-        return report(self.conn, days=days, project=q.get("project") or None, noise=q.get("noise") in ("1", "true"))
+        got = report(self.conn, days=days, project=q.get("project") or None, noise=q.get("noise") in ("1", "true"))
+        return {**got, "causes": [display(c) for c in got["causes"]]}
 
 
 def make_handler(app: App, port: int):
@@ -1201,24 +1229,28 @@ def make_handler(app: App, port: int):
             self.wfile.write(body)
 
         def do_GET(self):
+            token = i18n.lang.set(i18n.pick(self.headers.get("X-Chronicle-Lang")))  # the dashboard's language, per browser
             try:
                 app.refresh_config()
                 return self._get()
             finally:
+                i18n.lang.reset(token)
                 app.release()
 
         def do_POST(self):
+            token = i18n.lang.set(i18n.pick(self.headers.get("X-Chronicle-Lang")))
             try:
                 app.refresh_config()
                 return self._post()
             finally:
+                i18n.lang.reset(token)
                 app.release()
 
         def _get(self):
             if not self._host_ok():
-                return self._json({"error": "forbidden host"}, 403)
+                return self._json({"error": tr("forbidden host")}, 403)
             if not self._user_ok():
-                return self._json({"error": "this Tailscale login is not allowed ([server] allowed_users)"}, 403)
+                return self._json({"error": tr("this Tailscale login is not allowed ([server] allowed_users)")}, 403)
             url = urlparse(self.path)
             q = {k: v[-1] for k, v in parse_qs(url.query).items()}
             p = url.path
@@ -1239,7 +1271,7 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/sessions/([\w-]+)", p)
                 if m:
                     s = app.session(m.group(1))
-                    return self._json(s) if s else self._json({"error": "not found"}, 404)
+                    return self._json(s) if s else self._json({"error": tr("not found")}, 404)
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/events", p)
                 if m:
                     return self._json(app.events(m.group(1), q))
@@ -1250,10 +1282,10 @@ def make_handler(app: App, port: int):
                     return self._json(app.projects())
                 if p == "/api/project":
                     proj = app.project(unquote(q.get("path", "")))
-                    return self._json(proj) if proj else self._json({"error": "not found"}, 404)
+                    return self._json(proj) if proj else self._json({"error": tr("not found")}, 404)
                 if p == "/api/diagram":  # a download: the project's architecture sketch as an .excalidraw file
                     f = app.diagram_file(q.get("path", ""))
-                    return self._download(*f) if f else self._json({"error": "no architecture sketch for this project"}, 404)
+                    return self._download(*f) if f else self._json({"error": tr("no architecture sketch for this project")}, 404)
                 if p == "/api/file":  # parse_qs has decoded the path already: a second unquote would mangle a literal %
                     return self._json(app.file_sessions(q.get("path", ""), min(int(q.get("limit") or 50), 500)))
                 if p == "/api/files":
@@ -1302,7 +1334,7 @@ def make_handler(app: App, port: int):
                 if p == "/api/friction":
                     return self._json(app.friction(q))
                 if p.startswith("/api/"):
-                    return self._json({"error": "not found"}, 404)
+                    return self._json({"error": tr("not found")}, 404)
                 return self._static(p)
             except BrokenPipeError:
                 pass
@@ -1314,7 +1346,7 @@ def make_handler(app: App, port: int):
             """A claude.ai or ChatGPT export .zip, streamed to disk (it can be hundreds of MB), then imported in the background."""
             length = int(self.headers.get("Content-Length") or 0)
             if not length:
-                return self._json({"error": "empty upload"}, 400)
+                return self._json({"error": tr("empty upload")}, 400)
             dest = app.cfg.home / "imports" / f"chat-export-{int(time.time())}.zip"
             dest.parent.mkdir(parents=True, exist_ok=True)
             left = length
@@ -1327,7 +1359,7 @@ def make_handler(app: App, port: int):
                     left -= len(chunk)
             if left:
                 dest.unlink(missing_ok=True)
-                return self._json({"error": "upload cut off"}, 400)
+                return self._json({"error": tr("upload cut off")}, 400)
             name = Path(unquote(self.headers.get("X-Filename") or "")).name or None  # the file's own name, for messages
             started = app.action_import(dest, name)
             if not started:
@@ -1336,11 +1368,11 @@ def make_handler(app: App, port: int):
 
         def _post(self):
             if not self._host_ok():
-                return self._json({"error": "forbidden"}, 403)
+                return self._json({"error": tr("forbidden")}, 403)
             if urlparse(self.path).path.startswith("/api/hub/"):
                 return self._hub_api(urlparse(self.path).path)
             if self.headers.get("X-Chronicle") != "1" or not self._user_ok():
-                return self._json({"error": "forbidden"}, 403)
+                return self._json({"error": tr("forbidden")}, 403)
             if urlparse(self.path).path == "/api/import":
                 return self._import_upload()
             length = int(self.headers.get("Content-Length") or 0)
@@ -1349,7 +1381,7 @@ def make_handler(app: App, port: int):
                 try:
                     body = json.loads(self.rfile.read(length) or b"{}")
                 except ValueError:
-                    return self._json({"error": "bad json"}, 400)
+                    return self._json({"error": tr("bad json")}, 400)
             p = urlparse(self.path).path
             try:
                 if p == "/api/sync":
@@ -1358,6 +1390,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.update_info(remote=True))
                 if p == "/api/analysis/backend":
                     return self._json(app.action_backend(str(body.get("backend") or "")))
+                if p == "/api/analysis/language":
+                    return self._json(app.action_language(str(body.get("language") or "")))
                 if p == "/api/update/daily":
                     return self._json(app.action_update_setting("check_daily", bool(body.get("on"))))
                 if p == "/api/update/notify":
@@ -1378,7 +1412,7 @@ def make_handler(app: App, port: int):
                     try:
                         return self._json(app.action_connector(m.group(1), m.group(2)))
                     except KeyError:
-                        return self._json({"error": "unknown connector"}, 404)
+                        return self._json({"error": tr("unknown connector")}, 404)
                 if p == "/api/map/themes":
                     return self._json({"started": app.action_themes(bool(body.get("force")))})
                 if p == "/api/glossary/rebuild":
@@ -1402,7 +1436,7 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/suggestions/(\d+)/(apply|unapply|dismiss|done|edit|move)", p)
                 if m:
                     return self._json(*app.action_suggestion(int(m.group(1)), m.group(2), body if isinstance(body, dict) else {}))
-                return self._json({"error": "not found"}, 404)
+                return self._json({"error": tr("not found")}, 404)
             except Exception as exc:
                 log.exception("POST %s failed", p)
                 return self._json({"error": str(exc)}, 500)

@@ -977,7 +977,7 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
     """`chronicle config set section.key value`: the value is TOML, or a bare word taken as a string."""
     import tomllib
 
-    from .config import load_config, set_config_value
+    from .config import LANGUAGES, load_config, set_config_value
     from .llm import BACKENDS
 
     if not key or value is None or "." not in key:
@@ -992,6 +992,9 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
         literal = json.dumps(value)  # a bare word: a TOML basic string
     if key == "analysis.backend" and tomllib.loads(f"v = {literal}")["v"] not in BACKENDS:
         print(f"analysis.backend must be one of: {', '.join(BACKENDS)}", file=sys.stderr)
+        return 2
+    if key == "analysis.language" and tomllib.loads(f"v = {literal}")["v"] not in LANGUAGES:
+        print(f"analysis.language must be one of: {', '.join(LANGUAGES)}", file=sys.stderr)
         return 2
     try:
         set_config_value(cfg, section, name, literal)
