@@ -21,6 +21,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from . import artifacts
 from .config import Config
 from .db import kv_get, kv_set
 from .ladder import MEMORY_STAGE_REASON
@@ -256,8 +257,9 @@ def store_parsed(
         (ps.id,),
     ).fetchone()
     sid = ps.id
-    for table in ("events", "tool_calls", "session_files", "subagents", "api_calls"):
+    for table in ("events", "tool_calls", "session_files", "subagents", "api_calls", "artifacts"):
         conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (sid,))
+    artifacts.finish(ps)
 
     conn.executemany(
         "INSERT INTO events(session_id, agent_id, seq, ts, role, kind, tool_name, tool_use_id, is_error, searchable, text, meta_json) "
@@ -299,6 +301,18 @@ def store_parsed(
             (sid, c.agent_id, c.msg_id, c.ts, c.model, c.input_tokens, c.output_tokens, c.cache_read_tokens,
              c.cache_write_tokens, round(c.cost_usd, 6), c.speed)
             for c in ps.api_calls
+        ],
+    )
+
+    seqs = {(e.agent_id, e.tool_use_id): e.seq for e in ps.events if e.kind == "tool_use" and e.tool_use_id}
+    conn.executemany(
+        "INSERT INTO artifacts(session_id, agent_id, tool_use_id, seq, ts, key, kind, action, title, path, url, size, sha256, "
+        "versions, meta_json) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+        [
+            (sid, o.get("agent_id") or "", o.get("tool_use_id"), seqs.get((o.get("agent_id") or "", o.get("tool_use_id"))),
+             o.get("ts"), o["key"], o["kind"], o.get("action"), o.get("title"), o.get("path"), o.get("url"), o.get("size"),
+             o.get("sha256"), o.get("versions") or 1, artifacts.meta_json(o))
+            for o in ps.outputs
         ],
     )
 
@@ -379,6 +393,7 @@ def store_parsed(
         "n_api_errors": ps.n_api_errors,
         "n_subagents": len(ps.subagents),
         "n_images": ps.n_images,
+        "n_result_images": ps.n_result_images,
         "n_files": len(ps.files),
         "n_events": len(ps.events),
         "lines_added": ps.lines_added,
@@ -587,6 +602,14 @@ def sync(cfg: Config, conn: sqlite3.Connection, *, only: Path | None = None, end
                         conn.rollback()
                         log.exception("%s sync failed: %s", name, d)
                         report.errors.append(f"{name} {d}: {exc}")
+            try:  # chats imported from claude.ai or ChatGPT, after a parser upgrade: from the export the archive kept
+                from .chat_import import reparse_archived
+
+                report.sessions_updated += reparse_archived(cfg, conn, skip)
+            except Exception as exc:
+                conn.rollback()
+                log.exception("re-reading archived chat exports failed")
+                report.errors.append(f"chat exports: {exc}")
             from .statusline import ingest as ingest_statusline
 
             conn.execute("SAVEPOINT statusline")  # a bad record must not undo the sessions synced above
@@ -962,7 +985,7 @@ def forget_session(conn: sqlite3.Connection, cfg: Config, sid: str, *, delete_tr
 def _forget(conn: sqlite3.Connection, sid: str, delete_transcript: bool) -> list[str]:
     row = conn.execute("SELECT transcript_path, archive_path FROM sessions WHERE id = ?", (sid,)).fetchone()
     removed = []
-    for table in ("events", "tool_calls", "session_files", "subagents", "api_calls"):
+    for table in ("events", "tool_calls", "session_files", "subagents", "api_calls", "artifacts"):
         conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (sid,))
     n = conn.execute("DELETE FROM knowledge WHERE session_id = ?", (sid,)).rowcount
     conn.execute("DELETE FROM analyses WHERE target = ?", (sid,))

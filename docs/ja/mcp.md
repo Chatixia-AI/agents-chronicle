@@ -20,6 +20,7 @@ Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) の�
 | `get_transcript` | セッションの会話の一部。ツール呼び出しも含められます | `session_id`, `offset`, `limit`, `include_tools` |
 | `project_knowledge` | プロジェクトのナレッジベース：構成、実行・テスト・デプロイの方法、落とし穴、決定、未解決の事項。`project="global"` で全プロジェクト共通のプレイブック。 | `project` |
 | `glossary` | 用語の定義、別名、使われ方と出どころ、またはプロジェクトの用語集全体 | `term`, `project` |
+| `find_artifacts` | セッションが作ったもの：ドキュメント、ページ、図、スライド、公開したリンク、プルリクエスト、コミット。それぞれの場所、ファイルが書いたときのままディスクにあるか、作ったセッション | `query`, `kind`, `project`, `limit` |
 | `recent_sessions` | 最近のセッション（新しい順） | `project`, `days`, `limit` |
 
 `project` にはパスか名前（`billing-api`）を渡します。省略すると、`project_knowledge` と `glossary` はクライアントがサーバーを

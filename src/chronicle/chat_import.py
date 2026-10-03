@@ -256,6 +256,48 @@ def import_export(cfg, conn, path: Path, *, analyze: bool = False, progress=None
     return counts
 
 
+def reparse_archived(cfg, conn, skip: set[str] = frozenset()) -> int:
+    """Re-read, from the export each was last imported from (kept in the archive), the chats an older parser stored,
+    after a parser upgrade; each keeps its analysis state. Returns how many chats were re-parsed."""
+    from .ingest import store_parsed
+
+    done = 0
+    for fmt in FORMATS:
+        mod = fmt.module
+        tag = "|" + mod.conversation_signature({}).rsplit("|", 1)[-1]  # every signature ends with the parser version
+        by_dir: dict[Path, set[str]] = {}
+        for sid, sig, archive in conn.execute("SELECT id, files_sig, archive_path FROM sessions WHERE source = ?", (fmt.source,)):
+            if sid not in skip and archive and not (sig or "").endswith(tag):
+                by_dir.setdefault(Path(archive).parent, set()).add(sid)
+        for d, stale in by_dir.items():
+            projects_gz = d / "projects.json.gz"
+            try:
+                projects = claude_export.project_names(gzip.decompress(projects_gz.read_bytes())) \
+                    if fmt is CLAUDE_AI and projects_gz.exists() else {}
+            except OSError:
+                projects = {}
+            for shard in sorted(d.glob("conversations*.json.gz")):
+                try:
+                    data = json.loads(gzip.decompress(shard.read_bytes()))
+                except (OSError, ValueError):
+                    log.warning("could not read archived export %s", shard)
+                    continue
+                data = data.get("conversations") or [] if isinstance(data, dict) else data
+                for conv in data if isinstance(data, list) else []:
+                    sid = mod.conversation_id(conv) if isinstance(conv, dict) else None
+                    if sid not in stale:
+                        continue
+                    stale.discard(sid)
+                    ps = mod.parse_conversation(conv, projects)
+                    if ps is None or cfg.is_excluded(ps.project_path):
+                        continue
+                    store_parsed(conn, cfg, ps, claude_dir=d, project_dir=None, transcript_path=shard, archive_path=shard,
+                                 files_sig=mod.conversation_signature(conv), agent=fmt.agent, source=fmt.source)
+                    conn.commit()
+                    done += 1
+    return done
+
+
 def summary(counts: dict) -> str:
     parts = [f"{counts['new']} new", f"{counts['updated']} updated", f"{counts['unchanged']} unchanged"]
     if counts.get("empty"):

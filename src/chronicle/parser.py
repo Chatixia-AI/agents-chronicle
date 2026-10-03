@@ -17,10 +17,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from . import artifacts
 from .pricing import normalize_model, usage_cost
 from .util import iter_jsonl, one_line, parse_ts, safe_text, to_iso, truncate
 
-PARSER_VERSION = 2  # 2: replayed records (same uuid) and repeated tool ids are dropped; API retries count once
+PARSER_VERSION = 3  # 3: artifacts (files, pages, PRs, commits a session made); 2: replays and API retries count once
 
 TEXT_LIMITS = {
     "prompt": 20_000,
@@ -168,12 +169,14 @@ class ParsedSession:
     hooks: dict = field(default_factory=dict)
     prs: list = field(default_factory=list)
     artifacts: list = field(default_factory=list)
+    outputs: list = field(default_factory=list)  # what the session made (artifacts.py), for the artifacts table
     workflows: list = field(default_factory=list)
     n_prompts: int = 0
     n_interrupts: int = 0
     n_compactions: int = 0
     n_api_errors: int = 0
     n_images: int = 0
+    n_result_images: int = 0  # images tools returned (screenshots, image files read)
     parse_errors: int = 0
     cc_cost_usd: float | None = None
     remote_control: bool = False
@@ -183,6 +186,7 @@ class ParsedSession:
     _seen_uuids: set = field(default_factory=set, repr=False)
     _seen_tool_ids: set = field(default_factory=set, repr=False)
     _seen_result_ids: set = field(default_factory=set, repr=False)
+    _mentions: dict = field(default_factory=dict, repr=False)  # office/PDF paths tools named (artifacts.py)
 
     # ---------- aggregates
     def main_calls(self) -> list[ApiCall]:
@@ -560,6 +564,7 @@ class _Thread:
                 return  # the same result recorded twice (a replayed record under a new uuid)
             ps._seen_result_ids.add(tid)
         text, images = _result_text(block.get("content"))
+        ps.n_result_images += images
         is_error = bool(block.get("is_error"))
         call, started = self.pending.pop(tid, (None, None))
         name = call.name if call else None
@@ -583,6 +588,13 @@ class _Thread:
                     a, r = patch_stats(tur)
                     fs.lines_added += a
                     fs.lines_removed += r
+            if not is_error:
+                if name in WRITE_TOOLS and call.file_path:
+                    artifacts.file_written(ps, call.file_path, content=(call.input or {}).get("content"),
+                                           created=not (isinstance(tur, dict) and tur.get("type") == "update"),
+                                           ts=ts, agent_id=self.agent_id, tool_use_id=tid)
+                artifacts.from_tool(ps, name, call.input, text, ts=ts, agent_id=self.agent_id, tool_use_id=tid,
+                                    command=call.command, tur=tur)
             if name in AGENT_TOOLS and isinstance(tur, dict) and tur.get("agentId"):
                 sub = ps.subagents.setdefault(tur["agentId"], Subagent(tur["agentId"]))
                 sub.tool_use_id = sub.tool_use_id or tid

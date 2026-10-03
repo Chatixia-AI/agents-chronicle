@@ -22,6 +22,25 @@
   (`~/.gemini/antigravity/brain/<id>/.system_generated/logs/`): prompts, replies, thinking, tool calls with results
   and durations, and tokens per call, plus the workspace, git branch and model from its conversation database.
   Connecting also gives Antigravity Chronicle's MCP server (`~/.gemini/config/mcp_config.json`).
+- **Artifacts: what your agents made, in one place.** A new **Artifacts** section in the rail lists the documents, HTML
+  pages, diagrams, decks, spreadsheets, generated images, published links, pull requests and commits from every
+  session. Each comes from an explicit signal in the transcript (a file written whole, a page published, `gh pr
+  create`, a commit), each links to the tool call that made it, and each says whether the file is still on disk as
+  written, changed since, or gone. The same file across sessions is one item with its versions. Project pages list
+  their latest artifacts, and a session's Details lists what it made. Images and SVG diagrams still on disk show as
+  thumbnails, as a grid under **Images** and **Diagrams**, and open full size; a generated image is named after what
+  its prompt asked for. Decks, documents, spreadsheets and PDFs a script saved are found too (the session names the
+  file, and it was created during the session), with their first page drawn by Quick Look on a Mac; a file made in a
+  claude.ai chat links to the chat, where it lives. **Open** shows any file in a new tab, even one deleted since (rebuilt from the archived
+  transcript), with an HTML page's scripts sandboxed; on the Mac itself, **Open on this Mac** and **Show in Finder**
+  hand a file to its own app. claude.ai chats contribute their artifacts and
+  the files they handed over. Agents can search them with the new `find_artifacts` MCP tool. The next sync re-reads
+  every session once to find them, imported claude.ai chats included, from the copy Chronicle archived; no analysis
+  runs again. [Artifacts](docs/dashboard.md#artifacts)
+- **Fixed:** an unanalyzed session without a screening result showed a stray "null" under "Not analyzed yet".
+- **Fixed:** claude.ai's artifacts tool was counted as shell commands (its `command` is create/update), images that
+  tools return (screenshots, image files read) are now counted, and PRs opened with `gh pr create` in Codex, Copilot
+  or on a GitHub Enterprise host now reach the session's PR list.
 - **An architecture sketch for each project:** synthesizing a project's knowledge base now also draws its main parts
   (code it owns, ways in, data it keeps, external services) and how they connect, shown hand-drawn at the top of the
   project page. Every part and connection cites the knowledge items behind it, and anything without a valid source is

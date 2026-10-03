@@ -47,7 +47,7 @@
 `Glossary.md`、`Global Playbook.md`。
 
 **エージェントの中から**（MCP ツール。Claude Code と接続済みの各エージェントに登録）：`search_knowledge`、`search_sessions`、
-`get_session`、`get_transcript`、`project_knowledge`、`glossary`、`recent_sessions`。たとえば *「このエラー、前にも出た？」* や
+`get_session`、`get_transcript`、`project_knowledge`、`glossary`、`find_artifacts`、`recent_sessions`。たとえば *「このエラー、前にも出た？」* や
 *「deployer_ip のルールって何だっけ？」* のように尋ねられます。
 
 MCP サーバーは、エージェントを接続したときに登録されます（[ソース](sources.md)を参照）。各ツールの説明と、ほかのクライアントの

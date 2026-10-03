@@ -293,4 +293,12 @@ JA: dict[str, str] = {
     "MCP removal failed: {error}": "MCP の削除に失敗しました：{error}",
     "removed {n} hook(s) from {path}": "{path} からフックを {n} 個削除しました",
     "backed up {path} -> {backup}": "{path} を {backup} にバックアップしました",
+    # ---- artifacts: opening a file
+    "this file can no longer be opened": "このファイルはもう開けません",
+    "files open only on the computer Chronicle runs on": "ファイルは Chronicle が動いているコンピューターでだけ開けます",
+    "that file is not on this computer": "そのファイルはこのコンピューターにありません",
+    "that kind of file is not opened from here": "その種類のファイルはここからは開きません",
+    "opening files is not supported on this system": "このシステムではファイルを開けません",
+    "could not open it: {error}": "開けませんでした：{error}",
+    "not available": "利用できません",
 }

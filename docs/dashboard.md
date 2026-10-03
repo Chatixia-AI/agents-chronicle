@@ -37,9 +37,9 @@ until a full prior period exists to compare against; daily chart with a 7-day av
 calendar with streaks; busiest hour; projects, tools with failed calls, models and agents), a sortable, filterable
 session list, project cards with 12 weeks of activity, session pages (headline figures, the summary and the knowledge
 it produced up top, then **Details**, where a session opens: goal, highlights, open threads, the knowledge items,
-context-window chart with compactions, tools, files, subagents, PRs; or **Transcript**, where a search result opens:
-the conversation with one-line tool calls that expand to their input and output, and subagent threads; on wide
-windows an **Outline** of the prompts and changed files
+context-window chart with compactions, tools, files, subagents, and the [artifacts](#artifacts) the session made; or
+**Transcript**, where a search result opens: the conversation with one-line tool calls that expand to their input and
+output, and subagent threads; on wide windows an **Outline** of the prompts, what the session made and the changed files
 sits beside the transcript and follows your scroll), a Knowledge overview (one card each for the Map, All knowledge,
 the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
 [stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it), project knowledge
@@ -74,6 +74,45 @@ time and any project: sessions and projects hit, a 12-week trend, last seen and 
 a link to its suggestions. Click a cause for examples and fixes. Below are the tools that fail most, and a **Noise**
 card for expected failures (tests failing in a dev loop, provider outages), collapsed. See
 [Suggestions and What goes wrong](suggestions.md).
+
+## Artifacts
+
+**Artifacts** (the box in the rail) lists what your agents made: documents, HTML pages, diagrams, decks, spreadsheets,
+generated images, published links (claude.ai artifacts, Claude docs, Google Drive files, Slack canvases), pull requests
+and commits. Each comes from an explicit signal in a transcript, never from scanning your disk:
+
+- a file the agent created or wrote whole (an edit to an existing file is not an artifact), when it is a deliverable:
+  Markdown, HTML, SVG and other diagram formats, office files, PDFs, CSVs and images. Code, agent config and memory
+  (`CLAUDE.md`, `AGENTS.md`, `~/.claude`), dependencies and build output are left out, and so are an app's own pages,
+  icons and templates inside its source folders;
+- a deck, document, spreadsheet or PDF a script saved (python-pptx, a converter): a path the session's commands or
+  their output name, whose file was created while the session ran (a file it only read existed before). Files in
+  `~/Library` and the system's temporary folders are left out;
+- a page published with Claude Code's **Artifact** tool, a Claude doc, a Google Drive file or a Slack canvas;
+- a pull request from `gh pr create` or a GitHub tool, or Claude Code's own PR record;
+- a commit: git's `[branch sha] subject` line, a `git log --oneline` after a quiet commit, or the message of a quiet
+  commit that printed no hash;
+- an image from Codex's image generator;
+- in claude.ai chats, its artifacts (every update a version) and the files it handed over (`present_files`).
+
+The same file, link or commit is one item across sessions, with its versions and how many sessions made it. Each row
+says where it stands: **on disk** as the agent wrote it, **changed since**, **gone** (the session's transcript still
+holds what was written), **in the chat** for claude.ai, or a link. Filter by kind, project or words, hide what is
+gone, or open the session at the tool call that made it. **Open** (or a click on the title) shows the file in a new tab:
+as it is on disk, or, once it is gone, as the agent wrote it, rebuilt from the archived transcript (for files Claude
+Code or Codex wrote whole). An HTML page keeps its own scripts but runs in a sandbox, with no way into Chronicle's data
+or API; Markdown and CSV show as text, PDFs in the browser, and office files download. The **⋯** menu opens a file still on disk in its own
+app (**Open on this Mac**: Keynote or PowerPoint for a deck, your editor for Markdown), shows it in Finder, or copies
+its path. Those two appear only in a browser on the computer Chronicle runs on, never through Tailscale from another
+device. Images and SVG diagrams still on disk
+show a thumbnail, and so, on a Mac, do decks, documents, spreadsheets and PDFs (their first page, drawn by Quick
+Look); **Images**, **Diagrams** and **Decks** lay them out as a grid, and a click shows one full size. A file made in a
+claude.ai chat stays in claude.ai, since the export leaves it out: **claude.ai ↗** opens the chat to download it. Chronicle
+serves only files it recorded as artifacts, by their id, and an SVG opened on its own runs in a sandbox, so a script
+inside it cannot run. A file that is gone has no preview yet: the transcript records that it was written, not its
+pixels. A project page lists its latest
+artifacts, and a session's **Details** lists everything it made. Agents can search them too, with the
+`find_artifacts` MCP tool.
 
 ## Architecture sketch
 

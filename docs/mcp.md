@@ -20,6 +20,7 @@ the network. Every tool only reads the local vault.
 | `get_transcript` | Part of a session's conversation, optionally with tool calls | `session_id`, `offset`, `limit`, `include_tools` |
 | `project_knowledge` | A project's knowledge base: architecture, how to run, test and deploy it, gotchas, decisions, open threads. `project="global"` gives the cross-project playbook. | `project` |
 | `glossary` | A term's definition, aliases, uses and sources, or a project's whole glossary | `term`, `project` |
+| `find_artifacts` | What sessions made: documents, pages, diagrams, decks, published links, pull requests and commits, each with where it is, whether the file is still on disk as written, and the session that made it | `query`, `kind`, `project`, `limit` |
 | `recent_sessions` | Recent sessions, newest first | `project`, `days`, `limit` |
 
 `project` takes a path or a name (`billing-api`). When it is left out, `project_knowledge` and `glossary` use the

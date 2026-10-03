@@ -19,13 +19,14 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import unquote, urlparse
 
+from . import artifacts
 from .parser import IDLE_GAP_CAP_S, TEXT_LIMITS, ApiCall, Event, FileStat, ParsedSession, ToolCall, clean_prompt
 from .pricing import is_openai_model, normalize_model, openai_cost, usage_cost
 from .util import one_line, parse_ts, safe_text, truncate
 
 log = logging.getLogger("chronicle.copilot")
 
-COPILOT_PARSER_VERSION = 1
+COPILOT_PARSER_VERSION = 2  # 2: artifacts (files created, PRs, commits)
 _TERMINAL_TOOLS = {"run_in_terminal", "bash", "shell", "powershell", "run_command", "execute_command"}
 _READ_TOOLS = {"read_file", "view", "read", "get_file", "open_file", "view_file"}
 _EDIT_TOOLS = {"replace_string_in_file", "multi_replace_string_in_file", "insert_edit_into_file", "edit", "str_replace",
@@ -86,6 +87,8 @@ def _args(raw) -> dict:
 def tool_summary(name: str, args: dict) -> tuple[str, str | None, str | None]:
     """-> (summary, file_path, command)."""
     base = name.rsplit(".", 1)[-1].lower()
+    if base == "artifacts" and isinstance(args.get("id"), str):  # claude.ai's: its "command" is create/update/rewrite, not a shell
+        return one_line(safe_text(f"{args.get('command') or 'update'} {args.get('title') or args['id']}"), 200), None, None
     cmd = args.get("command") or args.get("cmd") or args.get("commandLine")
     if base in _TERMINAL_TOOLS or (cmd and isinstance(cmd, str)):
         cmd = safe_text(cmd if isinstance(cmd, str) else json.dumps(cmd))
@@ -137,8 +140,9 @@ def finish_session(ps: ParsedSession, stamps: list[str]) -> ParsedSession:
 class _Builder:
     """Appends events in order with sequence numbers."""
 
-    def __init__(self, ps: ParsedSession):
+    def __init__(self, ps: ParsedSession, where: str | None = None):
         self.ps, self.seq, self.stamps = ps, 0, []
+        self.where = where  # files the agent writes live there (claude.ai's sandbox), not on this machine
 
     def event(self, ts, role, kind, text, **kw) -> Event:
         ev = Event("", self.seq, ts, role, kind, truncate(safe_text(text), TEXT_LIMITS.get(kw.pop("limit_key", None) or kind, 2_000)), **kw)
@@ -166,6 +170,12 @@ class _Builder:
         if mcp:
             self.ps.mcp_servers[mcp] += 1
         count_file_op(self.ps, name, fp)
+        if not is_error:
+            if fp and name.rsplit(".", 1)[-1].lower() in _WRITE_TOOLS:
+                content = args.get("content") if isinstance(args.get("content"), str) else args.get("file_text")
+                artifacts.file_written(self.ps, fp, content=content, ts=ts, tool_use_id=call_id, where=self.where)
+            artifacts.from_tool(self.ps, call.name, args, result if isinstance(result, str) else "", ts=ts,
+                                tool_use_id=call_id, command=cmd)
         self.event(ts, "assistant", "tool_use", f"{call.name}: {summary}" if summary and summary != name else call.name,
                    tool_name=call.name, tool_use_id=call_id, meta={"input": truncate(json.dumps(args, ensure_ascii=False, default=str), 1_500)} if args else None)
         if result is not None:
