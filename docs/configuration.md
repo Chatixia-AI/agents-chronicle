@@ -69,3 +69,4 @@ One archive for several computers ([Phone and other computers](devices.md#your-o
 | --- | --- | --- |
 | `url` | `""` | on a computer that sends its sessions to a hub: the hub's address. Set by `chronicle hub join`, cleared by `chronicle hub leave`; while it is set, this computer sends instead of recording and analyzing |
 | `path_map` | `{}` | on the hub: folders on the other computers that hold the same projects as a folder here, e.g. `{ "/home/me/code" = "/Users/me/Projects" }`. Projects with a git remote are matched by it first |
+| `folders` | `{}` | on a computer that sends to a hub: folders here whose sessions belong to a project on the hub, the folder and everything below it, e.g. `{ "/Users/me/work/notes" = "/Users/hub/Projects/demo-app" }`. Set by `chronicle hub add-folder` ([Same project, different folders](devices.md#same-project-different-folders)) |

@@ -832,14 +832,19 @@ class App:
 
     def devices(self) -> dict:
         """This computer's role, the computers a hub hears from, and how the dashboard is reachable."""
-        from .hub import last_push, local_machine, machines, read_token
+        from .hub import last_folders, last_push, local_machine, machines, read_token
 
         role = "spoke" if self.cfg.is_spoke else "hub" if read_token(self.cfg) else "single"
+        seen = ((last_folders(self.cfg) or {}).get("folders") or {}) if role == "spoke" else {}
+        folders = [{"folder": f, "project": p, "name": Path(p).name or p, "sessions": (seen.get(f) or {}).get("sessions"),
+                    "overridden": (seen.get(f) or {}).get("overridden") or []}
+                   for f, p in sorted(self.cfg.hub_folders.items())] if role == "spoke" else []
         return {
             "this": local_machine(self.cfg),
             "role": role,
             "hub_url": self.cfg.hub_url or None,
             "last_push": last_push(self.cfg) if role == "spoke" else None,
+            "folders": folders,
             "machines": machines(self.conn, self.cfg),
             "path_map": self.cfg.hub_path_map,
             "allowed_hosts": self.cfg.server_allowed_hosts,

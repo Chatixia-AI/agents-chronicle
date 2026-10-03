@@ -70,7 +70,21 @@ matching project of its own:
 
 1. **By git remote.** The other computer reports each project folder's git remote (Codex sessions record theirs
    too); a session goes to the hub's folder with the same remote.
-2. **By `[hub] path_map`**, for projects without a remote, in the hub's [configuration](configuration.md#hub):
+2. **By a folder added on that computer**, for a folder whose sessions belong to one of the hub's projects: a notes
+   folder, a scratch folder, or a repository the hub doesn't know. On that computer, run:
+
+   ```bash
+   chronicle hub add-folder ~/work/client-notes --project demo-app
+   ```
+
+   `--project` takes a project's name or its path on the hub; `chronicle hub folders --list` lists them. The folder
+   and everything below it go to that project, including sessions already on the hub: they move with their knowledge,
+   and both projects' knowledge bases are rebuilt. The more specific match wins, so a repository inside the folder
+   whose git remote the hub knows still follows its remote. A folder inside a repository the hub files under another
+   project is refused, because a repository belongs to one project. `chronicle hub folders` shows what goes where,
+   and `chronicle hub remove-folder <folder>` takes one back out. The hub's **Settings › Devices** lists the folders
+   each computer added.
+3. **By `[hub] path_map`**, for projects without a remote, in the hub's [configuration](configuration.md#hub):
 
    ```toml
    [hub]

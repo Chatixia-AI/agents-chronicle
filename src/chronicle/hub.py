@@ -49,6 +49,9 @@ MAX_FILE_BYTES = 4 << 30  # one transcript; far above any real one
 ANALYSES_FILE = "analyses.json.gz"
 ANALYSES_MAX_AGE = 30 * 86400  # imported analyses whose sessions never arrive are dropped after this
 REPOS_CACHE_S = 86400
+FOLDERS_KV = "hub-folders:"  # + machine id: the folders that computer added to projects here (spoke's [hub] folders)
+FOLDERS_FILE = "hub-folders.json"  # on a spoke: what the hub made of its folders at the last hello
+MAX_FOLDERS = 200
 
 # The analysis a spoke's own Chronicle already wrote, carried over when it joins (see export_analyses).
 ANALYSIS_COLS = ("analysis_status", "analysis_reason", "analyzed_at", "analysis_model", "analyzed_prompts", "llm_title",
@@ -285,6 +288,89 @@ def spoke_repos(cfg: Config, roots: list[Root]) -> dict[str, list[str]]:
     return out
 
 
+# ------------------------------------------------------------------ folders added by hand
+def under(path: str | None, folder: str) -> bool:
+    """`path` is `folder` or somewhere below it."""
+    if not path:
+        return False
+    folder = folder.rstrip("/") or "/"
+    return path == folder or path.startswith(folder if folder == "/" else folder + "/")
+
+
+def clean_folders(raw) -> dict[str, str]:
+    """A spoke's {folder: project on the hub} as the hub accepts it: absolute paths, a bounded number of them."""
+    if not isinstance(raw, dict):
+        return {}
+    out: dict[str, str] = {}
+    for k, v in list(raw.items())[:MAX_FOLDERS]:
+        k, v = str(k).strip(), str(v).strip()
+        if k.startswith("/") and v.startswith("/") and len(k) <= 1024 and len(v) <= 1024 and "\0" not in k + v:
+            out[k.rstrip("/") or "/"] = v.rstrip("/") or "/"
+    return out
+
+
+def folders_of(conn, machine_id: str) -> dict[str, str]:
+    """The folders another computer added to projects here, as it last reported them."""
+    from .db import kv_get
+
+    try:
+        data = json.loads(kv_get(conn, FOLDERS_KV + machine_id) or "{}")
+    except ValueError:
+        return {}
+    return clean_folders(data)
+
+
+def hub_projects(conn, limit: int = 1000) -> list[dict]:
+    """The projects this hub files sessions under, busiest first: what another computer can add a folder to."""
+    return [{"path": r[0], "name": r[1], "sessions": r[2]} for r in conn.execute(
+        "SELECT project_path, MAX(project_name), COUNT(*) FROM sessions WHERE project_path IS NOT NULL "
+        "AND source != 'history' GROUP BY project_path ORDER BY COUNT(*) DESC LIMIT ?", (limit,))]
+
+
+def refile(cfg: Config, conn, machine_id: str, folders) -> int:
+    """File a computer's sessions in `folders` again after its folder mappings changed; their knowledge moves along.
+
+    Both projects' knowledge bases are rebuilt at the next synthesis. Returns how many sessions moved.
+    """
+    from .ingest import project_name_for
+
+    folders = list(folders)
+    r = ProjectResolver(cfg, conn)
+    moved, touched = 0, set()
+    rows = conn.execute("SELECT id, project_path, machine_path, project_dir FROM sessions WHERE machine_id = ?",
+                        (machine_id,)).fetchall()
+    for row in rows:
+        recorded = row["machine_path"] or row["project_path"]
+        if not any(under(recorded, f) for f in folders):
+            continue
+        new = r.resolve(machine_id, recorded)
+        if new == row["project_path"]:
+            continue
+        name = project_name_for(new, row["project_dir"])
+        conn.execute("UPDATE sessions SET project_path = ?, project_name = ?, machine_path = ? WHERE id = ?",
+                     (new, name, recorded if recorded != new else None, row["id"]))
+        conn.execute("UPDATE knowledge SET project_path = ?, project_name = ? WHERE session_id = ? AND project_path IS ?",
+                     (new, name, row["id"], row["project_path"]))
+        touched.update(p for p in (row["project_path"], new) if p)
+        moved += 1
+    conn.executemany("UPDATE project_kb SET knowledge_max_id = 0 WHERE project_path = ?", [(p,) for p in touched])
+    conn.commit()
+    return moved
+
+
+def folders_report(conn, machine_id: str, folders: dict[str, str], repos: dict, remotes: dict[str, str]) -> dict:
+    """Per folder: its project, this computer's sessions filed there, and the repositories inside it that their git
+    remote files under another project (a remote the hub knows wins over a folder around it)."""
+    out = {}
+    for folder, project in folders.items():
+        n = conn.execute("SELECT COUNT(*) FROM sessions WHERE machine_id = ? AND project_path = ? AND source != 'history'",
+                         (machine_id, project)).fetchone()[0]
+        other = sorted({(top, remotes[rem]) for top, rem in repos.values()
+                        if under(top, folder) and remotes.get(rem) and remotes[rem] != project})
+        out[folder] = {"project": project, "sessions": n, "overridden": [{"repo": t, "project": p} for t, p in other]}
+    return out
+
+
 # ------------------------------------------------------------------ client (spoke)
 class HubClient:
     """Keep-alive HTTP(S) client for the hub's /api/hub endpoints."""
@@ -387,7 +473,29 @@ def _same(inv: list | None, size: int, mtime: float) -> bool:
 def hello_info(cfg: Config, roots: list[Root]) -> dict:
     me = local_machine(cfg)
     return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "platform": platform_label(),
-            "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots)}
+            "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
+            "folders": cfg.hub_folders}
+
+
+def _check_protocol(hello: dict) -> None:
+    if int(hello.get("protocol", 0)) != PROTOCOL:
+        raise HubError(f"the hub runs Chronicle {hello.get('version')}, which speaks a different protocol; "
+                       "update both computers to the same version")
+
+
+def handshake(cfg: Config, client: HubClient | None = None) -> dict:
+    """Say hello without sending files: the hub's projects and what it made of this computer's folders."""
+    token = read_token(cfg)
+    if not cfg.hub_url or not token:
+        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+    client = client or HubClient(cfg.hub_url, token)
+    try:
+        hello = client.request("POST", "/api/hub/hello", body=hello_info(cfg, spoke_roots(cfg)))
+    finally:
+        client.close()
+    _check_protocol(hello)
+    _record_folders(cfg, hello)
+    return hello
 
 
 def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
@@ -402,9 +510,8 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
     me = local_machine(cfg)
     try:
         hello = client.request("POST", "/api/hub/hello", body=hello_info(cfg, roots))
-        if int(hello.get("protocol", 0)) != PROTOCOL:
-            raise HubError(f"the hub runs Chronicle {hello.get('version')}, which speaks a different protocol; "
-                           "update both computers to the same version")
+        _check_protocol(hello)
+        _record_folders(cfg, hello)
         inventory = hello.get("inventory") or {}
         if hello.get("wants_analyses"):
             blob, n = export_analyses(cfg)
@@ -473,6 +580,24 @@ def last_push(cfg: Config) -> dict | None:
         return None
 
 
+def _record_folders(cfg: Config, hello: dict) -> None:
+    """The spoke's note of what the hub made of its folders, for `chronicle hub folders` (an older hub sends none)."""
+    if not isinstance(hello.get("folders"), dict):
+        return
+    try:
+        (cfg.home / FOLDERS_FILE).write_text(json.dumps({"at": utcnow_iso(), "folders": hello["folders"],
+                                                          "moved": int(hello.get("moved") or 0)}))
+    except OSError:
+        pass
+
+
+def last_folders(cfg: Config) -> dict | None:
+    try:
+        return json.loads((cfg.home / FOLDERS_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+
+
 # ------------------------------------------------------------------ hub side
 def machine_dir(cfg: Config, machine_id: str) -> Path:
     return cfg.machines_dir / machine_id
@@ -532,11 +657,23 @@ def hello(cfg: Config, conn, body: dict) -> dict:
          str(body.get("version") or "")[:40] or None, "spoke", now, now, json.dumps(repos)),
     )
     conn.commit()
-    from .db import kv_get
+    from .db import kv_get, kv_set
 
+    folders, moved = folders_of(conn, machine_id), 0
+    if "folders" in body:  # an older spoke doesn't send them: keep what it had
+        sent = clean_folders(body.get("folders"))
+        if sent != folders:
+            kv_set(conn, FOLDERS_KV + machine_id, json.dumps(sent))
+            conn.commit()
+            moved = refile(cfg, conn, machine_id, set(folders) | set(sent))
+            folders = sent
+    remotes = ProjectResolver(cfg, conn).local_remotes()
+    report = folders_report(conn, machine_id, folders, repos, remotes)
+    conn.commit()  # local_remotes caches what git said
     me = local_machine(cfg)
     return {"protocol": PROTOCOL, "version": __version__, "hub": me["name"],
-            "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}")}
+            "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}"),
+            "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved}
 
 
 def receive_file(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
@@ -784,6 +921,8 @@ def machines(conn, cfg: Config) -> list[dict]:
     for r in conn.execute("SELECT * FROM machines ORDER BY role = 'this' DESC, last_seen DESC").fetchall():
         m = dict(r)
         m.pop("repos_json", None)
+        m["folders"] = [] if m["id"] == me else [
+            {"folder": f, "project": p, "name": Path(p).name or p} for f, p in sorted(folders_of(conn, m["id"]).items())]
         m["sessions"], m["last_session"] = counts.get(m["id"], (0, None))
         m["this"] = m["id"] == me
         out.append(m)
@@ -793,8 +932,10 @@ def machines(conn, cfg: Config) -> list[dict]:
 class ProjectResolver:
     """Maps a project folder on another computer to the same project's folder here.
 
-    First by git remote (the other computer reported its repositories' remotes, or the transcript names one), then
-    by `[hub] path_map` prefixes; otherwise the folder is kept as that computer recorded it.
+    By git remote (the other computer reported its repositories' remotes, or the transcript names one), or by a
+    folder that computer added to a project here (`chronicle hub add-folder`), whichever is more specific: a
+    repository with a known remote inside an added folder follows its remote. Then by `[hub] path_map` prefixes;
+    otherwise the folder is kept as that computer recorded it.
     """
 
     def __init__(self, cfg: Config, conn):
@@ -802,6 +943,7 @@ class ProjectResolver:
         self.conn = conn
         self.me = local_machine(cfg)["id"]
         self._repos: dict[str, dict] = {}
+        self._folders: dict[str, dict[str, str]] = {}
         self._local: dict[str, str] | None = None
 
     def repos(self, machine_id: str) -> dict:
@@ -812,6 +954,11 @@ class ProjectResolver:
             except ValueError:
                 self._repos[machine_id] = {}
         return self._repos[machine_id]
+
+    def folders(self, machine_id: str) -> dict[str, str]:
+        if machine_id not in self._folders:
+            self._folders[machine_id] = folders_of(self.conn, machine_id)
+        return self._folders[machine_id]
 
     def local_remotes(self) -> dict[str, str]:
         """{normalized remote: top-level folder} of the repositories this computer's own sessions ran in."""
@@ -843,9 +990,14 @@ class ProjectResolver:
                 top, norm = repo_top, norm or repo_remote
                 break
         local_top = self.local_remotes().get(norm) if norm else None
-        if local_top:
+        added = self.folders(machine_id)
+        folder = max((f for f in added if under(path, f)), key=len, default=None)
+        # a remote named by the transcript alone (no reported top level) is the session's own repository
+        if local_top and (folder is None or top is None or len(top) >= len(folder)):
             rest = path[len(top):].strip("/") if top else ""
             return f"{local_top}/{rest}" if rest else local_top
+        if folder is not None:
+            return added[folder]  # the folder and everything below it is that project
         for src in sorted(self.cfg.hub_path_map, key=len, reverse=True):
             if path == src or path.startswith(src + "/"):
                 return self.cfg.hub_path_map[src] + path[len(src):]

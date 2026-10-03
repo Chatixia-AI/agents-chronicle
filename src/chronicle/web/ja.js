@@ -1181,4 +1181,11 @@ window.CHRONICLE_JA = {
   "Made": "作ったもの",
   "Documents, pages, PRs and commits your agents made": "エージェントが作ったドキュメント、ページ、PR、コミット",
   "what your agents made": "エージェントが作ったもの",
+  "Folders added to projects on the hub": "ハブのプロジェクトに追加したフォルダー",
+  "not sent yet": "まだ送っていません",
+  "{repo} goes to {project} instead: the hub knows its git remote": "{repo} は {project} に入ります（ハブがその git リモートを知っているため）",
+  "Sessions in these folders, and the folders below them, go to that project on the hub. Add one with {command}.": "これらのフォルダーとその下のフォルダーのセッションは、ハブのそのプロジェクトに入ります。追加するには {command} を実行します。",
+  "To file a folder's sessions under a project on the hub, run {command} here.": "フォルダーのセッションをハブのプロジェクトに入れるには、ここで {command} を実行します。",
+  "Folders added on other computers": "ほかのコンピューターで追加したフォルダー",
+  "Sessions in these folders go to the project shown, unless a repository inside has a git remote this hub knows.": "これらのフォルダーのセッションは、表示のプロジェクトに入ります。ただし、中のリポジトリの git リモートをこのハブが知っている場合は、そのリモートに従います。",
 };
