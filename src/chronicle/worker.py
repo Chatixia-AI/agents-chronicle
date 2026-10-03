@@ -28,6 +28,7 @@ class WorkReport:
     reviews: list[str] = field(default_factory=list)
     exported: int = 0
     suggestions: int = 0  # new suggestions this run's refresh found
+    shared: str | None = None  # [hub] share = "knowledge": what was sent to the hub
     cost_usd: float = 0.0
     paused_until: str | None = None
     note: str | None = None
@@ -39,6 +40,8 @@ class WorkReport:
             parts.append(f"{self.suggestions} new suggestion{'s' if self.suggestions != 1 else ''}")
         if self.paused_until:
             parts.append(f"paused until {self.paused_until}")
+        if self.shared:
+            parts.append(f"hub: {self.shared}")
         if self.note:
             parts.append(self.note)
         return ", ".join(parts)
@@ -53,7 +56,7 @@ def pending_sessions(conn, cfg: Config, limit: int) -> list[str]:
         "installed": kv_get(conn, "installed_at") or "0000",
     }
     sql = (
-        "SELECT id, project_path FROM sessions WHERE source != 'history' "
+        "SELECT id, project_path FROM sessions WHERE source NOT IN ('history', 'remote') "
         f"AND analysis_status IN ('pending', 'stale', 'error') AND analysis_attempts < {MAX_ATTEMPTS} "
         "AND (analysis_not_before IS NULL OR analysis_not_before <= :now) "
         "AND n_prompts >= :min_prompts AND (ended_flag = 1 OR ended_at <= :idle)"
@@ -134,7 +137,8 @@ def count_pending(conn, cfg: Config) -> dict:
     reasons: dict[str, int] = {}
     for s in conn.execute(
             "SELECT analysis_status, source, analysis_attempts, analysis_reason, analysis_not_before, project_path, n_prompts, "
-            "started_at, ended_at, ended_flag FROM sessions WHERE source != 'history' AND analysis_status IN ('pending','stale','error')"):
+            "started_at, ended_at, ended_flag FROM sessions WHERE source NOT IN ('history', 'remote') "
+            "AND analysis_status IN ('pending','stale','error')"):
         got = waiting_reason(conn, cfg, s)
         if got:
             reasons[got[0]] = reasons.get(got[0], 0) + 1
@@ -147,7 +151,7 @@ def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyse
                analyze: bool = True, synthesize: bool = True, export: bool = True, force: bool = False,
                model: str | None = None, progress=None, wait: bool = False) -> WorkReport:
     report = WorkReport()
-    if cfg.is_spoke:  # its sessions go to the hub, which analyzes them; analyzing here would pay twice
+    if cfg.sends_files:  # its sessions go to the hub, which analyzes them; analyzing here would pay twice
         report.note = f"analysis runs on the hub ({cfg.hub_url})"
         return report
     if wait and progress:
@@ -166,6 +170,13 @@ def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyse
         finally:
             conn.rollback()  # never leave a write transaction (and its lock) behind on any exit path
             conn.close()
+    if cfg.shares_knowledge:  # send the hub what was learned; a missed send is caught up by the next run
+        from .hub import HubError, push_knowledge
+
+        try:
+            report.shared = push_knowledge(cfg).summary()
+        except HubError as exc:
+            report.shared = f"not sent ({exc})"
     log.info("worker: %s", report.summary())
     return report
 

@@ -241,6 +241,8 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
         raise KeyError(session_id)
     if s["source"] == "history":
         raise AnalysisSkipped("history-only session has no transcript")
+    if s["source"] == "remote":
+        raise AnalysisSkipped("analyzed on the computer it ran on, which keeps its transcript")
     started = utcnow_iso()
     conn.execute("UPDATE sessions SET analysis_status = 'running' WHERE id = ?", (session_id,))
     conn.commit()

@@ -103,6 +103,10 @@ path_map = {}
 # On a computer that sends to a hub: folders here whose sessions belong to a project on the hub, folder and all
 # below it. Set by `chronicle hub add-folder <folder> --project <name>`.
 folders = {}
+# On a computer that sends to a hub: what it sends. "everything": its transcripts, and the hub records and analyzes
+# them. "knowledge": this computer keeps recording and analyzing with its own Claude Code (or Codex) login and sends
+# only each session's details, summary and project lessons; transcripts and personal lessons stay here.
+share = "everything"
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -127,6 +131,7 @@ notify = false
 
 
 LANGUAGES = {"en": "English", "ja": "日本語"}  # [analysis] language: code -> its own name, as the picker shows it
+SHARE_MODES = ("everything", "knowledge")  # [hub] share
 
 
 def chronicle_home() -> Path:
@@ -184,6 +189,7 @@ class Config:
     hub_url: str = ""
     hub_path_map: dict[str, str] = field(default_factory=dict)
     hub_folders: dict[str, str] = field(default_factory=dict)
+    hub_share: str = "everything"
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -219,8 +225,18 @@ class Config:
 
     @property
     def is_spoke(self) -> bool:
-        """This computer sends its sessions to a hub instead of recording them itself."""
+        """This computer has joined a hub (`[hub] url`), whatever it sends it."""
         return bool(self.hub_url)
+
+    @property
+    def sends_files(self) -> bool:
+        """It sends its transcripts to the hub, which records and analyzes them, instead of doing that itself."""
+        return self.is_spoke and self.hub_share != "knowledge"
+
+    @property
+    def shares_knowledge(self) -> bool:
+        """It records and analyzes its own sessions and sends the hub only what was learned (`[hub] share`)."""
+        return self.is_spoke and self.hub_share == "knowledge"
 
     def ensure_dirs(self) -> None:
         for d in (self.home, self.archive_dir, self.logs_dir, self.locks_dir):
@@ -287,6 +303,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
     hub = _section(data, "hub")
     path_map = hub.get("path_map")
     folders = hub.get("folders")
+    share = str(hub.get("share") or "everything").strip().lower()
 
     env_dirs = os.environ.get("CHRONICLE_CLAUDE_DIRS")
     raw_dirs = env_dirs.split(os.pathsep) if env_dirs else sources.get("claude_dirs", ["~/.claude"])
@@ -314,6 +331,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         hub_path_map={str(k).rstrip("/"): str(v).rstrip("/") for k, v in path_map.items()} if isinstance(path_map, dict) else {},
         hub_folders={str(Path(str(k)).expanduser()).rstrip("/") or "/": str(v).rstrip("/") for k, v in folders.items()
                      if str(k).strip() and str(v).strip()} if isinstance(folders, dict) else {},
+        hub_share=share if share in SHARE_MODES else "everything",
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),

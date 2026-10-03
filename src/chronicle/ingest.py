@@ -1015,7 +1015,8 @@ def _forget(conn: sqlite3.Connection, sid: str, delete_transcript: bool) -> list
 
 def mark_missing_sources(conn: sqlite3.Connection) -> int:
     missing = 0
-    for r in conn.execute("SELECT id, transcript_path, source_present FROM sessions WHERE source != 'history'").fetchall():
+    for r in conn.execute("SELECT id, transcript_path, source_present FROM sessions "
+                          "WHERE source NOT IN ('history', 'remote')").fetchall():  # remote: its transcript is elsewhere
         present = 1 if r["transcript_path"] and Path(r["transcript_path"]).exists() else 0
         if present != r["source_present"]:
             conn.execute("UPDATE sessions SET source_present = ? WHERE id = ?", (present, r["id"]))

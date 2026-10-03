@@ -24,6 +24,7 @@ import re
 import secrets
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -59,6 +60,18 @@ ANALYSIS_COLS = ("analysis_status", "analysis_reason", "analyzed_at", "analysis_
                  "highlights_json", "open_threads_json", "friction_json", "analysis_json")
 KNOWLEDGE_COLS = ("kind", "title", "body", "tags_json", "scope", "confidence", "evidence", "source", "agent",
                   "source_ref", "fingerprint", "status", "pinned", "created_at", "updated_at")
+
+# [hub] share = "knowledge": what a computer sends about a session it analyzed itself. Never its prompts, commands,
+# file paths or transcript; the hub stores it with source 'remote' and never analyzes it again (receive_sessions).
+SHARED_COLS = ("agent", "started_at", "ended_at", "duration_s", "active_s", "git_branch", "cc_version", "primary_model",
+               "models_json", "tools_json", "skills_json", "mcp_json", "prs_json", "n_prompts", "n_api_calls",
+               "n_tool_calls", "n_tool_errors", "n_interrupts", "n_compactions", "n_api_errors", "n_subagents", "n_files",
+               "lines_added", "lines_removed", "input_tokens", "output_tokens", "cache_read_tokens",
+               "cache_write_tokens", "sub_tokens", "est_cost_usd", "sub_cost_usd", "peak_context", "ended_flag")
+SHARED_AGENTS = ("claude", "codex", "copilot", "bob", "antigravity")  # coding agents; imported chats stay personal
+SHARE_BATCH = 200
+SHARE_KV = "hub-share:"  # + machine id: what that computer sends, as it last said
+SESSION_ID_RE = re.compile(r"^[\w.:-]{1,128}$")
 
 
 class HubError(Exception):
@@ -442,9 +455,12 @@ class PushReport:
     errors: list[str] = field(default_factory=list)
     hub: str = ""
     seconds: float = 0.0
+    kind: str = "files"  # or "knowledge": sessions this computer analyzed itself
 
     def summary(self) -> str:
-        parts = [f"{self.sent} file{'s' * (self.sent != 1)} sent ({self.bytes / 1e6:.1f} MB)", f"{self.unchanged} unchanged"]
+        what = "session" if self.kind == "knowledge" else "file"
+        verb = "shared" if self.kind == "knowledge" else "sent"
+        parts = [f"{self.sent} {what}{'s' * (self.sent != 1)} {verb} ({self.bytes / 1e6:.1f} MB)", f"{self.unchanged} unchanged"]
         if self.skipped:
             parts.append(f"{self.skipped} excluded")
         if self.analyses:
@@ -474,7 +490,7 @@ def hello_info(cfg: Config, roots: list[Root]) -> dict:
     me = local_machine(cfg)
     return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "platform": platform_label(),
             "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
-            "folders": cfg.hub_folders}
+            "folders": cfg.hub_folders, "share": cfg.hub_share}
 
 
 def _check_protocol(hello: dict) -> None:
@@ -499,7 +515,10 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
 
 
 def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
-    """Send the hub every session file it lacks (or has an older copy of)."""
+    """Send the hub every session file it lacks (or has an older copy of); with [hub] share = "knowledge", what
+    this computer learned instead (push_knowledge)."""
+    if cfg.shares_knowledge:
+        return push_knowledge(cfg, progress=progress, client=client)
     token = read_token(cfg)
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
@@ -556,6 +575,86 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
             finally:
                 body.close()
         if report.sent or report.analyses:
+            client.request("POST", "/api/hub/done", body={"machine": me["id"]})
+    finally:
+        client.close()
+    report.seconds = time.monotonic() - t0
+    _record_push(cfg, report)
+    return report
+
+
+def _shared_records(cfg: Config, have: dict) -> tuple[list[dict], int, int]:
+    """(records the hub lacks or has an older analysis of, unchanged, excluded) for push_knowledge."""
+    from .db import connect
+
+    out: list[dict] = []
+    unchanged = excluded = 0
+    if not cfg.db_path.exists():
+        return out, 0, 0
+    conn = connect(cfg.db_path, readonly=True)
+    remotes: dict[str, str | None] = {}
+    try:
+        cols = ", ".join(("id", "project_path") + SHARED_COLS + ANALYSIS_COLS)
+        marks = ", ".join("?" for _ in SHARED_AGENTS)
+        rows = conn.execute(f"SELECT {cols} FROM sessions WHERE analysis_status = 'done' "
+                            f"AND source NOT IN ('history', 'remote') AND agent IN ({marks})", SHARED_AGENTS).fetchall()
+        for r in rows:
+            rec = dict(r)
+            if cfg.is_excluded(rec["project_path"]):
+                excluded += 1
+                continue
+            if have.get(rec["id"]) == rec["analyzed_at"]:
+                unchanged += 1
+                continue
+            path = rec["project_path"]
+            if path and path not in remotes:
+                info = git_info(path)
+                remotes[path] = info[1] if info else None
+            rec["remote"] = remotes.get(path) if path else None
+            # lessons about the project only: ones about the person (global, preferences) stay on this computer
+            rec["knowledge"] = [dict(k) for k in conn.execute(
+                f"SELECT {', '.join(KNOWLEDGE_COLS)} FROM knowledge WHERE session_id = ? AND source = 'analysis' "
+                "AND scope = 'project' AND kind != 'preference' AND status != 'dismissed'", (rec["id"],)).fetchall()]
+            out.append(rec)
+    finally:
+        conn.close()
+    return out, unchanged, excluded
+
+
+def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
+    """[hub] share = "knowledge": send the hub each analyzed session's details, analysis and project lessons that it
+    lacks or has an older analysis of. Transcripts never leave this computer."""
+    token = read_token(cfg)
+    if not cfg.hub_url or not token:
+        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+    t0 = time.monotonic()
+    report = PushReport(hub=cfg.hub_url, kind="knowledge")
+    client = client or HubClient(cfg.hub_url, token)
+    me = local_machine(cfg)
+    try:
+        hello = client.request("POST", "/api/hub/hello", body=hello_info(cfg, spoke_roots(cfg)))
+        _check_protocol(hello)
+        _record_folders(cfg, hello)
+        have = hello.get("knowledge")
+        if not isinstance(have, dict):
+            raise HubError(f"the hub runs Chronicle {hello.get('version')}, which can't take knowledge only; update it")
+        records, report.unchanged, report.skipped = _shared_records(cfg, have)
+        for i in range(0, len(records), SHARE_BATCH):
+            batch = records[i:i + SHARE_BATCH]
+            if progress:
+                progress(f"sharing {i + len(batch)} of {len(records)} sessions")
+            body = gzip.compress(json.dumps({"version": 1, "sessions": batch}).encode(), mtime=0)
+            try:
+                client.request("POST", "/api/hub/sessions", params={"machine": me["id"]}, body=body,
+                               headers={"Content-Type": "application/gzip"})
+            except HubUnreachable:
+                raise
+            except HubError as exc:
+                report.errors.append(str(exc))
+                continue
+            report.sent += len(batch)
+            report.bytes += len(body)
+        if report.sent:
             client.request("POST", "/api/hub/done", body={"machine": me["id"]})
     finally:
         client.close()
@@ -669,11 +768,16 @@ def hello(cfg: Config, conn, body: dict) -> dict:
             folders = sent
     remotes = ProjectResolver(cfg, conn).local_remotes()
     report = folders_report(conn, machine_id, folders, repos, remotes)
+    share = "knowledge" if body.get("share") == "knowledge" else "everything"
+    kv_set(conn, SHARE_KV + machine_id, share)
     conn.commit()  # local_remotes caches what git said
     me = local_machine(cfg)
+    shared = {r[0]: r[1] for r in conn.execute(
+        "SELECT id, analyzed_at FROM sessions WHERE machine_id = ? AND source = 'remote'", (machine_id,))}
     return {"protocol": PROTOCOL, "version": __version__, "hub": me["name"],
             "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}"),
-            "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved}
+            "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved,
+            "knowledge": shared}
 
 
 def receive_file(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
@@ -740,6 +844,74 @@ def _drain(rfile, left: int) -> None:
         if not chunk:
             return
         left -= len(chunk)
+
+
+def _cell(value):
+    """A value another computer sent, as SQLite can store it."""
+    if value is None or isinstance(value, (str, int, float)):
+        return value
+    return json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+
+
+def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
+    """Sessions another computer analyzed itself ([hub] share = "knowledge"): their details, analysis and project
+    lessons, without a transcript. Stored with source 'remote', filed like any session of that computer, and never
+    analyzed here. A session the hub has the transcript of keeps its own record."""
+    from .ingest import best_title, project_name_for
+
+    machine_id = check_machine(cfg, params.get("machine", ""))
+    if length > 64 << 20:
+        _drain(rfile, length)
+        raise HubError("sessions too large")
+    try:
+        data = json.loads(gzip.decompress(rfile.read(length)))
+    except (OSError, ValueError, EOFError) as exc:
+        raise HubError(f"bad sessions: {exc}") from None
+    if not isinstance(data, dict) or not isinstance(data.get("sessions"), list):
+        raise HubError("bad sessions")
+    r = ProjectResolver(cfg, conn)
+    now = utcnow_iso()
+    stored = kept = 0
+    for rec in data["sessions"][:SHARE_BATCH * 2]:
+        sid = str(rec.get("id") or "") if isinstance(rec, dict) else ""
+        if not SESSION_ID_RE.match(sid) or rec.get("agent") not in SHARED_AGENTS:
+            continue
+        have = conn.execute("SELECT source FROM sessions WHERE id = ?", (sid,)).fetchone()
+        if have and have["source"] != "remote":
+            kept += 1  # its transcript is here: the hub's own record wins
+            continue
+        recorded = str(rec.get("project_path") or "") or None
+        remote = rec.get("remote") if isinstance(rec.get("remote"), str) else None
+        project = r.resolve(machine_id, recorded, remote)
+        name = project_name_for(project)
+        row = {c: _cell(rec.get(c)) for c in SHARED_COLS + ANALYSIS_COLS}
+        row.update(id=sid, source="remote", machine_id=machine_id, project_path=project, project_name=name,
+                   machine_path=recorded if recorded != project else None, source_present=1, ingested_at=now,
+                   analysis_status="done", title=best_title({"llm_title": rec.get("llm_title")}),
+                   ended_flag=1 if rec.get("ended_flag") else 0)
+        cols = list(row)
+        try:
+            conn.execute(f"INSERT INTO sessions({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
+                         "ON CONFLICT(id) DO UPDATE SET " + ", ".join(f"{c} = excluded.{c}" for c in cols if c != "id"),
+                         [row[c] for c in cols])
+        except sqlite3.Error as exc:  # one bad record must not lose the rest of the batch
+            log.warning("shared session %s from %s not stored: %s", sid, machine_id, exc)
+            continue
+        conn.execute("DELETE FROM knowledge WHERE session_id = ? AND source = 'analysis'", (sid,))
+        for k in rec.get("knowledge") or []:
+            if not isinstance(k, dict) or not k.get("title") or not k.get("kind"):
+                continue
+            if k.get("scope") != "project" or k.get("kind") == "preference":
+                continue  # about the person: it should not have been sent, and is not kept
+            krow = {c: _cell(k.get(c)) for c in KNOWLEDGE_COLS}
+            krow.update(session_id=sid, project_path=project, project_name=name, source="analysis")
+            conn.execute(f"INSERT OR IGNORE INTO knowledge({', '.join(krow)}) VALUES ({', '.join('?' for _ in krow)})",
+                         list(krow.values()))
+        stored += 1
+    if stored:
+        conn.execute("UPDATE machines SET last_push = ? WHERE id = ?", (now, machine_id))
+    conn.commit()
+    return {"ok": True, "stored": stored, "kept": kept}
 
 
 def receive_analyses(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
@@ -912,6 +1084,8 @@ def machine_of(cfg: Config, path: Path | str | None) -> str | None:
 
 def machines(conn, cfg: Config) -> list[dict]:
     """Every computer the hub knows, with its session counts, this one first."""
+    from .db import kv_get
+
     register_local(conn, cfg)
     conn.commit()
     me = local_machine(cfg)["id"]
@@ -923,6 +1097,7 @@ def machines(conn, cfg: Config) -> list[dict]:
         m.pop("repos_json", None)
         m["folders"] = [] if m["id"] == me else [
             {"folder": f, "project": p, "name": Path(p).name or p} for f, p in sorted(folders_of(conn, m["id"]).items())]
+        m["share"] = None if m["id"] == me else (kv_get(conn, SHARE_KV + m["id"]) or "everything")
         m["sessions"], m["last_session"] = counts.get(m["id"], (0, None))
         m["this"] = m["id"] == me
         out.append(m)

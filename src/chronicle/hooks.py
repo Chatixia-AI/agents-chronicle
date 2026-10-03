@@ -58,7 +58,7 @@ def _on_session_end(payload: dict, *, ended: bool) -> int:
 
     transcript = payload.get("transcript_path")
     home = chronicle_home()
-    if load_config(home, create=False).is_spoke:  # this computer sends its sessions to a hub, which records them
+    if load_config(home, create=False).sends_files:  # this computer sends its sessions to a hub, which records them
         spawn_detached([*self_command(), "push", "--quiet"], home / "logs" / "hooks.log")
         return 0
     args = [*self_command(), "ingest-session"]

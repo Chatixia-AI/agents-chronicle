@@ -63,7 +63,7 @@ def cmd_ingest_session(args) -> int:
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
-    if cfg.is_spoke:
+    if cfg.sends_files:
         return _push(cfg, quiet=True)
     conn = _conn(cfg)
     path = Path(args.transcript).expanduser() if args.transcript else None
@@ -87,7 +87,7 @@ def cmd_sync(args) -> int:
     cfg = _cfg()
     setup_logging(cfg.logs_dir, verbose=args.verbose)
     release_check_safely(cfg)  # [updates] notify: at most one PyPI request a day, one notification per release
-    if cfg.is_spoke:  # the hub records and analyzes; this computer only sends it files
+    if cfg.sends_files:  # the hub records and analyzes; this computer only sends it files
         return _push(cfg, quiet=args.quiet)
     conn = _conn(cfg)
     report = sync(cfg, conn, force=args.force)
@@ -111,7 +111,7 @@ def cmd_work(args) -> int:
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
-    if cfg.is_spoke:
+    if cfg.sends_files:
         print(f"This computer sends its sessions to the hub at {cfg.hub_url}, which analyzes them.")
         return 0
     report = run_worker(cfg, max_analyses=args.limit, analyze=not args.no_analyze, synthesize=not args.no_synthesize,
@@ -141,7 +141,7 @@ def cmd_analyze(args) -> int:
     if args.all or args.pending:
         if args.all and args.force:
             conn.execute("UPDATE sessions SET analysis_status = 'pending', analysis_attempts = 0 "
-                         "WHERE source != 'history' AND analysis_status IN ('done','error','stale')")
+                         "WHERE source NOT IN ('history', 'remote') AND analysis_status IN ('done','error','stale')")
             conn.commit()
         ids += pending_sessions(conn, cfg, args.limit or 100_000)
     if not ids:
@@ -411,7 +411,7 @@ def cmd_status(args) -> int:
 
     if cfg.is_spoke:
         last = last_push(cfg)
-        console.print(f"  sends its sessions to the hub at {cfg.hub_url}"
+        console.print(f"  sends {'what it learns' if cfg.shares_knowledge else 'its sessions'} to the hub at {cfg.hub_url}"
                       f" (last push: {local_str(last['at']) + ' · ' + last['summary'] if last else 'never'})", highlight=False)
     elif read_token(cfg):
         others = conn.execute("SELECT COUNT(*) FROM machines WHERE role = 'spoke'").fetchone()[0]
@@ -780,7 +780,7 @@ def cmd_install(args) -> int:
         kv_set(conn, "installed_at", utcnow_iso())
         conn.commit()
     now, waiting, later = [], 0, ""
-    if picked and analyzer and not cfg.is_spoke:
+    if picked and analyzer and not cfg.sends_files:
         now, waiting, later = _analysis_step(cfg, conn, console, analyzer, interactive=interactive, choice=args.analyze,
                                              background_sync=background_on and not args.no_launchd, interval=args.interval)
     conn.close()
@@ -1585,15 +1585,26 @@ def cmd_hub(args) -> int:
             url = f"https://{url}"
         hub.write_token(cfg, args.token)
         _set_config_value(cfg, "hub", "url", json.dumps(url))
+        if args.share:
+            _set_config_value(cfg, "hub", "share", json.dumps(args.share))
         from .config import load_config
 
         cfg = load_config(cfg.home)
-        console.print(f"Joined the hub at {url}. This computer now sends its Claude Code and Codex sessions there; "
-                      "the hub records and analyzes them.", highlight=False)
+        if cfg.shares_knowledge:
+            console.print(f"Joined the hub at {url}, sharing knowledge only. This computer keeps recording and "
+                          "analyzing its own sessions; the hub gets each analyzed session's summary and project "
+                          "lessons. Transcripts and lessons about you stay here.", highlight=False)
+        else:
+            console.print(f"Joined the hub at {url}. This computer now sends its Claude Code and Codex sessions there; "
+                          "the hub records and analyzes them.", highlight=False)
         if args.no_push:
             return 0
-        console.print("Sending the sessions on this computer (the first time can take a while)…")
+        console.print("Sharing what this computer has analyzed so far…" if cfg.shares_knowledge
+                      else "Sending the sessions on this computer (the first time can take a while)…")
         code = _push(cfg)
+        if code == 0 and cfg.shares_knowledge:
+            console.print("New sessions are shared after each analysis. `chronicle hub leave` stops sharing.")
+            return code
         if code == 0:
             bg = background_status()
             hooked = bool(hooks_installed(cfg).get("SessionEnd"))
@@ -1631,7 +1642,8 @@ def cmd_hub(args) -> int:
     # status
     if cfg.is_spoke:
         last = hub.last_push(cfg)
-        console.print(f"Sends its sessions to the hub at [bold]{cfg.hub_url}[/]", highlight=False)
+        console.print(f"Sends its sessions to the hub at [bold]{cfg.hub_url}[/]"
+                      + (" · knowledge only (transcripts stay here)" if cfg.shares_knowledge else ""), highlight=False)
         console.print(f"  last push: {last['at'] + ' · ' + last['summary'] if last else 'never'}", highlight=False)
         if cfg.hub_folders:
             n = len(cfg.hub_folders)
@@ -1646,6 +1658,8 @@ def cmd_hub(args) -> int:
 
     for m in rows:
         seen = "this computer" if m["this"] else f"last sent {local_str(m['last_push']) if m['last_push'] else 'nothing yet'}"
+        if m.get("share") == "knowledge":
+            seen += " · knowledge only"
         console.print(f"  {m['name'] or m['id'][:8]:<28} {m['platform'] or '':<8} {m['sessions']:>5} session{'s' * (m['sessions'] != 1)} · {seen}",
                       highlight=False)
         for f in m.get("folders") or []:
@@ -2099,6 +2113,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--url", dest="url_opt", help=argparse.SUPPRESS)
     s.add_argument("--rotate", action="store_true", help="with enable: make a new token (computers must join again)")
     s.add_argument("--project", help="with add-folder: the project on the hub its sessions belong to (name or path)")
+    s.add_argument("--share", choices=["everything", "knowledge"],
+                   help="with join: send transcripts for the hub to analyze (everything, the default), or analyze here "
+                        "and send only summaries and project lessons (knowledge)")
     s.add_argument("--list", action="store_true", help="with folders: list the hub's projects")
     s.add_argument("--no-push", action="store_true",
                    help="with join, add-folder, remove-folder: don't send anything to the hub yet")

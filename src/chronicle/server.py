@@ -844,6 +844,7 @@ class App:
             "role": role,
             "hub_url": self.cfg.hub_url or None,
             "last_push": last_push(self.cfg) if role == "spoke" else None,
+            "share": self.cfg.hub_share if role == "spoke" else None,
             "folders": folders,
             "machines": machines(self.conn, self.cfg),
             "path_map": self.cfg.hub_path_map,
@@ -1000,7 +1001,7 @@ class App:
         from .ingest import sync
         from .worker import run_worker
 
-        if self.cfg.is_spoke:
+        if self.cfg.sends_files:
             from .hub import push
 
             return self.jobs.start("sync", lambda progress: push(self.cfg, progress=progress).summary())
@@ -1255,6 +1256,8 @@ def make_handler(app: App, port: int):
                     return self._json(hub.receive_file(app.cfg, app.conn, q, self.rfile, length))
                 if p == "/api/hub/analyses":
                     return self._json(hub.receive_analyses(app.cfg, app.conn, q, self.rfile, length))
+                if p == "/api/hub/sessions":
+                    return self._json(hub.receive_sessions(app.cfg, app.conn, q, self.rfile, length))
                 body = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 if not isinstance(body, dict):
                     return self._json({"error": "bad json"}, 400)

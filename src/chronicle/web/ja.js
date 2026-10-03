@@ -1188,4 +1188,10 @@ window.CHRONICLE_JA = {
   "To file a folder's sessions under a project on the hub, run {command} here.": "フォルダーのセッションをハブのプロジェクトに入れるには、ここで {command} を実行します。",
   "Folders added on other computers": "ほかのコンピューターで追加したフォルダー",
   "Sessions in these folders go to the project shown, unless a repository inside has a git remote this hub knows.": "これらのフォルダーのセッションは、表示のプロジェクトに入ります。ただし、中のリポジトリの git リモートをこのハブが知っている場合は、そのリモートに従います。",
+  "Records and analyzes its own sessions, and shares each session's summary and project lessons with a hub. Transcripts stay here.": "自分のセッションを記録・分析し、各セッションの要約とプロジェクトのナレッジだけをハブと共有します。トランスクリプトはこのコンピューターに残ります。",
+  "Analyzes its own sessions and sends only summaries and project lessons": "自分でセッションを分析し、要約とプロジェクトのナレッジだけを送ります",
+  " · knowledge only": " · ナレッジのみ",
+  "Analyzed on the computer it ran on, which keeps its transcript": "実行したコンピューターで分析済み。トランスクリプトはそのコンピューターにあります",
+  "transcript on {machine}": "トランスクリプトは {machine} に",
+  "This session was analyzed on {machine}, which keeps its transcript. Only its summary and project lessons were shared.": "このセッションは {machine} で分析され、トランスクリプトはそちらにあります。共有されたのは要約とプロジェクトのナレッジだけです。",
 };

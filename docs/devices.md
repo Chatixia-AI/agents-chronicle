@@ -106,6 +106,31 @@ computer's name.
   other computers then have to join again.
 - The hub keeps what it receives under `~/.claude-chronicle/machines/<computer>/` and archives it like its own.
 
+### Sharing knowledge only
+
+A computer can keep its transcripts and still add to the hub's knowledge. Join with `--share knowledge`:
+
+```bash
+chronicle hub join https://pc.tail1234.ts.net --token … --share knowledge
+```
+
+(or `chronicle config set hub.share knowledge` on a computer that already joined). That computer then works like a
+standalone Chronicle: it records its own sessions, analyzes them with its own Claude Code or Codex login, and keeps
+its dashboard and MCP tools up to date. After each analysis it sends the hub only:
+
+- each analyzed session's details: when it ran, agent, model, branch, tokens and cost, which tools it used;
+- its analysis: title, summary, outcome, highlights and what went wrong;
+- the lessons it produced about the project.
+
+Prompts, shell commands, file paths, transcripts and lessons about you (global ones and preferences) never leave
+the computer. Sessions from GitHub Copilot, IBM Bob and Google Antigravity are shared too; imported chats are not.
+
+On the hub these sessions are filed like any other from that computer (by git remote, an added folder or
+`path_map`) and their lessons join the project's knowledge base. A session page shows **transcript on
+<computer>** instead of the transcript, and the hub never analyzes these sessions again, so it needs no Claude login
+for them. It still builds each project's knowledge base and glossary with its own. **Settings › Devices** marks the
+computer **knowledge only**. A session the hub already has the transcript of keeps the hub's record.
+
 ### Leaving
 
 `chronicle hub leave` on a computer makes it record and analyze its own sessions again; the hub keeps what it was

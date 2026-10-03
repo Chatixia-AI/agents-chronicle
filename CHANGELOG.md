@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Share knowledge, keep transcripts:** `chronicle hub join … --share knowledge` (or `[hub] share = "knowledge"`)
+  lets a computer add to the hub's knowledge without sending its transcripts. It keeps recording and analyzing its
+  own sessions with its own Claude Code or Codex login, and after each analysis sends the hub only the session's
+  details, its summary and its lessons about the project. Prompts, shell commands, file paths, transcripts and
+  lessons about the person stay on the computer. The hub files these sessions like any other, adds their lessons to
+  the project's knowledge base, never analyzes them again, and shows **transcript on <computer>** on their pages.
+  [Sharing knowledge only](docs/devices.md#sharing-knowledge-only)
 - **Add a folder to a project on the hub:** on a computer that sends its sessions to a hub,
   `chronicle hub add-folder <folder> --project <name>` files the sessions in that folder, and every folder below it,
   under one of the hub's projects: a notes folder, a scratch folder, or a repository the hub doesn't know. Sessions
