@@ -187,6 +187,132 @@ def test_projects_matched_across_computers(hubenv, monkeypatch):
     assert r.resolve(hub.local_machine(cfg)["id"], "/srv/x/app") == "/srv/x/app"  # the hub's own sessions: untouched
 
 
+def test_added_folders_and_what_wins(hubenv):
+    """A folder a computer added files everything below it; a repository with a remote the hub knows, when it is the
+    more specific match, follows its remote."""
+    cfg, conn = hubenv["cfg"], hubenv["conn"]
+    spoke_id = hub.local_machine(hubenv["spoke"])["id"]
+    hub.push(hubenv["spoke"])  # registers the computer
+    conn.execute("UPDATE machines SET repos_json = ? WHERE id = ?", (json.dumps({
+        "/w/client/app": ["/w/client/app", "github.com/org/demo-app"],      # known here: CWD
+        "/w/client/fork": ["/w/client/fork", "github.com/someone/fork"],    # unknown here
+        "/w/mono": ["/w/mono", "github.com/org/demo-app"],                  # known, with an added folder inside
+    }), spoke_id))
+    kv_set(conn, f"git:{CWD}", json.dumps([CWD, "github.com/org/demo-app"]))
+    kv_set(conn, hub.FOLDERS_KV + spoke_id, json.dumps({
+        "/w/client": "/hub/client-a", "/w/client/notes/private": "/hub/other", "/w/mono/tools": "/hub/tools"}))
+    conn.commit()
+    r = hub.resolver(cfg, conn, fresh=True)
+    assert r.resolve(spoke_id, "/w/client") == "/hub/client-a"
+    assert r.resolve(spoke_id, "/w/client/notes/deep") == "/hub/client-a"  # the folder and everything below it
+    assert r.resolve(spoke_id, "/w/client/notes/private/x") == "/hub/other"  # the most specific folder wins
+    assert r.resolve(spoke_id, "/w/client/app/api") == f"{CWD}/api"  # a known remote inside the folder wins
+    assert r.resolve(spoke_id, "/w/client/fork") == "/hub/client-a"  # an unknown remote: the folder decides
+    assert r.resolve(spoke_id, "/w/mono/tools/cli") == "/hub/tools"  # a folder inside a known repository wins
+    assert r.resolve(spoke_id, "/w/mono/src") == f"{CWD}/src"
+    assert r.resolve(spoke_id, "/w/client/x", remote="git@github.com:org/demo-app.git") == CWD  # the transcript's own
+    assert r.resolve(spoke_id, "/elsewhere") == "/elsewhere"
+
+
+def test_hub_add_folder_files_and_moves_sessions(hubenv, monkeypatch, capsys):
+    """`chronicle hub add-folder` on the spoke: its sessions there move to the hub's project, knowledge and all, and
+    `remove-folder` moves them back."""
+    from chronicle.cli import main
+    from chronicle.ingest import sync
+
+    cfg, conn, spoke = hubenv["cfg"], hubenv["conn"], hubenv["spoke"]
+    hub.push(spoke)
+    sync(cfg, conn)
+    conn.execute("INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, confidence, source, "
+                 "fingerprint, created_at, updated_at) VALUES (?, ?, 'demo-app', 'gotcha', 'A lesson', 'body', 'high', "
+                 "'analysis', 'fp-spoke', '2026-09-20', '2026-09-20')", (SPOKE_SID, SPOKE_CWD))
+    conn.execute("INSERT INTO project_kb(project_path, project_name, knowledge_max_id, n_items) VALUES (?, 'demo-app', 99, 1)",
+                 (CWD,))
+    conn.commit()
+    assert conn.execute("SELECT project_path FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == SPOKE_CWD
+
+    folder = hubenv["tmp"] / "spoke-work"  # the spoke's own folder: it has to exist there
+    folder.mkdir()
+    monkeypatch.setenv("CHRONICLE_HOME", str(spoke.home))
+    assert main(["hub", "add-folder", str(folder), "--project", "demo-app"]) == 1  # two projects are called that
+    assert "/home/test/code/demo-app" in capsys.readouterr().out
+    assert main(["hub", "add-folder", str(folder), "--project", CWD]) == 0
+    out = " ".join(capsys.readouterr().out.split())  # rich wraps long lines
+    assert "now go to demo-app" in out
+    spoke = load_config(spoke.home)
+    assert spoke.hub_folders == {str(folder.resolve()): CWD}
+
+    # the session ran in SPOKE_CWD, which exists only on the simulated other computer: add it in its config directly
+    from chronicle.cli import _toml_table
+    from chronicle.config import set_config_value
+
+    set_config_value(spoke, "hub", "folders", _toml_table({**spoke.hub_folders, SPOKE_CWD: CWD}))
+    spoke = load_config(spoke.home)
+    report = hub.push(spoke)
+    assert not report.errors
+    row = conn.execute("SELECT project_path, project_name, machine_path FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert (row["project_path"], row["project_name"], row["machine_path"]) == (CWD, "demo-app", SPOKE_CWD)
+    assert conn.execute("SELECT project_path FROM knowledge WHERE fingerprint = 'fp-spoke'").fetchone()[0] == CWD
+    assert conn.execute("SELECT knowledge_max_id FROM project_kb WHERE project_path = ?", (CWD,)).fetchone()[0] == 0
+    seen = hub.last_folders(spoke)
+    assert seen["moved"] == 1 and seen["folders"][SPOKE_CWD]["sessions"] == 1
+    listed = {m["id"]: m for m in hub.machines(conn, cfg)}[hub.local_machine(spoke)["id"]]["folders"]
+    assert {f["folder"] for f in listed} == {SPOKE_CWD, str(folder.resolve())}
+
+    with open(hubenv["spoke_main"], "a") as fh:  # the session goes on: ingesting it again keeps the project
+        fh.write(json.dumps({"type": "user", "sessionId": SPOKE_SID, "cwd": SPOKE_CWD, "timestamp": "2026-09-20T11:00:00.000Z",
+                             "message": {"role": "user", "content": "one more thing"}}) + "\n")
+    hub.push(spoke)
+    sync(cfg, conn)
+    assert conn.execute("SELECT project_path FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == CWD
+
+    assert main(["hub", "folders"]) == 0
+    assert SPOKE_CWD in capsys.readouterr().out
+    assert main(["hub", "remove-folder", SPOKE_CWD]) == 0
+    assert "1 session already on the hub moved" in " ".join(capsys.readouterr().out.split())
+    row = conn.execute("SELECT project_path, machine_path FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert (row["project_path"], row["machine_path"]) == (SPOKE_CWD, None)
+    assert conn.execute("SELECT project_path FROM knowledge WHERE fingerprint = 'fp-spoke'").fetchone()[0] == SPOKE_CWD
+
+
+def test_hub_add_folder_refuses_another_projects_repository(env, monkeypatch, capsys):
+    from chronicle.cli import main
+    from chronicle.config import set_config_value
+
+    cfg = load_config(env["home"])
+    set_config_value(cfg, "hub", "url", '"https://hub.example"')
+    hub.write_token(cfg, "t")
+    folder = env["tmp"] / "client-b-app"
+    folder.mkdir()
+    projects = [{"path": "/hub/client-a", "name": "client-a", "sessions": 3},
+                {"path": "/hub/client-b", "name": "client-b", "sessions": 2},
+                {"path": "/other/client-b", "name": "client-b", "sessions": 1}]
+    monkeypatch.setattr(hub, "handshake", lambda cfg: {"projects": projects,
+                                                       "remotes": {"github.com/org/b": "/hub/client-b"}})
+    monkeypatch.setattr(hub, "git_info", lambda path: (path, "github.com/org/b"))
+
+    assert main(["hub", "add-folder", str(folder), "--project", "client-a", "--no-push"]) == 1
+    assert "belongs to one project" in " ".join(capsys.readouterr().out.split())
+    assert main(["hub", "add-folder", str(folder), "--project", "client-b", "--no-push"]) == 1  # two of them
+    assert "/other/client-b" in capsys.readouterr().out
+    assert main(["hub", "add-folder", str(folder), "--project", "/hub/client-b", "--no-push"]) == 0
+    assert "Nothing to add" in " ".join(capsys.readouterr().out.split())  # its remote already files it there
+    assert main(["hub", "add-folder", str(folder), "--project", "nope", "--no-push"]) == 1
+    assert load_config(env["home"]).hub_folders == {}
+
+    monkeypatch.setattr(hub, "git_info", lambda path: None)  # not a repository: the member decides
+    assert main(["hub", "add-folder", str(folder), "--project", "client-a", "--no-push"]) == 0
+    assert load_config(env["home"]).hub_folders == {str(folder.resolve()): "/hub/client-a"}
+    assert main(["hub", "remove-folder", str(folder), "--no-push"]) == 0
+    assert load_config(env["home"]).hub_folders == {}
+
+
+def test_hub_ignores_bad_folders():
+    assert hub.clean_folders({"relative/x": "/a", "/ok/": "/p/", "/b": "relative", 3: "/c"}) == {"/ok": "/p"}
+    assert hub.clean_folders(["/a"]) == {}
+    assert hub.under("/a/b", "/a") and hub.under("/a", "/a/") and not hub.under("/ab", "/a") and hub.under("/x", "/")
+
+
 def test_normalize_remote():
     for url in ("git@github.com:Org/Repo.git", "https://github.com/org/repo", "https://tok@github.com/Org/Repo/",
                 "ssh://git@github.com/org/repo.git"):

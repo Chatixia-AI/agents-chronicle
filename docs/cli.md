@@ -36,6 +36,7 @@
 | `chronicle hub enable [--rotate]` | Make this computer the hub for your others; prints the `chronicle hub join` command to run on them |
 | `chronicle hub join <address> --token <token>` / `hub leave` | Send this computer's sessions to a hub instead of recording them here, or stop ([Your other computers](devices.md#your-other-computers)) |
 | `chronicle hub status` / `hub disable` | The computers sending to this hub; stop accepting them |
+| `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | On a computer that joined a hub: file a folder's sessions under a project on the hub, take it back out, or show what goes where (`--list`: the hub's projects) ([Same project, different folders](devices.md#same-project-different-folders)) |
 | `chronicle push` | On a computer that joined a hub: send its new sessions now (the hook and the background sync do this) |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
 | `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` ([Configuration](configuration.md)) |

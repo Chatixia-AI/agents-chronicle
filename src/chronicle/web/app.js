@@ -3724,7 +3724,15 @@ route(/^\/devices$/, async () => {
         h("div", null, tx("Hub {url}", { url: h("span", { class: "codeline" }, dv.hub_url) })),
         h("div", { class: "muted" }, dv.last_push ? t("Last sent {ago}: {summary}", { ago: ago(dv.last_push.at), summary: dv.last_push.summary }) : t("Nothing sent yet.")),
         ...(dv.last_push?.errors || []).map((e) => h("div", { class: "muted" }, `! ${e}`))),
-      h("p", null, extLink(`${dv.hub_url}/`, t("Open the hub's dashboard")), h("span", { class: "muted" }, t(" · {command} stops sending", { command: "chronicle hub leave" })))] : null);
+      h("p", null, extLink(`${dv.hub_url}/`, t("Open the hub's dashboard")), h("span", { class: "muted" }, t(" · {command} stops sending", { command: "chronicle hub leave" }))),
+      dv.folders.length ? [
+        h("div", { class: "subhead" }, t("Folders added to projects on the hub")),
+        h("ul", { class: "bullets" }, dv.folders.map((f) => h("li", null,
+          h("span", { class: "codeline" }, f.folder), " → ", h("b", { title: f.project }, f.name),
+          h("span", { class: "muted" }, ` · ${f.sessions == null ? t("not sent yet") : tn(f.sessions, "{n} session", "{n} sessions")}`),
+          ...f.overridden.map((o) => h("div", { class: "muted" }, t("{repo} goes to {project} instead: the hub knows its git remote", { repo: o.repo, project: o.project.split("/").pop() })))))),
+        h("p", { class: "muted" }, t("Sessions in these folders, and the folders below them, go to that project on the hub. Add one with {command}.", { command: "chronicle hub add-folder <folder> --project <name>" }))]
+      : h("p", { class: "muted" }, t("To file a folder's sessions under a project on the hub, run {command} here.", { command: "chronicle hub add-folder <folder> --project <name>" }))] : null);
   const phone = h("section", { class: "card" }, cardHead(t("On your phone"), { iconName: "devices" }),
     ts ? [
       h("p", null, tx("This dashboard is on your tailnet at {url}. Open it on your phone with the Tailscale app on, then add it to the Home Screen (iPhone: Share › Add to Home Screen) to open it like an app.",
@@ -3746,11 +3754,16 @@ route(/^\/devices$/, async () => {
         h("td", null, m.last_session ? ago(m.last_session) : "–"),
         h("td", null, m.this ? "–" : m.last_push ? ago(m.last_push) : t("nothing yet")))))));
     const maps = Object.entries(dv.path_map || {});
+    const added = dv.machines.flatMap((m) => (m.folders || []).map((f) => [m, f]));
     computers = h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices", hint: dv.role === "hub" ? t("{n} sending here", { n: others.length }) : null }),
       dv.role === "hub" ? [
         table,
         h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "chronicle hub enable" })),
-        maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null]
+        maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null,
+        added.length ? [h("div", { class: "subhead" }, t("Folders added on other computers")),
+          h("ul", { class: "bullets" }, added.map(([m, f]) => h("li", null, h("b", null, m.name || m.id.slice(0, 8)), ": ",
+            h("span", { class: "codeline" }, f.folder), " → ", h("span", { title: f.project }, f.name)))),
+          h("p", { class: "muted" }, t("Sessions in these folders go to the project shown, unless a repository inside has a git remote this hub knows."))] : null]
       : [
         h("p", null, t("Keep the sessions of your other computers here too. This computer becomes the hub, the only one that records and analyzes (so each session is analyzed once); the others send it their Claude Code and Codex sessions over your tailnet. Run here:")),
         cmd("chronicle hub enable"),

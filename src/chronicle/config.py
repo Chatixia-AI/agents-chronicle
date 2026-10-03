@@ -100,6 +100,9 @@ url = ""
 # On the hub: folders on the other computers that hold the same projects as a folder here,
 # e.g. { "/home/me/code" = "/Users/me/Projects" }. Projects are also matched by their git remote.
 path_map = {}
+# On a computer that sends to a hub: folders here whose sessions belong to a project on the hub, folder and all
+# below it. Set by `chronicle hub add-folder <folder> --project <name>`.
+folders = {}
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -180,6 +183,7 @@ class Config:
     server_allowed_users: list[str] = field(default_factory=list)
     hub_url: str = ""
     hub_path_map: dict[str, str] = field(default_factory=dict)
+    hub_folders: dict[str, str] = field(default_factory=dict)
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -282,6 +286,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
     inject = _section(data, "inject")
     hub = _section(data, "hub")
     path_map = hub.get("path_map")
+    folders = hub.get("folders")
 
     env_dirs = os.environ.get("CHRONICLE_CLAUDE_DIRS")
     raw_dirs = env_dirs.split(os.pathsep) if env_dirs else sources.get("claude_dirs", ["~/.claude"])
@@ -307,6 +312,8 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         server_allowed_users=[str(u).strip() for u in server.get("allowed_users") or [] if str(u).strip()],
         hub_url=str(hub.get("url") or "").strip().rstrip("/"),
         hub_path_map={str(k).rstrip("/"): str(v).rstrip("/") for k, v in path_map.items()} if isinstance(path_map, dict) else {},
+        hub_folders={str(Path(str(k)).expanduser()).rstrip("/") or "/": str(v).rstrip("/") for k, v in folders.items()
+                     if str(k).strip() and str(v).strip()} if isinstance(folders, dict) else {},
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),

@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Add a folder to a project on the hub:** on a computer that sends its sessions to a hub,
+  `chronicle hub add-folder <folder> --project <name>` files the sessions in that folder, and every folder below it,
+  under one of the hub's projects: a notes folder, a scratch folder, or a repository the hub doesn't know. Sessions
+  already on the hub move too, with their knowledge, and both projects' knowledge bases are rebuilt. The more
+  specific match wins: a repository inside the folder whose git remote the hub knows still follows its remote, and a
+  folder inside a repository the hub files under another project is refused. `chronicle hub folders` shows what
+  goes where, `chronicle hub remove-folder` undoes one, and the hub's **Settings › Devices** lists the folders each
+  computer added. [Same project, different folders](docs/devices.md#same-project-different-folders)
 - **The dashboard in Japanese:** every page, menu, chart, toast and the ⌘K palette can be shown in Japanese, with
   dates, times and durations written the Japanese way. **日本語** in the status bar (next to the theme toggle) switches
   over, and **Settings › Appearance › Language** picks System, English or 日本語; System follows the browser. Text the
