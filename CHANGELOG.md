@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Session pages open on Details:** the summary, knowledge, context chart, tools and files come first, and
+  **Transcript** is one click away. A search result still opens the transcript at the match, and `?tab=transcript`
+  or `?tab=details` in a link picks one.
 - **Google Antigravity is a source:** `chronicle connect antigravity` (or the Sources page) records Antigravity
   conversations from the step log Antigravity writes beside each conversation's artifacts
   (`~/.gemini/antigravity/brain/<id>/.system_generated/logs/`): prompts, replies, thinking, tool calls with results
