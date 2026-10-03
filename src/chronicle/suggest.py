@@ -22,6 +22,7 @@ from pathlib import Path
 
 from . import friction, instructions
 from .config import Config
+from .i18n import lang, tr, trn
 from .util import dumps, loads, one_line, utcnow_iso
 
 log = logging.getLogger("chronicle.suggest")
@@ -56,6 +57,46 @@ def list_suggestions(conn: sqlite3.Connection, status: str | None = None, projec
     return [_row(r) for r in conn.execute(sql + " ORDER BY score DESC, id", params)]
 
 
+def display(s: dict) -> dict:
+    """A suggestion as the dashboard shows it, in the viewer's language (i18n). The row keeps its English title and
+    evidence line (a knowledge title, and every line's text, stay as they were written), so they are rebuilt here."""
+    if lang.get() == "en":
+        return s
+    e = dict(s.get("evidence") or {})
+    if s["origin"] == "friction":
+        s = {**s, "title": tr(s["title"])}
+        if e.get("cause"):
+            e["cause"] = tr(e["cause"])
+        if e.get("line") and "sessions" in e and "still_happening" in e:
+            e["line"] = _friction_line(e)
+        e["examples"] = [{**x, "note": friction.display_note(x.get("note"))} for x in e.get("examples") or []]
+    elif s["origin"] == "knowledge" and e.get("line") and "sessions" in e:
+        e["line"] = _knowledge_line(e)
+    return {**s, "evidence": e}
+
+
+def _friction_line(e: dict) -> str:
+    """_evidence_line, in the viewer's language."""
+    n, p = e.get("sessions") or 0, e.get("projects") or 0
+    parts = [trn(n, "seen in {n} session across {p} projects", "seen in {n} sessions across {p} projects", p=p) if p > 1
+             else trn(n, "seen in {n} session", "seen in {n} sessions")]
+    parts.append(tr("still happening") if e.get("still_happening") else tr("not seen lately"))
+    if e.get("last_seen"):
+        parts.append(tr("last {date}", date=e["last_seen"]))
+    if e.get("project_sessions") is not None:
+        parts.append(tr("{n} in this project", n=e["project_sessions"]))
+    return " · ".join(parts)
+
+
+def _knowledge_line(e: dict) -> str:
+    """A knowledge suggestion's evidence line (instructions._candidate), in the viewer's language."""
+    n, p = e.get("sessions") or 0, e.get("projects") or 0
+    where = e["line"].rsplit(" · ", 1)[-1]
+    confirmed = (trn(n, "confirmed in {n} session across {p} projects", "confirmed in {n} sessions across {p} projects", p=p)
+                 if p > 1 else trn(n, "confirmed in {n} session", "confirmed in {n} sessions"))
+    return " · ".join([tr(e.get("stage") or "provisional"), confirmed, tr(where) if where == "user level" else where])
+
+
 def counts(conn: sqlite3.Connection) -> dict[str, int]:
     out = {s: 0 for s in STATUSES}
     for r in conn.execute("SELECT status, COUNT(*) FROM suggestions GROUP BY status"):
@@ -84,6 +125,13 @@ def claude_json_path() -> Path:
 
 def playwright_output_dir() -> str:
     return str(Path("~/.cache/playwright-mcp").expanduser())
+
+
+def fix_text(fix: dict, cfg: Config) -> str:
+    """A catalog fix's text in the language Chronicle writes in: instruction lines have a Japanese version (text_ja);
+    commands and config changes are the same in every language."""
+    text = fix.get("text_ja") if cfg.analysis.language == "ja" and fix.get("text_ja") else fix["text"]
+    return text.replace("{playwright_output_dir}", playwright_output_dir())
 
 
 def _evidence_line(cause: dict) -> str:
@@ -127,7 +175,7 @@ def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
     base = {"origin": "friction", "cause_id": cid, "knowledge_id": None, "score": score}
     for fix in cause["fixes"]:
         kind = fix["kind"]
-        text = fix["text"].replace("{playwright_output_dir}", playwright_output_dir())
+        text = fix_text(fix, cfg)
         if kind == "environment":
             out.append({**base, "key": f"friction:{cid}:all:user:environment", "kind": kind, "project_path": None,
                         "agent": "all", "target_path": None, "title": fix["title"], "text": text,
@@ -162,8 +210,9 @@ def _friction_proposals(conn: sqlite3.Connection, cfg: Config, cause: dict,
                     if t:
                         targets.setdefault((t, path), []).append(a)
         for (target, project), who in targets.items():
-            if instructions.overlap(text, _read(target)):
-                continue  # the file already says this
+            content = _read(target)
+            if any(instructions.overlap(t, content) for t in (text, fix["text"], fix.get("text_ja")) if t):
+                continue  # the file already says this, in either language
             out.append({**base, "key": f"friction:{cid}:{_file_label(target)}:{project or 'user'}", "kind": "instruction",
                         "project_path": project, "agent": who[0] if len(who) == 1 else "all",
                         "target_path": str(target), "title": fix["title"], "text": text,
@@ -214,6 +263,8 @@ def refresh(conn: sqlite3.Connection, cfg: Config) -> dict[str, int]:
         old = existing.get(p["key"])
         if old is None and _decided_lesson(existing.values(), p):
             continue  # the same lesson, under another member's id, was already dismissed or applied here
+        if old is None and _in_file(p):
+            continue  # its line is already in the file's block (its marker is the same in every language)
         if old is None:
             conn.execute(
                 f"INSERT INTO suggestions({', '.join(COLUMNS)}, status, created_at, updated_at) "
@@ -283,13 +334,13 @@ def move(conn: sqlite3.Connection, cfg: Config, sid: int, to: str) -> dict:
     again where it now goes, ahead of the 8-a-file limit; applied and dismissed ones stay as they are."""
     s = get(conn, sid)
     if s is None:
-        return {"ok": False, "error": "no such suggestion"}
+        return {"ok": False, "error": tr("no such suggestion")}
     if to not in ("user", "project"):
-        return {"ok": False, "error": "move to user or project"}
+        return {"ok": False, "error": tr("move to user or project")}
     if s["kind"] != "instruction" or s["status"] != "new" or s["origin"] not in ("friction", "knowledge"):
-        return {"ok": False, "error": "only an instruction line waiting for review can move"}
+        return {"ok": False, "error": tr("only an instruction line waiting for review can move")}
     if (s["project_path"] is None) == (to == "user"):
-        return {"ok": False, "error": "it is already there"}
+        return {"ok": False, "error": tr("it is already there")}
     ids = _lesson_ids(s)
     subjects = [f"cause:{s['cause_id']}"] if s["origin"] == "friction" else [f"knowledge:{i}" for i in sorted(ids)]
 
@@ -309,6 +360,16 @@ def move(conn: sqlite3.Connection, cfg: Config, sid: int, to: str) -> dict:
         conn.executemany("UPDATE suggestions SET text = ? WHERE id = ?", [(s["text"], r["id"]) for r in arrived])
         conn.commit()
     return {"ok": True, "moved": len(arrived), "targets": sorted({r["target_path"] for r in arrived})}
+
+
+def _in_file(p: dict) -> bool:
+    """The target file's Chronicle block already holds this proposal's line, by its marker."""
+    if p["kind"] != "instruction" or not p["target_path"]:
+        return False
+    try:
+        return marker(p) in {k for k, _text in instructions.read_block(Path(p["target_path"]))}
+    except instructions.MalformedBlock:
+        return False
 
 
 def _lesson_ids(s: dict) -> set[int]:
@@ -359,23 +420,23 @@ def parse_config_change(text: str) -> tuple[str, list[str]]:
     """'mcpServers.<name>.args += [...]' -> (server name, args to add). Raises ValueError otherwise."""
     m = _CONFIG_CHANGE.match(text or "")
     if not m:
-        raise ValueError("expected: mcpServers.<name>.args += [\"--flag\", ...]")
+        raise ValueError(tr("expected: mcpServers.<name>.args += [\"--flag\", ...]"))
     try:
         args = json.loads(m.group(2))
     except ValueError:
-        raise ValueError("the arguments must be a JSON list of strings") from None
+        raise ValueError(tr("the arguments must be a JSON list of strings")) from None
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
-        raise ValueError("the arguments must be a JSON list of strings")
+        raise ValueError(tr("the arguments must be a JSON list of strings"))
     if "playwright" not in m.group(1).lower():
-        raise ValueError("Chronicle only changes the Playwright MCP server's arguments")
+        raise ValueError(tr("Chronicle only changes the Playwright MCP server's arguments"))
     i = 0
     while i < len(args):
         if args[i] not in CONFIG_FLAGS:
-            raise ValueError(f"Chronicle does not set {args[i]!r}; only " + ", ".join(CONFIG_FLAGS))
+            raise ValueError(tr("Chronicle does not set {arg!r}; only {flags}", arg=args[i], flags=", ".join(CONFIG_FLAGS)))
         if CONFIG_FLAGS[args[i]]:
             i += 1
             if i >= len(args) or not args[i].startswith("/"):
-                raise ValueError(f"{args[i - 1]} needs an absolute path")
+                raise ValueError(tr("{flag} needs an absolute path", flag=args[i - 1]))
         i += 1
     return m.group(1), args
 
@@ -401,7 +462,7 @@ def _load_json(path: Path) -> tuple[str, dict]:
     old = path.read_text()
     data = json.loads(old) if old.strip() else {}
     if not isinstance(data, dict):
-        raise ValueError(f"{path} is not a JSON object")
+        raise ValueError(tr("{path} is not a JSON object", path=path))
     return old, data
 
 
@@ -433,7 +494,7 @@ def plan_config(path: Path, text: str, *, remove: bool = False) -> tuple[str, st
     old, data = _load_json(path)
     server = (data.get("mcpServers") or {}).get(name)
     if not isinstance(server, dict):
-        raise ValueError(f"no MCP server named {name!r} in {path}")
+        raise ValueError(tr("no MCP server named {name!r} in {path}", name=name, path=path))
     args = list(server.get("args") or [])
     if remove:
         for g in _groups(wanted):
@@ -466,7 +527,7 @@ def marker(s: dict) -> str:
 def _plan(s: dict, text: str, *, remove: bool = False) -> tuple[Path, str, str]:
     path = Path(s["target_path"])
     if s["project_path"] and not Path(s["project_path"]).is_dir():
-        raise ValueError(f"the project {s['project_path']} no longer exists")
+        raise ValueError(tr("the project {path} no longer exists", path=s["project_path"]))
     if s["kind"] == "instruction":
         old = _read(path) if path.exists() else ""
         mark = marker(s)
@@ -475,14 +536,14 @@ def _plan(s: dict, text: str, *, remove: bool = False) -> tuple[Path, str, str]:
     if s["kind"] == "config":
         old, new = plan_config(path, text, remove=remove)
         return path, old, new
-    raise ValueError(f"{s['kind']} suggestions are not written by Chronicle")
+    raise ValueError(tr("{kind} suggestions are not written by Chronicle", kind=s["kind"]))
 
 
 def preview(conn: sqlite3.Connection, cfg: Config, sid: int, text: str | None = None) -> dict:
     """The unified diff applying would make, written nowhere. Environment steps return their command instead."""
     s = get(conn, sid)
     if s is None:
-        return {"ok": False, "error": "no such suggestion"}
+        return {"ok": False, "error": tr("no such suggestion")}
     text = (text if text is not None else s["text"]).strip()
     # ~/.claude.json is never committed or shared, so a home path there is not a leak
     warnings = {**(s["warnings"] or {}), "sensitive": [] if s["kind"] == "config" else instructions.sensitive(text)}
@@ -499,9 +560,9 @@ def apply(conn: sqlite3.Connection, cfg: Config, sid: int, text: str | None = No
     """Write the suggestion (backing the file up first) and mark it applied. Returns {ok, path, diff}."""
     s = get(conn, sid)
     if s is None:
-        return {"ok": False, "error": "no such suggestion"}
+        return {"ok": False, "error": tr("no such suggestion")}
     if s["kind"] == "environment":
-        return {"ok": False, "error": "Chronicle does not run setup steps: run the command yourself, then mark it done"}
+        return {"ok": False, "error": tr("Chronicle does not run setup steps: run the command yourself, then mark it done")}
     text = one_line(text, 2000) if text is not None and s["kind"] == "instruction" else (text or s["text"]).strip()
     applied = text
     evidence = dict(s["evidence"])
@@ -529,7 +590,7 @@ def unapply(conn: sqlite3.Connection, cfg: Config, sid: int) -> dict:
     """Take an applied suggestion back out of its file (or an environment step out of 'done'); it returns to 'new'."""
     s = get(conn, sid)
     if s is None:
-        return {"ok": False, "error": "no such suggestion"}
+        return {"ok": False, "error": tr("no such suggestion")}
     diff, path = "", None
     gone = bool(s["project_path"]) and not Path(s["project_path"]).is_dir()  # the line went with the project
     if s["kind"] != "environment" and s["status"] == "applied" and not gone:
@@ -553,7 +614,7 @@ def edit_text(conn: sqlite3.Connection, sid: int, text: str) -> dict:
     """Keep an edited proposal text; refresh will not overwrite it."""
     text = (text or "").strip()
     if not text:
-        return {"ok": False, "error": "empty text"}
+        return {"ok": False, "error": tr("empty text")}
     cur = conn.execute("UPDATE suggestions SET text = ?, updated_at = ? WHERE id = ? AND status IN ('new', 'stale')",
                        (text, utcnow_iso(), sid))
     conn.commit()
@@ -563,7 +624,7 @@ def edit_text(conn: sqlite3.Connection, sid: int, text: str) -> dict:
 def dismiss(conn: sqlite3.Connection, sid: int, reason: str | None = None) -> dict:
     s = get(conn, sid)
     if s is not None and s["status"] == "applied":
-        return {"ok": False, "error": "this one is applied: undo it first, so its line leaves the file"}
+        return {"ok": False, "error": tr("this one is applied: undo it first, so its line leaves the file")}
     cur = conn.execute("UPDATE suggestions SET status = 'dismissed', dismissed_reason = ?, updated_at = ? WHERE id = ?",
                        ((reason or "").strip() or None, utcnow_iso(), sid))
     conn.commit()
@@ -574,7 +635,7 @@ def mark_done(conn: sqlite3.Connection, sid: int) -> dict:
     """You ran an environment step yourself."""
     s = get(conn, sid)
     if s is None or s["kind"] != "environment":
-        return {"ok": False, "error": "only environment steps are marked done"}
+        return {"ok": False, "error": tr("only environment steps are marked done")}
     now = utcnow_iso()
     conn.execute("UPDATE suggestions SET status = 'done', applied_at = ?, applied_text = text, updated_at = ? WHERE id = ?",
                  (now, now, sid))

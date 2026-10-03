@@ -73,6 +73,17 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
    with backfill off, failed four times). When the whole queue is stopped (paused for a usage limit, automatic
    analysis off, or the analyzer not found), that is said too.
 
+## Language
+
+Chronicle writes in English unless `[analysis] language` is `ja` ([Configuration](configuration.md#analysis), or
+**Status › Analysis**). Then summaries, knowledge, knowledge bases, the playbook, glossary definitions and theme names,
+weekly reviews and screening reasons are written in Japanese. Identifiers, commands, paths, error messages and quotes
+stay as they were, and so do tags and the codes Chronicle reads back (kinds, outcomes, verdicts). The setting applies
+to what is analyzed or synthesized from then on; earlier sessions keep their language until they are analyzed again.
+Synthesis treats items in different languages that state the same lesson as duplicates, so they merge and confirm
+each other. The dashboard's own words follow the language chosen in the dashboard, per browser, whatever this
+setting says.
+
 ## How knowledge earns trust
 
 Every knowledge item has a stage, which says how far it has been confirmed:

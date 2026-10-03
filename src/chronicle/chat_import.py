@@ -25,6 +25,7 @@ from pathlib import Path
 
 from . import chatgpt_export, claude_export
 from .util import utcnow_iso
+from .views import NOT_ANALYZED_CHAT
 
 log = logging.getLogger("chronicle.chat_import")
 
@@ -52,7 +53,7 @@ class Format:
 
     @property
     def not_analyzed(self) -> str:
-        return f"imported {self.label} chat: not analyzed automatically (Analyze now, or import with --analyze)"
+        return NOT_ANALYZED_CHAT.format(label=self.label)
 
 
 CLAUDE_AI = Format("claude-ai", "claude.ai", claude_export)

@@ -28,6 +28,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `model` / `effort` | `sonnet` / `medium` | Claude: any `claude --model` alias. `effort` also sets Codex's reasoning effort (`max` becomes `xhigh`) |
 | `codex_model` | `""` | Codex model, e.g. `gpt-5.5`; empty uses Codex's default |
 | `screen_model` | `haiku` | model that screens imported chats (`chronicle screen`); it reads only each chat's opening, 60 chats a call |
+| `language` | `en` | the language Chronicle writes in: summaries, knowledge, knowledge bases, the playbook, glossary definitions, weekly reviews, screening reasons and the lines it proposes for `CLAUDE.md` / `AGENTS.md`. `en` or `ja`; applies to what is analyzed from then on. Also in **Status › Analysis**. The dashboard's own language is chosen in the dashboard, per browser |
 | `max_budget_usd` | `3.0` | spend cap per `claude -p` call, API-equivalent USD (Codex reports tokens only) |
 | `idle_minutes` | `20` | a session must have ended or been idle this long before it is analyzed |
 | `min_prompts` | `1` | sessions with fewer human prompts are skipped |

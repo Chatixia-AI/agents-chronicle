@@ -8,7 +8,8 @@ from datetime import date, datetime, time, timedelta
 
 from . import ladder
 from .config import Config
-from .llm import Runner, make_runner
+from .i18n import tr
+from .llm import Runner, make_runner, written_in
 from .util import dumps, human_cost, human_count, human_duration, loads, one_line, to_iso, utcnow_iso
 
 log = logging.getLogger("chronicle.reviews")
@@ -50,6 +51,7 @@ respect the word limits. Cover what they worked on and achieved, the recurring t
 learnings, what is left open, what kept slowing them down, and a few concrete, specific suggestions to work \
 better with Claude Code (a CLAUDE.md rule, a script, a skill, a habit). Be specific and grounded in the \
 sessions; no generic productivity advice. Write in English; keep project names and identifiers verbatim."""
+WRITE_ENGLISH = "Write in English; keep project names and identifiers verbatim."
 
 
 def week_bounds(key: str | None = None) -> tuple[str, datetime, datetime]:
@@ -93,7 +95,7 @@ def week_glance(conn, since: str, until: str) -> dict:
         day = (datetime.fromisoformat(r["started_at"].replace("Z", "+00:00")).astimezone().date() - start.date()).days
         daily[min(max(day, 0), 6)] += r["active_s"] or 0
         p = projects.setdefault(r["project_path"] or "", {
-            "path": r["project_path"] or "", "label": labels.get(r["project_path"], r["project_name"] or "(no project)"),
+            "path": r["project_path"] or "", "label": labels.get(r["project_path"], r["project_name"] or tr("(no project)")),
             "active_s": 0.0, "sessions": 0})
         p["active_s"] += r["active_s"] or 0
         p["sessions"] += 1
@@ -111,16 +113,16 @@ def review_ready(conn, key: str | None = None) -> tuple[bool, str]:
     since, until = to_iso(start), to_iso(end)
     existing = conn.execute("SELECT created_at FROM reviews WHERE period = ?", (key,)).fetchone()
     if existing and (existing[0] or "") >= until:
-        return False, "exists"  # a "so far" review written mid-week does not count as the week's review
+        return False, tr("exists")  # a "so far" review written mid-week does not count as the week's review
     row = conn.execute(
         "SELECT SUM(CASE WHEN analysis_status = 'done' THEN 1 ELSE 0 END), "
         "SUM(CASE WHEN analysis_status IN ('pending','stale','running') THEN 1 ELSE 0 END) FROM sessions "
         "WHERE source != 'history' AND started_at >= ? AND started_at < ?", (since, until)).fetchone()
     done, waiting = row[0] or 0, row[1] or 0
     if done < 2:
-        return False, "fewer than 2 analyzed sessions"
+        return False, tr("fewer than 2 analyzed sessions")
     if waiting:
-        return False, f"{waiting} sessions still waiting for analysis"
+        return False, tr("{n} sessions still waiting for analysis", n=waiting)
     return True, key
 
 
@@ -162,9 +164,10 @@ def generate_review(conn: sqlite3.Connection, cfg: Config, key: str | None = Non
         "<knowledge_extracted>\n" + "\n".join(f"- [{k['kind']}] {k['title']} ({k['project_name']})" for k in knowledge[:200])
         + "\n</knowledge_extracted>\n\nWrite the weekly review."
     )
-    res = runner.run(prompt, REVIEW_SCHEMA, system=SYSTEM, model=cfg.synthesis.model)
+    res = runner.run(prompt, REVIEW_SCHEMA, system=written_in(cfg, SYSTEM, WRITE_ENGLISH, "Keep project names verbatim."),
+                     model=cfg.synthesis.model)
     data = normalize_review(res.data)
-    data["overturned"] = [overturned_line(k) for k in ladder.overturned(conn, since, until)]
+    data["overturned"] = [overturned_line(k, cfg.analysis.language) for k in ladder.overturned(conn, since, until)]
     markdown = render_review(key, start, end, data, stats)
     try:
         _store_review(conn, key, since, until, res, len(sessions), markdown, data, stats, len(prompt))
@@ -190,10 +193,18 @@ def _store_review(conn, key, since, until, res, n_sessions, markdown, data, stat
     conn.commit()
 
 
-def overturned_line(k: dict) -> str:
-    """One overturned item: what it said, how trusted it was, and what replaced it."""
+OVERTURNED_JA = {"wip": "仮", "provisional": "1 回のみ", "established": "定着", "canonical": "確定", "outdated": "古くなった",
+                 "contradicted": "否定された", "duplicate": "重複"}
+
+
+def overturned_line(k: dict, language: str = "en") -> str:
+    """One overturned item: what it said, how trusted it was, and what replaced it (in the language the review is in)."""
     what = f"{k['title']}" + (f" ({k['project_name']})" if k.get("project_name") else "")
-    why = f"{k['stage']}, {k.get('superseded_reason') or 'outdated'}"
+    reason = k.get("superseded_reason") or "outdated"
+    if language == "ja":
+        why = f"{OVERTURNED_JA.get(k['stage'], k['stage'])}（{OVERTURNED_JA.get(reason, reason)}）"
+        return f"{what}：{why}" + (f" →「{k['successor_title']}」" if k.get("successor_title") else "")
+    why = f"{k['stage']}, {reason}"
     return f"{what}: was {why}" + (f"; now \u201c{k['successor_title']}\u201d" if k.get("successor_title") else "")
 
 

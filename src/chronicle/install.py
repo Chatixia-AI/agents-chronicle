@@ -14,6 +14,7 @@ import sys
 from pathlib import Path
 
 from .config import Config
+from .i18n import tr
 from .util import utcnow_iso
 
 LAUNCHD_LABEL = "com.claude-chronicle.sync"
@@ -136,7 +137,7 @@ def install_hooks(cfg: Config, exe: str, *, inject: bool, dry_run: bool = False)
     if not dry_run and (not path.exists() or path.read_text() != new_text):
         backup = _backup(cfg, path)
         if backup:
-            actions.append(f"backed up {path} -> {backup}")
+            actions.append(tr("backed up {path} -> {backup}", path=path, backup=backup))
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_text)
     return actions
@@ -165,7 +166,7 @@ def uninstall_hooks(cfg: Config) -> list[str]:
     if removed:
         _backup(cfg, path)
         path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
-    return [f"removed {removed} hook(s) from {path}"] if removed else []
+    return [tr("removed {n} hook(s) from {path}", n=removed, path=path)] if removed else []
 
 
 # ------------------------------------------------------------------ status line (optional)
@@ -205,7 +206,7 @@ def install_statusline(cfg: Config, exe: str, *, dry_run: bool = False) -> list[
     if not dry_run and (not path.exists() or path.read_text() != new_text):
         backup = _backup(cfg, path)
         if backup:
-            actions.append(f"backed up {path} -> {backup}")
+            actions.append(tr("backed up {path} -> {backup}", path=path, backup=backup))
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(new_text)
     return actions
@@ -461,7 +462,7 @@ def mcp_registered() -> bool:
 def install_mcp(cfg: Config, exe: str, *, dry_run: bool = False) -> list[str]:
     claude = cfg.claude_bin()
     if not claude:
-        return ["MCP registration skipped: claude CLI not found"]
+        return [tr("MCP registration skipped: claude CLI not found")]
     args = shlex.split(exe) + ["mcp"]
     cmd = [claude, "mcp", "add", "--scope", "user", "--transport", "stdio", MCP_NAME, "--", *args]
     if dry_run:
@@ -469,8 +470,8 @@ def install_mcp(cfg: Config, exe: str, *, dry_run: bool = False) -> list[str]:
     subprocess.run([claude, "mcp", "remove", "--scope", "user", MCP_NAME], capture_output=True, text=True)
     proc = subprocess.run(cmd, capture_output=True, text=True, env={**os.environ, "CHRONICLE_INTERNAL": "1"})
     if proc.returncode != 0:
-        return [f"MCP registration failed: {(proc.stderr or proc.stdout).strip()[:300]}"]
-    return [f"registered MCP server '{MCP_NAME}' (user scope)"]
+        return [tr("MCP registration failed: {error}", error=(proc.stderr or proc.stdout).strip()[:300])]
+    return [tr("registered MCP server '{name}' (user scope)", name=MCP_NAME)]
 
 
 def uninstall_mcp(cfg: Config) -> list[str]:
@@ -478,4 +479,5 @@ def uninstall_mcp(cfg: Config) -> list[str]:
     if not claude or not mcp_registered():
         return []
     proc = subprocess.run([claude, "mcp", "remove", "--scope", "user", MCP_NAME], capture_output=True, text=True)
-    return [f"removed MCP server '{MCP_NAME}'"] if proc.returncode == 0 else [f"MCP removal failed: {proc.stderr.strip()[:200]}"]
+    return ([tr("removed MCP server '{name}'", name=MCP_NAME)] if proc.returncode == 0
+            else [tr("MCP removal failed: {error}", error=proc.stderr.strip()[:200])])

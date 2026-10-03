@@ -27,6 +27,7 @@ from pathlib import Path
 from collections.abc import Callable
 
 from .config import Config
+from .i18n import tr
 from .util import dumps, loads, one_line, parse_ts, utcnow
 
 BEGIN = "<!-- BEGIN chronicle -->"
@@ -71,8 +72,8 @@ def _block_span(lines: list[str]) -> tuple[int, int] | None:
     if not begins and not ends:
         return None
     if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
-        raise MalformedBlock(f"malformed chronicle block ({len(begins)} BEGIN and {len(ends)} END markers, "
-                             "expected one BEGIN followed by one END)")
+        raise MalformedBlock(tr("malformed chronicle block ({begins} BEGIN and {ends} END markers, expected one BEGIN "
+                                "followed by one END)", begins=len(begins), ends=len(ends)))
     return begins[0], ends[0]
 
 
@@ -175,7 +176,7 @@ def merge_file(path: Path, old_text: str | None, add: list[tuple[str, str]], rem
     try:
         return merge(old_text, add, remove_keys)
     except MalformedBlock as exc:
-        raise MalformedBlock(f"{exc} in {path}; fix it by hand") from None
+        raise MalformedBlock(tr("{error} in {path}; fix it by hand", error=exc, path=path)) from None
 
 
 def write_atomic(path: Path, text: str, *, cfg: Config | None = None, mkdir: bool = True) -> Path | None:
@@ -193,7 +194,7 @@ def write_atomic(path: Path, text: str, *, cfg: Config | None = None, mkdir: boo
     path = Path(os.path.realpath(path))
     if not path.parent.is_dir():
         if not mkdir:
-            raise FileNotFoundError(f"{path.parent} no longer exists")
+            raise FileNotFoundError(tr("{path} no longer exists", path=path.parent))
         path.parent.mkdir(parents=True, exist_ok=True)
     try:
         if b"\r\n" in path.read_bytes():  # the merge works on \n lines; give a CRLF file its endings back
@@ -273,13 +274,19 @@ _STOP = {"this", "that", "with", "from", "when", "then", "than", "into", "your",
          "only", "also", "each", "every", "before", "after", "never", "always", "should", "must", "does", "dont", "instead"}
 
 
+_CJK_WORD = re.compile(r"[\u3400-\u4dbf\u4e00-\u9fff\u30a0-\u30ff々]{2,}")  # Japanese content words: kanji and katakana
+
+
 def tokens(text: str | None) -> set[str]:
-    """Identifiers, paths and words of 4+ characters, lowercased (the overlap vocabulary)."""
+    """Identifiers, paths and words of 4+ characters, lowercased, and the two-character pieces of Japanese words, so
+    that Japanese lines compare too (the overlap vocabulary)."""
     out = set()
     for t in re.findall(r"[A-Za-z0-9_./~:@-]+", (text or "").lower()):
         t = t.strip(".:-/")
         if len(t) >= 4 and t not in _STOP:
             out.add(t)
+    for word in _CJK_WORD.findall(text or ""):
+        out.update(word[i:i + 2] for i in range(len(word) - 1))
     return out
 
 
@@ -436,10 +443,14 @@ _CHANGELOG = re.compile(
     r"^(fixed|fix:|fixes|added|adds|shipped|implemented|introduced|replaced|redesigned|refactored|removed|renamed|migrated|"
     r"switched|moved|created|built|closed|resolved|upgraded|updated|extended|rewrote|restructured|enabled|disabled|"
     r"released|bumped|merged|deployed|landed|completed|finished|adr-\d+)\b|\bnow (\w+s|is|has|uses|does|returns)\b|"
-    r"\b(was|were) (fixed|added|replaced|removed|closed)\b|\bclosed via\b", re.I)
-_NARRATIVE = re.compile(r"\b(returned|crashed|broke|caused|accepted|was shadowed|were showing|regressed|failed)\b", re.I)
-_RULE = re.compile(r"\b(must|never|always|don'?t|do not|avoid|only|requires?|prefer|instead of|should|needs? to|not)\b", re.I)
-_STRONG_RULE = re.compile(r"\b(must|never|always|don'?t|do not|avoid|use .{1,40} (not|instead of))\b", re.I)
+    r"\b(was|were) (fixed|added|replaced|removed|closed)\b|\bclosed via\b"
+    r"|(修正|追加|実装|削除|変更|移行|導入|更新|置き換え|対応)(した|しました)?。?$|(した|しました)。?$", re.I)  # and in Japanese
+_NARRATIVE = re.compile(r"\b(returned|crashed|broke|caused|accepted|was shadowed|were showing|regressed|failed)\b"
+                        r"|失敗した|クラッシュした|壊れた|原因だった|表示されていた", re.I)
+_RULE = re.compile(r"\b(must|never|always|don'?t|do not|avoid|only|requires?|prefer|instead of|should|needs? to|not)\b"
+                   r"|必ず|常に|決して|禁止|べき|必要|ではなく|代わりに|しない|使わない|ないこと|避け", re.I)
+_STRONG_RULE = re.compile(r"\b(must|never|always|don'?t|do not|avoid|use .{1,40} (not|instead of))\b"
+                          r"|必ず|常に|決して|禁止|しないこと|使わない|ではなく.{1,40}(を使う|にする)", re.I)
 _ABBREV = re.compile(r"\b(e\.g|i\.e|vs|etc|cf|approx|incl)\.$", re.I)
 
 

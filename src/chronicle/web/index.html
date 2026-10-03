@@ -20,6 +20,10 @@
       // the macOS app loads ?app=mac: the page goes transparent over the window's native vibrancy
       if (q.get("app") === "mac") root.classList.add("in-app");
       if (q.get("reduce") === "1") root.classList.add("os-solid");
+      // the UI language, resolved as i18n.js does: set before the first paint
+      var lang = /^ja\b/i.test((navigator.languages && navigator.languages[0]) || navigator.language || "") ? "ja" : "en";
+      try { var l = localStorage.getItem("chronicle-lang"); if (l === "en" || l === "ja") lang = l; } catch (e) {}
+      root.lang = lang;
       try {
         var t = localStorage.getItem("chronicle-theme"); if (t) root.dataset.theme = t;
         if (localStorage.getItem("chronicle-solid") === "1") root.classList.add("solid");
@@ -63,6 +67,7 @@
         <span id="status-sync"></span>
         <span id="status-version"></span>
         <button type="button" id="status-update" hidden></button>
+        <button type="button" id="lang-btn" title="日本語に切り替え" aria-label="日本語に切り替え" lang="ja">日本語</button>
         <button type="button" id="theme-btn" title="Toggle theme" aria-label="Toggle theme"></button>
       </div>
     </footer>
@@ -73,6 +78,8 @@
   <div id="update-note" role="status" aria-live="polite" hidden></div>
   <div id="activity" role="dialog" aria-label="Activity" hidden></div>
   <script src="rough.js"></script>
+  <script src="ja.js"></script>
+  <script src="i18n.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

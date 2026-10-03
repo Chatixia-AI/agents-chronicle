@@ -134,6 +134,15 @@ Chronicle writes only inside one block at the end of the file:
 - A damaged block (a `BEGIN` without its `END`, or two blocks) is never guessed at: applying stops and names the file
   to fix by hand.
 
+### Language
+
+Lines from what goes wrong are written in the language of `[analysis] language` ([Configuration](configuration.md#analysis)):
+English, or Japanese with `ja`. Commands and config changes read the same in both. The marker at the end of a line
+(`<!-- chronicle:friction:… -->`) does not change with the language, so a line already in the file is not proposed
+again in the other one, and a line outside the block that says the same thing counts in either language. A waiting
+line you have not edited switches language at the next refresh; an applied or edited one stays as it is. Lines from
+knowledge are in the language the knowledge was written in.
+
 ### The config change
 
 For `playwright-output-roots` and `playwright-browser-in-use`, Chronicle proposes:

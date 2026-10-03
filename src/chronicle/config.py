@@ -67,6 +67,10 @@ codex_model = ""
 codex_bin = ""
 # Model that screens imported chats (`chronicle screen`): it reads only each chat's opening.
 screen_model = "haiku"
+# Language Chronicle writes in: summaries, knowledge, knowledge bases, the playbook, glossary definitions, weekly reviews,
+# screening reasons, and the lines it proposes for CLAUDE.md / AGENTS.md. "en" or "ja". Applies to sessions analyzed
+# from now on.
+language = "en"
 
 [synthesis]
 # Consolidate per-project knowledge bases once enough new knowledge accumulates.
@@ -119,6 +123,9 @@ notify = false
 """
 
 
+LANGUAGES = {"en": "English", "ja": "日本語"}  # [analysis] language: code -> its own name, as the picker shows it
+
+
 def chronicle_home() -> Path:
     return Path(os.environ.get("CHRONICLE_HOME", "~/.claude-chronicle")).expanduser()
 
@@ -141,6 +148,7 @@ class AnalysisConfig:
     codex_model: str = ""
     codex_bin: str = ""
     screen_model: str = "haiku"  # `chronicle screen`: sorts imported chats, reading only their openings
+    language: str = "en"  # what Chronicle writes in (LANGUAGES); codes the parser reads stay English
 
 
 @dataclass
@@ -306,6 +314,12 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         suggestions_enabled=bool(_section(data, "suggestions").get("enabled", True)),
         suggestions_notify=bool(_section(data, "suggestions").get("notify", False)),
     )
+    if cfg.analysis.language not in LANGUAGES:
+        import logging
+
+        logging.getLogger("chronicle").warning("[analysis] language %r is not one of %s; using \"en\"",
+                                               cfg.analysis.language, ", ".join(LANGUAGES))
+        cfg.analysis.language = "en"
     return cfg
 
 

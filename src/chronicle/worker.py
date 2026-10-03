@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 
 from .config import Config
 from .db import connect, kv_get, kv_set
+from .i18n import tr
 from .llm import BudgetExceededError, LLMError, Runner, UsageLimitError, make_runner
 from .util import file_lock, local_str, one_line, to_iso, utcnow
 
@@ -88,40 +89,42 @@ def waiting_reason(conn, cfg: Config, s) -> tuple[str, str] | None:
         return None
     attempts = s["analysis_attempts"] or 0
     if attempts >= MAX_ATTEMPTS:
-        return "gave_up", f"analysis failed {attempts if attempts < 99 else 'for good'}; it will not be retried " \
-                          f"automatically ({one_line(s['analysis_reason'] or 'no error recorded', 160)})"
+        reason = one_line(s["analysis_reason"] or tr("no error recorded"), 160)
+        return "gave_up", (tr("analysis failed {n}; it will not be retried automatically ({reason})", n=attempts, reason=reason)
+                           if attempts < 99 else
+                           tr("analysis failed for good; it will not be retried automatically ({reason})", reason=reason))
     if cfg.is_excluded(s["project_path"]):
-        return "excluded", "its project is excluded from analysis (sources.exclude_projects)"
+        return "excluded", tr("its project is excluded from analysis (sources.exclude_projects)")
     if (s["n_prompts"] or 0) < cfg.analysis.min_prompts:
-        return "too_short", f"fewer than {cfg.analysis.min_prompts} prompts (analysis.min_prompts)"
+        return "too_short", tr("fewer than {n} prompts (analysis.min_prompts)", n=cfg.analysis.min_prompts)
     if not cfg.analysis.backfill and (s["started_at"] or "") < (kv_get(conn, "installed_at") or "0000"):
-        return "before_install", "it started before Chronicle was installed, and analysis.backfill is off"
+        return "before_install", tr("it started before Chronicle was installed, and analysis.backfill is off")
     now = utcnow()
     if s["analysis_not_before"] and s["analysis_not_before"] > to_iso(now):
-        return "retry", f"retrying at {local_str(s['analysis_not_before'], '%m-%d %H:%M')} after a failed attempt " \
-                        f"({one_line(s['analysis_reason'] or '', 160)})"
+        return "retry", tr("retrying at {when} after a failed attempt ({reason})",
+                           when=local_str(s["analysis_not_before"], "%m-%d %H:%M"), reason=one_line(s["analysis_reason"] or "", 160))
     idle_at = (s["ended_at"] or "")
     if not s["ended_flag"] and idle_at > to_iso(now - timedelta(minutes=cfg.analysis.idle_minutes)):
         ready_at = datetime.fromisoformat(idle_at.replace("Z", "+00:00")) + timedelta(minutes=cfg.analysis.idle_minutes)
-        return "active", f"the session may still be going; it is analyzed once idle for {cfg.analysis.idle_minutes} " \
-                         f"minutes (around {local_str(to_iso(ready_at), '%H:%M')})"
+        return "active", tr("the session may still be going; it is analyzed once idle for {minutes} minutes (around {at})",
+                            minutes=cfg.analysis.idle_minutes, at=local_str(to_iso(ready_at), "%H:%M"))
     block = queue_block(conn, cfg)
     if block:
-        return "ready", f"ready, but {block}"
-    return "ready", ("ready: the background agent analyzes it on its next run (every 15 minutes)" if status != "stale"
-                     else "ready to re-analyze: the session continued after it was analyzed")
+        return "ready", tr("ready, but {block}", block=block)
+    return "ready", (tr("ready: the background agent analyzes it on its next run (every 15 minutes)") if status != "stale"
+                     else tr("ready to re-analyze: the session continued after it was analyzed"))
 
 
 def queue_block(conn, cfg: Config, runner: Runner | None = None) -> str | None:
     """What stops the whole queue right now, if anything."""
     paused = kv_get(conn, PAUSE_KEY)
     if paused and paused > to_iso(utcnow()):
-        return f"analysis is paused until {local_str(paused, '%m-%d %H:%M')} (usage limit); it resumes by itself"
+        return tr("analysis is paused until {when} (usage limit); it resumes by itself", when=local_str(paused, "%m-%d %H:%M"))
     if not cfg.analysis.auto:
-        return "automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`"
+        return tr("automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`")
     runner = runner or make_runner(cfg)
     if not runner.available():
-        return f"{runner.label} (`{runner.cli.split()[0]}`) was not found, so nothing can be analyzed"
+        return tr("{label} (`{cli}`) was not found, so nothing can be analyzed", label=runner.label, cli=runner.cli.split()[0])
     return None
 
 
@@ -136,7 +139,8 @@ def count_pending(conn, cfg: Config) -> dict:
         if got:
             reasons[got[0]] = reasons.get(got[0], 0) + 1
     return {"ready": reasons.get("ready", 0), "queued": sum(reasons.get(c, 0) for c in QUEUED_CODES),
-            "held": sum(reasons.get(c, 0) for c in HELD_CODES), "reasons": reasons, "block": queue_block(conn, cfg)}
+            "held": sum(reasons.get(c, 0) for c in HELD_CODES), "reasons": reasons, "block": queue_block(conn, cfg),
+            "labels": {code: tr(label) for code, label in QUEUE_REASON_LABEL.items()}}
 
 
 def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyses: int | None = None,

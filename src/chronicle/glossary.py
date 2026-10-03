@@ -8,7 +8,8 @@ import re
 import sqlite3
 
 from .config import Config
-from .llm import Runner, make_runner
+from .i18n import tr
+from .llm import Runner, make_runner, written_in
 from .synthesize import GLOBAL, kb_sections
 from .util import dumps, loads, one_line, safe_text, truncate, utcnow_iso
 
@@ -66,6 +67,9 @@ work with, and any recurring vocabulary of their own.
 Leave out generic programming words. Ground every definition in the material given; put abbreviations, \
 expansions and alternative spellings in aliases; cite the ids of the knowledge items that mention each term. \
 Aim for 15-50 terms."""
+# with [analysis] language = "ja", besides llm.JAPANESE
+TERMS_JA = ("Write definitions and context in Japanese. A term stays spelled as the developer writes it; translations go "
+            "in aliases.")
 
 
 def norm(term: str) -> str:
@@ -188,7 +192,8 @@ def _generate(cfg: Config, project_path: str, material: str, ids: list[int], run
     is_global = project_path == GLOBAL
     header = "" if is_global else f"<project path=\"{project_path}\" />\n\n"
     res = runner.run(header + material + "\n\nWrite the glossary.", GLOSSARY_SCHEMA,
-                     system=GLOBAL_SYSTEM if is_global else PROJECT_SYSTEM, model=cfg.synthesis.model)
+                     system=written_in(cfg, GLOBAL_SYSTEM if is_global else PROJECT_SYSTEM, note=TERMS_JA),
+                     model=cfg.synthesis.model)
     return normalize_terms(res.data), ids, res, len(material)
 
 
@@ -297,7 +302,7 @@ def glossary_entries(conn: sqlite3.Connection, *, query: str | None = None, proj
     for u in conn.execute("SELECT * FROM glossary_usage").fetchall():
         usage.setdefault(u["term_id"], []).append({
             "project_path": u["project_path"],
-            "project_name": "all projects" if u["project_path"] == GLOBAL else names.get(u["project_path"], u["project_path"]),
+            "project_name": tr("all projects") if u["project_path"] == GLOBAL else names.get(u["project_path"], u["project_path"]),
             "context": u["context"], "sources": loads(u["sources_json"], []) or []})
     titles = {r[0]: r[1] for r in conn.execute("SELECT id, title FROM sessions")}
     for r in rows:
@@ -326,6 +331,10 @@ Make 4 to 10 themes. Name each by subject or system in 1 to 4 words a developer 
 example "Auth & identity", "Quote pipeline", "Test tooling"), using the language most of the terms use, and \
 describe it in one short sentence. Avoid vague buckets such as "Misc" or "General"; use "Other" only for the few \
 terms that fit nowhere. Put every term id in exactly one theme."""
+THEMES_JA = ("Name and describe the themes in Japanese (system and product names stay as they are), and call the theme "
+             "for terms that fit nowhere 「その他」 instead of \"Other\".")
+OTHER_THEME = {"en": ("Other", "Terms that fit none of the other themes."),  # leftovers, in the language Chronicle writes in
+               "ja": ("その他", "ほかのどのテーマにも入らない用語。")}
 
 THEMES_SCHEMA = {
     "type": "object",
@@ -380,11 +389,11 @@ def _theme_material(rows) -> str:
 
 def _generate_themes(cfg: Config, category: str, rows, runner: Runner):
     prompt = f"<category>{category}</category>\n\n{_theme_material(rows)}\n\nGroup the terms into themes."
-    return runner.run(prompt, THEMES_SCHEMA, system=THEMES_SYSTEM, model=cfg.synthesis.model)
+    return runner.run(prompt, THEMES_SCHEMA, system=written_in(cfg, THEMES_SYSTEM, note=THEMES_JA), model=cfg.synthesis.model)
 
 
-def _store_themes(conn: sqlite3.Connection, category: str, rows, res) -> int:
-    """Validate Claude's grouping (unknown ids dropped, every term placed once, leftovers in "Other") and store it."""
+def _store_themes(conn: sqlite3.Connection, category: str, rows, res, other: tuple[str, str] = OTHER_THEME["en"]) -> int:
+    """Validate Claude's grouping (unknown ids dropped, every term placed once, leftovers in `other`) and store it."""
     from .db import kv_set
 
     valid = {r["id"] for r in rows}
@@ -403,8 +412,8 @@ def _store_themes(conn: sqlite3.Connection, category: str, rows, res) -> int:
         for i in ids:
             placed[i] = name
     for i in valid - placed.keys():
-        placed[i] = "Other"
-        themes.setdefault("Other", "Terms that fit none of the other themes.")
+        placed[i] = other[0]
+        themes.setdefault(other[0], other[1])
     try:
         conn.execute("DELETE FROM glossary_themes WHERE category = ?", (category,))
         now = utcnow_iso()
@@ -445,7 +454,8 @@ def build_themes(cfg: Config, categories: list[str] | None = None, *, force: boo
             for fut in as_completed(futures):
                 cat = futures[fut]
                 try:
-                    results[cat] = _store_themes(conn, cat, inputs[cat], fut.result())
+                    results[cat] = _store_themes(conn, cat, inputs[cat], fut.result(),
+                                                 OTHER_THEME.get(cfg.analysis.language, OTHER_THEME["en"]))
                 except Exception as exc:
                     conn.rollback()
                     results[cat] = f"failed: {exc}"
@@ -473,7 +483,7 @@ def map_data(conn: sqlite3.Connection) -> dict:
             "WHERE project_path IN (SELECT project_path FROM glossary_usage) GROUP BY project_path ORDER BY n DESC")
     ]
     if conn.execute("SELECT 1 FROM glossary_usage WHERE project_path = ? LIMIT 1", (GLOBAL,)).fetchone():
-        projects.insert(0, {"path": GLOBAL, "label": "Everywhere", "sessions": None, "active_s": None, "last": None,
+        projects.insert(0, {"path": GLOBAL, "label": tr("Everywhere"), "sessions": None, "active_s": None, "last": None,
                             "knowledge": kinds.get(GLOBAL, {})})
     usage: dict[int, list] = {}
     for u in conn.execute("SELECT term_id, project_path, context, sources_json FROM glossary_usage"):

@@ -17,6 +17,7 @@ from pathlib import Path
 
 from .agents import full_name
 from .export_md import safe_name
+from .i18n import tr
 from .redact import redact
 from .util import local_str, one_line
 from .views import session_markdown, session_record
@@ -138,15 +139,15 @@ def _one(conn: sqlite3.Connection, sid: str, fmt: str) -> tuple[str, bytes] | No
 def export_sessions(conn: sqlite3.Connection, ids: list[str], fmt: str) -> tuple[str, str, bytes]:
     """(download name, content type, bytes): the file itself for one session, a .zip with an index for several."""
     if fmt not in FORMATS:
-        raise ExportError(f"unknown format {fmt!r}")
+        raise ExportError(tr("unknown format {fmt!r}", fmt=fmt))
     ids = list(dict.fromkeys(ids))[:MAX_SESSIONS]
     if not ids:
-        raise ExportError("no sessions to export")
+        raise ExportError(tr("no sessions to export"))
     if len(ids) == 1:
         one = _one(conn, ids[0], fmt)
         if one is None:
-            raise ExportError("This session has no original transcript of its own (claude.ai chats and prompt-history "
-                              "sessions); export it as Markdown or JSON instead.")
+            raise ExportError(tr("This session has no original transcript of its own (claude.ai chats and prompt-history "
+                                 "sessions); export it as Markdown or JSON instead."))
         ctype = {"md": "text/markdown; charset=utf-8", "json": "application/json"}.get(fmt, "application/octet-stream")
         return one[0], ctype, one[1]
     stamp = datetime.now().strftime("%Y-%m-%d %H%M")
@@ -171,6 +172,7 @@ def export_sessions(conn: sqlite3.Connection, ids: list[str], fmt: str) -> tuple
                       "and prompt-history sessions have none. Export them as Markdown or JSON.", ""]
             index += [f"- {s['title'] or 'untitled'} `{s['id'][:8]}`" for s in missing]
         if len(missing) == len(ids):
-            raise ExportError("None of these sessions has an original transcript of its own; export them as Markdown or JSON.")
+            raise ExportError(tr("None of these sessions has an original transcript of its own; export them as Markdown "
+                                 "or JSON."))
         z.writestr(f"{folder}/index.md", "\n".join(index) + "\n")
     return f"{folder}.zip", "application/zip", buf.getvalue()
