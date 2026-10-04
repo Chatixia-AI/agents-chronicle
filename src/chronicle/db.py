@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 12
+SCHEMA_VERSION = 13
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -341,7 +341,49 @@ CREATE TABLE IF NOT EXISTS machines (
     last_push TEXT,                                -- last time it sent a file
     files INTEGER DEFAULT 0,                       -- files received from it
     bytes INTEGER DEFAULT 0,
-    repos_json TEXT                                -- {cwd: [git top level, normalized remote]} it reported
+    repos_json TEXT,                               -- {cwd: [git top level, normalized remote]} it reported
+    person_id INTEGER                              -- whose computer it is (people.py), once it joined with an invite
+);
+
+CREATE TABLE IF NOT EXISTS people (                -- people on a hub (people.py): who may send and see, with which role
+    id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE,                             -- lower case; how a company sign-in (auth header) names them
+    role TEXT NOT NULL,                            -- admin | member | readonly
+    created_at TEXT NOT NULL,
+    created_by INTEGER,
+    removed_at TEXT                                -- removed: tokens, sessions and invites stop working
+);
+
+CREATE TABLE IF NOT EXISTS people_codes (          -- one-time codes: invites, and short dashboard sign-in links
+    code_hash TEXT PRIMARY KEY,                    -- sha256 of the code; the code itself is shown once
+    person_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                            -- invite | signin
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    used_at TEXT
+);
+
+CREATE TABLE IF NOT EXISTS people_tokens (         -- a computer's push token, or a browser's dashboard session
+    token_hash TEXT PRIMARY KEY,                   -- sha256; the token itself lives only on the computer or in the cookie
+    person_id INTEGER NOT NULL,
+    kind TEXT NOT NULL,                            -- computer | browser
+    machine_id TEXT,                               -- the computer, for kind computer
+    label TEXT,                                    -- e.g. the browser's user agent, shown to admins
+    created_at TEXT NOT NULL,
+    expires_at TEXT,                               -- browsers only
+    last_used TEXT,
+    revoked_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_people_tokens_person ON people_tokens(person_id);
+
+CREATE TABLE IF NOT EXISTS people_audit (          -- who did what to people, roles and settings on this hub
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,
+    actor TEXT,                                    -- "person:<id>", "this computer", or "legacy token"
+    action TEXT NOT NULL,
+    person_id INTEGER,
+    detail TEXT                                    -- JSON
 );
 
 CREATE TABLE IF NOT EXISTS suggestions (

@@ -416,13 +416,24 @@ async function api(path, params) {
   const url = new URL(path, location.origin);
   if (params) for (const [k, v] of Object.entries(params)) if (v != null && v !== "") url.searchParams.set(k, v);
   const res = await fetch(url, { headers: { "X-Chronicle-Lang": LANG } });
-  if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || res.statusText);
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    if (res.status === 401 && body.signin) { showSignin(); throw handledError(body.error); }
+    throw new Error(body.error || res.statusText);
+  }
   return res.json();
 }
+// A hub with people answers 401 {signin: true} to someone not signed in (the sign-in screen takes over) and 403 to
+// a viewer whose role doesn't allow the change (said in a toast). Both reject with an error already shown.
 async function post(path, body) {
   const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Chronicle": "1", "X-Chronicle-Lang": LANG }, body: JSON.stringify(body || {}) });
-  return res.json();
+  const data = await res.json().catch(() => ({ error: res.statusText }));
+  if (res.status === 401 && data.signin) { showSignin(); throw handledError(data.error); }
+  if (res.status === 403) { toast(data.error || t("Only an admin of this hub can change this."), 6000); throw handledError(data.error); }
+  return data;
 }
+function handledError(msg) { const e = new Error(msg || "forbidden"); e.handled = true; return e; }
+window.addEventListener("unhandledrejection", (e) => { if (e.reason?.handled) e.preventDefault(); }); // already shown
 let toastTimer;
 function toast(msg, ms = 3500) {
   const t = $("#toast");
@@ -1147,7 +1158,7 @@ route(/^\/sessions$/, async (params) => {
     headBox.indeterminate = n > 0 && !headBox.checked;
     selBar.hidden = !n;
     if (!n) return;
-    const analyze = h("button", { class: "btn primary small", type: "button", onclick: async () => {
+    const analyze = h("button", { class: "btn primary small admin-only", type: "button", onclick: async () => {
       if (n > 25 && !confirm(t("Analyze {n} sessions now? Each one is a call on your {agent} login.", { n, agent: analyzer() }))) return;
       analyze.disabled = true; analyze.textContent = t("Starting…");
       const r = await post("/api/sessions/analyze", { ids: [...picked] });
@@ -1302,7 +1313,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   const token = renderSeq;
   const sx = await api(`/api/sessions/${id}`);
   ART_LOCAL = sx.local;
-  const analyzing = h("button", { class: "btn primary", type: "button", onclick: async () => {
+  const analyzing = h("button", { class: "btn primary admin-only", type: "button", onclick: async () => {
     analyzing.disabled = true;
     analyzing.textContent = t("Analyzing…");
     const r = await post(`/api/sessions/${sx.id}/analyze`);
@@ -2093,7 +2104,7 @@ route(/^\/project$/, async (params) => {
   ART_LOCAL = p.local;
   const isGlobal = path === "__global__";
   setCrumbs(isGlobal ? [[t("Knowledge"), "#/knowledge"], [t("Global playbook")]] : [[t("Projects"), "#/projects"], [p.label || shortPath(path)]], token);
-  const synth = h("button", { class: "btn primary", type: "button", onclick: async () => {
+  const synth = h("button", { class: "btn primary admin-only", type: "button", onclick: async () => {
     synth.disabled = true; synth.textContent = t("Synthesizing…");
     const r = await post("/api/synthesize", { path });
     toast(r.started ? t("Synthesizing the knowledge base with {agent}…", { agent: analyzer() }) : t("Already running"));
@@ -2468,7 +2479,7 @@ route(/^\/glossary$/, async (params) => {
   const state = { q: params.q || "", project: params.project || "", category: params.category || "" };
   const data = await api("/api/glossary", state);
   const refresh = () => { setParams({ ...state }); render(); };
-  const rebuild = h("button", { class: "btn", type: "button", onclick: async () => {
+  const rebuild = h("button", { class: "btn admin-only", type: "button", onclick: async () => {
     rebuild.disabled = true;
     const r = await post("/api/glossary/rebuild", { path: state.project || "" });
     toast(r.started ? t("{agent} is rebuilding the glossary…", { agent: analyzerShort() }) : t("Already running"));
@@ -3071,7 +3082,7 @@ route(/^\/map$/, async (params) => {
     const have = Object.keys(data.themes || {}).length > 0;
     if (!due.length) return have && !levels.includes("theme")
       ? h("p", { class: "mm-tip" }, t("The big categories are grouped into themes: add a Theme level to see them.")) : null;
-    const btn = h("button", { type: "button", class: "btn small primary", onclick: async () => {
+    const btn = h("button", { type: "button", class: "btn small primary admin-only", onclick: async () => {
       btn.disabled = true;
       const r = await post("/api/map/themes", {});
       toast(r.started ? t("{agent} is grouping categories into themes…", { agent: analyzerShort() }) : t("Already running"));
@@ -3387,10 +3398,12 @@ const MCP_SETUPS = [ // [key, tab label, where it goes, snippet key]
 const MCP_EXAMPLES = [t("Have we solved this before? The build fails with …"), t("How is this project deployed?"),
   t("What did I decide about … last month, and why?"), t("What does the term … mean here?"), t("Summarize what I worked on this week.")];
 async function copyText(text, btn) {
+  let ok = true;
   try { await navigator.clipboard.writeText(text); } catch (e) {
     const ta = h("textarea", { style: { position: "fixed", opacity: "0" } }, text); document.body.append(ta); ta.select();
-    try { document.execCommand("copy"); } catch (e2) { /* nothing more to try */ } ta.remove();
+    try { ok = document.execCommand("copy"); } catch (e2) { ok = false; } ta.remove();
   }
+  if (!ok) { toast(t("Could not copy here: select the text and copy it yourself."), 6000); return; }
   const was = btn.textContent; btn.textContent = t("Copied"); setTimeout(() => (btn.textContent = was), 1500);
 }
 let mcpTab = "json";
@@ -3525,7 +3538,7 @@ function reviewView(r) {
 route(/^\/reviews$/, async (params) => {
   const data = await api("/api/reviews");
   const btn = (label, week, primary) => {
-    const b = h("button", { class: `btn${primary ? " primary" : ""}`, type: "button", onclick: async () => {
+    const b = h("button", { class: `btn admin-only${primary ? " primary" : ""}`, type: "button", onclick: async () => {
       b.disabled = true;
       const r = await post("/api/review", { week });
       toast(r.started ? t("{agent} is writing the review…", { agent: analyzerShort() }) : t("Already running"));
@@ -3562,14 +3575,14 @@ function updatesCard() {
         u.notes_url ? h("a", { href: u.notes_url, target: "_blank", rel: "noopener" }, t("What's new")) : null)
       : online && !u.checked_at ? h("div", { class: "muted" }, u.check_daily ? t("Checking pypi.org for the latest version…") : t("Not checked yet. Checking asks pypi.org for the latest version."))
       : online ? h("div", null, t("You're on the latest version (checked {ago})", { ago: ago(new Date(u.checked_at * 1000).toISOString()) })) : null;
-    const check = online ? h("button", { class: "btn", type: "button", onclick: async () => {
+    const check = online ? h("button", { class: "btn admin-only", type: "button", onclick: async () => {
       check.disabled = true; check.textContent = t("Checking…");
       const r = await post("/api/update/check");
       draw(r);
       pollStatus(); // the status bar and the notification pick up what the check found
     } }, t("Check for updates")) : null;
     const label = u.local ? t("Reinstall from checkout") : u.source ? t("Reinstall") : t("Update to {version}", { version: u.latest });
-    const run = u.can_update && (u.available || u.source) ? h("button", { class: `btn${u.available ? " primary" : ""}`, type: "button", onclick: async () => {
+    const run = u.can_update && (u.available || u.source) ? h("button", { class: `btn admin-only${u.available ? " primary" : ""}`, type: "button", onclick: async () => {
       run.disabled = true; run.textContent = t("Updating…");
       const r = await post("/api/update");
       if (!r.started) { toast(r.error || t("An update is already running")); run.disabled = false; run.textContent = label; return; }
@@ -3578,7 +3591,7 @@ function updatesCard() {
       watchJob("update");
     } }, label) : null;
     const setting = (key, path, label) => {
-      const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(!!u[key]), "aria-label": label,
+      const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(!!u[key]), "aria-label": label, disabled: !canAdmin(),
         onclick: async () => {
           sw.disabled = true;
           const r = await post(path, { on: !u[key] });
@@ -3645,7 +3658,7 @@ function analyzerPicker(a) {
   return h("div", { class: "analyzer" },
     h("div", { class: "seg", role: "radiogroup", "aria-label": t("Analyzed by") }, choices.map((c) =>
       h("button", { type: "button", role: "radio", class: c.name === a.backend ? "on" : "", "aria-checked": String(c.name === a.backend),
-        disabled: !c.path && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : t("{agent} is not installed", { agent: c.label }),
+        disabled: (!c.path || !canAdmin()) && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : t("{agent} is not installed", { agent: c.label }),
         onclick: () => pick(c.name) }, c.label))),
     h("div", { class: "muted" }, current?.path
       ? t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: current.label })
@@ -3666,7 +3679,7 @@ function knowledgeLangPicker(a) {
     h("div", { class: "subhead" }, t("Knowledge language")),
     h("div", { class: "seg", role: "radiogroup", "aria-label": t("Knowledge language") }, langs.map((l) =>
       h("button", { type: "button", role: "radio", lang: l.code, class: l.code === a.language ? "on" : "", "aria-checked": String(l.code === a.language),
-        onclick: () => pick(l.code) }, l.label))),
+        disabled: !canAdmin() && l.code !== a.language, onclick: () => pick(l.code) }, l.label))),
     h("div", { class: "muted" }, t("Language of summaries, knowledge, reviews and the lines proposed for CLAUDE.md and AGENTS.md. Applies to sessions analyzed from now on.")));
 }
 route(/^\/status$/, async () => {
@@ -3763,10 +3776,10 @@ function teamStoreCard(dv) {
     h("p", null, t("Keep what your team's computers share in a Postgres database as well, and send each computer that shares knowledge its teammates' lessons. Only this hub connects to the database; the other computers never get its address or password.")),
     status,
     st.driver ? null : h("div", { class: "warn-line" }, t("The Postgres driver isn't installed here. Run {command}, then restart the dashboard.", { command: "uv tool install 'agents-chronicle[team]'" }))];
-  if (!dv.here) {
+  if (!(dv.can_admin ?? dv.here)) { // an older server sends only "here"
     return h("section", { class: "card" }, cardHead(t("Team store"), { iconName: "data" }), head,
       st.settings ? h("div", { class: "muted" }, tx("Database {db} on {host}, as {user}", { db: h("span", { class: "codeline" }, saved.dbname), host: h("span", { class: "codeline" }, saved.host), user: h("span", { class: "codeline" }, saved.user) })) : null,
-      h("p", { class: "muted" }, t("Change these settings on the hub itself, not from another device.")));
+      h("p", { class: "muted" }, dv.people_mode ? t("Only an admin of this hub can change these settings.") : t("Change these settings on the hub itself, not from another device.")));
   }
   const field = (key, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: key, value: saved[key] || "", autocomplete: "off", spellcheck: "false", ...attrs }));
   const ssl = h("select", { name: "sslmode" }, st.sslmodes.map((m) => h("option", { value: m, selected: m === (saved.sslmode || "require") }, m)));
@@ -3813,6 +3826,216 @@ function teamStoreCard(dv) {
     result);
 }
 
+// On a computer that sends to a hub: the hub's dashboard opens signed in as this computer's person, through a
+// short-lived link the hub gives this computer's token. An older hub, or no token: the plain address.
+function hubDashboardLink(hubUrl) {
+  const plain = `${hubUrl}/`;
+  const open = (url) => { const a = h("a", { href: url, target: "_blank", rel: "noopener" }); document.body.append(a); a.click(); a.remove(); };
+  return h("a", { href: plain, target: "_blank", rel: "noopener", onclick: async (e) => {
+    e.preventDefault();
+    let url = plain;
+    try {
+      const r = await post("/api/devices/hub-signin");
+      if (safeUrl(r.url)) url = r.url;
+      else if (r.error) toast(t("Opening the hub's dashboard without signing in: {error}", { error: r.error }), 6000);
+    } catch (err) { /* already said, or not reachable: the plain address */ }
+    open(url);
+  } }, t("Open the hub's dashboard"));
+}
+
+// On a hub, for an admin: the people who may send here and open this dashboard, their invites, computers and
+// browser sessions, the shared hub token, and what changed (people.py). The server checks every action again.
+const ROLE_HINT = {
+  admin: t("Invites people, changes roles and this hub's settings"),
+  member: t("Their computers send here and get teammates' lessons back"),
+  readonly: t("Opens this dashboard; sends and changes nothing"),
+};
+function uaLabel(ua) { // a dashboard session is labelled with the browser's User-Agent: say it in two words
+  const s = String(ua || "");
+  const browser = /Edg\//.test(s) ? "Edge" : /Firefox\//.test(s) ? "Firefox" : /Chrome\//.test(s) ? "Chrome" : /Safari\//.test(s) ? "Safari" : null;
+  const os = /iPhone/.test(s) ? "iPhone" : /iPad/.test(s) ? "iPad" : /Android/.test(s) ? "Android" : /Mac OS X|Macintosh/.test(s) ? "macOS"
+    : /Windows/.test(s) ? "Windows" : /Linux/.test(s) ? "Linux" : null;
+  return browser && os ? t("{browser} on {os}", { browser, os }) : browser || os || t("A browser");
+}
+function auditText(a) {
+  const actor = !a.actor || a.actor === "this computer" ? t("Someone at the hub") : a.actor_name || a.actor;
+  const vars = { actor, person: a.person_name || t("someone"), role: ROLE_LABEL[a.detail?.role] || a.detail?.role,
+    before: ROLE_LABEL[a.detail?.before] || a.detail?.before, after: ROLE_LABEL[a.detail?.after] || a.detail?.after,
+    computer: a.detail?.name || (a.detail?.machine || "").slice(0, 8) || t("a computer") };
+  const on = a.detail?.on;
+  return {
+    add: () => t("{actor} added {person} as {role}", vars),
+    role: () => t("{actor} changed {person}'s role from {before} to {after}", vars),
+    remove: () => t("{actor} removed {person}", vars),
+    invite: () => t("{actor} made an invite for {person}", vars),
+    join: () => t("{person} joined from {computer}", vars),
+    signin: () => t("{person} signed in to the dashboard", vars),
+    revoke: () => t("{actor} revoked a computer or browser of {person}", vars),
+    "shared-token": () => (on ? t("{actor} turned the shared hub token on", vars) : t("{actor} turned the shared hub token off", vars)),
+  }[String(a.action).replace("_", "-")]?.() || `${actor}: ${a.action}`;
+}
+// What an admin passes on to the person: shown once, since the hub keeps only the code's hash
+function inviteResult(r, close) {
+  const row = (label, text, block) => {
+    const copy = h("button", { class: "btn small", type: "button", onclick: () => copyText(text, copy) }, t("Copy"));
+    return h("div", { class: "ir-row" }, h("div", { class: "ir-label" }, label),
+      h("div", { class: "ir-value" }, block ? h("pre", { class: "mcp-code" }, text) : h("span", { class: "codeline" }, text), copy));
+  };
+  const name = r.person?.name || "";
+  return h("div", { class: "invite-result", role: "status" },
+    h("div", { class: "ir-head" }, h("b", null, t("Invite for {name}", { name })),
+      h("button", { class: "btn small", type: "button", onclick: close }, t("Done"))),
+    h("div", { class: "warn-line" }, t("Shown once: copy what you need now. The code works once and expires {when}.", { when: fmtDT(r.expires_at) })),
+    row(t("Code"), r.code),
+    r.join ? row(t("To join their computer, they run"), r.join, true) : null,
+    r.link ? row(t("Or, to open this dashboard in a browser"), r.link) : null,
+    r.note ? h("div", { class: "muted" }, r.note) : null,
+    h("p", { class: "muted" }, t("Send them one of these by chat or email: the hub sends nothing itself. A computer that joined can open this dashboard later without a code, from Settings › Devices.")));
+}
+function peopleCard(dv) {
+  const box = h("section", { class: "card people-card" }, cardHead(t("People"), { iconName: "preference" }), h("div", { class: "muted" }, t("Loading…")));
+  const slot = h("div", { class: "invite-slot" }); // the last invite stays up while the list reloads
+  const showInvite = (r) => {
+    slot.replaceChildren(inviteResult(r, () => slot.replaceChildren()));
+    slot.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" });
+  };
+  const send = async (path, body) => { // -> the answer, or null once the failure is said
+    try {
+      const r = await post(path, body);
+      if (r.error) { toast(r.error, 6000); return null; }
+      return r;
+    } catch (e) { if (!e.handled) toast(e.message, 6000); return null; }
+  };
+  const load = async () => {
+    try { draw(await api("/api/people")); } catch (e) {
+      if (!e.handled) box.replaceChildren(cardHead(t("People"), { iconName: "preference" }), h("div", { class: "warn-line" }, e.message));
+    }
+  };
+  const roleOptions = (roles, selected) => roles.map((r) => h("option", { value: r, selected: r === selected, title: ROLE_HINT[r] || "" }, ROLE_LABEL[r] || r));
+
+  const tokenRow = (p, x, kind) => {
+    const label = kind === "computer" ? x.name || t("A computer") : uaLabel(x.label);
+    const revoke = h("button", { class: "link-btn danger", type: "button", onclick: async () => {
+      if (!confirm(kind === "computer" ? t("Stop {computer} from sending to this hub? It can join again only with a new invite.", { computer: label })
+        : t("End {name}'s dashboard session in {browser}? That browser has to sign in again.", { name: p.name, browser: label }))) return;
+      revoke.disabled = true;
+      if (await send("/api/people/revoke", { id: p.id, token: x.id })) { toast(t("Revoked.")); load(); } else revoke.disabled = false;
+    } }, t("Revoke"));
+    return h("div", { class: "pp-tok" }, icon(kind === "computer" ? "devices" : "page"),
+      h("span", { title: kind === "browser" ? x.label || "" : x.machine_id || "" }, label),
+      h("span", { class: "muted" }, x.last_used ? t("used {ago}", { ago: ago(x.last_used) }) : t("since {ago}", { ago: ago(x.since) })), revoke);
+  };
+  const personRow = (p, roles) => {
+    const me = ME?.viewer?.id != null && ME.viewer.id === p.id;
+    const sel = h("select", { "aria-label": t("Role of {name}", { name: p.name }), onchange: async () => {
+      const role = sel.value;
+      sel.disabled = true;
+      const r = await send("/api/people/role", { id: p.id, role });
+      sel.disabled = false;
+      if (!r) { sel.value = p.role; return; }
+      toast(t("{name} is now: {role}.", { name: p.name, role: ROLE_LABEL[role] || role }));
+      if (me) location.reload(); else load(); // your own role changed: the whole dashboard follows
+    } }, roleOptions(roles, p.role));
+    const reinvite = h("button", { class: "btn small", type: "button", title: t("A new one-time code for another computer or browser"), onclick: async () => {
+      reinvite.disabled = true;
+      const r = await send("/api/people/invite", { id: p.id });
+      reinvite.disabled = false;
+      if (r) { showInvite(r); load(); }
+    } }, t("New invite"));
+    const remove = h("button", { class: "btn small danger", type: "button", onclick: async () => {
+      if (!confirm(t("Remove {name} from this hub? Their computers stop sending and their dashboard sessions end at once. What they already sent stays here.", { name: p.name }))) return;
+      remove.disabled = true;
+      if (await send("/api/people/remove", { id: p.id })) { toast(t("{name} was removed.", { name: p.name })); if (me) location.reload(); else load(); }
+      else remove.disabled = false;
+    } }, t("Remove"));
+    const computers = p.computers || [], browsers = p.browsers || [], invites = p.invites || [];
+    const lastInvite = invites[invites.length - 1];
+    return h("tr", null,
+      h("td", null, h("b", null, p.name), me ? h("span", { class: "muted" }, t(" (you)")) : null,
+        p.email ? h("div", { class: "muted" }, p.email) : null,
+        lastInvite ? h("div", { class: "muted" }, t("Invite open until {when}", { when: fmtDT(lastInvite.expires_at) })) : null),
+      h("td", null, sel),
+      h("td", null, computers.length || browsers.length
+        ? [...computers.map((c) => tokenRow(p, c, "computer")), ...browsers.map((b) => tokenRow(p, b, "browser"))]
+        : h("span", { class: "muted" }, lastInvite ? t("Not joined yet") : t("No computer or browser yet: make a new invite"))),
+      h("td", { class: "pp-actions" }, reinvite, remove));
+  };
+
+  const inviteForm = (roles, first) => {
+    const name = h("input", { class: "input", name: "name", required: true, maxlength: "120", autocomplete: "off" });
+    const email = h("input", { class: "input", name: "email", type: "email", autocomplete: "off", spellcheck: "false", placeholder: t("optional") });
+    const role = h("select", { name: "role" }, roleOptions(roles, first ? "admin" : "member"));
+    const hint = h("div", { class: "muted" }, ROLE_HINT[role.value] || "");
+    role.addEventListener("change", () => (hint.textContent = ROLE_HINT[role.value] || ""));
+    const submit = h("button", { class: "btn primary", type: "submit" }, t("Create invite"));
+    const form = h("form", { class: "people-form", onsubmit: async (e) => {
+      e.preventDefault();
+      if (!name.value.trim()) { name.focus(); return; }
+      submit.disabled = true;
+      const r = await send("/api/people/add", { name: name.value.trim(), email: email.value.trim(), role: role.value });
+      submit.disabled = false;
+      if (!r) return;
+      form.reset();
+      showInvite(r);
+      load();
+    } },
+    h("div", { class: "ts-form" },
+      h("label", null, t("Name"), name),
+      h("label", null, t("Email"), email),
+      h("label", null, t("Role"), role)),
+    h("div", { class: "ts-actions" }, submit, hint));
+    return [h("div", { class: "subhead" }, t("Invite someone")), form,
+      h("div", { class: "muted" }, t("Email is optional; it lets a company sign-in in front of the hub recognize the person."))];
+  };
+
+  const sharedToken = (data) => {
+    const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(!!data.shared_token), "aria-label": t("Shared hub token"),
+      onclick: async () => {
+        const on = !data.shared_token;
+        if (!on && !confirm(t("Turn off the shared hub token? Computers that joined with it stop sending until someone joins them again with an invite."))) return;
+        sw.disabled = true;
+        const r = await send("/api/people/shared-token", { on });
+        sw.disabled = false;
+        if (!r) return;
+        toast(on ? t("Computers with the shared hub token can send again.") : t("Only computers that joined with an invite can send now."));
+        load();
+      } });
+    return h("div", { class: "set-row" },
+      h("div", null, h("b", null, t("Shared hub token")),
+        h("div", { class: "muted" }, data.shared_token
+          ? t("On: computers that joined with the hub's shared token, before there were people, can still send. Turn it off once everyone has joined with their own invite.")
+          : t("Off: only computers that joined with a person's invite can send. Computers that joined with the shared token are turned away."))),
+      sw);
+  };
+
+  const auditList = (items) => h("details", { class: "pp-audit" },
+    h("summary", null, t("Recent changes"), h("span", { class: "muted" }, ` · ${fmtNum(items.length)}`)),
+    h("ul", { class: "bullets" }, items.map((a) => h("li", null, auditText(a), h("span", { class: "muted", title: fmtDT(a.at) }, ` · ${ago(a.at)}`)))));
+
+  const draw = (data) => {
+    const people = data.people || [];
+    const roles = data.roles || ["admin", "member", "readonly"];
+    box.replaceChildren(); append(box, [ // append() flattens the arrays and skips nulls
+      cardHead(t("People"), { iconName: "preference", hint: people.length ? tn(people.length, "{n} person", "{n} people") : null }),
+      people.length ? [
+        h("div", { class: "table-wrap" }, h("table", { class: "data pp-table" },
+          h("thead", null, h("tr", null, ...[t("Person"), t("Role"), t("Computers and browsers"), ""].map((x) => h("th", null, x)))),
+          h("tbody", null, people.map((p) => personRow(p, roles))))),
+        h("p", { class: "muted" }, t("Admins invite people and change this hub's settings; members' computers send here and get their teammates' lessons back; read-only people only open this dashboard. Whoever is at this computer is always an admin."))]
+      : [
+        h("p", null, t("Give each person a role: admins invite people and change this hub's settings, members' computers send here and get their teammates' lessons back, and read-only people only open this dashboard. The first person you add as admin can manage the hub from their own computer.")),
+        h("p", { class: "muted" }, t("Until you add someone, nothing changes: computers send with the hub's shared token, as they do now."))],
+      slot,
+      inviteForm(roles, !people.length),
+      data.address ? null : h("div", { class: "muted pp-note" }, tx("This hub has no address set, so invites use the one this page was opened with ({host}). Set the address others reach it at with {command}.",
+        { host: h("span", { class: "codeline" }, location.host), command: h("span", { class: "codeline" }, "chronicle hub enable --url <address>") })),
+      people.length ? sharedToken(data) : null,
+      data.audit?.length ? auditList(data.audit) : null]);
+  };
+  load();
+  return box;
+}
+
 route(/^\/devices$/, async () => {
   const dv = await api("/api/devices");
   const ts = dv.allowed_hosts.find((x) => x.endsWith(".ts.net"));
@@ -3832,7 +4055,7 @@ route(/^\/devices$/, async () => {
         h("div", null, tx("Hub {url}", { url: h("span", { class: "codeline" }, dv.hub_url) })),
         h("div", { class: "muted" }, dv.last_push ? t("Last sent {ago}: {summary}", { ago: ago(dv.last_push.at), summary: dv.last_push.summary }) : t("Nothing sent yet.")),
         ...(dv.last_push?.errors || []).map((e) => h("div", { class: "muted" }, `! ${e}`))),
-      h("p", null, extLink(`${dv.hub_url}/`, t("Open the hub's dashboard")), h("span", { class: "muted" }, t(" · {command} stops sending", { command: "chronicle hub leave" }))),
+      h("p", null, hubDashboardLink(dv.hub_url), h("span", { class: "muted" }, t(" · {command} stops sending", { command: "chronicle hub leave" }))),
       shareSection(dv),
       dv.folders.length ? [
         h("div", { class: "subhead" }, t("Folders added to projects on the hub")),
@@ -3881,7 +4104,8 @@ route(/^\/devices$/, async () => {
   }
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
-    h("div", { class: "grid" }, thisCard, phone, computers, dv.role === "hub" && dv.store ? teamStoreCard(dv) : null));
+    h("div", { class: "grid" }, thisCard, phone, computers, dv.role === "hub" && dv.can_admin ? peopleCard(dv) : null,
+      dv.role === "hub" && dv.store ? teamStoreCard(dv) : null));
 });
 
 // =====================================================================================
@@ -4184,7 +4408,7 @@ route(/^\/suggestions$/, async (params) => {
     counts[next] = (counts[next] || 0) + 1;
     for (const [v] of SG_STATUS) chipCount[v].textContent = fmtNum(counts[v] || 0);
   };
-  const refreshBtn = h("button", { class: "btn", type: "button", title: t("Look at the latest sessions and knowledge for new suggestions"), onclick: () => busy(refreshBtn, t("Checking…"), async () => {
+  const refreshBtn = h("button", { class: "btn admin-only", type: "button", title: t("Look at the latest sessions and knowledge for new suggestions"), onclick: () => busy(refreshBtn, t("Checking…"), async () => {
     const r = await post("/api/suggestions/refresh");
     toast(r.error ? t("Could not check: {error}", { error: r.error }) : t("{new} new, {updated} updated, {stale} no longer happening", { new: fmtNum(r.new), updated: fmtNum(r.updated), stale: fmtNum(r.stale) }));
     suggestionsChanged();
@@ -4616,22 +4840,22 @@ function paletteCommands() {
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
     nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),
-    { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow },
+    { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow, admin: true },
     { group: cmds, label: t("Toggle sidebar"), icon: "sidebar", hint: "⌘B", run: toggleSidebar },
     { group: cmds, label: dark ? t("Switch to light theme") : t("Switch to dark theme"), icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
     // named in the language it switches to, like the status bar button
     { group: cmds, label: LANG === "ja" ? "Switch to English" : "日本語に切り替え", icon: "domain", hint: "", run: () => setLang(LANG === "ja" ? "en" : "ja") },
-    { group: cmds, label: t("Group glossary themes"), icon: "sparkles", hint: model, run: async () => {
+    { group: cmds, label: t("Group glossary themes"), icon: "sparkles", hint: model, admin: true, run: async () => {
       const r = await post("/api/map/themes");
       toast(r.started ? t("{agent} is grouping the glossary into themes…", { agent: analyzerShort() }) : t("Already running"));
       watchJob("themes");
     } },
-    { group: cmds, label: t("Rebuild the glossary"), icon: "glossary", hint: model, run: async () => {
+    { group: cmds, label: t("Rebuild the glossary"), icon: "glossary", hint: model, admin: true, run: async () => {
       const r = await post("/api/glossary/rebuild", { path: "" });
       toast(r.started ? t("{agent} is rebuilding the glossary…", { agent: analyzerShort() }) : t("Already running"));
       watchJob("glossary:all");
     } },
-  ];
+  ].filter((x) => !x.admin || canAdmin());
 }
 async function paletteSearch(q) {
   const lq = q.toLowerCase();
@@ -4718,11 +4942,73 @@ function closePalette() {
 }
 function runPaletteItem(x) { if (!x) return; closePalette(); x.run(); }
 
+// ------------------------------------------------------------------ who is viewing (a hub with people), sign-in
+// GET /api/me: {viewer, people_mode, can_admin}; null from an older server, which has no people.
+let ME = null, signinShown = false;
+const ROLE_LABEL = { admin: t("Admin"), member: t("Member"), readonly: t("Read-only") };
+// may use the controls that change things: an admin, someone at the hub computer, or anyone on a hub without people
+// (the server's POST rule). The hub's own settings (People, team store) follow the stricter can_admin.
+function canAdmin() { return !ME || (ME.viewer?.role ?? "admin") === "admin"; }
+async function loadMe() {
+  try { ME = await api("/api/me"); } catch (e) { ME = null; return; } // an older server, or the sign-in screen is up
+  applyViewer();
+}
+// Non-admins: the controls that change things are hidden (CSS :root.not-admin); the server refuses them anyway.
+// Someone signed in (not at the hub computer): their name, role and Sign out in the toolbar.
+function applyViewer() {
+  document.documentElement.classList.toggle("not-admin", !canAdmin());
+  $("#sync-btn").parentElement.hidden = !canAdmin();
+  const v = ME?.viewer;
+  $("#viewer-pill")?.remove();
+  if (!ME?.people_mode || !v || v.here) return;
+  const out = h("button", { class: "text-btn", type: "button", onclick: async () => {
+    out.disabled = true;
+    try { await post("/api/signout"); } catch (e) { /* the page reloads either way */ }
+    location.reload();
+  } }, t("Sign out"));
+  $("#sync-btn").parentElement.before(h("div", { class: "glass viewer-pill", id: "viewer-pill", title: v.email ? `${v.name} · ${v.email}` : v.name },
+    icon("preference"), h("span", { class: "vp-name" }, v.name),
+    h("span", { class: `vp-role${v.role === "readonly" ? " ro" : ""}` }, ROLE_LABEL[v.role] || v.role), out));
+}
+// A hub with people answered 401: nothing shows until this browser signs in, with a link from the person's own
+// Chronicle or an invite code (GET /signin?code=… sets the session cookie and comes back here).
+function showSignin() {
+  if (signinShown) return;
+  signinShown = true;
+  clearTimeout(pollTimer);
+  document.documentElement.classList.add("signed-out");
+  const code = h("input", { class: "input", name: "code", placeholder: "XXXX-XXXX-XXXX", autocomplete: "one-time-code", autocapitalize: "characters",
+    spellcheck: "false", "aria-label": t("Invite code") });
+  const form = h("form", { class: "signin-form", onsubmit: (e) => {
+    e.preventDefault();
+    const c = code.value.trim();
+    if (c) location.href = `/signin?code=${encodeURIComponent(c)}`; else code.focus();
+  } }, code, h("button", { class: "btn primary", type: "submit" }, t("Sign in")));
+  const theme = h("button", { class: "btn small", type: "button", onclick: () => { flipTheme(); theme.replaceChildren(icon(isDark() ? "sun" : "moon")); },
+    "aria-label": t("Toggle theme"), title: t("Toggle theme") }, icon(isDark() ? "sun" : "moon"));
+  const other = LANG === "ja" ? "en" : "ja";
+  const lang = h("button", { class: "btn small", type: "button", lang: other, onclick: () => setLang(other) }, other === "ja" ? "日本語" : "English");
+  document.body.append(h("div", { class: "signin-screen", id: "signin", role: "dialog", "aria-modal": "true", "aria-labelledby": "signin-title" },
+    h("div", { class: "card signin-card" },
+      h("div", { class: "signin-brand" }, h("img", { src: "icon.png", width: "26", height: "26", alt: "" }), "Chronicle"),
+      h("h1", { id: "signin-title" }, t("Sign in to this hub")),
+      h("p", null, t("This hub's dashboard opens only for people an admin has added. There is no password: you sign in from your own Chronicle, or with an invite code.")),
+      h("div", { class: "subhead" }, t("From your own computer")),
+      h("p", null, tx("If your computer already sends to this hub, open Chronicle there and choose {path}.",
+        { path: h("b", null, [t("Settings"), t("Devices"), t("Open the hub's dashboard")].join(" › ")) })),
+      h("div", { class: "subhead" }, t("With an invite code")),
+      form,
+      h("p", { class: "muted" }, t("A code works once. No code, or it has expired? Ask an admin of this hub for a new one.")),
+      h("div", { class: "signin-foot" }, lang, theme))));
+  code.focus();
+}
+
 // ------------------------------------------------------------------ jobs, status bar, theme
 let watched = new Set(), pollTimer, uiBuild = null;
 function watchJob(name) { watched.add(name); pollStatus(); }
 async function pollStatus() {
   clearTimeout(pollTimer);
+  if (signinShown) return; // nothing to show until this browser signs in
   let busy = false;
   try {
     const st = await api("/api/jobs");
@@ -4822,7 +5108,7 @@ function drawActivity(st) {
     h("div", { class: "act-foot" },
       h("span", { class: "muted" }, st.last_sync ? t("Synced {ago}", { ago: ago(st.last_sync) }) : t("Not synced yet")),
       h("span", null, h("button", { class: "btn small", type: "button", onclick: () => { toggleActivity(false); go("#/status"); } }, t("Status")), " ",
-        h("button", { class: "btn small primary", type: "button", disabled: running.some(([n]) => n === "sync"), onclick: syncNow }, t("Sync now")))),
+        h("button", { class: "btn small primary admin-only", type: "button", disabled: running.some(([n]) => n === "sync"), onclick: syncNow }, t("Sync now")))),
   ].filter(Boolean));
 }
 // an update on offer: a chip in the status bar, a dot on Settings, and once per update a notification card
@@ -4945,5 +5231,4 @@ document.addEventListener("keydown", (e) => {
   else if (e.key === "/" && !mod && !typing && !pal.open) { e.preventDefault(); openPalette(); }
 });
 window.addEventListener("hashchange", render);
-render();
-pollStatus();
+loadMe().finally(() => { render(); pollStatus(); }); // who is viewing decides which controls show

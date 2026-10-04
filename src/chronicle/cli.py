@@ -1541,7 +1541,10 @@ def cmd_hub(args) -> int:
         hub.register_local(conn, cfg)
         conn.commit()
         conn.close()
-        url = (args.url_opt or args.url or _hub_url_guess(cfg) or "").rstrip("/")
+        address = (args.url_opt or args.url or "").rstrip("/")
+        if address and address != cfg.hub_address:  # what invites and sign-in links point at from now on
+            _set_config_value(cfg, "hub", "address", json.dumps(address))
+        url = address or cfg.hub_address or (_hub_url_guess(cfg) or "").rstrip("/")
         console.print(f"[bold]{hub.local_machine(cfg)['name']}[/] is a hub: other computers can send it their sessions.",
                       highlight=False)
         if not url:
@@ -1563,7 +1566,8 @@ def cmd_hub(args) -> int:
         console.print("On each other computer, install Chronicle and run:\n")
         console.print(f"  [bold]{hub.join_command(url, token)}[/]\n", highlight=False, soft_wrap=True)
         console.print("[dim]The token lets a computer send sessions here; keep it private. "
-                      "`chronicle hub enable --rotate` replaces it.[/]", highlight=False)
+                      "`chronicle hub enable --rotate` replaces it. To give each person a token of their own and a "
+                      "dashboard sign-in instead: `chronicle hub invite <name> --email <email>`.[/]", highlight=False)
         if not _wait_for_port(cfg.server_port, 1.0):
             console.print(f"[yellow]The dashboard is not running on port {cfg.server_port}[/]: it is what receives "
                           "the files. `chronicle install` keeps it running (or run `chronicle ui`).", highlight=False)
@@ -1573,9 +1577,9 @@ def cmd_hub(args) -> int:
         return 0
 
     if action == "join":
-        if not args.url or not args.token:
-            console.print("Usage: chronicle hub join <hub address> --token <token> (the hub's `chronicle hub enable` "
-                          "prints the whole command).")
+        if not args.url or bool(args.token) == bool(args.code):
+            console.print("Usage: chronicle hub join <hub address> --code <invite code> (from the hub's admin), or "
+                          "--token <token> (the hub's `chronicle hub enable` prints the whole command).")
             return 2
         if hub.read_token(cfg) and not cfg.is_spoke:
             console.print("This computer is a hub itself (`chronicle hub disable` first).")
@@ -1583,7 +1587,17 @@ def cmd_hub(args) -> int:
         url = args.url.rstrip("/")
         if "://" not in url:
             url = f"https://{url}"
-        hub.write_token(cfg, args.token)
+        token = args.token
+        if args.code:
+            try:
+                got = hub.redeem_invite(cfg, url, args.code)
+            except hub.HubError as exc:
+                console.print(f"Can't join: {exc}", highlight=False)
+                return 1
+            token, who = got["token"], got.get("person") or {}
+            console.print(f"The hub {got.get('hub') or url} knows you as [bold]{who.get('name')}[/] ({who.get('role')}).",
+                          highlight=False)
+        hub.write_token(cfg, token)
         _set_config_value(cfg, "hub", "url", json.dumps(url))
         if args.share:
             _set_config_value(cfg, "hub", "share", json.dumps(args.share))
@@ -1641,6 +1655,22 @@ def cmd_hub(args) -> int:
 
     if action == "store":
         return _hub_store(cfg, console)
+
+    if action in ("people", "invite", "role", "remove", "shared-token"):
+        return _hub_people(cfg, console, args)
+
+    if action == "signin":
+        if not cfg.is_spoke:
+            console.print("This computer has not joined a hub; its own dashboard is `chronicle ui`.")
+            return 1
+        try:
+            link = hub.dashboard_signin(cfg)
+        except hub.HubError as exc:
+            console.print(f"Can't get a sign-in link: {exc}", highlight=False)
+            return 1
+        console.print("Open this within a few minutes to see the hub's dashboard as you (it works once):\n")
+        console.print(f"  {link}\n", highlight=False, soft_wrap=True)
+        return 0
 
     # status
     if cfg.is_spoke:
@@ -1704,6 +1734,153 @@ def _hub_store(cfg, console) -> int:
     if not hub.read_token(cfg):
         console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
     return 0
+
+
+ROLE_WORDS = {"admin": "an admin", "member": "a member", "readonly": "read-only"}
+
+
+def _find_person(conn, key: str | None) -> dict | None:
+    """A person on this hub by email, or by the id `chronicle hub people` shows."""
+    from . import people
+
+    key = (key or "").strip()
+    if key.isdigit():
+        p = people.get(conn, int(key))
+        return p if p and not p["removed_at"] else None
+    return people.by_email(conn, key) if key else None
+
+
+def _hub_people(cfg, console, args) -> int:
+    """`chronicle hub people | invite | role | remove | shared-token`: who may send to this hub and open its dashboard.
+
+    It runs at the hub itself, so it acts as an admin (people.py: whoever is at the hub computer always is one).
+    """
+    from . import hub, people
+    from .util import local_str
+
+    if cfg.is_spoke:
+        console.print(f"People belong to the hub; this computer sends to the hub at {cfg.hub_url}.", highlight=False)
+        return 1
+    action = args.action
+    conn = _conn(cfg)
+    try:
+        if action == "people":
+            rows = people.listing(conn)
+            if not rows:
+                console.print("No people on this hub yet: computers send with its shared token. To give each person a "
+                              "token of their own and a dashboard sign-in: `chronicle hub invite <name> --email <email> "
+                              "--role admin|member|readonly`.")
+                return 0
+            n = len(rows)
+            console.print(f"{n} {'person' if n == 1 else 'people'} on this hub · shared token "
+                          f"{'on' if cfg.hub_shared_token else 'off'}", highlight=False)
+            for p in rows:
+                bits = [p["email"] or "no email", p["role"]]
+                if p["invites"]:
+                    bits.append(f"invite open until {local_str(p['invites'][-1]['expires_at'])}")
+                console.print(f"  {p['id']:>3}  [bold]{p['name']}[/] · " + " · ".join(bits), highlight=False)
+                for c in p["computers"]:
+                    used = local_str(c["last_used"]) if c["last_used"] else "never"
+                    console.print(f"       computer {c['name'] or (c['machine_id'] or '')[:8]} · last used {used}",
+                                  highlight=False)
+                if p["browsers"]:
+                    n = len(p["browsers"])
+                    console.print(f"       {n} browser{'s' * (n != 1)} signed in to the dashboard", highlight=False)
+            console.print("[dim]`chronicle hub role <email|id> <role>` changes a role, `chronicle hub remove <email|id>` "
+                          "removes someone, `chronicle hub invite <name>` makes a new code.[/]", highlight=False)
+            return 0
+
+        if action == "invite":
+            name = (args.url or "").strip()
+            if not name:
+                console.print("Usage: chronicle hub invite <name> [--email <email>] [--role admin|member|readonly]")
+                return 2
+            existing = _find_person(conn, args.email) if args.email else None
+            if existing is None and (name.isdigit() or "@" in name):  # `hub invite bob@example.com`: a new code for Bob
+                existing = _find_person(conn, name)
+            try:
+                if existing and args.role and args.role != existing["role"]:
+                    existing = people.set_role(conn, existing["id"], args.role)
+                person = existing or people.add(conn, name, args.email, args.role or "member")
+                code = people.invite(conn, person["id"])
+            except people.PeopleError as exc:
+                console.print(f"Can't invite {name}: {exc}", highlight=False)
+                return 1
+            expires = conn.execute("SELECT MAX(expires_at) FROM people_codes WHERE person_id = ? AND kind = 'invite'",
+                                   (person["id"],)).fetchone()[0]
+            address = cfg.hub_address or (_hub_url_guess(cfg) or "")
+            where = address or "<hub address>"
+            email = f" ({person['email']})" if person["email"] else ""
+            console.print(f"{'New invite for' if existing else 'Added'} [bold]{person['name']}[/]{email}, "
+                          f"{ROLE_WORDS[person['role']]}. The invite code works once, until {local_str(expires)}:\n",
+                          highlight=False)
+            console.print(f"  [bold]{code}[/]\n", highlight=False)
+            if person["role"] != "readonly":
+                console.print("On their computer (it joins as them and sends what it learned, not transcripts):")
+                console.print(f"  {hub.invite_command(where, code)}\n", highlight=False, soft_wrap=True)
+            console.print("Or in their browser, to see the hub's dashboard:")
+            console.print(f"  {hub.invite_link(where, code)}\n", highlight=False, soft_wrap=True)
+            if not address:
+                console.print("[yellow]This hub has no address yet[/]: `chronicle hub enable --url https://<address>` "
+                              "sets the one other computers and browsers reach it at.", highlight=False)
+            console.print("[dim]Pass them on by chat; the code is not shown again. It joins one computer or opens one "
+                          "browser; `chronicle hub invite` again makes another.[/]", highlight=False)
+            if not hub.read_token(cfg):
+                console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
+            return 0
+
+        if action in ("role", "remove"):
+            role = args.value or args.role
+            if not args.url or (action == "role" and not role):
+                console.print("Usage: chronicle hub role <email|id> admin|member|readonly" if action == "role"
+                              else "Usage: chronicle hub remove <email|id>")
+                return 2
+            person = _find_person(conn, args.url)
+            if not person:
+                console.print(f"No one on this hub has the email or id {args.url}. `chronicle hub people` lists them.",
+                              highlight=False)
+                return 1
+            try:
+                if action == "role":
+                    people.set_role(conn, person["id"], role)
+                else:
+                    people.remove(conn, person["id"])
+            except people.PeopleError as exc:
+                what = "change the role of" if action == "role" else "remove"
+                console.print(f"Can't {what} {person['name']}: {exc}", highlight=False)
+                return 1
+            if action == "role":
+                console.print(f"{person['name']} is now {ROLE_WORDS[role]}.", highlight=False)
+            else:
+                console.print(f"Removed {person['name']}: their computers and browsers can no longer reach this hub. "
+                              "What their computers sent stays.", highlight=False)
+            return 0
+
+        # shared-token
+        value = (args.url or "").lower()
+        if value not in ("on", "off"):
+            console.print("Usage: chronicle hub shared-token on|off")
+            return 2
+        on = value == "on"
+        _set_config_value(cfg, "hub", "shared_token", json.dumps(on))
+        people.audit(conn, people.LOCAL, "shared-token", on=on)
+        conn.commit()
+        if on:
+            console.print("Computers may send with the hub's shared token again, as well as with their own.")
+            return 0
+        if not people.has_people(conn):
+            console.print("The shared token is refused once this hub has people (`chronicle hub invite`); until then "
+                          "computers keep sending with it.")
+            return 0
+        console.print("Only computers that joined with an invite may send now; the shared token is refused.")
+        legacy = [r[0] or r[1][:8] for r in conn.execute(
+            "SELECT name, id FROM machines WHERE role = 'spoke' AND person_id IS NULL ORDER BY name")]
+        if legacy:
+            console.print(f"[yellow]{len(legacy)} computer{'s' * (len(legacy) != 1)} joined with the shared token[/] and "
+                          f"need an invite to keep sending: {', '.join(legacy)}", highlight=False)
+        return 0
+    finally:
+        conn.close()
 
 
 def _toml_table(d: dict[str, str]) -> str:
@@ -2145,11 +2322,19 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("hub", help="one archive for several computers: this one records them all (enable), "
                                    "or sends its sessions to one that does (join)")
     s.add_argument("action", nargs="?", choices=["status", "enable", "join", "leave", "disable", "folders", "add-folder",
-                                                 "remove-folder", "store"], default="status")
-    s.add_argument("url", nargs="?", metavar="address|folder",
-                   help="with join: the hub's address; with add-folder and remove-folder: a folder on this computer")
+                                                 "remove-folder", "store", "people", "invite", "role", "remove",
+                                                 "shared-token", "signin"], default="status")
+    s.add_argument("url", nargs="?", metavar="address|folder|name|email",
+                   help="with join: the hub's address; with add-folder and remove-folder: a folder on this computer; "
+                        "with invite: the person's name; with role and remove: their email or id; with shared-token: "
+                        "on or off")
+    s.add_argument("value", nargs="?", metavar="role", help="with role: admin, member or readonly")
     s.add_argument("--token", help="with join: the token the hub's `chronicle hub enable` printed")
-    s.add_argument("--url", dest="url_opt", help=argparse.SUPPRESS)
+    s.add_argument("--code", help="with join: the invite code the hub's admin gave you (instead of --token)")
+    s.add_argument("--url", dest="url_opt",
+                   help="with enable: the address other computers and browsers reach this hub at (kept as [hub] address)")
+    s.add_argument("--email", help="with invite: the person's email (how a company sign-in finds them)")
+    s.add_argument("--role", choices=["admin", "member", "readonly"], help="with invite: their role (member by default)")
     s.add_argument("--rotate", action="store_true", help="with enable: make a new token (computers must join again)")
     s.add_argument("--project", help="with add-folder: the project on the hub its sessions belong to (name or path)")
     s.add_argument("--share", choices=["everything", "knowledge"],

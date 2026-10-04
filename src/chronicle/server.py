@@ -2,7 +2,11 @@
 
 Besides 127.0.0.1 and localhost it answers only to the names in `[server] allowed_hosts` (Tailscale Serve's, set by
 `chronicle tailnet on`), and there only to the Tailscale logins in `[server] allowed_users`. On a hub, /api/hub/* takes
-other computers' session files, authenticated by the hub's token instead (hub.py).
+other computers' session files, authenticated by the hub's token or a person's computer token instead (hub.py).
+
+Once a hub has people (people.py), its API answers only someone signed in: at the hub computer itself (an admin),
+through a company sign-in proxy that names them in `[server] auth_header`, or with a session cookie from an invite or
+sign-in link (/signin). Everyone signed in may look; only admins change things. A hub without people answers as before.
 """
 
 from __future__ import annotations
@@ -40,6 +44,12 @@ log = logging.getLogger("chronicle.server")
 MAX_SELECTION = 1000  # sessions one "analyze selected" may cover
 WEB_DIR = Path(__file__).parent / "web"
 LOOPBACK = ("127.0.0.1", "localhost", "[::1]")
+SESSION_COOKIE = "chronicle_session"  # a person's dashboard session on a hub (people.py)
+# headers a proxy adds: a request with any of them came through one, so it is not from someone at this computer
+PROXY_HEADERS = ("X-Forwarded-For", "Tailscale-User-Login", "X-Forwarded-Proto", "X-Real-IP", "Forwarded")
+HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub/done", "/api/hub/hello")
+SIGNIN_HELP = ("Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
+               "(Settings › Devices).")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 
 
@@ -919,6 +929,69 @@ class App:
         self._cfg_sig = self._config_sig()
         return {"ok": True, "store": self.team_store_info(), "status": self.team_store_status()}
 
+    # ---- Devices › People (people.py): who may send to this hub and open its dashboard; admins only
+    def people_info(self) -> dict:
+        from . import people
+
+        return {"people": people.listing(self.conn), "shared_token": self.cfg.hub_shared_token,
+                "address": self.cfg.hub_address or None, "audit": people.audit_log(self.conn, 50),
+                "roles": list(people.ROLES)}
+
+    def _invite(self, person: dict, by: dict | None, address: str) -> dict:
+        """A new invite for `person`, with the command and the link to pass on. The code is shown this once."""
+        from . import people
+        from .hub import invite_command, invite_link
+
+        code = people.invite(self.conn, person["id"], by=by)
+        expires = self.conn.execute("SELECT expires_at FROM people_codes WHERE person_id = ? AND kind = 'invite' "
+                                    "ORDER BY rowid DESC LIMIT 1", (person["id"],)).fetchone()[0]
+        out = {"person": person, "code": code, "expires_at": expires,
+               "join": invite_command(address, code), "link": invite_link(address, code)}
+        if not self.cfg.hub_address:  # guessed from this page's address, which others may not reach
+            out["note"] = tr("this hub has no address set ([hub] address), so these use the address this page was "
+                             "opened at; set it with `chronicle hub enable --url`")
+        return out
+
+    def action_people(self, verb: str, body: dict, by: dict | None, address: str) -> tuple[dict, int]:
+        """add, invite, role, remove, revoke or shared-token, done by `by` (None: at the hub itself) for the audit."""
+        from . import people
+        from .config import load_config, set_config_value
+
+        try:
+            if verb == "add":
+                person = people.add(self.conn, str(body.get("name") or ""), str(body.get("email") or ""),
+                                    str(body.get("role") or "member"), by=by)
+                return self._invite(person, by, address), 200
+            if verb == "shared-token":
+                on = bool(body.get("on"))
+                set_config_value(self.cfg, "hub", "shared_token", "true" if on else "false")
+                self.cfg = load_config(self.cfg.home)
+                self._cfg_sig = self._config_sig()
+                people.audit(self.conn, people.actor_of(by), "shared-token", None, on=on)
+                self.conn.commit()
+                return {"ok": True, **self.people_info()}, 200
+            try:
+                pid = int(body.get("id"))
+            except (TypeError, ValueError):
+                return {"error": tr("no such person")}, 400
+            if verb == "invite":
+                person = people.get(self.conn, pid)
+                if not person or person["removed_at"]:
+                    return {"error": tr("no such person")}, 400
+                return self._invite(person, by, address), 200
+            if verb == "role":
+                people.set_role(self.conn, pid, str(body.get("role") or ""), by=by)
+            elif verb == "remove":
+                people.remove(self.conn, pid, by=by)
+            elif verb == "revoke":
+                if not people.revoke(self.conn, pid, str(body.get("token") or ""), by=by):
+                    return {"error": tr("no such computer or browser session")}, 400
+            else:
+                return {"error": tr("not found")}, 404
+        except people.PeopleError as exc:
+            return {"error": exc.shown()}, 400
+        return {"ok": True, **self.people_info()}, 200
+
     def action_share_mode(self, share: str) -> dict:
         """[hub] share on a computer that sends to a hub: its transcripts, or only what it learned."""
         from .config import SHARE_MODES, load_config, set_config_value
@@ -1268,6 +1341,7 @@ def make_handler(app: App, port: int):
 
     class Handler(BaseHTTPRequestHandler):
         server_version = f"chronicle/{__version__}"
+        viewer: dict | None = None  # who is viewing (_viewer), None meaning an admin
 
         def log_message(self, fmt, *args):  # quiet
             log.debug("%s - %s", self.address_string(), fmt % args)
@@ -1302,9 +1376,19 @@ def make_handler(app: App, port: int):
 
         def _from_here(self) -> bool:
             """The request comes from this computer itself: not through Tailscale Serve, not from another device.
-            Gates the settings that hold a password or change what leaves the computer (Devices)."""
-            proxied = self.headers.get("X-Forwarded-For") is not None or self.headers.get("Tailscale-User-Login") is not None
+            Gates the settings that hold a password or change what leaves the computer (Devices).
+
+            With `[server] behind_proxy`, never: a reverse proxy on this computer may send neither X-Forwarded-For nor
+            its visitors' Host (nginx's default), so every visitor would look like someone at the hub itself."""
+            if app.cfg.server_behind_proxy:
+                return False
+            proxied = any(self.headers.get(h) is not None for h in PROXY_HEADERS)
             return not proxied and self.client_address[0] in ("127.0.0.1", "::1") and self._host() in local_hosts
+
+        def _people_mode(self) -> bool:
+            from . import people
+
+            return people.has_people(app.conn)
 
         def _local(self) -> str | None:
             """"mac" or "linux" when the request comes from this computer itself and Chronicle can open files here;
@@ -1314,6 +1398,99 @@ def make_handler(app: App, port: int):
             if not self._from_here():
                 return None
             return "mac" if sys.platform == "darwin" else "linux" if sys.platform.startswith("linux") else None
+
+        # ---- who is viewing (people.py): set per request in _get/_post, None meaning an admin
+        def _proxied_https(self) -> bool:
+            """The request reached a proxy in [server] trusted_proxies over https. X-Forwarded-Proto from anyone else
+            is not believed."""
+            return (self.client_address[0] in app.cfg.server_trusted_proxies
+                    and (self.headers.get("X-Forwarded-Proto") or "").strip().lower() == "https")
+
+        def _session(self) -> str:
+            from http.cookies import CookieError, SimpleCookie
+
+            try:
+                morsel = SimpleCookie(self.headers.get("Cookie") or "").get(SESSION_COOKIE)
+            except CookieError:
+                return ""
+            return morsel.value if morsel else ""
+
+        def _session_cookie(self, value: str, max_age: int) -> str:
+            secure = "; Secure" if self._proxied_https() else ""
+            return f"{SESSION_COOKIE}={value}; HttpOnly; SameSite=Lax; Path=/; Max-Age={max_age}{secure}"
+
+        def _viewer(self) -> tuple[dict | None, tuple[dict, int] | None]:
+            """(person, None) for who is viewing, person None being an admin: someone at the hub computer itself, or,
+            while the hub has no people, anyone the dashboard let in before people existed. (None, (error, status))
+            when no one is signed in."""
+            from . import people
+
+            if self._from_here() or not self._people_mode():
+                return None, None
+            header = app.cfg.server_auth_header
+            if header and self.client_address[0] in app.cfg.server_trusted_proxies and self.headers.get(header):
+                person = people.by_email(app.conn, self.headers.get(header))  # a company sign-in in front of the hub
+                if not person:
+                    return None, ({"error": tr("you're not on this hub; ask an admin to add you")}, 403)
+                return person, None
+            person = people.browser_person(app.conn, self._session())
+            if person:
+                return person, None
+            return None, ({"error": tr("sign in to this hub"), "signin": True}, 401)
+
+        def _can_admin(self) -> bool:
+            """May change the hub's own settings (people, team store): at the hub itself, or an admin person. A hub
+            without people keeps these to the computer itself, as before."""
+            return self._from_here() or (self.viewer is not None and self.viewer["role"] == "admin")
+
+        def _me(self) -> dict:
+            from . import people
+
+            return {"viewer": {**people.public(self.viewer), "here": self._from_here()},
+                    "people_mode": people.has_people(app.conn), "can_admin": self._can_admin()}
+
+        def _address(self) -> str:
+            """The hub's address as others reach it: [hub] address, or a guess from how this page was opened."""
+            if app.cfg.hub_address:
+                return app.cfg.hub_address
+            return f"{'https' if self._proxied_https() else 'http'}://{self._host() or '127.0.0.1'}"
+
+        def _signin(self, code: str):
+            """An invite link, or a sign-in link a person's own Chronicle asked for: opens a browser session."""
+            import html
+
+            from . import people
+
+            accept = (self.headers.get("Accept-Language") or "").strip().lower()
+            i18n.lang.set("ja" if accept.startswith("ja") else "en")  # a link opened by hand sends no X-Chronicle-Lang
+            try:
+                _person, session = people.open_browser(app.conn, code, label=self.headers.get("User-Agent"))
+            except people.PeopleError as exc:
+                title = html.escape(tr("Could not sign in"))
+                body = (f'<!doctype html><html lang="{i18n.lang.get()}"><meta charset="utf-8">'
+                        '<meta name="viewport" content="width=device-width, initial-scale=1">'
+                        f'<meta name="color-scheme" content="light dark"><title>{title} · Chronicle</title>'
+                        '<body style="font: 16px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 12vh auto; '
+                        f'padding: 0 16px"><h1 style="font-size: 1.3rem">{title}</h1><p>{html.escape(exc.shown())}</p>'
+                        f"<p>{html.escape(tr(SIGNIN_HELP))}</p>"
+                        f'<p><a href="/">{html.escape(tr("Open the dashboard"))}</a></p></body></html>').encode()
+                self.send_response(400)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
+                self.end_headers()
+                self.wfile.write(body)
+                return
+            self.send_response(302)
+            self.send_header("Location", "/#/")
+            self.send_header("Set-Cookie", self._session_cookie(session, people.BROWSER_DAYS * 86400))
+            self.send_header("Cache-Control", "no-store")
+            self.send_header("Referrer-Policy", "no-referrer")  # the code is in this page's address
+            self.send_header("Content-Length", "0")
+            self.end_headers()
 
         def _open_file(self, f: dict):
             from urllib.parse import quote
@@ -1334,13 +1511,28 @@ def make_handler(app: App, port: int):
             self.wfile.write(f["body"])
 
         def _hub_api(self, p: str):
-            """Another computer sending its sessions (hub.py). Authenticated by the hub token, not a browser header."""
+            """Another computer sending its sessions (hub.py). Authenticated by the hub's shared token or a person's
+            computer token (hub.authorize), not a browser header; joining with an invite needs neither."""
             from . import hub
 
-            if not hub.token_ok(app.cfg, self.headers.get("Authorization")):
-                return self._json({"error": "unauthorized"}, 401)
             q = {k: v[-1] for k, v in parse_qs(urlparse(self.path).query).items()}
             length = int(self.headers.get("Content-Length") or 0)
+            if p == "/api/hub/join":  # the invite code is the credential
+                if length > 65536:
+                    return self._json({"error": "too large"}, 413)
+                try:
+                    body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                    if not isinstance(body, dict):
+                        return self._json({"error": "bad json"}, 400)
+                    return self._json(hub.join_with_code(app.cfg, app.conn, body))
+                except (hub.HubError, ValueError) as exc:
+                    return self._json({"error": str(exc)}, 400)
+            auth = self.headers.get("Authorization")
+            ok, person = hub.authorize(app.cfg, app.conn, auth, q.get("machine"))  # before reading what was sent
+            if not ok:
+                return self._json({"error": "unauthorized"}, 401)
+            if person and person["role"] == "readonly" and p in HUB_PUSH:
+                return self._json({"error": "read-only people can't send to the hub"}, 403)
             try:
                 if p == "/api/hub/file":
                     return self._json(hub.receive_file(app.cfg, app.conn, q, self.rfile, length))
@@ -1351,6 +1543,12 @@ def make_handler(app: App, port: int):
                 body = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 if not isinstance(body, dict):
                     return self._json({"error": "bad json"}, 400)
+                if person and body.get("machine"):  # a person's token works only from the computer it was issued to
+                    ok, person = hub.authorize(app.cfg, app.conn, auth, str(body["machine"]))
+                    if not ok:
+                        return self._json({"error": "unauthorized"}, 401)
+                if p == "/api/hub/signin":
+                    return self._json(hub.signin_code_for(app.cfg, app.conn, person))
                 if p == "/api/hub/hello":
                     return self._json(hub.hello(app.cfg, app.conn, body))
                 if p == "/api/hub/lessons":
@@ -1363,12 +1561,14 @@ def make_handler(app: App, port: int):
                 return self._json({"error": str(exc)}, 400)
             return self._json({"error": "not found"}, 404)
 
-        def _json(self, data, status=200):
+        def _json(self, data, status=200, cookie: str | None = None):
             body = json.dumps(data, ensure_ascii=False, default=str).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(body)))
+            if cookie:
+                self.send_header("Set-Cookie", cookie)
             self.end_headers()
             self.wfile.write(body)
 
@@ -1433,12 +1633,24 @@ def make_handler(app: App, port: int):
         def _get(self):
             if not self._host_ok():
                 return self._json({"error": tr("forbidden host")}, 403)
-            if not self._user_ok():
+            if not self._user_ok() and not self._people_mode():  # with people, _viewer says who may see what
                 return self._json({"error": tr("this Tailscale login is not allowed ([server] allowed_users)")}, 403)
             url = urlparse(self.path)
             q = {k: v[-1] for k, v in parse_qs(url.query).items()}
             p = url.path
             try:
+                if p == "/signin":
+                    return self._signin(q.get("code", ""))
+                if p.startswith("/api/"):  # the page itself stays public, so it can show how to sign in
+                    self.viewer, refused = self._viewer()
+                    if refused:
+                        return self._json(*refused)
+                if p == "/api/me":
+                    return self._json(self._me())
+                if p == "/api/people":
+                    if not self._can_admin():
+                        return self._json({"error": tr("only an admin of this hub can do this")}, 403)
+                    return self._json(app.people_info())
                 if p == "/api/overview":
                     return self._json(app.overview(q))
                 if p == "/api/sessions":
@@ -1515,7 +1727,7 @@ def make_handler(app: App, port: int):
                 if p == "/api/imports":
                     return self._json(app.imports())
                 if p == "/api/devices":
-                    return self._json({**app.devices(), "here": self._from_here()})
+                    return self._json({**app.devices(), "here": self._from_here(), **self._me()})
                 if p == "/api/team-store":
                     return self._json(app.team_store_status())
                 if p == "/api/suggestions":
@@ -1567,8 +1779,19 @@ def make_handler(app: App, port: int):
                 return self._json({"error": tr("forbidden")}, 403)
             if urlparse(self.path).path.startswith("/api/hub/"):
                 return self._hub_api(urlparse(self.path).path)
-            if self.headers.get("X-Chronicle") != "1" or not self._user_ok():
+            if self.headers.get("X-Chronicle") != "1" or not (self._user_ok() or self._people_mode()):
                 return self._json({"error": tr("forbidden")}, 403)
+            if urlparse(self.path).path == "/api/signout":
+                from . import people
+
+                if self._session():
+                    people.sign_out(app.conn, self._session())
+                return self._json({"ok": True}, cookie=self._session_cookie("", 0))
+            self.viewer, refused = self._viewer()
+            if refused:
+                return self._json(*refused)
+            if self.viewer is not None and self.viewer["role"] != "admin":  # members and read-only people look
+                return self._json({"error": tr("only an admin of this hub can do this")}, 403)
             if urlparse(self.path).path == "/api/import":
                 return self._import_upload()
             length = int(self.headers.get("Content-Length") or 0)
@@ -1588,14 +1811,29 @@ def make_handler(app: App, port: int):
                         return self._json({"error": tr("files open only on the computer Chronicle runs on")}, 403)
                     err = app.artifact_reveal(int(m.group(1)), "reveal" if body.get("how") == "reveal" else "open")
                     return self._json({"error": err}, 400) if err else self._json({"ok": True})
-                if p in ("/api/team-store/test", "/api/team-store/save", "/api/devices/share"):
-                    if not self._from_here():  # a password, or what leaves this computer: only at the computer itself
+                if p in ("/api/team-store/test", "/api/team-store/save"):
+                    if not self._can_admin():  # a password: at the hub itself, or an admin of a hub with people
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
                     if p == "/api/team-store/test":
                         return self._json(app.action_team_store_test(body))
-                    if p == "/api/team-store/save":
-                        return self._json(app.action_team_store_save(body))
+                    return self._json(app.action_team_store_save(body))
+                if p in ("/api/devices/share", "/api/devices/hub-signin"):
+                    if not self._from_here():  # what leaves this computer, or its own sign-in: only from here
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    if p == "/api/devices/hub-signin":
+                        from .hub import HubError, dashboard_signin
+
+                        try:
+                            return self._json({"url": dashboard_signin(app.cfg)})
+                        except HubError as exc:
+                            return self._json({"error": tr(str(exc))}, 400)
                     return self._json(app.action_share_mode(str(body.get("share") or "")))
+                m = re.fullmatch(r"/api/people/(add|invite|role|remove|revoke|shared-token)", p)
+                if m:
+                    if not self._can_admin():
+                        return self._json({"error": tr("only an admin of this hub can do this")}, 403)
+                    return self._json(*app.action_people(m.group(1), body if isinstance(body, dict) else {},
+                                                         self.viewer, self._address()))
                 if p == "/api/devices/push":
                     return self._json({"started": app.action_push()})
                 if p == "/api/update/check":  # a POST: with the daily check off, the dashboard's only call to PyPI

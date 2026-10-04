@@ -1,0 +1,356 @@
+"""People on a hub: who may send to it and open its dashboard, and with which role. No Tailscale needed.
+
+Roles:
+    admin     sees everything, invites people and changes roles, changes the hub's settings (team store, people)
+    member    their computers send to the hub and get teammates' lessons back; sees the hub's dashboard
+    readonly  sees the hub's dashboard; sends nothing, changes nothing
+
+Everything starts with an invite. An admin adds a person with a role and gets a one-time code (expires after
+INVITE_DAYS) to pass on by chat; the hub sends no email. The code is redeemed once, either by a computer
+(`chronicle hub join <hub> --code …`: it becomes a push token for that person and that computer) or by a browser
+(the invite link: it becomes a dashboard session). A person's own computer can later ask for a short sign-in link
+(SIGNIN_MINUTES) to open the hub's dashboard without a password.
+
+Only hashes of codes, tokens and sessions are stored; the secret itself is shown once (codes) or lives only on the
+computer (tokens) or in the browser's cookie (sessions). Removing a person, or revoking a token or session, takes
+effect at the next request. Whoever is at the hub computer itself is always an admin: that is how the first admin
+is made, and how a hub whose admins are all gone is recovered.
+
+While a hub has no people, it works as before: computers send with the hub's shared token. Once it has people the
+shared token keeps working until `[hub] shared_token = false` (Devices › People, or the config), so computers that
+joined before are not cut off.
+"""
+
+from __future__ import annotations
+
+import hashlib
+import json
+import re
+import secrets
+import sqlite3
+from datetime import datetime, timedelta, timezone
+
+from .util import utcnow_iso
+
+ROLES = ("admin", "member", "readonly")
+ROLE_RANK = {"readonly": 0, "member": 1, "admin": 2}
+INVITE_DAYS = 7
+SIGNIN_MINUTES = 5
+BROWSER_DAYS = 30  # a dashboard session lasts this long after it was last used
+CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"  # no 0/O, 1/I: read aloud or retyped from chat
+LOCAL = "this computer"  # the actor for things done at the hub itself
+EMAIL_RE = re.compile(r"^[^@\s]{1,64}@[^@\s]{1,255}$")
+
+
+class PeopleError(Exception):
+    """A message template and its values, so the dashboard can show it in the viewer's language (`shown`)."""
+
+    def __init__(self, template: str, **values):
+        super().__init__(template.format(**values) if values else template)
+        self.template, self.values = template, values
+
+    def shown(self) -> str:
+        from .i18n import tr
+
+        return tr(self.template, **self.values)
+
+
+def _hash(secret: str) -> str:
+    return hashlib.sha256(secret.strip().encode()).hexdigest()
+
+
+def _now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+def _iso(dt: datetime) -> str:
+    return dt.strftime("%Y-%m-%dT%H:%M:%S.") + f"{dt.microsecond // 1000:03d}Z"
+
+
+def _expired(at: str | None) -> bool:
+    return bool(at) and at < _iso(_now())
+
+
+def new_code() -> str:
+    """XXXX-XXXX-XXXX: 60 bits, easy to read out and retype."""
+    raw = "".join(secrets.choice(CODE_ALPHABET) for _ in range(12))
+    return f"{raw[:4]}-{raw[4:8]}-{raw[8:]}"
+
+
+def normalize_code(code: str) -> str:
+    raw = re.sub(r"[^A-Za-z0-9]", "", code or "").upper()
+    return f"{raw[:4]}-{raw[4:8]}-{raw[8:]}" if len(raw) == 12 else raw
+
+
+def audit(conn: sqlite3.Connection, actor: str | None, action: str, person_id: int | None = None, **detail) -> None:
+    conn.execute("INSERT INTO people_audit(at, actor, action, person_id, detail) VALUES (?, ?, ?, ?, ?)",
+                 (utcnow_iso(), actor, action, person_id, json.dumps(detail, ensure_ascii=False) if detail else None))
+
+
+def actor_of(person: dict | None) -> str:
+    return f"person:{person['id']}" if person else LOCAL
+
+
+# ------------------------------------------------------------------ people
+def has_people(conn: sqlite3.Connection) -> bool:
+    return conn.execute("SELECT 1 FROM people WHERE removed_at IS NULL LIMIT 1").fetchone() is not None
+
+
+def get(conn: sqlite3.Connection, person_id: int) -> dict | None:
+    r = conn.execute("SELECT * FROM people WHERE id = ?", (person_id,)).fetchone()
+    return dict(r) if r else None
+
+
+def by_email(conn: sqlite3.Connection, email: str) -> dict | None:
+    r = conn.execute("SELECT * FROM people WHERE email = ? AND removed_at IS NULL", ((email or "").strip().lower(),)).fetchone()
+    return dict(r) if r else None
+
+
+def add(conn: sqlite3.Connection, name: str, email: str | None, role: str, *, by: dict | None = None) -> dict:
+    """Add a person. Email is optional but needed for a company sign-in (auth header) to find them."""
+    name, email = (name or "").strip(), (email or "").strip().lower() or None
+    if not name:
+        raise PeopleError("a name is needed")
+    if role not in ROLES:
+        raise PeopleError("role must be one of: {roles}", roles=", ".join(ROLES))
+    if email and not EMAIL_RE.match(email):
+        raise PeopleError("{email} is not an email address", email=email)
+    if email and by_email(conn, email):
+        raise PeopleError("{email} is already on this hub", email=email)
+    if email:  # someone removed earlier comes back as a new person: the old row keeps its history
+        conn.execute("UPDATE people SET email = NULL WHERE email = ? AND removed_at IS NOT NULL", (email,))
+    cur = conn.execute("INSERT INTO people(name, email, role, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
+                       (name[:120], email, role, utcnow_iso(), by["id"] if by else None))
+    audit(conn, actor_of(by), "add", cur.lastrowid, role=role, email=email)
+    conn.commit()
+    return get(conn, cur.lastrowid)
+
+
+def set_role(conn: sqlite3.Connection, person_id: int, role: str, *, by: dict | None = None) -> dict:
+    p = get(conn, person_id)
+    if not p or p["removed_at"]:
+        raise PeopleError("no such person")
+    if role not in ROLES:
+        raise PeopleError("role must be one of: {roles}", roles=", ".join(ROLES))
+    if p["role"] == "admin" and role != "admin" and by is not None and _admins(conn) == [person_id]:
+        raise PeopleError("this is the hub's last admin: make someone else an admin first")
+    conn.execute("UPDATE people SET role = ? WHERE id = ?", (role, person_id))
+    audit(conn, actor_of(by), "role", person_id, before=p["role"], after=role)
+    conn.commit()
+    return get(conn, person_id)
+
+
+def remove(conn: sqlite3.Connection, person_id: int, *, by: dict | None = None) -> None:
+    """Remove a person: their codes, computer tokens and browser sessions stop working at once. What their computers
+    sent stays on the hub."""
+    p = get(conn, person_id)
+    if not p or p["removed_at"]:
+        raise PeopleError("no such person")
+    if p["role"] == "admin" and by is not None and _admins(conn) == [person_id]:
+        raise PeopleError("this is the hub's last admin: make someone else an admin first")
+    now = utcnow_iso()
+    conn.execute("UPDATE people SET removed_at = ? WHERE id = ?", (now, person_id))
+    conn.execute("UPDATE people_tokens SET revoked_at = ? WHERE person_id = ? AND revoked_at IS NULL", (now, person_id))
+    conn.execute("UPDATE people_codes SET used_at = ? WHERE person_id = ? AND used_at IS NULL", (now, person_id))
+    audit(conn, actor_of(by), "remove", person_id)
+    conn.commit()
+
+
+def _admins(conn: sqlite3.Connection) -> list[int]:
+    return [r[0] for r in conn.execute("SELECT id FROM people WHERE role = 'admin' AND removed_at IS NULL")]
+
+
+def listing(conn: sqlite3.Connection) -> list[dict]:
+    """Everyone on the hub, with their computers, open browser sessions and unused invites (no secrets)."""
+    now = _iso(_now())
+    out = []
+    for p in conn.execute("SELECT * FROM people WHERE removed_at IS NULL ORDER BY role = 'admin' DESC, name"):
+        p = dict(p)
+        toks = [dict(t) for t in conn.execute(
+            "SELECT t.token_hash, t.kind, t.machine_id, t.label, t.created_at, t.last_used, t.expires_at, m.name AS machine_name "
+            "FROM people_tokens t LEFT JOIN machines m ON m.id = t.machine_id "
+            "WHERE t.person_id = ? AND t.revoked_at IS NULL ORDER BY t.created_at", (p["id"],))]
+        p["computers"] = [{"id": t["token_hash"][:16], "machine_id": t["machine_id"], "name": t["machine_name"] or t["label"],
+                           "since": t["created_at"], "last_used": t["last_used"]} for t in toks if t["kind"] == "computer"]
+        p["browsers"] = [{"id": t["token_hash"][:16], "label": t["label"], "since": t["created_at"], "last_used": t["last_used"]}
+                         for t in toks if t["kind"] == "browser" and not (t["expires_at"] and t["expires_at"] < now)]
+        p["invites"] = [{"expires_at": r[0], "created_at": r[1]} for r in conn.execute(
+            "SELECT expires_at, created_at FROM people_codes WHERE person_id = ? AND kind = 'invite' AND used_at IS NULL "
+            "AND expires_at > ? ORDER BY created_at", (p["id"], now))]
+        out.append(p)
+    return out
+
+
+# ------------------------------------------------------------------ one-time codes
+def invite(conn: sqlite3.Connection, person_id: int, *, by: dict | None = None, days: int = INVITE_DAYS) -> str:
+    """A one-time code for this person: redeemed by `chronicle hub join … --code` (a computer) or the invite link
+    (a browser). Returns the code; only its hash is kept."""
+    p = get(conn, person_id)
+    if not p or p["removed_at"]:
+        raise PeopleError("no such person")
+    code = new_code()
+    now = _now()
+    conn.execute("INSERT INTO people_codes(code_hash, person_id, kind, created_at, expires_at) VALUES (?, ?, 'invite', ?, ?)",
+                 (_hash(code), person_id, _iso(now), _iso(now + timedelta(days=days))))
+    audit(conn, actor_of(by), "invite", person_id, days=days)
+    conn.commit()
+    return code
+
+
+def signin_code(conn: sqlite3.Connection, person: dict) -> str:
+    """A short-lived code that opens the dashboard as this person, asked for by one of their computers."""
+    code = secrets.token_urlsafe(24)
+    now = _now()
+    conn.execute("INSERT INTO people_codes(code_hash, person_id, kind, created_at, expires_at) VALUES (?, ?, 'signin', ?, ?)",
+                 (_hash(code), person["id"], _iso(now), _iso(now + timedelta(minutes=SIGNIN_MINUTES))))
+    conn.commit()
+    return code
+
+
+def peek_invite(conn: sqlite3.Connection, code: str) -> dict | None:
+    """The person an unused invite code is for, without using it up (e.g. to refuse a read-only person's computer
+    while the code still opens a browser); None when the code isn't a live invite."""
+    r = conn.execute("SELECT person_id, expires_at FROM people_codes WHERE kind = 'invite' AND used_at IS NULL "
+                     "AND code_hash IN (?, ?)", (_hash(normalize_code(code)), _hash(code or ""))).fetchone()
+    if not r or _expired(r["expires_at"]):
+        return None
+    p = get(conn, r["person_id"])
+    return p if p and not p["removed_at"] else None
+
+
+def _take_code(conn: sqlite3.Connection, code: str, kinds: tuple[str, ...]) -> dict:
+    # an invite as typed (any case, with or without dashes), or a sign-in code exactly as issued
+    r = conn.execute("SELECT * FROM people_codes WHERE code_hash IN (?, ?)",
+                     (_hash(normalize_code(code)), _hash(code or ""))).fetchone()
+    h = r["code_hash"] if r else None
+    if not r or r["kind"] not in kinds:
+        raise PeopleError("that code isn't known on this hub")
+    if r["used_at"]:
+        raise PeopleError("that code was already used; ask an admin for a new one")
+    if _expired(r["expires_at"]):
+        raise PeopleError("that code has expired; ask an admin for a new one")
+    p = get(conn, r["person_id"])
+    if not p or p["removed_at"]:
+        raise PeopleError("that person is no longer on this hub")
+    cur = conn.execute("UPDATE people_codes SET used_at = ? WHERE code_hash = ? AND used_at IS NULL", (utcnow_iso(), h))
+    if cur.rowcount != 1:  # two redemptions at once: only one wins
+        raise PeopleError("that code was already used; ask an admin for a new one")
+    return p
+
+
+def join_computer(conn: sqlite3.Connection, code: str, machine_id: str, machine_name: str | None = None) -> tuple[dict, str]:
+    """Redeem an invite for a computer: (person, push token). The token replaces any earlier one of that computer."""
+    p = _take_code(conn, code, ("invite",))
+    token = secrets.token_urlsafe(32)
+    now = utcnow_iso()
+    conn.execute("UPDATE people_tokens SET revoked_at = ? WHERE machine_id = ? AND kind = 'computer' AND revoked_at IS NULL",
+                 (now, machine_id))
+    conn.execute("INSERT INTO people_tokens(token_hash, person_id, kind, machine_id, label, created_at) "
+                 "VALUES (?, ?, 'computer', ?, ?, ?)", (_hash(token), p["id"], machine_id, (machine_name or "")[:120] or None, now))
+    conn.execute("UPDATE machines SET person_id = ? WHERE id = ?", (p["id"], machine_id))
+    audit(conn, actor_of(p), "join", p["id"], machine=machine_id, name=machine_name)
+    conn.commit()
+    return p, token
+
+
+def open_browser(conn: sqlite3.Connection, code: str, label: str | None = None) -> tuple[dict, str]:
+    """Redeem an invite or a sign-in code in a browser: (person, session secret for the cookie)."""
+    p = _take_code(conn, code, ("invite", "signin"))
+    session = secrets.token_urlsafe(32)
+    now = _now()
+    conn.execute("INSERT INTO people_tokens(token_hash, person_id, kind, label, created_at, expires_at, last_used) "
+                 "VALUES (?, ?, 'browser', ?, ?, ?, ?)",
+                 (_hash(session), p["id"], (label or "")[:200] or None, _iso(now), _iso(now + timedelta(days=BROWSER_DAYS)), _iso(now)))
+    audit(conn, actor_of(p), "signin", p["id"])
+    conn.commit()
+    return p, session
+
+
+# ------------------------------------------------------------------ who is asking
+def _by_token(conn: sqlite3.Connection, secret: str, kind: str) -> tuple[dict, dict] | None:
+    if not secret:
+        return None
+    t = conn.execute("SELECT * FROM people_tokens WHERE token_hash = ? AND kind = ?", (_hash(secret), kind)).fetchone()
+    if not t or t["revoked_at"] or _expired(t["expires_at"]):
+        return None
+    p = get(conn, t["person_id"])
+    if not p or p["removed_at"]:
+        return None
+    return p, dict(t)
+
+
+def computer_person(conn: sqlite3.Connection, token: str, machine_id: str | None = None) -> dict | None:
+    """The person a computer's push token belongs to; None when it is no (longer a) valid token. A token presented by
+    another computer than the one it was issued to is refused."""
+    hit = _by_token(conn, token, "computer")
+    if not hit:
+        return None
+    p, t = hit
+    if machine_id and t["machine_id"] and t["machine_id"] != machine_id:
+        return None
+    if not t["last_used"] or t["last_used"][:16] != utcnow_iso()[:16]:  # at most one write a minute
+        conn.execute("UPDATE people_tokens SET last_used = ? WHERE token_hash = ?", (utcnow_iso(), t["token_hash"]))
+        conn.commit()
+    return p
+
+
+def browser_person(conn: sqlite3.Connection, session: str) -> dict | None:
+    """The person a dashboard session cookie belongs to, sliding its expiry forward; None when it isn't valid."""
+    hit = _by_token(conn, session, "browser")
+    if not hit:
+        return None
+    p, t = hit
+    now = _now()
+    if not t["last_used"] or t["last_used"][:13] != _iso(now)[:13]:  # at most one write an hour
+        conn.execute("UPDATE people_tokens SET last_used = ?, expires_at = ? WHERE token_hash = ?",
+                     (_iso(now), _iso(now + timedelta(days=BROWSER_DAYS)), t["token_hash"]))
+        conn.commit()
+    return p
+
+
+def sign_out(conn: sqlite3.Connection, session: str) -> None:
+    conn.execute("UPDATE people_tokens SET revoked_at = ? WHERE token_hash = ? AND kind = 'browser' AND revoked_at IS NULL",
+                 (utcnow_iso(), _hash(session)))
+    conn.commit()
+
+
+def revoke(conn: sqlite3.Connection, person_id: int, token_id: str, *, by: dict | None = None) -> bool:
+    """Revoke one of a person's computer tokens or browser sessions by the short id listing() shows."""
+    if not re.fullmatch(r"[0-9a-f]{16}", token_id or ""):
+        return False
+    cur = conn.execute("UPDATE people_tokens SET revoked_at = ? WHERE person_id = ? AND substr(token_hash, 1, 16) = ? "
+                       "AND revoked_at IS NULL", (utcnow_iso(), person_id, token_id))
+    if cur.rowcount:
+        audit(conn, actor_of(by), "revoke", person_id, token=token_id)
+    conn.commit()
+    return bool(cur.rowcount)
+
+
+def allows(person: dict | None, need: str) -> bool:
+    """`person` (None: someone at the hub computer itself, always an admin) has at least role `need`."""
+    if person is None:
+        return True
+    return ROLE_RANK.get(person.get("role"), -1) >= ROLE_RANK[need]
+
+
+def public(person: dict | None) -> dict:
+    """What the dashboard may know about who is viewing it."""
+    if person is None:
+        return {"id": None, "name": LOCAL, "email": None, "role": "admin", "here": True}
+    return {"id": person["id"], "name": person["name"], "email": person.get("email"), "role": person["role"], "here": False}
+
+
+def audit_log(conn: sqlite3.Connection, limit: int = 200) -> list[dict]:
+    rows = conn.execute("SELECT a.*, p.name AS person_name FROM people_audit a LEFT JOIN people p ON p.id = a.person_id "
+                        "ORDER BY a.id DESC LIMIT ?", (limit,)).fetchall()
+    out = []
+    for r in rows:
+        d = dict(r)
+        d["detail"] = json.loads(d["detail"]) if d["detail"] else {}
+        if d["actor"] and d["actor"].startswith("person:"):
+            who = get(conn, int(d["actor"][7:]))
+            d["actor_name"] = who["name"] if who else d["actor"]
+        else:
+            d["actor_name"] = d["actor"]
+        out.append(d)
+    return out

@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **People and roles on a hub, without Tailscale:** an admin invites each person as an admin, a member or read-only,
+  with `chronicle hub invite <name> --email … --role …` or **Settings › Devices › People** on the hub. The invite is a
+  one-time code, valid for 7 days and shown once, passed on by chat. A member's computer joins with
+  `chronicle hub join <address> --code …` and gets a token of its own; a browser opens the invite link. Members open
+  the hub's dashboard from their own Chronicle with a short sign-in link, no password. Read-only people see the
+  dashboard and send nothing, and only admins change anything there. Removing a person, or revoking one computer or
+  browser, takes effect at once, and every invite, role change, removal, join and sign-in goes into an audit log.
+  Computers that joined with the hub's shared token keep working until `chronicle hub shared-token off`. Whoever is
+  at the hub computer itself is always an admin. A hub can now sit on the company network or VPN behind an HTTPS
+  proxy (`[hub] address`), with company sign-in through an auth proxy's header (`[server] auth_header`,
+  `trusted_proxies`) for people added on the hub. [People and roles](docs/devices.md#people-and-roles)
 - **Teammates' lessons, and a team store in Postgres:** a hub with `[hub] store = "postgres"` (the connection in
   `team-store.env`, the driver from `agents-chronicle[team]`) also keeps what computers share in Postgres: each
   session's details and summary, its project lessons, and an audit log. Lessons belong to their git repository

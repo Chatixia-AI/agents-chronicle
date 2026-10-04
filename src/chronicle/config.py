@@ -93,6 +93,14 @@ allowed_hosts = []
 # Reached by one of those names through Tailscale Serve: only these Tailscale logins get in
 # (empty = everyone on your tailnet). `chronicle tailnet on` sets it to yours.
 allowed_users = []
+# Company sign-in in front of the dashboard (an auth proxy such as oauth2-proxy or Azure's Easy Auth): the request
+# header that names the signed-in person's email, e.g. "X-Forwarded-Email". Only trusted from trusted_proxies, and
+# only for people added on this hub (people.py). Empty: people sign in with an invite or sign-in link.
+auth_header = ""
+trusted_proxies = ["127.0.0.1", "::1"]
+# A reverse proxy on this computer forwards to the dashboard (HTTPS for a team hub): then no request counts as made
+# at this computer itself, so nobody is an admin just by coming through the proxy. Admins sign in, or use the CLI.
+behind_proxy = false
 
 [hub]
 # On a computer that sends its sessions to another one (the hub): the hub's address. Set by `chronicle hub join`.
@@ -112,6 +120,12 @@ share = "everything"
 # back. The connection (PGHOST, PGDATABASE, PGUSER, PGPASSWORD, ...) is read from team-store.env in Chronicle's
 # folder; the Postgres driver comes with the team extra: uv tool install 'agents-chronicle[team]'.
 store = ""
+# On the hub, once it has people (`chronicle hub invite`): whether computers may still send with the hub's one shared
+# token instead of a token of their own. Turn off when everyone has joined with an invite.
+shared_token = true
+# On the hub: its address as the other computers and browsers reach it (e.g. "https://chronicle.example.internal"),
+# for the join commands and sign-in links it hands out. `chronicle hub enable --url` sets it.
+address = ""
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -192,11 +206,16 @@ class Config:
     server_port: int = 8765
     server_allowed_hosts: list[str] = field(default_factory=list)
     server_allowed_users: list[str] = field(default_factory=list)
+    server_auth_header: str = ""
+    server_trusted_proxies: list[str] = field(default_factory=lambda: ["127.0.0.1", "::1"])
+    server_behind_proxy: bool = False
     hub_url: str = ""
     hub_path_map: dict[str, str] = field(default_factory=dict)
     hub_folders: dict[str, str] = field(default_factory=dict)
     hub_share: str = "everything"
     hub_store: str = ""
+    hub_shared_token: bool = True
+    hub_address: str = ""
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -335,12 +354,17 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         server_port=int(server.get("port", 8765)),
         server_allowed_hosts=[str(h).strip().lower() for h in server.get("allowed_hosts") or [] if str(h).strip()],
         server_allowed_users=[str(u).strip() for u in server.get("allowed_users") or [] if str(u).strip()],
+        server_auth_header=str(server.get("auth_header") or "").strip(),
+        server_behind_proxy=bool(server.get("behind_proxy", False)),
+        server_trusted_proxies=[str(x).strip() for x in server.get("trusted_proxies", ["127.0.0.1", "::1"]) or [] if str(x).strip()],
         hub_url=str(hub.get("url") or "").strip().rstrip("/"),
         hub_path_map={str(k).rstrip("/"): str(v).rstrip("/") for k, v in path_map.items()} if isinstance(path_map, dict) else {},
         hub_folders={str(Path(str(k)).expanduser()).rstrip("/") or "/": str(v).rstrip("/") for k, v in folders.items()
                      if str(k).strip() and str(v).strip()} if isinstance(folders, dict) else {},
         hub_share=share if share in SHARE_MODES else "everything",
         hub_store=store if store in STORES else "",
+        hub_shared_token=bool(hub.get("shared_token", True)),
+        hub_address=str(hub.get("address") or "").strip().rstrip("/"),
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),

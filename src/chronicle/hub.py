@@ -88,6 +88,10 @@ class HubUnreachable(HubError):
     pass
 
 
+class HubUnauthorized(HubError):
+    pass
+
+
 # ------------------------------------------------------------------ identity
 def _computer_name() -> str:
     if sys.platform == "darwin":
@@ -168,6 +172,20 @@ def token_ok(cfg: Config, authorization: str | None) -> bool:
     if not expected or cfg.is_spoke or not authorization or not authorization.startswith("Bearer "):
         return False
     return hmac.compare_digest(authorization[7:].strip().encode(), expected.encode())
+
+
+def authorize(cfg: Config, conn, authorization: str | None, machine_id: str | None = None) -> tuple[bool, dict | None]:
+    """Who may call /api/hub/*: (ok, person). The hub's shared token is let in (person None) while the hub has no
+    people, or while `[hub] shared_token` stays on; a person's own computer token (from `hub join --code`) is let in
+    as that person, from the computer it was issued to. Nothing is let in once this computer stopped being a hub."""
+    from . import people
+
+    if not read_token(cfg) or cfg.is_spoke or not authorization or not authorization.startswith("Bearer "):
+        return False, None
+    if token_ok(cfg, authorization):
+        return bool(cfg.hub_shared_token or not people.has_people(conn)), None
+    person = people.computer_person(conn, authorization[7:].strip(), machine_id or None)
+    return (True, person) if person else (False, None)
 
 
 # ------------------------------------------------------------------ git remotes
@@ -420,7 +438,9 @@ class HubClient:
     def request(self, method: str, path: str, *, params: dict | None = None, body=None, length: int | None = None,
                 headers: dict | None = None) -> dict:
         target = path + (f"?{urlencode(params)}" if params else "")
-        hdrs = {"Authorization": f"Bearer {self.token}", "User-Agent": f"chronicle/{__version__}", **(headers or {})}
+        hdrs = {"User-Agent": f"chronicle/{__version__}", **(headers or {})}
+        if self.token:  # none when redeeming an invite: the code is the credential
+            hdrs["Authorization"] = f"Bearer {self.token}"
         if isinstance(body, (dict, list)):
             body = json.dumps(body).encode()
             hdrs["Content-Type"] = "application/json"
@@ -444,8 +464,8 @@ class HubClient:
         except ValueError:
             payload = {"error": data[:200].decode(errors="replace")}
         if resp.status == 401:
-            raise HubError("the hub did not accept this computer's token; run `chronicle hub join` again with the "
-                           "command `chronicle hub enable` prints on the hub")
+            raise HubUnauthorized("the hub did not accept this computer's token; join it again with a new invite "
+                                  "(`chronicle hub invite` on the hub) or the command `chronicle hub enable` prints there")
         if resp.status >= 400:
             raise HubError(f"hub error {resp.status}: {payload.get('error') or payload}")
         return payload
@@ -521,6 +541,42 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
     _check_protocol(hello)
     _record_folders(cfg, hello)
     return hello
+
+
+def redeem_invite(cfg: Config, url: str, code: str, client: HubClient | None = None) -> dict:
+    """Trade an invite code for this computer's own token at the hub (`chronicle hub join --code`).
+
+    Returns the hub's answer: {"token", "person", "hub"}. The caller keeps the token (write_token).
+    """
+    me = local_machine(cfg)
+    client = client or HubClient(url, "")
+    try:
+        got = client.request("POST", "/api/hub/join", body={"code": code, "machine": me["id"], "name": me["name"],
+                                                             "platform": platform_label(), "version": __version__})
+    except HubUnauthorized:  # a hub that predates invites asks every caller for its shared token
+        raise HubError(f"the hub at {client.url} doesn't take invite codes yet: update Chronicle there, or join with "
+                       "the command its `chronicle hub enable` prints") from None
+    finally:
+        client.close()
+    if not isinstance(got.get("token"), str) or not got["token"]:
+        raise HubError(f"the hub at {client.url} sent no token")
+    return got
+
+
+def dashboard_signin(cfg: Config, client: HubClient | None = None) -> str:
+    """A short-lived link that opens the hub's dashboard as the person this computer joined as (no password)."""
+    token = read_token(cfg)
+    if not cfg.hub_url or not token:
+        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+    client = client or HubClient(cfg.hub_url, token)
+    try:
+        got = client.request("POST", "/api/hub/signin", body={"machine": local_machine(cfg)["id"]})
+    finally:
+        client.close()
+    code = got.get("code")
+    if not isinstance(code, str) or not code:
+        raise HubError("the hub sent no sign-in code")
+    return f"{cfg.hub_url}/signin?code={quote(code, safe='-_')}"
 
 
 def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
@@ -962,6 +1018,45 @@ def hello(cfg: Config, conn, body: dict) -> dict:
             "knowledge": shared, "team": bool(store)}
 
 
+def join_with_code(cfg: Config, conn, body: dict) -> dict:
+    """POST /api/hub/join: a computer redeems an invite for a push token of its own. The code is the credential, so
+    this is called without a token; the computer is recorded only once its code was good."""
+    from . import people
+
+    if not read_token(cfg) or cfg.is_spoke:
+        raise HubError("this computer is not a hub")
+    machine_id = check_machine(cfg, str(body.get("machine") or ""))
+    code, name = str(body.get("code") or ""), str(body.get("name") or "")[:120] or None
+    # a read-only person's computer could never send: refuse before the code is used, so it still opens a browser
+    invited = people.peek_invite(conn, code)
+    if invited and invited["role"] == "readonly":
+        raise HubError(f"{invited['name']} is read-only on this hub: read-only people see its dashboard but don't send "
+                       "to it. Open the invite link in a browser instead; the code still works there.")
+    try:
+        person, token = people.join_computer(conn, code, machine_id, name)
+    except people.PeopleError as exc:
+        raise HubError(str(exc)) from None
+    now = utcnow_iso()
+    conn.execute(
+        "INSERT INTO machines(id, name, platform, version, role, first_seen, last_seen, person_id) VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(id) DO UPDATE SET person_id = excluded.person_id",
+        (machine_id, name, str(body.get("platform") or "")[:40] or None, str(body.get("version") or "")[:40] or None,
+         "spoke", now, now, person["id"]),
+    )
+    conn.commit()
+    return {"token": token, "person": people.public(person), "hub": local_machine(cfg)["name"]}
+
+
+def signin_code_for(cfg: Config, conn, person: dict | None) -> dict:
+    """POST /api/hub/signin: a short-lived code that opens the dashboard as the person whose computer asks. A computer
+    sending with the shared token is nobody in particular, so it can't."""
+    from . import people
+
+    if person is None:
+        raise HubError("join with an invite to sign in")
+    return {"code": people.signin_code(conn, person)}
+
+
 def receive_file(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
     """Store one gzip-compressed file a spoke sent, verified against its size and sha256, atomically."""
     from .ingest import forgotten_ids
@@ -1400,3 +1495,13 @@ def resolver(cfg: Config, conn, *, fresh: bool = False) -> ProjectResolver:
 
 def join_command(url: str, token: str) -> str:
     return f"chronicle hub join {url} --token {quote(token, safe='-_')}"
+
+
+def invite_command(address: str, code: str) -> str:
+    """What an invited person runs on their computer: it joins as them and shares knowledge only."""
+    return f"chronicle hub join {address} --code {code} --share knowledge"
+
+
+def invite_link(address: str, code: str) -> str:
+    """The same invite opened in a browser: the hub's dashboard, without a computer joining."""
+    return f"{address}/signin?code={quote(code, safe='-_')}"

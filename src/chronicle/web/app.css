@@ -1674,3 +1674,47 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .ts-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 .ts-result { margin-top: 8px; min-height: 1em; }
 .ts-modes { margin-top: 10px; }
+
+/* People on a hub: what non-admins don't get, the viewer in the toolbar, the sign-in screen, the People card */
+:root.not-admin :is(.admin-only, .sg-actions, .sg-row-act, .kactions, .src-list button.btn) { display: none !important; }
+.viewer-pill { gap: 6px; padding: 0 3px 0 10px; font-size: 12.5px; color: var(--ink-2); min-width: 0; max-width: 340px; }
+.viewer-pill .icon { width: 14px; height: 14px; flex: none; color: var(--muted); }
+.viewer-pill .vp-name { font-weight: 550; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.viewer-pill .vp-role { flex: none; font-size: 11.5px; color: var(--muted); }
+.viewer-pill .vp-role.ro { color: var(--warning-ink); background: color-mix(in srgb, var(--warning) 16%, transparent); padding: 1px 7px; border-radius: 999px; font-weight: 550; }
+.viewer-pill .text-btn { color: var(--ink-2); font-size: 12.5px; padding: 0 10px; }
+.viewer-pill .text-btn:hover { background: var(--hover); color: var(--ink); }
+@media (max-width: 860px) { .viewer-pill .vp-name, .viewer-pill > .icon { display: none; } .viewer-pill { padding-left: 8px; } }
+.signin-screen { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 24px 16px; overflow-y: auto; background: var(--page); color: var(--ink); }
+:root.signed-out .shell { visibility: hidden; }
+.signin-card { width: min(480px, 100%); box-sizing: border-box; padding: 24px 26px; }
+.signin-card h1 { font-size: 22px; margin: 14px 0 8px; }
+.signin-card p { line-height: 1.5; }
+.signin-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink-2); }
+.signin-form { display: flex; gap: 8px; margin: 4px 0 8px; }
+.signin-form .input { flex: 1; min-width: 0; font-family: var(--mono); letter-spacing: 0.04em; }
+.signin-foot { display: flex; justify-content: flex-end; gap: 6px; margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--grid); }
+.signin-foot .icon { width: 14px; height: 14px; }
+.pp-table td { vertical-align: top; }
+.pp-table td:first-child { min-width: 170px; }
+.pp-table select { max-width: 150px; }
+.pp-tok { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; padding: 1px 0; }
+.pp-tok .icon { width: 13px; height: 13px; color: var(--muted); flex: none; }
+.pp-actions { white-space: nowrap; text-align: right; }
+.pp-actions .btn + .btn { margin-left: 6px; }
+.link-btn.danger { color: var(--critical-ink); }
+.people-form { margin-bottom: 6px; }
+.pp-note { margin-top: 8px; }
+.pp-audit { margin-top: 12px; }
+.pp-audit summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.pp-audit .bullets li { margin: 3px 0; }
+.invite-slot:not(:empty) { margin: 12px 0; }
+.invite-result { display: grid; gap: 10px; padding: 14px 16px; border-radius: 10px; background: var(--accent-wash); box-shadow: inset 0 0 0 1px var(--accent-wash-2); }
+.invite-result p { margin: 0; }
+.ir-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ir-row { display: grid; gap: 4px; min-width: 0; }
+.ir-label { font-size: 12px; color: var(--muted); }
+.ir-value { display: flex; align-items: flex-start; gap: 8px; min-width: 0; }
+.ir-value .mcp-code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ir-value .codeline { min-width: 0; overflow-wrap: anywhere; padding: 4px 8px; }
+.ir-value .btn { flex: none; }
