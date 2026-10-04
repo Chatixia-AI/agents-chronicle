@@ -114,7 +114,8 @@ A computer can keep its transcripts and still add to the hub's knowledge. Join w
 chronicle hub join https://pc.tail1234.ts.net --token … --share knowledge
 ```
 
-(or `chronicle config set hub.share knowledge` on a computer that already joined). That computer then works like a
+(or, on a computer that already joined, `chronicle config set hub.share knowledge`, or **Settings › Devices › What this
+computer sends** in its dashboard). That computer then works like a
 standalone Chronicle: it records its own sessions, analyzes them with its own Claude Code or Codex login, and keeps
 its dashboard and MCP tools up to date. After each analysis it sends the hub only:
 
@@ -130,6 +131,45 @@ On the hub these sessions are filed like any other from that computer (by git re
 <computer>** instead of the transcript, and the hub never analyzes these sessions again, so it needs no Claude login
 for them. It still builds each project's knowledge base and glossary with its own. **Settings › Devices** marks the
 computer **knowledge only**. A session the hub already has the transcript of keeps the hub's record.
+
+### Teammates' lessons, and a team store in Postgres
+
+A hub that several people share can keep the team's record in Postgres, and send each computer that shares
+knowledge what its teammates learned. On the hub:
+
+```bash
+uv tool install 'agents-chronicle[team]'    # the Postgres driver, needed on the hub only
+# PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD (and PGSSLMODE, require by default), one per line:
+$EDITOR ~/.claude-chronicle/team-store.env && chmod 600 ~/.claude-chronicle/team-store.env
+chronicle config set hub.store postgres
+chronicle hub store                          # connects, sets up its tables, and shows what it holds
+```
+
+Then restart the dashboard, which is what receives the sessions. Or, once the driver is installed, open **Settings ›
+Devices › Team store** on the hub itself: fill in the connection, **Test connection**, then **Save**. Nothing is saved
+unless the connection works, the password is never shown again, and these settings can't be changed from another
+device (through Tailscale, say).
+
+- **What it keeps.** Every session a computer shares, its details, summary and project lessons, is written to
+  Postgres first and then to the hub's own database, which the dashboard still reads. If Postgres can't be reached,
+  neither keeps it, and the computer sends it again at its next push.
+- **Lessons belong to a repository.** A lesson learned in a git repository belongs to that repository (its remote),
+  wherever each person cloned it; one learned in a folder without a remote belongs to that folder's project on the
+  hub. The same lesson from two people (same kind and title) becomes one item that remembers whose sessions stated
+  it.
+- **Teammates' lessons come back.** After each push, a computer that shares knowledge gets its teammates' lessons
+  for the repositories it has clones of, the projects it shared sessions in, and those it added folders to. They are
+  kept read-only in its own database, under its own folder for that repository, where its MCP tools answer with them
+  (marked as teammates') and the start-of-session notes list them under **From teammates' sessions**. Lessons it
+  stated itself are not sent back. One it dismisses stays dismissed; one the team no longer has disappears.
+  `chronicle hub status` and its **Settings › Devices** show how many it holds; **Share and get team lessons now**
+  there pushes at once.
+- **Only the hub connects to the database.** Computers never get its address or password, so it can sit on a
+  network only the hub reaches. Its tables live in the schema `team`, with an audit log of every push and pull
+  (counts only), and each upgrade step runs once, recorded by name.
+
+Not yet: every computer still uses the hub's one token; lessons from sessions the hub analyzes itself (`share =
+"everything"`) don't go to Postgres; and when the same lesson arrives in two languages, the latest wording wins.
 
 ### Leaving
 

@@ -8,6 +8,10 @@ lost push is simply redone by the next one.
 
 A spoke that already analyzed sessions with its own Chronicle sends those results once, when it first joins, so
 the hub does not pay to analyze the same sessions again.
+
+With `[hub] store = "postgres"` the hub also keeps the team's record in Postgres (team_store.py), and each computer
+that shares knowledge gets its teammates' lessons for its own projects back after every push, kept read-only in its
+own database (knowledge.source 'team') where its MCP tools and start-of-session notes find them.
 """
 
 from __future__ import annotations
@@ -72,6 +76,8 @@ SHARED_AGENTS = ("claude", "codex", "copilot", "bob", "antigravity")  # coding a
 SHARE_BATCH = 200
 SHARE_KV = "hub-share:"  # + machine id: what that computer sends, as it last said
 SESSION_ID_RE = re.compile(r"^[\w.:-]{1,128}$")
+TEAM_FILE = "team-lessons.json"  # on a computer that shares knowledge: the team lessons it holds, as of the last pull
+TEAM_SOURCE = "team"  # knowledge.source of a teammate's lesson the hub sent; fingerprint "team:<lesson id on the hub>"
 
 
 class HubError(Exception):
@@ -456,6 +462,7 @@ class PushReport:
     hub: str = ""
     seconds: float = 0.0
     kind: str = "files"  # or "knowledge": sessions this computer analyzed itself
+    team: int | None = None  # teammates' lessons held here after the pull (a hub with a team store sends them)
 
     def summary(self) -> str:
         what = "session" if self.kind == "knowledge" else "file"
@@ -465,6 +472,8 @@ class PushReport:
             parts.append(f"{self.skipped} excluded")
         if self.analyses:
             parts.append(f"{self.analyses} earlier analyses handed over")
+        if self.team is not None:
+            parts.append(f"{self.team} team lesson{'s' * (self.team != 1)} here")
         if self.errors:
             parts.append(f"{len(self.errors)} errors")
         return f"to {self.hub}: " + ", ".join(parts) + f" in {self.seconds:.1f}s"
@@ -611,6 +620,7 @@ def _shared_records(cfg: Config, have: dict) -> tuple[list[dict], int, int]:
                 info = git_info(path)
                 remotes[path] = info[1] if info else None
             rec["remote"] = remotes.get(path) if path else None
+            rec["language"] = cfg.analysis.language  # what its summary and lessons are written in
             # lessons about the project only: ones about the person (global, preferences) stay on this computer
             rec["knowledge"] = [dict(k) for k in conn.execute(
                 f"SELECT {', '.join(KNOWLEDGE_COLS)} FROM knowledge WHERE session_id = ? AND source = 'analysis' "
@@ -632,7 +642,8 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
     client = client or HubClient(cfg.hub_url, token)
     me = local_machine(cfg)
     try:
-        hello = client.request("POST", "/api/hub/hello", body=hello_info(cfg, spoke_roots(cfg)))
+        info = hello_info(cfg, spoke_roots(cfg))
+        hello = client.request("POST", "/api/hub/hello", body=info)
         _check_protocol(hello)
         _record_folders(cfg, hello)
         have = hello.get("knowledge")
@@ -656,11 +667,155 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
             report.bytes += len(body)
         if report.sent:
             client.request("POST", "/api/hub/done", body={"machine": me["id"]})
+        if hello.get("team"):  # the hub keeps a team store: bring back what teammates learned in these projects
+            try:
+                report.team = pull_team_lessons(cfg, client, info["repos"])
+            except HubUnreachable:
+                raise
+            except HubError as exc:
+                report.errors.append(f"team lessons: {exc}")
     finally:
         client.close()
     report.seconds = time.monotonic() - t0
     _record_push(cfg, report)
     return report
+
+
+def pull_team_lessons(cfg: Config, client: HubClient, repos: dict) -> int:
+    """Ask the hub for teammates' lessons in this computer's projects and keep them here, read-only (source 'team').
+    Returns how many this computer holds. Nothing changes when the hub's answer is the one it already has."""
+    from .db import connect
+
+    state = last_team(cfg) or {}
+    if state.get("version") and cfg.db_path.exists():  # "unchanged" only counts if the lessons are still here
+        conn = connect(cfg.db_path, readonly=True)
+        try:
+            held = conn.execute("SELECT COUNT(*) FROM knowledge WHERE source = ?", (TEAM_SOURCE,)).fetchone()[0]
+        finally:
+            conn.close()
+        if held != state.get("lessons"):
+            state = {}
+    remotes = sorted({v[1] for v in repos.values() if isinstance(v, list) and len(v) == 2 and v[1]})
+    data = client.request("POST", "/api/hub/lessons", body={
+        "machine": local_machine(cfg)["id"], "remotes": remotes, "projects": sorted(set(cfg.hub_folders.values())),
+        "version": state.get("version")})
+    if not data.get("team"):
+        return 0
+    if data.get("unchanged"):
+        held = int(state.get("lessons") or 0)
+    else:
+        held = apply_team_lessons(cfg, data, repos)
+        state = {"version": data.get("version"), "lessons": held, "hub": data.get("hub")}
+    try:  # "at" is when this computer last asked, whether or not the answer changed
+        (cfg.home / TEAM_FILE).write_text(json.dumps({**state, "at": utcnow_iso()}))
+    except OSError:
+        pass
+    return held
+
+
+def team_from(row) -> list[str]:
+    """The computers whose sessions stated a teammate's lesson (knowledge.source_ref of a 'team' item)."""
+    try:
+        ref = json.loads(row["source_ref"] or "{}")
+    except (ValueError, TypeError, KeyError, IndexError):
+        return []
+    return [str(c) for c in ref.get("from") or []] if isinstance(ref, dict) else []
+
+
+def last_team(cfg: Config) -> dict | None:
+    try:
+        return json.loads((cfg.home / TEAM_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def apply_team_lessons(cfg: Config, data: dict, repos: dict) -> int:
+    """Keep the hub's lessons in this computer's own database, each filed under the folder here that holds its place
+    (a repository, or a hub project without one): where this computer's own sessions there were filed, else the clone
+    of that repository with the most sessions, else a folder added to that hub project. Lessons with no folder here
+    are skipped. A lesson the hub no longer sends is removed; one dismissed here stays dismissed. Returns how many are
+    held."""
+    from . import ladder
+    from .db import connect
+    from .util import dumps
+
+    places = data.get("places") if isinstance(data.get("places"), dict) else {}
+    clones: dict[str, list[str]] = {}
+    for cwd, v in repos.items():
+        if isinstance(v, list) and len(v) == 2 and v[1]:
+            clones.setdefault(v[1], []).append(cwd)
+    added = {}
+    for folder, project in sorted(cfg.hub_folders.items()):
+        added.setdefault(project, folder)
+    conn = connect(cfg.db_path)
+    try:
+        def name_of(path: str) -> str:
+            r = conn.execute("SELECT project_name FROM sessions WHERE project_path = ? AND project_name IS NOT NULL "
+                             "LIMIT 1", (path,)).fetchone()
+            return r[0] if r else (Path(path).name or path)
+
+        def here(at: str, project: str | None) -> tuple[str, str] | None:
+            info = places.get(at) if isinstance(places.get(at), dict) else {}
+            mine = info.get("mine")
+            if isinstance(mine, str):
+                r = conn.execute("SELECT project_path, project_name FROM sessions WHERE id = ?", (mine,)).fetchone()
+                if r and r[0]:
+                    return r[0], r[1] or name_of(r[0])
+            found = sorted(clones.get(info.get("remote"), [])) if isinstance(info.get("remote"), str) else []
+            if found:
+                marks = ",".join("?" * len(found))
+                used = dict(conn.execute(f"SELECT project_path, COUNT(*) FROM sessions WHERE project_path IN ({marks}) "
+                                         "GROUP BY project_path", found).fetchall())
+                best = max(found, key=lambda c: used.get(c, 0))
+                return best, name_of(best)
+            for p in (info.get("project"), project):
+                if isinstance(p, str) and p in added:
+                    return added[p], name_of(added[p])
+            return None
+
+        where: dict[tuple, tuple[str, str] | None] = {}
+        held: set[str] = set()
+        changed: list[int] = []
+        now = utcnow_iso()
+        for k in data.get("lessons") or []:
+            if not isinstance(k, dict) or not isinstance(k.get("id"), int) or not k.get("title") or not k.get("kind"):
+                continue
+            spot = (str(k.get("place") or ""), k.get("project") if isinstance(k.get("project"), str) else None)
+            if spot not in where:
+                where[spot] = here(*spot)
+            if not where[spot]:
+                continue
+            path, name = where[spot]
+            fp = f"{TEAM_SOURCE}:{k['id']}"
+            held.add(fp)
+            sessions = [str(s) for s in k.get("session_ids") or [] if isinstance(s, str)][:ladder.MAX_CONFIRMATIONS]
+            ref = dumps({"lesson": k["id"], "hub": data.get("hub"), "from": [str(c) for c in k.get("computers") or []][:10],
+                         "sessions": int(k.get("sessions") or len(sessions)), "language": k.get("language")})
+            tags = k.get("tags") if isinstance(k.get("tags"), list) else None
+            values = {"project_path": path, "project_name": name, "kind": str(k["kind"])[:40], "title": str(k["title"]),
+                      "body": k.get("body") if isinstance(k.get("body"), str) else None,
+                      "tags_json": dumps(tags) if tags else None, "scope": "project", "source": TEAM_SOURCE,
+                      "agent": None, "source_ref": ref, "confirmed_json": dumps(sessions) if sessions else None,
+                      "created_at": k.get("created_at") or now, "updated_at": k.get("updated_at") or now}
+            have = conn.execute("SELECT id FROM knowledge WHERE fingerprint = ?", (fp,)).fetchone()
+            if have:  # its status and pin are this computer's own choice: kept
+                conn.execute("UPDATE knowledge SET " + ", ".join(f"{c} = ?" for c in values) + " WHERE id = ?",
+                             [*values.values(), have[0]])
+                changed.append(have[0])
+            else:
+                cols = [*values, "fingerprint", "session_id"]
+                cur = conn.execute(f"INSERT INTO knowledge({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                                   [*values.values(), fp, None])
+                changed.append(cur.lastrowid)
+        gone = [r[0] for r in conn.execute("SELECT id, fingerprint FROM knowledge WHERE source = ?", (TEAM_SOURCE,))
+                if r[1] not in held]
+        if gone:
+            conn.execute(f"DELETE FROM knowledge WHERE id IN ({','.join('?' * len(gone))})", gone)
+        ladder.refresh(conn, changed)
+        conn.commit()
+        return len(held)
+    finally:
+        conn.close()
 
 
 def _record_push(cfg: Config, report: PushReport) -> None:
@@ -741,10 +896,34 @@ def inventory(cfg: Config, machine_id: str) -> dict[str, dict[str, list]]:
     return out
 
 
+def _store(cfg: Config):
+    """The hub's team store (team_store.py) when `[hub] store` names one, else None; its errors as HubError."""
+    from .team_store import TeamStoreError, get
+
+    try:
+        return get(cfg)
+    except TeamStoreError as exc:
+        raise HubError(str(exc)) from None
+
+
+def _in_store(call, *args):
+    from .team_store import TeamStoreError
+
+    try:
+        return call(*args)
+    except TeamStoreError as exc:
+        raise HubError(str(exc)) from None
+
+
 def hello(cfg: Config, conn, body: dict) -> dict:
     machine_id = check_machine(cfg, str(body.get("machine") or ""))
     if int(body.get("protocol", 0)) != PROTOCOL:
         return {"protocol": PROTOCOL, "version": __version__}
+    # the team store holds what computers share as knowledge; one that sends transcripts never waits on it
+    store = _store(cfg) if body.get("share") == "knowledge" else None
+    if store:
+        _in_store(store.computer_seen, machine_id, str(body.get("name") or "")[:120] or None,
+                  str(body.get("platform") or "")[:40] or None, str(body.get("version") or "")[:40] or None)
     repos = body.get("repos") if isinstance(body.get("repos"), dict) else {}
     repos = {str(k): [str(v[0]), str(v[1])] for k, v in repos.items() if isinstance(v, list) and len(v) == 2}
     now = utcnow_iso()
@@ -758,26 +937,29 @@ def hello(cfg: Config, conn, body: dict) -> dict:
     conn.commit()
     from .db import kv_get, kv_set
 
-    folders, moved = folders_of(conn, machine_id), 0
+    folders, moved, refiled = folders_of(conn, machine_id), 0, False
     if "folders" in body:  # an older spoke doesn't send them: keep what it had
         sent = clean_folders(body.get("folders"))
         if sent != folders:
             kv_set(conn, FOLDERS_KV + machine_id, json.dumps(sent))
             conn.commit()
             moved = refile(cfg, conn, machine_id, set(folders) | set(sent))
-            folders = sent
+            folders, refiled = sent, True
     remotes = ProjectResolver(cfg, conn).local_remotes()
     report = folders_report(conn, machine_id, folders, repos, remotes)
     share = "knowledge" if body.get("share") == "knowledge" else "everything"
     kv_set(conn, SHARE_KV + machine_id, share)
     conn.commit()  # local_remotes caches what git said
     me = local_machine(cfg)
-    shared = {r[0]: r[1] for r in conn.execute(
-        "SELECT id, analyzed_at FROM sessions WHERE machine_id = ? AND source = 'remote'", (machine_id,))}
+    if store:  # the store is the team's record: what it lacks is sent again, and folders that changed refile it all
+        shared = {} if refiled else _in_store(store.shared, machine_id)
+    else:
+        shared = {r[0]: r[1] for r in conn.execute(
+            "SELECT id, analyzed_at FROM sessions WHERE machine_id = ? AND source = 'remote'", (machine_id,))}
     return {"protocol": PROTOCOL, "version": __version__, "hub": me["name"],
             "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}"),
             "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved,
-            "knowledge": shared}
+            "knowledge": shared, "team": bool(store)}
 
 
 def receive_file(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
@@ -872,6 +1054,7 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
     r = ProjectResolver(cfg, conn)
     now = utcnow_iso()
     stored = kept = 0
+    accepted = []
     for rec in data["sessions"][:SHARE_BATCH * 2]:
         sid = str(rec.get("id") or "") if isinstance(rec, dict) else ""
         if not SESSION_ID_RE.match(sid) or rec.get("agent") not in SHARED_AGENTS:
@@ -889,6 +1072,18 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
                    machine_path=recorded if recorded != project else None, source_present=1, ingested_at=now,
                    analysis_status="done", title=best_title({"llm_title": rec.get("llm_title")}),
                    ended_flag=1 if rec.get("ended_flag") else 0)
+        # lessons about the project only: one about the person should not have been sent, and is not kept
+        lessons = [k for k in rec.get("knowledge") or [] if isinstance(k, dict) and k.get("title") and k.get("kind")
+                   and k.get("scope") == "project" and k.get("kind") != "preference"]
+        accepted.append((sid, {**rec, "knowledge": lessons}, row, remote))
+    store = _store(cfg)
+    if store and accepted:  # the team's record first: if it fails, nothing is kept and the computer sends it again
+        from .team_store import payload
+
+        _in_store(store.put_sessions, machine_id, [
+            payload(rec, project=row["project_path"], project_name=row["project_name"], remote=remote,
+                    title=row["title"], details_cols=SHARED_COLS) for _, rec, row, remote in accepted])
+    for sid, rec, row, _ in accepted:
         cols = list(row)
         try:
             conn.execute(f"INSERT INTO sessions({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
@@ -897,12 +1092,9 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
         except sqlite3.Error as exc:  # one bad record must not lose the rest of the batch
             log.warning("shared session %s from %s not stored: %s", sid, machine_id, exc)
             continue
+        project, name = row["project_path"], row["project_name"]
         conn.execute("DELETE FROM knowledge WHERE session_id = ? AND source = 'analysis'", (sid,))
-        for k in rec.get("knowledge") or []:
-            if not isinstance(k, dict) or not k.get("title") or not k.get("kind"):
-                continue
-            if k.get("scope") != "project" or k.get("kind") == "preference":
-                continue  # about the person: it should not have been sent, and is not kept
+        for k in rec["knowledge"]:
             krow = {c: _cell(k.get(c)) for c in KNOWLEDGE_COLS}
             krow.update(session_id=sid, project_path=project, project_name=name, source="analysis")
             conn.execute(f"INSERT OR IGNORE INTO knowledge({', '.join(krow)}) VALUES ({', '.join('?' for _ in krow)})",
@@ -912,6 +1104,22 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
         conn.execute("UPDATE machines SET last_push = ? WHERE id = ?", (now, machine_id))
     conn.commit()
     return {"ok": True, "stored": stored, "kept": kept}
+
+
+def team_lessons(cfg: Config, body: dict) -> dict:
+    """What teammates learned in the projects a computer works on, from the team store (pull_team_lessons asks).
+    {"team": False} when this hub keeps no team store; {"unchanged": True} when the computer already has this answer."""
+    machine_id = check_machine(cfg, str(body.get("machine") or ""))
+    store = _store(cfg)
+    if not store:
+        return {"team": False}
+    remotes = [normalize_remote(x) or x for x in body.get("remotes") or [] if isinstance(x, str) and len(x) <= 300][:500]
+    projects = [x for x in body.get("projects") or [] if isinstance(x, str) and x.startswith("/") and len(x) <= 1024]
+    data = _in_store(store.lessons_for, machine_id, remotes, projects[:MAX_FOLDERS])
+    version = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:32]
+    if body.get("version") == version:
+        return {"team": True, "version": version, "unchanged": True}
+    return {"team": True, "version": version, "hub": local_machine(cfg)["name"], **data}
 
 
 def receive_analyses(cfg: Config, conn, params: dict, rfile, length: int) -> dict:

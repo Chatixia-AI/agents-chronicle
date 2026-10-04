@@ -79,8 +79,9 @@ carefully.
 
 - **A hosted service, cloud sync or telemetry.** Chronicle's promise is that nothing leaves your machines except
   the analysis call through your own login. Sharing across computers goes through your own hub.
-- **A shared database server** (such as Postgres) for several computers. One computer, the hub, writes; the others
-  send it their sessions. That keeps one SQLite file as the single source of truth.
+- **Computers connecting to a shared database.** One computer, the hub, writes; the others send it their sessions
+  and never get a database's address or password. A hub may keep the team's record in your own Postgres as well
+  ([team store](docs/devices.md#teammates-lessons-and-a-team-store-in-postgres)), but it stays the only writer.
 - **Analysis with an API key we hold.** Analysis always uses the Claude Code or Codex login already on your
   computer and counts against your own plan.
 

@@ -3710,6 +3710,109 @@ route(/^\/status$/, async () => {
 // =====================================================================================
 // Devices: this computer as a hub or as one that sends to a hub, and the dashboard on a phone (Tailscale)
 // =====================================================================================
+// On a computer that sends to a hub: what it sends, and the teammates' lessons a hub with a team store sends back.
+// Changing what leaves the computer works only at the computer itself (dv.here), never from a phone.
+function shareSection(dv) {
+  const pick = async (share) => {
+    if (share === dv.share) return;
+    if (share === "everything" && !confirm(t("Send this computer's transcripts to the hub? The hub then records and analyzes them, and this computer stops analyzing its own sessions."))) return;
+    const r = await post("/api/devices/share", { share });
+    if (!r || r.error) { toast(r?.error || t("Could not change what this computer sends")); return; }
+    toast(share === "knowledge" ? t("This computer now shares only summaries and project lessons.") : t("This computer now sends its transcripts to the hub."));
+    render();
+  };
+  const sendNow = h("button", { class: "btn small", type: "button", onclick: async () => {
+    sendNow.disabled = true;
+    const r = await post("/api/devices/push");
+    toast(r.started ? t("Sending to the hub…") : t("Already sending"));
+    if (r.started) watchJob("push");
+  } }, dv.share === "knowledge" ? t("Share and get team lessons now") : t("Send now"));
+  const team = dv.team;
+  return [
+    h("div", { class: "subhead" }, t("What this computer sends")),
+    h("div", { class: "analyzer" },
+      h("div", { class: "seg", role: "radiogroup", "aria-label": t("What this computer sends") }, [
+        ["knowledge", t("Summaries and lessons")], ["everything", t("Transcripts")]].map(([v, label]) =>
+        h("button", { type: "button", role: "radio", class: v === dv.share ? "on" : "", "aria-checked": String(v === dv.share),
+          disabled: !dv.here && v !== dv.share, onclick: () => pick(v) }, label))),
+      h("div", { class: "muted" }, dv.share === "knowledge"
+        ? t("Analyzed here with your own login; the hub gets each session's summary and project lessons. Transcripts and lessons about you stay here.")
+        : t("The hub records and analyzes the transcripts; this computer no longer analyzes its own sessions.")),
+      dv.here ? null : h("div", { class: "muted" }, t("Change this on the computer itself, not from another device."))),
+    dv.share === "knowledge" ? h("div", { class: "status-list" },
+      h("div", null, team ? tn(team.lessons || 0, "{n} lesson from teammates here", "{n} lessons from teammates here") + (team.at ? t(" · checked {ago}", { ago: ago(team.at) }) : "")
+        : t("No teammates' lessons yet: a hub that keeps a team store sends them back after each push.")),
+      h("div", { class: "muted" }, t("They are read-only here: your MCP tools answer with them and the start-of-session notes list them, marked as teammates'."))) : null,
+    h("p", null, sendNow)];
+}
+
+// On a hub: keep the team's record in Postgres as well (team_store.py). The password goes to the server, never back.
+function teamStoreCard(dv) {
+  const st = dv.store;
+  const saved = st.settings || {};
+  let mode = st.enabled ? "postgres" : "off";
+  const status = h("div", { class: "status-list" }, h("div", { class: "muted" }, st.enabled ? t("Checking the team store…")
+    : t("Off: what computers share is kept in this hub's own database only.")));
+  if (st.enabled) api("/api/team-store").then((s) => status.replaceChildren(...(s.error
+    ? [h("div", { class: "warn-line" }, s.error)]
+    : [h("div", null, t("On · {where} · PostgreSQL {server}", { where: s.where, server: s.server })),
+      h("div", { class: "muted" }, t("{computers} computers · {sessions} sessions · {lessons} lessons · {audit} audit entries",
+        { computers: fmtNum(s.counts.computers), sessions: fmtNum(s.counts.sessions), lessons: fmtNum(s.counts.lessons), audit: fmtNum(s.counts.audit) }))])))
+    .catch((e) => status.replaceChildren(h("div", { class: "warn-line" }, e.message)));
+  const head = [
+    h("p", null, t("Keep what your team's computers share in a Postgres database as well, and send each computer that shares knowledge its teammates' lessons. Only this hub connects to the database; the other computers never get its address or password.")),
+    status,
+    st.driver ? null : h("div", { class: "warn-line" }, t("The Postgres driver isn't installed here. Run {command}, then restart the dashboard.", { command: "uv tool install 'agents-chronicle[team]'" }))];
+  if (!dv.here) {
+    return h("section", { class: "card" }, cardHead(t("Team store"), { iconName: "data" }), head,
+      st.settings ? h("div", { class: "muted" }, tx("Database {db} on {host}, as {user}", { db: h("span", { class: "codeline" }, saved.dbname), host: h("span", { class: "codeline" }, saved.host), user: h("span", { class: "codeline" }, saved.user) })) : null,
+      h("p", { class: "muted" }, t("Change these settings on the hub itself, not from another device.")));
+  }
+  const field = (key, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: key, value: saved[key] || "", autocomplete: "off", spellcheck: "false", ...attrs }));
+  const ssl = h("select", { name: "sslmode" }, st.sslmodes.map((m) => h("option", { value: m, selected: m === (saved.sslmode || "require") }, m)));
+  const form = h("form", { class: "ts-form", hidden: mode === "off", onsubmit: (e) => e.preventDefault() },
+    field("host", t("Server address"), { placeholder: "example.postgres.database.azure.com" }),
+    field("port", t("Port"), { inputmode: "numeric", placeholder: "5432", value: saved.port || "5432" }),
+    field("dbname", t("Database")),
+    field("user", t("User")),
+    h("label", null, t("Password"), h("input", { class: "input", name: "password", type: "password", autocomplete: "new-password",
+      placeholder: saved.password_set ? t("saved; leave empty to keep it") : "" })),
+    h("label", null, t("SSL mode"), ssl));
+  const values = () => Object.fromEntries([...form.querySelectorAll("input, select")].map((x) => [x.name, x.value]));
+  const result = h("div", { class: "ts-result" });
+  const say = (text, bad) => result.replaceChildren(h("div", { class: bad ? "warn-line" : "muted" }, text));
+  const test = h("button", { class: "btn", type: "button", hidden: mode === "off", onclick: async () => {
+    test.disabled = true;
+    say(t("Connecting…"));
+    const r = await post("/api/team-store/test", values()).catch((e) => ({ error: e.message }));
+    test.disabled = false;
+    if (!r.ok) { say(r.error || t("Could not connect"), true); return; }
+    say(t("Connected to {where} (PostgreSQL {server}).", { where: r.where, server: r.server }) + " " + (r.steps.length
+      ? t("The team store is there: {lessons} lessons from {computers} computers.", { lessons: fmtNum(r.counts.lessons), computers: fmtNum(r.counts.computers) })
+      : r.can_create ? t("Its tables are created when you save.") : t("This user can't create the team's tables here.")), !r.steps.length && !r.can_create);
+  } }, t("Test connection"));
+  const save = h("button", { class: "btn primary", type: "button", onclick: async () => {
+    save.disabled = true;
+    say(mode === "off" ? t("Saving…") : t("Connecting and saving…"));
+    const r = await post("/api/team-store/save", { enabled: mode === "postgres", ...(mode === "postgres" ? values() : {}) }).catch((e) => ({ error: e.message }));
+    save.disabled = false;
+    if (!r.ok) { say(r.error || t("Could not save"), true); return; }
+    toast(mode === "postgres" ? t("Team store on: computers that share knowledge now get their teammates' lessons.") : t("Team store off. Its settings are kept."));
+    render();
+  } }, t("Save"));
+  const modes = segControl([["off", t("Off")], ["postgres", "Postgres"]], mode, (v) => {
+    mode = v;
+    modes.querySelectorAll("button").forEach((b, i) => { const on = (i === 0 ? "off" : "postgres") === v; b.className = on ? "on" : ""; b.setAttribute("aria-pressed", String(on)); });
+    form.hidden = test.hidden = v === "off";
+    result.replaceChildren();
+  });
+  return h("section", { class: "card" }, cardHead(t("Team store"), { iconName: "data" }), head,
+    h("div", { class: "analyzer ts-modes" }, modes), form,
+    h("div", { class: "ts-actions" }, test, save,
+      h("span", { class: "muted" }, tx("Saved in {file}, readable by your user only.", { file: h("span", { class: "codeline" }, st.file) }))),
+    result);
+}
+
 route(/^\/devices$/, async () => {
   const dv = await api("/api/devices");
   const ts = dv.allowed_hosts.find((x) => x.endsWith(".ts.net"));
@@ -3730,6 +3833,7 @@ route(/^\/devices$/, async () => {
         h("div", { class: "muted" }, dv.last_push ? t("Last sent {ago}: {summary}", { ago: ago(dv.last_push.at), summary: dv.last_push.summary }) : t("Nothing sent yet.")),
         ...(dv.last_push?.errors || []).map((e) => h("div", { class: "muted" }, `! ${e}`))),
       h("p", null, extLink(`${dv.hub_url}/`, t("Open the hub's dashboard")), h("span", { class: "muted" }, t(" · {command} stops sending", { command: "chronicle hub leave" }))),
+      shareSection(dv),
       dv.folders.length ? [
         h("div", { class: "subhead" }, t("Folders added to projects on the hub")),
         h("ul", { class: "bullets" }, dv.folders.map((f) => h("li", null,
@@ -3777,7 +3881,7 @@ route(/^\/devices$/, async () => {
   }
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
-    h("div", { class: "grid" }, thisCard, phone, computers));
+    h("div", { class: "grid" }, thisCard, phone, computers, dv.role === "hub" && dv.store ? teamStoreCard(dv) : null));
 });
 
 // =====================================================================================
@@ -4659,7 +4763,7 @@ function jobLabel(name) {
   const [kind, arg] = name.split(/:(.*)/);
   const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
   return {
-    sync: t("Sync"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), themes: t("Grouping glossary themes"),
+    sync: t("Sync"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), themes: t("Grouping glossary themes"),
     analyze: arg === "selection" ? t("Analyzing selected sessions") : t("Analyzing session {id}", { id: (arg || "").slice(0, 8) }),
     glossary: arg ? t("Glossary: {name}", { name: tail(arg) }) : t("Glossary"), review: t("Weekly review"),
     synthesize: arg === "__global__" ? t("Global playbook") : t("Knowledge base: {name}", { name: tail(arg) }),

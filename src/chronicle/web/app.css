@@ -1666,3 +1666,11 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
   .ar-row { grid-template-columns: 26px minmax(0, 1fr); }
   .ar-acts { grid-column: 2; }
 }
+
+/* Devices › Team store: the Postgres connection form */
+.ts-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px 12px; margin: 4px 0 12px; }
+.ts-form label { display: grid; gap: 4px; font-size: 12.5px; color: var(--ink-2); min-width: 0; }
+.ts-form .input, .ts-form select { width: 100%; min-width: 0; box-sizing: border-box; }
+.ts-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.ts-result { margin-top: 8px; min-height: 1em; }
+.ts-modes { margin-top: 10px; }

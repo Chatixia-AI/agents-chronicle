@@ -834,6 +834,8 @@ class App:
         """This computer's role, the computers a hub hears from, and how the dashboard is reachable."""
         from .hub import last_folders, last_push, local_machine, machines, read_token
 
+        from .hub import last_team
+
         role = "spoke" if self.cfg.is_spoke else "hub" if read_token(self.cfg) else "single"
         seen = ((last_folders(self.cfg) or {}).get("folders") or {}) if role == "spoke" else {}
         folders = [{"folder": f, "project": p, "name": Path(p).name or p, "sessions": (seen.get(f) or {}).get("sessions"),
@@ -845,6 +847,8 @@ class App:
             "hub_url": self.cfg.hub_url or None,
             "last_push": last_push(self.cfg) if role == "spoke" else None,
             "share": self.cfg.hub_share if role == "spoke" else None,
+            "team": last_team(self.cfg) if role == "spoke" else None,
+            "store": self.team_store_info() if role != "spoke" else None,
             "folders": folders,
             "machines": machines(self.conn, self.cfg),
             "path_map": self.cfg.hub_path_map,
@@ -852,6 +856,87 @@ class App:
             "allowed_users": self.cfg.server_allowed_users,
             "port": self.cfg.server_port,
         }
+
+    # ---- Devices › Team store (team_store.py): the password goes in, never out
+    def team_store_info(self) -> dict:
+        from . import team_store
+
+        return {"enabled": self.cfg.hub_store == "postgres", "driver": team_store.driver_available(),
+                "settings": team_store.read_settings(self.cfg), "file": str(team_store.env_path(self.cfg)),
+                "sslmodes": list(team_store.SSLMODES)}
+
+    def team_store_status(self) -> dict:
+        """What the store holds; asked for after the page shows, since the database may be far away."""
+        from . import team_store
+
+        if self.cfg.hub_store != "postgres" or self.cfg.is_spoke:
+            return {"enabled": False}
+        try:
+            return {"enabled": True, **team_store.get(self.cfg).status()}
+        except team_store.TeamStoreError as exc:
+            return {"enabled": True, "error": str(exc)}
+
+    def _store_params(self, body: dict) -> dict:
+        from . import team_store
+
+        try:
+            saved = team_store.connection_params(self.cfg)
+        except (team_store.TeamStoreError, OSError):
+            saved = None
+        return team_store.check_settings(body, saved)
+
+    def action_team_store_test(self, body: dict) -> dict:
+        from . import team_store
+
+        try:
+            return {"ok": True, **team_store.probe(self._store_params(body))}
+        except team_store.TeamStoreError as exc:
+            return {"ok": False, "error": tr(str(exc))}
+
+    def action_team_store_save(self, body: dict) -> dict:
+        """Turn the team store on with these settings (tested first: nothing is saved if they don't work), or off.
+        Off keeps the settings, so turning it on again needs no password."""
+        from . import team_store
+        from .config import load_config, set_config_value
+
+        if self.cfg.is_spoke:
+            return {"error": tr("this computer sends to a hub: the team store is set up on the hub")}
+        if not body.get("enabled"):
+            set_config_value(self.cfg, "hub", "store", '""')
+            self.cfg = load_config(self.cfg.home)
+            self._cfg_sig = self._config_sig()
+            return {"ok": True, "store": self.team_store_info()}
+        try:
+            params = self._store_params(body)
+            found = team_store.probe(params)
+            if not found["steps"] and not found["can_create"]:
+                raise team_store.TeamStoreError(f"user {params['user']} can't create the team's tables in {found['where']}")
+        except team_store.TeamStoreError as exc:
+            return {"error": tr(str(exc))}
+        team_store.write_settings(self.cfg, params)
+        set_config_value(self.cfg, "hub", "store", '"postgres"')
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        return {"ok": True, "store": self.team_store_info(), "status": self.team_store_status()}
+
+    def action_share_mode(self, share: str) -> dict:
+        """[hub] share on a computer that sends to a hub: its transcripts, or only what it learned."""
+        from .config import SHARE_MODES, load_config, set_config_value
+
+        if not self.cfg.is_spoke:
+            return {"error": tr("this computer has not joined a hub")}
+        if share not in SHARE_MODES:
+            return {"error": tr("unknown share mode {share!r}", share=share)}
+        set_config_value(self.cfg, "hub", "share", json.dumps(share))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        return {"ok": True, "share": self.cfg.hub_share}
+
+    def action_push(self) -> bool:
+        """Send to the hub now; a computer that shares knowledge also gets its teammates' lessons back."""
+        from .hub import push
+
+        return self.jobs.start("push", lambda progress: push(self.cfg, progress=progress).summary())
 
     def update_info(self, remote: bool) -> dict:
         from .update import check, recall, remember
@@ -1215,13 +1300,18 @@ def make_handler(app: App, port: int):
                 return True  # this computer itself
             return (self.headers.get("Tailscale-User-Login") or "") in users
 
+        def _from_here(self) -> bool:
+            """The request comes from this computer itself: not through Tailscale Serve, not from another device.
+            Gates the settings that hold a password or change what leaves the computer (Devices)."""
+            proxied = self.headers.get("X-Forwarded-For") is not None or self.headers.get("Tailscale-User-Login") is not None
+            return not proxied and self.client_address[0] in ("127.0.0.1", "::1") and self._host() in local_hosts
+
         def _local(self) -> str | None:
-            """"mac" or "linux" when the request comes from this computer itself (not through Tailscale Serve, not from
-            another device) and Chronicle can open files here; None otherwise. Gates "Open on this Mac"."""
+            """"mac" or "linux" when the request comes from this computer itself and Chronicle can open files here;
+            None otherwise. Gates "Open on this Mac"."""
             import sys
 
-            proxied = self.headers.get("X-Forwarded-For") is not None or self.headers.get("Tailscale-User-Login") is not None
-            if proxied or self.client_address[0] not in ("127.0.0.1", "::1") or self._host() not in local_hosts:
+            if not self._from_here():
                 return None
             return "mac" if sys.platform == "darwin" else "linux" if sys.platform.startswith("linux") else None
 
@@ -1263,6 +1353,8 @@ def make_handler(app: App, port: int):
                     return self._json({"error": "bad json"}, 400)
                 if p == "/api/hub/hello":
                     return self._json(hub.hello(app.cfg, app.conn, body))
+                if p == "/api/hub/lessons":
+                    return self._json(hub.team_lessons(app.cfg, body))
                 if p == "/api/hub/done":
                     hub.check_machine(app.cfg, str(body.get("machine") or ""))
                     app.ingest.request()
@@ -1423,7 +1515,9 @@ def make_handler(app: App, port: int):
                 if p == "/api/imports":
                     return self._json(app.imports())
                 if p == "/api/devices":
-                    return self._json(app.devices())
+                    return self._json({**app.devices(), "here": self._from_here()})
+                if p == "/api/team-store":
+                    return self._json(app.team_store_status())
                 if p == "/api/suggestions":
                     return self._json(app.suggestions(q))
                 if p == "/api/suggestions/unseen":
@@ -1494,6 +1588,16 @@ def make_handler(app: App, port: int):
                         return self._json({"error": tr("files open only on the computer Chronicle runs on")}, 403)
                     err = app.artifact_reveal(int(m.group(1)), "reveal" if body.get("how") == "reveal" else "open")
                     return self._json({"error": err}, 400) if err else self._json({"ok": True})
+                if p in ("/api/team-store/test", "/api/team-store/save", "/api/devices/share"):
+                    if not self._from_here():  # a password, or what leaves this computer: only at the computer itself
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    if p == "/api/team-store/test":
+                        return self._json(app.action_team_store_test(body))
+                    if p == "/api/team-store/save":
+                        return self._json(app.action_team_store_save(body))
+                    return self._json(app.action_share_mode(str(body.get("share") or "")))
+                if p == "/api/devices/push":
+                    return self._json({"started": app.action_push()})
                 if p == "/api/update/check":  # a POST: with the daily check off, the dashboard's only call to PyPI
                     return self._json(app.update_info(remote=True))
                 if p == "/api/analysis/backend":

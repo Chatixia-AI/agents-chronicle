@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **Teammates' lessons, and a team store in Postgres:** a hub with `[hub] store = "postgres"` (the connection in
+  `team-store.env`, the driver from `agents-chronicle[team]`) also keeps what computers share in Postgres: each
+  session's details and summary, its project lessons, and an audit log. Lessons belong to their git repository
+  wherever each person cloned it, so the same lesson from two people becomes one item that remembers whose sessions
+  stated it. After each push, a computer that shares knowledge gets its teammates' lessons for its own repositories
+  back, read-only: its MCP tools answer with them, marked as teammates', and the start-of-session notes list them
+  under **From teammates' sessions**. Only the hub connects to the database. `chronicle hub store` sets it up and
+  shows what it holds, and so does **Settings › Devices › Team store** on the hub itself (tested before it is saved; the
+  password never comes back to the browser). On a member, **Settings › Devices** switches what it sends and shows its
+  teammates' lessons. [Teammates' lessons, and a team store in Postgres](docs/devices.md#teammates-lessons-and-a-team-store-in-postgres)
 - **Share knowledge, keep transcripts:** `chronicle hub join … --share knowledge` (or `[hub] share = "knowledge"`)
   lets a computer add to the hub's knowledge without sending its transcripts. It keeps recording and analyzing its
   own sessions with its own Claude Code or Codex login, and after each analysis sends the hub only the session's

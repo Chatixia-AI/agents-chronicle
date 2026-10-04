@@ -296,6 +296,16 @@ JA: dict[str, str] = {
     # ---- artifacts: opening a file
     "this file can no longer be opened": "このファイルはもう開けません",
     "files open only on the computer Chronicle runs on": "ファイルは Chronicle が動いているコンピューターでだけ開けます",
+    # ---- Devices: what this computer sends, the team store
+    "change this on the computer itself, not from another device": "ほかのデバイスからではなく、そのコンピューター自身で変更してください",
+    "this computer sends to a hub: the team store is set up on the hub": "このコンピューターはハブに送っています。チームストアはハブで設定します",
+    "this computer has not joined a hub": "このコンピューターはハブに参加していません",
+    "unknown share mode {share!r}": "不明な共有方法 {share!r}",
+    "the database server's address is missing": "データベースサーバーのアドレスがありません",
+    "the database name is missing": "データベース名がありません",
+    "the user name is missing": "ユーザー名がありません",
+    "the port must be a number from 1 to 65535": "ポートは 1 から 65535 までの数字にしてください",
+    "the password is missing": "パスワードがありません",
     "that file is not on this computer": "そのファイルはこのコンピューターにありません",
     "that kind of file is not opened from here": "その種類のファイルはここからは開きません",
     "opening files is not supported on this system": "このシステムではファイルを開けません",

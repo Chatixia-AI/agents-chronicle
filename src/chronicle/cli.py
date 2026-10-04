@@ -1639,12 +1639,19 @@ def cmd_hub(args) -> int:
     if action in ("add-folder", "remove-folder", "folders"):
         return _hub_folders(cfg, console, args)
 
+    if action == "store":
+        return _hub_store(cfg, console)
+
     # status
     if cfg.is_spoke:
         last = hub.last_push(cfg)
         console.print(f"Sends its sessions to the hub at [bold]{cfg.hub_url}[/]"
                       + (" · knowledge only (transcripts stay here)" if cfg.shares_knowledge else ""), highlight=False)
         console.print(f"  last push: {last['at'] + ' · ' + last['summary'] if last else 'never'}", highlight=False)
+        team = hub.last_team(cfg)
+        if team:
+            console.print(f"  team lessons here: {team.get('lessons', 0)} from the hub's team store (as of {team.get('at')})",
+                          highlight=False)
         if cfg.hub_folders:
             n = len(cfg.hub_folders)
             console.print(f"  {n} folder{'s' * (n != 1)} added to projects on the hub (`chronicle hub folders`)", highlight=False)
@@ -1664,6 +1671,38 @@ def cmd_hub(args) -> int:
                       highlight=False)
         for f in m.get("folders") or []:
             console.print(f"      {f['folder']} → {f['name']}", highlight=False)
+    return 0
+
+
+def _hub_store(cfg, console) -> int:
+    """`chronicle hub store`: connect to the hub's team store, run its upgrade steps, and show what it holds."""
+    from . import hub, team_store
+
+    if cfg.is_spoke:
+        console.print(f"The team store belongs to the hub; this computer sends to the hub at {cfg.hub_url}.",
+                      highlight=False)
+        return 1
+    path = team_store.env_path(cfg)
+    if cfg.hub_store != "postgres":
+        console.print("This hub keeps what computers share in its own SQLite only. To keep the team's record in "
+                      f"Postgres as well: put PGHOST, PGDATABASE, PGUSER and PGPASSWORD in {path} (chmod 600), "
+                      "install the driver (uv tool install 'agents-chronicle[team]'), run "
+                      "`chronicle config set hub.store postgres`, and restart the dashboard.", highlight=False)
+        return 0
+    try:
+        store = team_store.get(cfg)
+        st = store.status()
+    except team_store.TeamStoreError as exc:
+        console.print(f"[red]{exc}[/]", highlight=False)
+        return 1
+    c = st["counts"]
+    console.print(f"Team store: [bold]{st['where']}[/] (PostgreSQL {st['server']}, schema {st['schema']})", highlight=False)
+    console.print(f"  {c['computers']} computers · {c['sessions']} sessions · {c['lessons']} lessons "
+                  f"({c['lesson_sources']} statements of them) · {c['audit']} audit entries", highlight=False)
+    console.print(f"  upgrade steps: {', '.join(st['steps']) or 'none'} · last activity: {st['last_activity'] or 'none'}",
+                  highlight=False)
+    if not hub.read_token(cfg):
+        console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
     return 0
 
 
@@ -2106,7 +2145,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("hub", help="one archive for several computers: this one records them all (enable), "
                                    "or sends its sessions to one that does (join)")
     s.add_argument("action", nargs="?", choices=["status", "enable", "join", "leave", "disable", "folders", "add-folder",
-                                                 "remove-folder"], default="status")
+                                                 "remove-folder", "store"], default="status")
     s.add_argument("url", nargs="?", metavar="address|folder",
                    help="with join: the hub's address; with add-folder and remove-folder: a folder on this computer")
     s.add_argument("--token", help="with join: the token the hub's `chronicle hub enable` printed")

@@ -111,7 +111,8 @@ chronicle hub join https://pc.tail1234.ts.net --token …
 chronicle hub join https://pc.tail1234.ts.net --token … --share knowledge
 ```
 
-（参加済みのコンピューターでは `chronicle config set hub.share knowledge`）。そのコンピューターは単独の Chronicle と同じように
+（参加済みのコンピューターでは `chronicle config set hub.share knowledge`、またはそのダッシュボードの **Settings › Devices ›
+What this computer sends**）。そのコンピューターは単独の Chronicle と同じように
 動きます。自分のセッションを記録し、自分の Claude Code または Codex のログインで分析し、ダッシュボードと MCP ツールも更新され
 続けます。分析のたびにハブへ送るのは次のものだけです。
 
@@ -129,6 +130,43 @@ chronicle hub join https://pc.tail1234.ts.net --token … --share knowledge
 ので、そのための Claude のログインは要りません。プロジェクトのナレッジベースと用語集は、ハブが自分のログインで作ります。
 **Settings › Devices** ではそのコンピューターに **ナレッジのみ** と表示されます。ハブがすでにトランスクリプトを持っている
 セッションは、ハブの記録がそのまま使われます。
+
+### チームメイトのナレッジと、Postgres のチームストア
+
+何人かで使うハブは、チームの記録を Postgres にも残し、ナレッジを共有している各コンピューターへチームメイトが学んだことを
+返せます。ハブで次を実行します。
+
+```bash
+uv tool install 'agents-chronicle[team]'    # Postgres のドライバー。必要なのはハブだけ
+# PGHOST、PGPORT、PGDATABASE、PGUSER、PGPASSWORD（と PGSSLMODE。既定は require）を 1 行ずつ：
+$EDITOR ~/.claude-chronicle/team-store.env && chmod 600 ~/.claude-chronicle/team-store.env
+chronicle config set hub.store postgres
+chronicle hub store                          # 接続し、テーブルを用意して、中身を表示します
+```
+
+そのあと、セッションを受け取るダッシュボードを再起動します。ドライバーを入れたあとは、ハブ自身で **Settings › Devices ›
+Team store** を開き、接続先を入力して **Test connection**、**Save** としても設定できます。接続できない設定は保存されず、
+パスワードは二度と表示されません。この設定は、ほかのデバイスから（Tailscale 経由などで）は変更できません。
+
+- **残すもの。** コンピューターが共有した各セッションの情報、要約、プロジェクトのナレッジを、まず Postgres に、次にハブ自身の
+  データベースに書きます。ダッシュボードが読むのは引き続きハブのデータベースです。Postgres に接続できないときはどちらにも
+  残さず、コンピューターは次のプッシュでもう一度送ります。
+- **ナレッジはリポジトリに属します。** git リポジトリで得たナレッジは、各自がどこにクローンしていても、そのリポジトリ
+  （リモート）に属します。リモートのないフォルダーで得たものは、ハブ上のそのフォルダーのプロジェクトに属します。二人から
+  同じナレッジ（種類とタイトルが同じもの）が届くと一つの項目になり、どのセッションが述べたかを覚えています。
+- **チームメイトのナレッジが戻ってきます。** ナレッジを共有しているコンピューターは、プッシュのたびに、クローンを持っている
+  リポジトリ、セッションを共有したプロジェクト、フォルダーを追加したプロジェクトについて、チームメイトのナレッジを受け取り
+  ます。自分のデータベースに読み取り専用で、そのリポジトリの自分のフォルダーの下に保存されます。MCP ツールはそれも
+  （チームメイトのものと示して）答えに使い、セッション開始時のメモは **From teammates' sessions** の下に並べます。自分が述べた
+  ナレッジは返ってきません。却下したものは却下されたまま残り、チームから消えたものは消えます。持っている数は
+  `chronicle hub status` とそのコンピューターの **Settings › Devices** で分かり、そこの **Share and get team lessons now**
+  ですぐにプッシュできます。
+- **データベースにつなぐのはハブだけです。** 各コンピューターはそのアドレスもパスワードも知らないので、ハブだけが届く
+  ネットワークに置けます。テーブルはスキーマ `team` にあり、プッシュとプルごとの監査ログ（件数のみ）も残ります。更新の
+  手順はそれぞれ名前で記録され、一度だけ実行されます。
+
+まだできないこと：どのコンピューターもハブの同じトークンを使います。ハブ自身が分析するセッション（`share = "everything"`）の
+ナレッジは Postgres に入りません。同じナレッジが二つの言語で届くと、最後に届いた書き方が残ります。
 
 ### やめるとき
 

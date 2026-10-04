@@ -71,3 +71,4 @@
 | `path_map` | `{}` | ハブで：ほかのコンピューターのフォルダーのうち、こちらのフォルダーと同じプロジェクトを持つもの。例：`{ "/home/me/code" = "/Users/me/Projects" }`。git リモートのあるプロジェクトは先にリモートで対応付けます |
 | `folders` | `{}` | ハブに送るコンピューターで：セッションをハブのプロジェクトに入れるこちらのフォルダー（その下も含む）。例：`{ "/Users/me/work/notes" = "/Users/hub/Projects/demo-app" }`。`chronicle hub add-folder` が設定します（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
 | `share` | `"everything"` | ハブに送るコンピューターで：`"everything"` はトランスクリプトを送り、ハブが記録・分析します。`"knowledge"` はこちらで記録・分析を続け、各セッションの情報、要約、プロジェクトのナレッジだけを送ります（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)） |
+| `store` | `""` | ハブで：`"postgres"` にすると、チームの記録を Postgres にも残し（接続は Chronicle のフォルダーの `team-store.env`）、ナレッジを共有するコンピューターにチームメイトのナレッジを返します（[チームメイトのナレッジと、Postgres のチームストア](devices.md#チームメイトのナレッジとpostgres-のチームストア)） |

@@ -107,6 +107,11 @@ folders = {}
 # them. "knowledge": this computer keeps recording and analyzing with its own Claude Code (or Codex) login and sends
 # only each session's details, summary and project lessons; transcripts and personal lessons stay here.
 share = "everything"
+# On the hub: also keep the team's record in Postgres ("postgres"): what computers share with share = "knowledge",
+# lessons merged across them, and an audit log. Computers that share get their teammates' lessons for their projects
+# back. The connection (PGHOST, PGDATABASE, PGUSER, PGPASSWORD, ...) is read from team-store.env in Chronicle's
+# folder; the Postgres driver comes with the team extra: uv tool install 'agents-chronicle[team]'.
+store = ""
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -132,6 +137,7 @@ notify = false
 
 LANGUAGES = {"en": "English", "ja": "日本語"}  # [analysis] language: code -> its own name, as the picker shows it
 SHARE_MODES = ("everything", "knowledge")  # [hub] share
+STORES = ("", "postgres")  # [hub] store
 
 
 def chronicle_home() -> Path:
@@ -190,6 +196,7 @@ class Config:
     hub_path_map: dict[str, str] = field(default_factory=dict)
     hub_folders: dict[str, str] = field(default_factory=dict)
     hub_share: str = "everything"
+    hub_store: str = ""
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -304,6 +311,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
     path_map = hub.get("path_map")
     folders = hub.get("folders")
     share = str(hub.get("share") or "everything").strip().lower()
+    store = str(hub.get("store") or "").strip().lower()
 
     env_dirs = os.environ.get("CHRONICLE_CLAUDE_DIRS")
     raw_dirs = env_dirs.split(os.pathsep) if env_dirs else sources.get("claude_dirs", ["~/.claude"])
@@ -332,6 +340,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         hub_folders={str(Path(str(k)).expanduser()).rstrip("/") or "/": str(v).rstrip("/") for k, v in folders.items()
                      if str(k).strip() and str(v).strip()} if isinstance(folders, dict) else {},
         hub_share=share if share in SHARE_MODES else "everything",
+        hub_store=store if store in STORES else "",
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
@@ -345,6 +354,11 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         logging.getLogger("chronicle").warning("[analysis] language %r is not one of %s; using \"en\"",
                                                cfg.analysis.language, ", ".join(LANGUAGES))
         cfg.analysis.language = "en"
+    if store not in STORES:
+        import logging
+
+        logging.getLogger("chronicle").warning("[hub] store %r is not one of: \"postgres\", or empty; keeping the "
+                                               "team's record in the hub's SQLite only", store)
     return cfg
 
 

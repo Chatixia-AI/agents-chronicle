@@ -13,6 +13,7 @@ from .agents import AGENTS, short_name, speaker
 from .artifacts import KINDS as ARTIFACT_KINDS
 from .artifacts import STATUS as ARTIFACT_STATUS
 from .db import connect
+from .hub import team_from
 from .ladder import stage_label
 from .redact import redact
 from .search import search_knowledge, search_sessions
@@ -42,7 +43,8 @@ TOOLS = [
         "annotations": {"title": "Search knowledge", "readOnlyHint": True, "destructiveHint": False,
                         "idempotentHint": True, "openWorldHint": False},
         "description": "Search knowledge extracted from past coding-agent sessions (fixes, gotchas, decisions, "
-                       "facts, commands, preferences). Best first stop for 'have we solved this before?'.",
+                       "facts, commands, preferences), including teammates' lessons when this computer shares with "
+                       "a team hub. Best first stop for 'have we solved this before?'.",
         "inputSchema": {
             "type": "object",
             "properties": {
@@ -182,6 +184,8 @@ class Tools:
         out = [f"{len(rows)} knowledge item(s) for {query!r}:\n"]
         for k in rows:
             src = f"session {k['session_id'][:8]} ({local_str(k.get('session_started'), '%Y-%m-%d')})" if k["session_id"] else k["source"]
+            if k["source"] == "team":  # a teammate's lesson the team hub sent: whose sessions stated it
+                src = "teammates' sessions" + (f" on {', '.join(who)}" if (who := team_from(k)) else "") + ", via the team hub"
             trust = stage_label(k) + (f" ({k['stage_reason']})" if k.get("stage_reason") else "")
             out.append(f"## [{k['kind']} · {stage_label(k)}] {k['title']}\n_{k.get('project_name') or '-'} · {trust} · "
                        f"{k.get('confidence') or '-'} confidence · {src}_\n\n{truncate(k.get('body') or '', 1500)}\n")
@@ -254,7 +258,8 @@ class Tools:
         if not items:
             return f"No knowledge recorded yet for {path}."
         lines = [f"No synthesized knowledge base yet for {path}; latest knowledge items:\n"]
-        lines += [f"- [{k['kind']} · {stage_label(k)}] **{k['title']}** — {one_line(k.get('body') or '', 300)}" for k in items]
+        lines += [f"- [{k['kind']} · {stage_label(k)}] **{k['title']}** — {one_line(k.get('body') or '', 300)}"
+                  + (" (from teammates)" if k["source"] == "team" else "") for k in items]
         return "\n".join(lines)
 
     def glossary(self, term: str | None = None, project: str | None = None) -> str:
