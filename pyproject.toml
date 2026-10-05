@@ -1,7 +1,6 @@
 [project]
 name = "agents-chronicle"
-version = "0.6.1"
-dynamic = ["readme"]
+dynamic = ["readme", "version"]  # the version comes from the latest vX.Y.Z git tag (hatch-vcs)
 description = "Record, archive, analyze and explore every coding-agent session (Claude Code, Codex, Copilot, Bob, Antigravity): a local knowledge vault built with Claude Code itself."
 requires-python = ">=3.11"
 license = "MIT"
@@ -40,8 +39,18 @@ app = [
 team = ["psycopg[binary]>=3.2"]
 
 [build-system]
-requires = ["hatchling", "hatch-fancy-pypi-readme>=24"]
+requires = ["hatchling", "hatch-fancy-pypi-readme>=24", "hatch-vcs>=0.4"]
 build-backend = "hatchling.build"
+
+# A tagged commit builds as that version (v0.7.0 -> 0.7.0); later commits as the next patch's dev release
+# (0.7.1.dev3+g1a2b3c4). A copy without git history, such as a GitHub source zip, builds as 0.0.0.
+[tool.hatch.version]
+source = "vcs"
+raw-options = { fallback_version = "0.0.0" }
+
+# rebuild the editable install's metadata when a commit or tag changes the version
+[tool.uv]
+cache-keys = [{ file = "pyproject.toml" }, { git = { commit = true, tags = true } }]
 
 # PyPI shows the README without the repository around it: make its relative images and links absolute.
 [tool.hatch.metadata.hooks.fancy-pypi-readme]

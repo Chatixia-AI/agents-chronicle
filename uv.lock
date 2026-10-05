@@ -4,7 +4,6 @@ requires-python = ">=3.11"
 
 [[package]]
 name = "agents-chronicle"
-version = "0.6.1"
 source = { editable = "." }
 dependencies = [
     { name = "rich" },
