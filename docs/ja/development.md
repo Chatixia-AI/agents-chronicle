@@ -6,7 +6,7 @@
 
 ```bash
 uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot, Bob and Antigravity stores
-# redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
+# redeploy: --reinstall picks up uncommitted edits too (uv rebuilds on its own only when pyproject.toml, the commit or a tag changes)
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
 
@@ -41,11 +41,20 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
 
 ## リリース
 
-`pyproject.toml` の `version` を上げ、`v<version>` タグで GitHub リリースを公開します。
-`.github/workflows/release.yml` がテストを実行し、`agents-chronicle` を PyPI に公開し（Trusted Publishing、
-環境 `pypi`）、DMG をリリースに添付します（`MACOS_*` / `APPLE_*` シークレットが設定されていれば署名・公証済み。
-詳細はワークフローの先頭を参照）。ワークフローを手動で実行すると（**Actions → Release → Run workflow**）
-ドライランになり、テストを実行して DMG をワークフローの成果物として保存するだけで、何も公開しません。
+バージョンはどこにも書きません。git のタグから決まります（hatch-vcs）。タグの付いたコミットはそのバージョン
+（`v0.7.0` → `0.7.0`）、その後のコミットは次のパッチの開発版（`0.7.1.dev3+g1a2b3c4`）としてビルドされ、ソースの
+チェックアウトでは Status ページにこれが表示されます。
+
+リリースするには、変更点を作業のたびに `CHANGELOG.md` の `## Unreleased` に書いておき、`main` で **Actions → Release →
+Run workflow** を実行して `patch`、`minor`、`major` のどれかを選びます。`.github/workflows/release.yml` が最新のタグから
+次のバージョンを決め、テストを実行し、タグと GitHub リリースを作成し（Unreleased の節がリリースノートになります）、
+`agents-chronicle` を PyPI に公開し（Trusted Publishing、環境 `pypi`）、DMG をリリースに添付します（`MACOS_*` /
+`APPLE_*` シークレットが設定されていれば署名・公証済み。詳細はワークフローの先頭を参照）。最後に、`## Unreleased` を
+`## <version> (<date>)` に変えるプルリクエストを開きます。次のリリースの前にマージしてください。マージするまでは
+リリース済みの内容が Unreleased に残っているため、次の実行は最初のステップでその旨を伝えて止まります。このリポジトリで
+GitHub Actions がプルリクエストを作れない設定の場合は、実行の Summary に開くためのリンクが出ます。
+既定の `dry run` はテストを実行して DMG をワークフローの成果物として保存するだけで、何も公開しません。
+GitHub で `v<version>` タグのリリースを手動で公開する方法も引き続き使えます。
 
 ### 最初のリリースの前に一度だけ必要な設定
 
@@ -57,6 +66,8 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
    `MACOS_CERT_PASSWORD`、`MACOS_CODESIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`
    （account.apple.com で発行するアプリ用パスワード）を追加します。これらがない場合、DMG はアドホック署名となり、
    利用者は「プライバシーとセキュリティ」で許可する必要があります。
+4. 任意：Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests** をオンにすると、
+   リリースが変更履歴のプルリクエストをリンクではなく自分で開きます。
 
 ## ドキュメントサイト
 

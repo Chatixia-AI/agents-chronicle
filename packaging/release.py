@@ -54,15 +54,26 @@ def date(text: str, version: str, day: str) -> str:
     return new
 
 
+def not_ready(text: str, tags: list[str]) -> str | None:
+    """Why the changelog cannot be released yet, or None."""
+    last = ".".join(map(str, latest(tags)))
+    if last != "0.0.0" and not re.search(rf"^## {re.escape(last)}\b", text, re.M):
+        # the last release's changelog pull request is not merged: its lines are still under Unreleased
+        return f"CHANGELOG.md has no '## {last}' section: merge the changelog pull request for {last} first"
+    if not unreleased(text):
+        return "CHANGELOG.md has nothing under '## Unreleased' to release"
+    return None
+
+
 def main(argv: list[str]) -> int:
     cmd, *args = argv or ["help"]
     text = CHANGELOG.read_text()
     if cmd == "next" and len(args) == 1:
-        if not unreleased(text):
-            print("::error::CHANGELOG.md has nothing under '## Unreleased' to release", file=sys.stderr)
+        tags = subprocess.run(["git", "tag", "--list", "v*"], capture_output=True, text=True, check=True).stdout.splitlines()
+        if why := not_ready(text, tags):
+            print(f"::error::{why}", file=sys.stderr)
             return 1
-        tags = subprocess.run(["git", "tag", "--list", "v*"], capture_output=True, text=True, check=True).stdout
-        print(next_version(tags.splitlines(), args[0]))
+        print(next_version(tags, args[0]))
     elif cmd == "notes" and len(args) == 1:
         print(notes(text, args[0]))
     elif cmd == "date" and len(args) == 2:
