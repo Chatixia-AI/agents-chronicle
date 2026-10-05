@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Moving a checkout install to PyPI, documented:** [Updating](docs/install.md#updating) now says that a checkout run
+  with `uv sync` or `uv run` has no Update button, and **From a checkout to a PyPI install** moves the hooks, MCP
+  servers and background agents to `uv tool install 'agents-chronicle[app]'` without touching your data. Installing
+  with a `==version` pin stops `uv tool upgrade`, and the Update button, from going past that version; the page
+  says how to drop it. A checkout's version now reads like `0.7.1.dev3+g1a2b3c4`: the last release plus the commits
+  since.
+
+## 0.7.0 (2026-10-05)
+
 - **People and roles on a hub, without Tailscale:** an admin invites each person as an admin, a member or read-only,
   with `chronicle hub invite <name> --email … --role …` or **Settings › Devices › People** on the hub. The invite is a
   one-time code, valid for 7 days and shown once, passed on by chat. A member's computer joins with
