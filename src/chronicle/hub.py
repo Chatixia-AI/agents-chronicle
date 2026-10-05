@@ -12,6 +12,11 @@ the hub does not pay to analyze the same sessions again.
 With `[hub] store = "postgres"` the hub also keeps the team's record in Postgres (team_store.py), and each computer
 that shares knowledge gets its teammates' lessons for its own projects back after every push, kept read-only in its
 own database (knowledge.source 'team') where its MCP tools and start-of-session notes find them.
+
+Projects can be set up on the hub ahead of time (`chronicle hub project add <folder>`): a folder on the hub computer
+whose sessions, and everything below it, are one project that other computers can add folders to before anything was
+sent. Its own analyzed sessions go to the team store like a member's, so teammates get the hub owner's lessons too.
+A person limited to projects (people.py) hears only of those projects, and the hub keeps only what belongs to them.
 """
 
 from __future__ import annotations
@@ -357,11 +362,72 @@ def folders_of(conn, machine_id: str) -> dict[str, str]:
     return clean_folders(data)
 
 
-def hub_projects(conn, limit: int = 1000) -> list[dict]:
-    """The projects this hub files sessions under, busiest first: what another computer can add a folder to."""
-    return [{"path": r[0], "name": r[1], "sessions": r[2]} for r in conn.execute(
+def hub_projects(conn, limit: int = 1000, only: list[str] | None = None) -> list[dict]:
+    """The projects this hub files sessions under, busiest first, and the ones set up ahead of time: what another
+    computer can add a folder to. `only`: just these project paths (a person limited to projects)."""
+    from .ingest import project_name_for
+
+    rows = {r[0]: {"path": r[0], "name": r[1], "sessions": r[2]} for r in conn.execute(
         "SELECT project_path, MAX(project_name), COUNT(*) FROM sessions WHERE project_path IS NOT NULL "
-        "AND source != 'history' GROUP BY project_path ORDER BY COUNT(*) DESC LIMIT ?", (limit,))]
+        "AND source != 'history' GROUP BY project_path ORDER BY COUNT(*) DESC LIMIT ?", (limit,))}
+    for path in declared_projects(conn):
+        rows.setdefault(path, {"path": path, "name": project_name_for(path), "sessions": 0})["set_up"] = True
+    out = sorted(rows.values(), key=lambda p: -p["sessions"])
+    return [p for p in out if only is None or p["path"] in only]
+
+
+def declared_projects(conn) -> list[str]:
+    """The projects set up on this hub ahead of time (`chronicle hub project add`): folders on this computer."""
+    return [r[0] for r in conn.execute("SELECT path FROM hub_projects ORDER BY path")]
+
+
+def project_folder(folder: str) -> str:
+    """A folder as a project path: absolute, without a trailing slash, symlinks kept as the agents recorded them."""
+    path = os.path.abspath(os.path.expanduser(str(folder or "").strip()))
+    return path.rstrip("/") or "/"
+
+
+def add_project(cfg: Config, conn, folder: str, *, by: str | None = None) -> dict:
+    """Set up a project on this hub ahead of time: `folder`, on this computer, and everything below it. This
+    computer's sessions there are filed under it at once (their knowledge moves along), and other computers can add
+    folders to it before anything was sent. Returns {path, name, moved}."""
+    from .ingest import project_name_for
+    from .people import LOCAL
+
+    path = project_folder(folder)
+    if under(os.path.expanduser("~").rstrip("/") or "/", path):  # /, /Users, the home folder itself
+        raise HubError(f"{path} holds every project: pick the project's own folder")
+    have = conn.execute("SELECT COUNT(*) FROM sessions WHERE source != 'history' AND (project_path = ? OR "
+                        "machine_path = ? OR substr(project_path, 1, ?) = ? OR substr(machine_path, 1, ?) = ?)",
+                        (path, path, len(path) + 1, path + "/", len(path) + 1, path + "/")).fetchone()[0]
+    if not Path(path).is_dir() and not have:
+        raise HubError(f"{path} is not a folder on this computer, and no session here ran in it")
+    inside = [p for p in declared_projects(conn) if under(p, path) or under(path, p)]
+    if path in inside:
+        return {"path": path, "name": project_name_for(path), "moved": 0, "existed": True}
+    if inside:
+        raise HubError(f"{path} overlaps the project {inside[0]}: a folder belongs to one project")
+    conn.execute("INSERT INTO hub_projects(path, created_at, created_by) VALUES (?, ?, ?)", (path, utcnow_iso(), by or LOCAL))
+    conn.commit()
+    resolver(cfg, conn, fresh=True)
+    moved = refile(cfg, conn, local_machine(cfg)["id"], [path])
+    conn.execute("UPDATE knowledge SET project_path = ?, project_name = ? WHERE session_id IS NULL AND "
+                 "substr(project_path, 1, ?) = ?", (path, project_name_for(path), len(path) + 1, path + "/"))
+    conn.commit()
+    held = conn.execute("SELECT COUNT(*) FROM sessions WHERE project_path = ? AND source != 'history'", (path,)).fetchone()[0]
+    return {"path": path, "name": project_name_for(path), "moved": moved, "sessions": held, "existed": False}
+
+
+def remove_project(cfg: Config, conn, folder: str) -> dict:
+    """Undo add_project: this computer's sessions in the folder are filed by their own folders again. What other
+    computers sent stays where it was filed until they send it again; people keep the project in their lists."""
+    path = project_folder(folder)
+    if not conn.execute("SELECT 1 FROM hub_projects WHERE path = ?", (path,)).fetchone():
+        raise HubError(f"{path} is not a project set up on this hub (`chronicle hub project list`)")
+    conn.execute("DELETE FROM hub_projects WHERE path = ?", (path,))
+    conn.commit()
+    resolver(cfg, conn, fresh=True)
+    return {"path": path, "moved": refile(cfg, conn, local_machine(cfg)["id"], [path])}
 
 
 def refile(cfg: Config, conn, machine_id: str, folders) -> int:
@@ -648,34 +714,47 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
     return report
 
 
-def _shared_records(cfg: Config, have: dict) -> tuple[list[dict], int, int]:
-    """(records the hub lacks or has an older analysis of, unchanged, excluded) for push_knowledge."""
+def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, remotes: dict | None = None,
+                    conn=None, where: str = "", params: tuple = ()) -> tuple[list[dict], int, int]:
+    """(records the hub lacks or has an older analysis of, unchanged, excluded) for push_knowledge.
+
+    `scope`: the hub projects this computer's person is limited to (hello says so); then only sessions the hub files
+    under them are sent: in a folder added to one of them, or in a repository whose remote the hub files there.
+    `conn`/`where`: the hub's own sessions in projects set up there (share_own)."""
     from .db import connect
 
     out: list[dict] = []
     unchanged = excluded = 0
-    if not cfg.db_path.exists():
+    own = conn is None
+    if own and not cfg.db_path.exists():
         return out, 0, 0
-    conn = connect(cfg.db_path, readonly=True)
-    remotes: dict[str, str | None] = {}
+    conn = conn or connect(cfg.db_path, readonly=True)
+    found: dict[str, str | None] = {}
     try:
-        cols = ", ".join(("id", "project_path") + SHARED_COLS + ANALYSIS_COLS)
+        cols = ", ".join(("id", "project_path", "machine_path") + SHARED_COLS + ANALYSIS_COLS)  # never a prompt-made title
         marks = ", ".join("?" for _ in SHARED_AGENTS)
         rows = conn.execute(f"SELECT {cols} FROM sessions WHERE analysis_status = 'done' "
-                            f"AND source NOT IN ('history', 'remote') AND agent IN ({marks})", SHARED_AGENTS).fetchall()
+                            f"AND source NOT IN ('history', 'remote') AND agent IN ({marks}){where}",
+                            (*SHARED_AGENTS, *params)).fetchall()
         for r in rows:
             rec = dict(r)
+            ran = rec.pop("machine_path") or rec["project_path"]  # where it ran: a set-up project may hold it
             if cfg.is_excluded(rec["project_path"]):
                 excluded += 1
+                continue
+            if scope is None and have.get(rec["id"]) == rec["analyzed_at"]:
+                unchanged += 1  # asked git nothing: it runs once per folder, only for what goes
+                continue
+            if ran and ran not in found:
+                info = git_info(ran)
+                found[ran] = info[1] if info else None
+            rec["remote"] = found.get(ran) if ran else None
+            if scope is not None and destination(cfg, rec["project_path"], rec["remote"], remotes or {}) not in scope:
+                excluded += 1  # not one of the projects this person shares: it stays here
                 continue
             if have.get(rec["id"]) == rec["analyzed_at"]:
                 unchanged += 1
                 continue
-            path = rec["project_path"]
-            if path and path not in remotes:
-                info = git_info(path)
-                remotes[path] = info[1] if info else None
-            rec["remote"] = remotes.get(path) if path else None
             rec["language"] = cfg.analysis.language  # what its summary and lessons are written in
             # lessons about the project only: ones about the person (global, preferences) stay on this computer
             rec["knowledge"] = [dict(k) for k in conn.execute(
@@ -683,8 +762,44 @@ def _shared_records(cfg: Config, have: dict) -> tuple[list[dict], int, int]:
                 "AND scope = 'project' AND kind != 'preference' AND status != 'dismissed'", (rec["id"],)).fetchall()]
             out.append(rec)
     finally:
-        conn.close()
+        if own:
+            conn.close()
     return out, unchanged, excluded
+
+
+def destination(cfg: Config, path: str | None, remote: str | None, remotes: dict) -> str | None:
+    """The hub project a session of this computer is filed under, as far as this computer can tell: the project the
+    hub files its repository's remote under, else the project of the folder it was added to (the longest one)."""
+    if remote and remotes.get(remote):
+        return remotes[remote]
+    folder = max((f for f in cfg.hub_folders if under(path, f)), key=len, default=None)
+    return cfg.hub_folders[folder] if folder else None
+
+
+def share_own(cfg: Config, conn, store) -> int:
+    """On a hub with a team store: send the store this computer's own analyzed sessions in projects set up here
+    (add_project), the same details and project lessons a member's computer shares, so teammates get the hub
+    owner's lessons too. Only what changed since the last time; returns how many sessions went."""
+    declared = declared_projects(conn)
+    if not declared:
+        return 0
+    me = local_machine(cfg)
+    have = _in_store(store.shared, me["id"])
+    marks = ", ".join("?" for _ in declared)
+    records, _, _ = _shared_records(cfg, have, conn=conn, where=f" AND machine_id = ? AND project_path IN ({marks})",
+                                    params=(me["id"], *declared))
+    if not records:
+        return 0
+    from .ingest import project_name_for
+    from .team_store import payload
+
+    _in_store(store.computer_seen, me["id"], me["name"], platform_label(), __version__)
+    for i in range(0, len(records), SHARE_BATCH):
+        _in_store(store.put_sessions, me["id"], [
+            payload(rec, project=rec["project_path"], project_name=project_name_for(rec["project_path"]),
+                    remote=rec["remote"], title=rec.get("llm_title"), details_cols=SHARED_COLS)
+            for rec in records[i:i + SHARE_BATCH]])
+    return len(records)
 
 
 def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
@@ -705,7 +820,9 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
         have = hello.get("knowledge")
         if not isinstance(have, dict):
             raise HubError(f"the hub runs Chronicle {hello.get('version')}, which can't take knowledge only; update it")
-        records, report.unchanged, report.skipped = _shared_records(cfg, have)
+        scope = hello.get("scope") if isinstance(hello.get("scope"), list) else None  # the hub limits this person
+        records, report.unchanged, report.skipped = _shared_records(cfg, have, scope=scope,
+                                                                    remotes=hello.get("remotes") or {})
         for i in range(0, len(records), SHARE_BATCH):
             batch = records[i:i + SHARE_BATCH]
             if progress:
@@ -971,10 +1088,24 @@ def _in_store(call, *args):
         raise HubError(str(exc)) from None
 
 
-def hello(cfg: Config, conn, body: dict) -> dict:
+def limited_error(person: dict) -> HubError:
+    return HubError(f"{person['name']} sees only some projects on this hub, so this computer may share knowledge only "
+                    "(summaries and project lessons, not transcripts): run `chronicle config set hub.share knowledge`, "
+                    "then `chronicle push`")
+
+
+def hello(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
+    """A computer says who it is and which folders it added to projects here; the hub answers with what it has of
+    that computer's, and the projects it may add folders to. A person limited to projects (people.py) hears only of
+    theirs, and must share knowledge (no transcripts)."""
+    from .people import projects_of
+
     machine_id = check_machine(cfg, str(body.get("machine") or ""))
     if int(body.get("protocol", 0)) != PROTOCOL:
         return {"protocol": PROTOCOL, "version": __version__}
+    scope = projects_of(person)
+    if scope is not None and body.get("share") != "knowledge":
+        raise limited_error(person)
     # the team store holds what computers share as knowledge; one that sends transcripts never waits on it
     store = _store(cfg) if body.get("share") == "knowledge" else None
     if store:
@@ -996,12 +1127,15 @@ def hello(cfg: Config, conn, body: dict) -> dict:
     folders, moved, refiled = folders_of(conn, machine_id), 0, False
     if "folders" in body:  # an older spoke doesn't send them: keep what it had
         sent = clean_folders(body.get("folders"))
+        if scope is not None:  # a folder can go only to a project this person sees
+            sent = {f: proj for f, proj in sent.items() if proj in scope}
         if sent != folders:
             kv_set(conn, FOLDERS_KV + machine_id, json.dumps(sent))
             conn.commit()
             moved = refile(cfg, conn, machine_id, set(folders) | set(sent))
             folders, refiled = sent, True
-    remotes = ProjectResolver(cfg, conn).local_remotes()
+    remotes = {rem: proj for rem, proj in ProjectResolver(cfg, conn).project_remotes().items()
+               if scope is None or proj in scope}
     report = folders_report(conn, machine_id, folders, repos, remotes)
     share = "knowledge" if body.get("share") == "knowledge" else "everything"
     kv_set(conn, SHARE_KV + machine_id, share)
@@ -1014,8 +1148,8 @@ def hello(cfg: Config, conn, body: dict) -> dict:
             "SELECT id, analyzed_at FROM sessions WHERE machine_id = ? AND source = 'remote'", (machine_id,))}
     return {"protocol": PROTOCOL, "version": __version__, "hub": me["name"],
             "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}"),
-            "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved,
-            "knowledge": shared, "team": bool(store)}
+            "projects": hub_projects(conn, only=scope), "remotes": remotes, "folders": report, "moved": moved,
+            "knowledge": shared, "team": bool(store), "scope": scope}
 
 
 def join_with_code(cfg: Config, conn, body: dict) -> dict:
@@ -1044,7 +1178,10 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
          "spoke", now, now, person["id"]),
     )
     conn.commit()
-    return {"token": token, "person": people.public(person), "hub": local_machine(cfg)["name"]}
+    scope = people.projects_of(person)
+    return {"token": token, "person": people.public(person), "hub": local_machine(cfg)["name"],
+            "projects": hub_projects(conn, only=scope) if scope is not None else None,
+            "share": "knowledge" if scope is not None else None}
 
 
 def signin_code_for(cfg: Config, conn, person: dict | None) -> dict:
@@ -1130,7 +1267,7 @@ def _cell(value):
     return json.dumps(value) if isinstance(value, (dict, list)) else str(value)
 
 
-def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
+def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person: dict | None = None) -> dict:
     """Sessions another computer analyzed itself ([hub] share = "knowledge"): their details, analysis and project
     lessons, without a transcript. Stored with source 'remote', filed like any session of that computer, and never
     analyzed here. A session the hub has the transcript of keeps its own record."""
@@ -1146,9 +1283,12 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
         raise HubError(f"bad sessions: {exc}") from None
     if not isinstance(data, dict) or not isinstance(data.get("sessions"), list):
         raise HubError("bad sessions")
+    from .people import projects_of
+
+    scope = projects_of(person)
     r = ProjectResolver(cfg, conn)
     now = utcnow_iso()
-    stored = kept = 0
+    stored = kept = refused = 0
     accepted = []
     for rec in data["sessions"][:SHARE_BATCH * 2]:
         sid = str(rec.get("id") or "") if isinstance(rec, dict) else ""
@@ -1161,6 +1301,9 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
         recorded = str(rec.get("project_path") or "") or None
         remote = rec.get("remote") if isinstance(rec.get("remote"), str) else None
         project = r.resolve(machine_id, recorded, remote)
+        if scope is not None and project not in scope:
+            refused += 1  # a person limited to projects: only what belongs to theirs is kept
+            continue
         name = project_name_for(project)
         row = {c: _cell(rec.get(c)) for c in SHARED_COLS + ANALYSIS_COLS}
         row.update(id=sid, source="remote", machine_id=machine_id, project_path=project, project_name=name,
@@ -1198,19 +1341,28 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dic
     if stored:
         conn.execute("UPDATE machines SET last_push = ? WHERE id = ?", (now, machine_id))
     conn.commit()
-    return {"ok": True, "stored": stored, "kept": kept}
+    return {"ok": True, "stored": stored, "kept": kept, "refused": refused}
 
 
-def team_lessons(cfg: Config, body: dict) -> dict:
+def team_lessons(cfg: Config, body: dict, person: dict | None = None, conn=None) -> dict:
     """What teammates learned in the projects a computer works on, from the team store (pull_team_lessons asks).
-    {"team": False} when this hub keeps no team store; {"unchanged": True} when the computer already has this answer."""
+    {"team": False} when this hub keeps no team store; {"unchanged": True} when the computer already has this answer.
+    A person limited to projects gets lessons from those projects only, whatever the computer names."""
+    from .people import projects_of
+
     machine_id = check_machine(cfg, str(body.get("machine") or ""))
     store = _store(cfg)
     if not store:
         return {"team": False}
+    if conn is not None:  # the hub owner's own lessons in projects set up here, before teammates ask for them
+        try:
+            share_own(cfg, conn, store)
+        except HubError as exc:
+            log.warning("team store: this hub's own sessions not shared: %s", exc)
     remotes = [normalize_remote(x) or x for x in body.get("remotes") or [] if isinstance(x, str) and len(x) <= 300][:500]
     projects = [x for x in body.get("projects") or [] if isinstance(x, str) and x.startswith("/") and len(x) <= 1024]
-    data = _in_store(store.lessons_for, machine_id, remotes, projects[:MAX_FOLDERS])
+    within = projects_of(person)
+    data = _in_store(lambda: store.lessons_for(machine_id, remotes, projects[:MAX_FOLDERS], within=within))
     version = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:32]
     if body.get("version") == version:
         return {"team": True, "version": version, "unchanged": True}
@@ -1423,6 +1575,7 @@ class ProjectResolver:
         self._repos: dict[str, dict] = {}
         self._folders: dict[str, dict[str, str]] = {}
         self._local: dict[str, str] | None = None
+        self._declared: list[str] | None = None
 
     def repos(self, machine_id: str) -> dict:
         if machine_id not in self._repos:
@@ -1438,15 +1591,30 @@ class ProjectResolver:
             self._folders[machine_id] = folders_of(self.conn, machine_id)
         return self._folders[machine_id]
 
+    def declared(self) -> list[str]:
+        if self._declared is None:
+            self._declared = declared_projects(self.conn)
+        return self._declared
+
+    def project_of(self, path: str | None) -> str | None:
+        """A folder set up as a project here (add_project) holds everything below it."""
+        if not path:
+            return path
+        return max((d for d in self.declared() if under(path, d)), key=len, default=path)
+
+    def project_remotes(self) -> dict[str, str]:
+        """{normalized remote: the project here its repository's sessions are filed under}."""
+        return {rem: self.project_of(top) for rem, top in self.local_remotes().items()}
+
     def local_remotes(self) -> dict[str, str]:
         """{normalized remote: top-level folder} of the repositories this computer's own sessions ran in."""
         if self._local is None:
             from .db import kv_get, kv_set
 
             self._local = {}
-            paths = [r[0] for r in self.conn.execute(
-                "SELECT project_path, COUNT(*) n FROM sessions WHERE project_path IS NOT NULL AND "
-                "(machine_id IS NULL OR machine_id = ?) GROUP BY project_path ORDER BY n", (self.me,))]
+            paths = [r[0] for r in self.conn.execute(  # where they ran, also when a set-up project holds them
+                "SELECT COALESCE(machine_path, project_path) p, COUNT(*) n FROM sessions WHERE project_path IS NOT NULL "
+                "AND (machine_id IS NULL OR machine_id = ?) GROUP BY p ORDER BY n", (self.me,))]
             for p in paths:
                 key = f"git:{p}"
                 cached = kv_get(self.conn, key)
@@ -1461,7 +1629,10 @@ class ProjectResolver:
 
     def resolve(self, machine_id: str | None, path: str | None, remote: str | None = None) -> str | None:
         if not path or not machine_id or machine_id == self.me:
-            return path
+            return self.project_of(path)
+        return self.project_of(self._resolve(machine_id, path, remote))
+
+    def _resolve(self, machine_id: str, path: str, remote: str | None) -> str:
         norm, top = normalize_remote(remote), None
         for repo_top, repo_remote in sorted(self.repos(machine_id).values(), key=lambda v: -len(v[0])):
             if path == repo_top or path.startswith(repo_top.rstrip("/") + "/"):

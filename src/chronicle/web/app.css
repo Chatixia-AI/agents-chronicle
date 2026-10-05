@@ -1704,6 +1704,16 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .pp-actions .btn + .btn { margin-left: 6px; }
 .link-btn.danger { color: var(--critical-ink); }
 .people-form { margin-bottom: 6px; }
+.pp-scope { border: 1px solid var(--border); border-radius: 10px; padding: 8px 12px 10px; margin: 0 0 12px; min-width: 0; }
+.pp-scope legend { font-size: 12.5px; color: var(--ink-2); padding: 0 4px; }
+.pp-proj { display: flex; align-items: baseline; gap: 8px; font-size: 13px; padding: 2px 0; min-width: 0; }
+.pp-proj > span { overflow-wrap: anywhere; }
+.pp-proj small { flex: none; }
+.pp-projs { display: grid; gap: 0; padding: 2px 0 0 22px; max-height: 220px; overflow: auto; }
+.pp-scope-cell { min-width: 140px; }
+.pp-scope-cell .link-btn { margin-left: 6px; }
+.pp-edit > td { padding-top: 0; }
+.pp-edit .pp-scope { margin: 0 0 8px; }
 .pp-note { margin-top: 8px; }
 .pp-audit { margin-top: 12px; }
 .pp-audit summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }

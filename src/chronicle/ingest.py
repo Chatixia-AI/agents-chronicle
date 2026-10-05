@@ -321,7 +321,8 @@ def store_parsed(
 
     machine = machine_of(cfg, claude_dir)
     recorded_path = ps.project_path or (decode_project_dir(project_dir) if project_dir else None)
-    project_path = resolver(cfg, conn).resolve(machine, recorded_path, ps.git_remote) if machine else recorded_path
+    # another computer's folder as this hub files it; this computer's own, under a project set up here if any
+    project_path = resolver(cfg, conn).resolve(machine, recorded_path, ps.git_remote)
     excluded = cfg.is_excluded(project_path)
 
     # analysis state machine
@@ -1037,8 +1038,7 @@ def import_history(conn: sqlite3.Connection, cfg: Config, path: Path) -> int:
 
     machine = machine_of(cfg, path)
     for sid, rec in parse_history(path).items():
-        if machine:
-            rec["project"] = resolver(cfg, conn).resolve(machine, rec.get("project"))
+        rec["project"] = resolver(cfg, conn).resolve(machine, rec.get("project"))
         if sid in known or cfg.is_excluded(rec.get("project")):
             continue
         prompts = [(ts, safe_text(text)) for ts, text in rec["prompts"] if str(text).strip()]

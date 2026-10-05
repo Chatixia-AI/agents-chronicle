@@ -65,15 +65,20 @@ class FakeStore:
                 del self.lessons[lid]
         return {"sessions": len(sessions)}
 
-    def lessons_for(self, machine_id, remotes, projects, limit=2000):
+    def lessons_for(self, machine_id, remotes, projects, limit=2000, within=None):
         def at(s):
             return team_store.place(s.get("remote"), s["project"])
 
-        scope = sorted({at(s) for s in self.sessions.values() if at(s) and (
+        def counts(s):  # within: only what sessions filed under those hub projects stated
+            return within is None or s["project"] in within
+
+        scope = sorted({at(s) for s in self.sessions.values() if at(s) and counts(s) and (
             s["computer"] == machine_id or s.get("remote") in remotes or s["project"] in projects)})
         out = []
         for lid, x in sorted(self.lessons.items()):
-            src = [s for s in self.sources if s[0] == lid]
+            src = [s for s in self.sources if s[0] == lid and counts(self.sessions[s[1]])]
+            if not src:
+                continue
             if x["place"] not in scope or any(s[2] == machine_id for s in src):
                 continue
             out.append({"id": lid, "place": x["place"], "project": x["project"], "remote": x["remote"],
@@ -295,6 +300,14 @@ def test_postgres_store(tmp_path):
         store.put_sessions(dave, [sess("d1", "/hub/dave-app", "github.com/org/app", [("gotcha", "Stripe needs the raw body.")])])
         merged = titles(carol, ["github.com/org/app"])["Stripe needs the raw body."]
         assert merged["sessions"] == 3 and merged["computers"] == ["Alice PC", "Bob PC", "Dave PC"]
+
+        # someone limited to hub projects: only what sessions filed under them stated, whatever the computer asks for
+        within = store.lessons_for(carol, ["github.com/org/app"], ["/hub/other"], within=["/hub/other"])["lessons"]
+        assert [x["title"] for x in within] == ["Elsewhere"]
+        within = {x["title"]: x for x in store.lessons_for(carol, ["github.com/org/app"], [], within=["/hub/app"])["lessons"]}
+        assert set(within) == {"Stripe needs the raw body.", "冪等性キーは Postgres に保存する", "Bob's fact"}
+        assert within["Stripe needs the raw body."]["computers"] == ["Alice PC", "Bob PC"]  # not Dave's other project
+        assert store.lessons_for(carol, ["github.com/org/app"], [], within=[])["lessons"] == []
 
         store.put_sessions(alice, [sess("a1", "/hub/app", "github.com/org/app", [])])  # analyzed again: no lessons
         left = titles(carol, ["github.com/org/app"])

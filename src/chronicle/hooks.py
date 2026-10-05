@@ -84,6 +84,19 @@ def _on_session_start(payload: dict) -> int:
     return 0
 
 
+def _project_here(conn, cwd: str) -> str:
+    """The project `cwd` belongs to: the folder set up as a project on this hub that holds it, else cwd itself."""
+    import sqlite3
+
+    from .hub import under
+
+    try:
+        declared = [r[0] for r in conn.execute("SELECT path FROM hub_projects")]
+    except sqlite3.OperationalError:  # a database from before projects could be set up
+        return cwd
+    return max((d for d in declared if under(cwd, d)), key=len, default=cwd)
+
+
 def build_session_context(cfg, cwd: str) -> str | None:
     """A compact digest of what previous sessions learned about this project."""
     from .db import connect
@@ -98,6 +111,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
     conn = connect(cfg.db_path, readonly=True)
     try:
         kb = kb_for_path(conn, cwd)
+        cwd = _project_here(conn, cwd)  # a folder inside a project set up on this hub belongs to that project
         lines: list[str] = []
         if kb:
             lines.append(f"Chronicle knowledge base for {kb['project_name']} (from past coding-agent sessions, "

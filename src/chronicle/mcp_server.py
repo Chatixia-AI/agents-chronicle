@@ -250,8 +250,10 @@ class Tools:
             row = self.conn.execute("SELECT * FROM project_kb WHERE project_path = ?", (path,)).fetchone()
             kb = dict(row) if row else None
         else:
+            from .hooks import _project_here
+
             kb = kb_for_path(self.conn, self.cwd)
-            path = kb["project_path"] if kb else self.cwd
+            path = kb["project_path"] if kb else _project_here(self.conn, self.cwd)
         if kb:
             return kb["markdown"]
         items = search_knowledge(self.conn, None, project=path, limit=25)

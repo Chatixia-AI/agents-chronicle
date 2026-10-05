@@ -381,10 +381,12 @@ class TeamStore:
             return {r[0]: r[1] for r in c.execute(f"SELECT id, analyzed_at FROM {self.schema}.sessions "
                                                   "WHERE computer_id = %s", (machine_id,))}
 
-    def lessons_for(self, machine_id: str, remotes: list[str], projects: list[str], limit: int = MAX_LESSONS) -> dict:
+    def lessons_for(self, machine_id: str, remotes: list[str], projects: list[str], limit: int = MAX_LESSONS,
+                    within: list[str] | None = None) -> dict:
         """Teammates' lessons for the places this computer works in: the repositories (and folders without a remote)
         it shared sessions in, those whose git remote it has a clone of, and those in hub projects it added a folder
-        to. Lessons it stated itself are left out (it has them).
+        to. Lessons it stated itself are left out (it has them). `within`: hub projects the asking person is limited
+        to; then only lessons stated in sessions filed under them count, whatever the computer asked for.
 
         Returns {"lessons": [...], "places": {place: {"remote", "project", "mine": a session id of this computer's
         there, or None}}}, which the computer uses to find each place's folder on its side."""
@@ -393,9 +395,11 @@ class TeamStore:
         s = self.schema
         at = "coalesce(remote, project)"  # place(), in SQL
         with self._session() as c:
+            limit_to = within is not None
             scope = [r[0] for r in c.execute(
                 f"SELECT DISTINCT {at} FROM {s}.sessions WHERE coalesce({at}, '') <> '' AND "
-                "(computer_id = %s OR remote = ANY(%s) OR project = ANY(%s))", (machine_id, remotes, projects))]
+                "(computer_id = %s OR remote = ANY(%s) OR project = ANY(%s)) AND (NOT %s OR project = ANY(%s))",
+                (machine_id, remotes, projects, limit_to, list(within or [])))]
             if not scope:
                 return {"lessons": [], "places": {}}
             places = {r[0]: {"remote": r[1], "project": r[2], "mine": r[3]} for r in c.execute(
@@ -407,9 +411,10 @@ class TeamStore:
                 f"array_agg(DISTINCT coalesce(m.name, left(m.id::text, 8))) AS computers, "
                 f"(array_agg(x.session_id ORDER BY x.seen_at DESC))[1:{MAX_SOURCES}] AS session_ids "
                 f"FROM {s}.lessons l JOIN {s}.lesson_sources x ON x.lesson_id = l.id "
-                f"JOIN {s}.computers m ON m.id = x.computer_id "
-                "WHERE l.place = ANY(%s) GROUP BY l.id HAVING bool_and(x.computer_id <> %s) "
-                "ORDER BY count(*) DESC, l.updated_at DESC, l.id LIMIT %s", (scope, machine_id, limit)).fetchall()
+                f"JOIN {s}.computers m ON m.id = x.computer_id JOIN {s}.sessions ss ON ss.id = x.session_id "
+                "WHERE l.place = ANY(%s) AND (NOT %s OR ss.project = ANY(%s)) GROUP BY l.id "
+                "HAVING bool_and(x.computer_id <> %s) ORDER BY count(*) DESC, l.updated_at DESC, l.id LIMIT %s",
+                (scope, limit_to, list(within or []), machine_id, limit)).fetchall()
             lessons = [{"id": r[0], "place": r[1], "project": r[2], "project_name": r[3], "remote": r[4], "kind": r[5],
                         "title": r[6], "body": r[7], "tags": r[8], "language": r[9], "created_at": _iso(r[10]),
                         "updated_at": _iso(r[11]), "sessions": r[12], "computers": sorted(r[13] or []),

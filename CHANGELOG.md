@@ -2,6 +2,20 @@
 
 ## Unreleased
 
+- **Projects on the hub, and who sees them:** `chronicle hub project add <folder>` sets up a project on the hub
+  before anyone sent to it: a folder on the hub computer and everything below it, named after the folder. The hub's
+  own sessions there are filed under it at once, with their knowledge, and other computers can
+  `chronicle hub add-folder` to it right away. An admin now says which projects each member or read-only person
+  sees: `chronicle hub invite <name> --project <name>` (repeat it for more) or `--all-projects`, changed later with
+  `chronicle hub access`, or in **Settings › Devices › People**. A new member or read-only invite without either is refused. Someone
+  limited to projects sees only theirs on the hub's dashboard (Home, Sessions, Knowledge and Projects), each session
+  as its summary and project lessons: no prompts, transcripts, files or commands, and the hub enforces this on its
+  side. Their computers share knowledge only, and only the sessions the hub files under their projects; the hub
+  drops anything else they send, and the teammates' lessons they get back come from those projects only. With a
+  team store, the hub's own sessions in a project set up there go to Postgres too, so teammates get the hub owner's
+  lessons. On the hub, the start-of-session notes and `project_knowledge` in any folder inside such a project use
+  that project's knowledge. Admins always see everything, and people added before this release still see every
+  project. [Projects and who sees them](docs/devices.md#projects-and-who-sees-them)
 - **Moving a checkout install to PyPI, documented:** [Updating](docs/install.md#updating) now says that a checkout run
   with `uv sync` or `uv run` has no Update button, and **From a checkout to a PyPI install** moves the hooks, MCP
   servers and background agents to `uv tool install 'agents-chronicle[app]'` without touching your data. Installing

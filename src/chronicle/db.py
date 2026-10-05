@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 13
+SCHEMA_VERSION = 14
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -352,7 +352,14 @@ CREATE TABLE IF NOT EXISTS people (                -- people on a hub (people.py
     role TEXT NOT NULL,                            -- admin | member | readonly
     created_at TEXT NOT NULL,
     created_by INTEGER,
-    removed_at TEXT                                -- removed: tokens, sessions and invites stop working
+    removed_at TEXT,                               -- removed: tokens, sessions and invites stop working
+    projects_json TEXT                             -- NULL: every project; else a JSON list of the project paths they see
+);
+
+CREATE TABLE IF NOT EXISTS hub_projects (          -- projects set up on a hub ahead of time (`chronicle hub project add`)
+    path TEXT PRIMARY KEY,                         -- a folder on the hub computer: its sessions, and everything below it
+    created_at TEXT NOT NULL,
+    created_by TEXT                                -- "person:<id>" or "this computer"
 );
 
 CREATE TABLE IF NOT EXISTS people_codes (          -- one-time codes: invites, and short dashboard sign-in links

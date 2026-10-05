@@ -5,6 +5,11 @@ Roles:
     member    their computers send to the hub and get teammates' lessons back; sees the hub's dashboard
     readonly  sees the hub's dashboard; sends nothing, changes nothing
 
+Projects: a member or read-only person sees the projects they were given (`chronicle hub invite … --project`), or
+every project (`--all-projects`). Someone limited to projects sees only those projects' session summaries and project
+lessons on the dashboard (access.py), and their computers share knowledge only, only for those projects (hub.py).
+Admins always see everything. People added before projects existed see every project, as they did.
+
 Everything starts with an invite. An admin adds a person with a role and gets a one-time code (expires after
 INVITE_DAYS) to pass on by chat; the hub sends no email. The code is redeemed once, either by a computer
 (`chronicle hub join <hub> --code …`: it becomes a push token for that person and that computer) or by a browser
@@ -91,6 +96,42 @@ def actor_of(person: dict | None) -> str:
     return f"person:{person['id']}" if person else LOCAL
 
 
+def clean_projects(projects) -> list[str] | None:
+    """None (every project) or a sorted list of distinct project paths; anything else is refused."""
+    if projects is None:
+        return None
+    if isinstance(projects, str) or not isinstance(projects, (list, tuple, set)):
+        raise PeopleError("projects must be a list of project paths")
+    out = set()
+    for x in projects:
+        x = str(x or "").strip()
+        x = x.rstrip("/") or x
+        if not x.startswith("/") or len(x) > 1024 or "\0" in x:
+            raise PeopleError("{project} is not a project on this hub", project=x or "''")
+        out.add(x)
+    return sorted(out)
+
+
+def projects_of(person: dict | None) -> list[str] | None:
+    """The projects `person` may see: None for every project (an admin, someone at the hub itself, or someone given
+    every project), else their list, possibly empty."""
+    if person is None or person.get("role") == "admin":
+        return None
+    raw = person.get("projects_json")
+    if raw is None:
+        return None
+    try:
+        got = json.loads(raw)
+    except ValueError:
+        return []  # unreadable: nothing, never everything
+    return [x for x in got if isinstance(x, str)] if isinstance(got, list) else []
+
+
+def sees(person: dict | None, project_path: str | None) -> bool:
+    scope = projects_of(person)
+    return scope is None or (project_path is not None and project_path in scope)
+
+
 # ------------------------------------------------------------------ people
 def has_people(conn: sqlite3.Connection) -> bool:
     return conn.execute("SELECT 1 FROM people WHERE removed_at IS NULL LIMIT 1").fetchone() is not None
@@ -106,9 +147,12 @@ def by_email(conn: sqlite3.Connection, email: str) -> dict | None:
     return dict(r) if r else None
 
 
-def add(conn: sqlite3.Connection, name: str, email: str | None, role: str, *, by: dict | None = None) -> dict:
-    """Add a person. Email is optional but needed for a company sign-in (auth header) to find them."""
+def add(conn: sqlite3.Connection, name: str, email: str | None, role: str, *, by: dict | None = None,
+        projects: list[str] | None = None) -> dict:
+    """Add a person. Email is optional but needed for a company sign-in (auth header) to find them. `projects`: the
+    project paths they see, None for every project (the command line and the dashboard make the inviter choose)."""
     name, email = (name or "").strip(), (email or "").strip().lower() or None
+    projects = clean_projects(projects)
     if not name:
         raise PeopleError("a name is needed")
     if role not in ROLES:
@@ -119,9 +163,10 @@ def add(conn: sqlite3.Connection, name: str, email: str | None, role: str, *, by
         raise PeopleError("{email} is already on this hub", email=email)
     if email:  # someone removed earlier comes back as a new person: the old row keeps its history
         conn.execute("UPDATE people SET email = NULL WHERE email = ? AND removed_at IS NOT NULL", (email,))
-    cur = conn.execute("INSERT INTO people(name, email, role, created_at, created_by) VALUES (?, ?, ?, ?, ?)",
-                       (name[:120], email, role, utcnow_iso(), by["id"] if by else None))
-    audit(conn, actor_of(by), "add", cur.lastrowid, role=role, email=email)
+    cur = conn.execute("INSERT INTO people(name, email, role, created_at, created_by, projects_json) VALUES (?, ?, ?, ?, ?, ?)",
+                       (name[:120], email, role, utcnow_iso(), by["id"] if by else None,
+                        None if projects is None else json.dumps(projects, ensure_ascii=False)))
+    audit(conn, actor_of(by), "add", cur.lastrowid, role=role, email=email, projects=projects)
     conn.commit()
     return get(conn, cur.lastrowid)
 
@@ -136,6 +181,21 @@ def set_role(conn: sqlite3.Connection, person_id: int, role: str, *, by: dict | 
         raise PeopleError("this is the hub's last admin: make someone else an admin first")
     conn.execute("UPDATE people SET role = ? WHERE id = ?", (role, person_id))
     audit(conn, actor_of(by), "role", person_id, before=p["role"], after=role)
+    conn.commit()
+    return get(conn, person_id)
+
+
+def set_projects(conn: sqlite3.Connection, person_id: int, projects: list[str] | None, *, by: dict | None = None) -> dict:
+    """Which projects a person sees: a list of project paths, or None for every project. Takes effect at their
+    next request; what their computers already sent stays."""
+    p = get(conn, person_id)
+    if not p or p["removed_at"]:
+        raise PeopleError("no such person")
+    projects = clean_projects(projects)
+    before = None if p.get("projects_json") is None else projects_of({**p, "role": "member"})
+    conn.execute("UPDATE people SET projects_json = ? WHERE id = ?",
+                 (None if projects is None else json.dumps(projects, ensure_ascii=False), person_id))
+    audit(conn, actor_of(by), "projects", person_id, before=before, after=projects)
     conn.commit()
     return get(conn, person_id)
 
@@ -166,6 +226,7 @@ def listing(conn: sqlite3.Connection) -> list[dict]:
     out = []
     for p in conn.execute("SELECT * FROM people WHERE removed_at IS NULL ORDER BY role = 'admin' DESC, name"):
         p = dict(p)
+        p["projects"] = projects_of(p)
         toks = [dict(t) for t in conn.execute(
             "SELECT t.token_hash, t.kind, t.machine_id, t.label, t.created_at, t.last_used, t.expires_at, m.name AS machine_name "
             "FROM people_tokens t LEFT JOIN machines m ON m.id = t.machine_id "
@@ -336,8 +397,9 @@ def allows(person: dict | None, need: str) -> bool:
 def public(person: dict | None) -> dict:
     """What the dashboard may know about who is viewing it."""
     if person is None:
-        return {"id": None, "name": LOCAL, "email": None, "role": "admin", "here": True}
-    return {"id": person["id"], "name": person["name"], "email": person.get("email"), "role": person["role"], "here": False}
+        return {"id": None, "name": LOCAL, "email": None, "role": "admin", "here": True, "projects": None}
+    return {"id": person["id"], "name": person["name"], "email": person.get("email"), "role": person["role"], "here": False,
+            "projects": projects_of(person)}
 
 
 def audit_log(conn: sqlite3.Connection, limit: int = 200) -> list[dict]:

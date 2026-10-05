@@ -332,6 +332,10 @@ JA: dict[str, str] = {
     "no such person": "その人はいません",
     "this is the hub's last admin: make someone else an admin first":
         "このハブの最後の管理者です。先にほかの人を管理者にしてください",
+    "you see only some projects on this hub": "このハブでは一部のプロジェクトだけが見えます",
+    "projects must be a list of project paths": "プロジェクトはプロジェクトのパスの一覧で指定してください",
+    "{project} is not a project on this hub": "{project} はこのハブのプロジェクトではありません",
+    "say which projects they see, or every project": "見えるプロジェクトを選ぶか、すべてのプロジェクトを選んでください",
     "that code isn't known on this hub": "このハブはそのコードを知りません",
     "that code was already used; ask an admin for a new one": "そのコードは使用済みです。管理者に新しいコードを頼んでください",
     "that code has expired; ask an admin for a new one": "そのコードは期限切れです。管理者に新しいコードを頼んでください",
