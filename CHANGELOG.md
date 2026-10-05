@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.8.0 (2026-10-05)
 
 - **Projects on the hub, and who sees them:** `chronicle hub project add <folder>` sets up a project on the hub
   before anyone sent to it: a folder on the hub computer and everything below it, named after the folder. The hub's
