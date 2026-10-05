@@ -376,6 +376,33 @@ def hub_projects(conn, limit: int = 1000, only: list[str] | None = None) -> list
     return [p for p in out if only is None or p["path"] in only]
 
 
+def shared_projects(conn) -> list[dict]:
+    """The projects set up on this hub, for the dashboard: where each is, who sees it, and what each computer filed
+    there. Everyone with every project (admins included) is counted, not listed."""
+    from .ingest import project_name_for
+    from .people import listing
+
+    everyone = listing(conn)
+    out = []
+    for r in conn.execute("SELECT path, created_at, created_by FROM hub_projects ORDER BY path").fetchall():
+        path = r["path"]
+        computers = [{"id": c["machine_id"], "name": c["name"], "sessions": c["n"], "this": c["this"]} for c in conn.execute(
+            "SELECT s.machine_id, m.name, m.role = 'this' AS this, COUNT(*) n FROM sessions s LEFT JOIN machines m "
+            "ON m.id = s.machine_id WHERE s.project_path = ? AND s.source != 'history' GROUP BY s.machine_id "
+            "ORDER BY n DESC", (path,))]
+        folders = []
+        for m in conn.execute("SELECT id, name FROM machines WHERE role = 'spoke' ORDER BY name"):
+            folders += [{"computer": m["name"] or m["id"][:8], "folder": f} for f, proj in folders_of(conn, m["id"]).items()
+                        if proj == path]
+        limited = [p for p in everyone if p["projects"] is not None]
+        out.append({"path": path, "name": project_name_for(path), "set_up_at": r["created_at"],
+                    "sessions": sum(c["sessions"] for c in computers), "computers": computers, "folders": folders,
+                    "people": [{"id": p["id"], "name": p["name"], "email": p["email"], "role": p["role"]}
+                               for p in limited if path in p["projects"]],
+                    "everyone": len(everyone) - len(limited)})
+    return out
+
+
 def declared_projects(conn) -> list[str]:
     """The projects set up on this hub ahead of time (`chronicle hub project add`): folders on this computer."""
     return [r[0] for r in conn.execute("SELECT path FROM hub_projects ORDER BY path")]

@@ -469,7 +469,10 @@ class App:
         return [{k: e[k] for k in ("seq", "agent_id", "kind", "tool_name", "ts", "snippet")} for e in hits]
 
     def projects(self) -> list[dict]:
+        from .hub import declared_projects
+
         labels = project_labels(self.conn)
+        shared = set(declared_projects(self.conn))
         # per project: active time in each of the last 12 weeks (oldest first), outcomes and agents
         weekly: dict[str, list[float]] = {}
         for r in self.conn.execute(
@@ -499,6 +502,7 @@ class App:
             d["exists"] = bool(d["project_path"]) and Path(d["project_path"]).exists()
             key = d["project_path"] or ""
             d["weekly"], d["outcomes"], d["agents"] = weekly.get(key, [0.0] * 12), outcomes.get(key, {}), agents.get(key, {})
+            d["shared"] = key in shared  # set up on this hub: its sessions and lessons go to the people given it
             rows.append(d)
         return rows
 
@@ -528,8 +532,11 @@ class App:
         from .glossary import glossary_entries
         kb = c.execute("SELECT * FROM project_kb WHERE project_path = ?", (path,)).fetchone()
         labels = project_labels(c)
+        from .hub import declared_projects
+
         return {
             "project_path": path,
+            "shared": path in declared_projects(c),
             "label": labels.get(path, stats["project_name"]),
             "stats": dict(stats),
             "kb": dict(kb) if kb else None,
@@ -1035,6 +1042,35 @@ class App:
         except people.PeopleError as exc:
             return {"error": exc.shown()}, 400
         return {"ok": True, **self.people_info()}, 200
+
+    def shared_projects(self) -> dict:
+        """Settings › Devices › Shared projects: the projects set up on this hub (hub.add_project), and the ones that
+        could be (this hub's projects that aren't, busiest first)."""
+        from .hub import declared_projects, hub_projects, read_token, shared_projects, under
+
+        shared = shared_projects(self.conn)
+        set_up = declared_projects(self.conn)
+        candidates = [p for p in hub_projects(self.conn, limit=300)
+                      if not any(under(p["path"], d) or under(d, p["path"]) for d in set_up)][:200]
+        return {"shared": shared, "candidates": candidates, "hub": bool(read_token(self.cfg)) and not self.cfg.is_spoke,
+                "store": self.cfg.hub_store == "postgres"}
+
+    def action_shared_project(self, verb: str, body: dict) -> tuple[dict, int]:
+        """Set up a project on this hub (its sessions and lessons then go to the team store and to the people given
+        it), or stop: hub.add_project / remove_project, recorded in the people audit log."""
+        from . import people
+        from .hub import HubError, add_project, remove_project
+
+        folder = str(body.get("folder") or body.get("path") or "").strip()
+        if not folder.startswith(("/", "~")):
+            return {"error": tr("pick a project or type its folder")}, 400
+        try:
+            got = add_project(self.cfg, self.conn, folder) if verb == "add" else remove_project(self.cfg, self.conn, folder)
+        except HubError as exc:
+            return {"error": str(exc)}, 400
+        people.audit(self.conn, people.LOCAL, "project-add" if verb == "add" else "project-remove", None, path=got["path"])
+        self.conn.commit()
+        return {"ok": True, "result": got, **self.shared_projects()}, 200
 
     def action_share_mode(self, share: str) -> dict:
         """[hub] share on a computer that sends to a hub: its transcripts, or only what it learned."""
@@ -1791,6 +1827,10 @@ def make_handler(app: App, port: int):
                     return self._json({**app.devices(), "here": self._from_here(), **self._me()})
                 if p == "/api/team-store":
                     return self._json(app.team_store_status())
+                if p == "/api/projects/shared":
+                    if not self._can_admin():
+                        return self._json({"error": tr("only an admin of this hub can do this")}, 403)
+                    return self._json({**app.shared_projects(), "here": self._from_here()})
                 if p == "/api/suggestions":
                     return self._json(app.suggestions(q))
                 if p == "/api/suggestions/unseen":
@@ -1889,6 +1929,11 @@ def make_handler(app: App, port: int):
                         except HubError as exc:
                             return self._json({"error": tr(str(exc))}, 400)
                     return self._json(app.action_share_mode(str(body.get("share") or "")))
+                m = re.fullmatch(r"/api/projects/shared/(add|remove)", p)
+                if m:  # what leaves this computer (its sessions go to the team store): only from here
+                    if not self._from_here():
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    return self._json(*app.action_shared_project(m.group(1), body if isinstance(body, dict) else {}))
                 m = re.fullmatch(r"/api/people/(add|invite|role|access|remove|revoke|shared-token)", p)
                 if m:
                     if not self._can_admin():

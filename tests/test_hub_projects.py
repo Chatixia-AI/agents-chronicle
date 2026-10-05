@@ -343,3 +343,37 @@ def test_notes_inside_a_project_set_up_here(synced):
     _project_setup(conn, cfg)
     text = build_session_context(cfg, CWD) or ""
     assert "Resona lesson" in text and "Recent sessions here: 09-20 Fix login token expiry" in text
+
+
+def test_shared_projects_on_the_dashboard(limited):
+    """Settings › Devices › Shared projects: admins see which projects leave the hub and who sees them; only someone
+    at the hub itself sets one up or stops sharing it, and both go into the audit log."""
+    url, conn = limited["url"], limited["conn"]
+    ada = _as(people.open_browser(conn, people.invite(conn, limited["ada"]["id"]), "test")[1])
+    bob = _as(limited["bob_session"])
+
+    code, r = _call(url, "/api/projects/shared")  # at the hub itself
+    assert code == 200 and r["here"] and r["hub"]
+    [x] = r["shared"]
+    assert x["path"] == PROJECTS and x["name"] == "Projects" and x["sessions"] == 1
+    assert [p["name"] for p in x["people"]] == ["Bob"] and x["everyone"] == 1  # Ada, an admin, sees every project
+    assert OTHER in [c["path"] for c in r["candidates"]] and PROJECTS not in [c["path"] for c in r["candidates"]]
+    code, r = _call(url, "/api/projects/shared", headers=ada)  # an admin elsewhere sees it, can't change it
+    assert code == 200 and r["here"] is False
+    assert _call(url, "/api/projects/shared", headers=bob)[0] == 403  # limited people: not theirs to see
+    assert _call(url, "/api/projects/shared/add", {"folder": OTHER}, ada)[0] == 403
+    assert _call(url, "/api/projects/shared/remove", {"path": PROJECTS}, ada)[0] == 403
+
+    code, r = _call(url, "/api/projects/shared/add", {"folder": "relative/x"})
+    assert code == 400
+    code, r = _call(url, "/api/projects/shared/add", {"folder": OTHER})
+    assert code == 200 and r["result"]["path"] == OTHER and r["result"]["sessions"] == 1
+    assert sorted(x["path"] for x in r["shared"]) == sorted([PROJECTS, OTHER])
+    code, rows = _call(url, "/api/projects")
+    flags = {p["project_path"]: p["shared"] for p in rows}
+    assert flags[PROJECTS] and flags[OTHER] and not flags["/Users/test"]  # the history-only session's folder
+    assert _call(url, f"/api/project?path={OTHER}")[1]["shared"] is True
+
+    code, r = _call(url, "/api/projects/shared/remove", {"path": OTHER})
+    assert code == 200 and [x["path"] for x in r["shared"]] == [PROJECTS]
+    assert [a["action"] for a in people.audit_log(conn)][:2] == ["project-remove", "project-add"]

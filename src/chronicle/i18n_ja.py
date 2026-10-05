@@ -336,6 +336,7 @@ JA: dict[str, str] = {
     "projects must be a list of project paths": "プロジェクトはプロジェクトのパスの一覧で指定してください",
     "{project} is not a project on this hub": "{project} はこのハブのプロジェクトではありません",
     "say which projects they see, or every project": "見えるプロジェクトを選ぶか、すべてのプロジェクトを選んでください",
+    "pick a project or type its folder": "プロジェクトを選ぶか、フォルダーを入力してください",
     "that code isn't known on this hub": "このハブはそのコードを知りません",
     "that code was already used; ask an admin for a new one": "そのコードは使用済みです。管理者に新しいコードを頼んでください",
     "that code has expired; ask an admin for a new one": "そのコードは期限切れです。管理者に新しいコードを頼んでください",

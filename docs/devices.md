@@ -296,7 +296,9 @@ chronicle hub add-folder ~/work/Resona --project Resona
   The hub's own sessions there are filed under it at once, with their knowledge, and so are new ones. Other computers
   can add a folder to it right away, before anything was sent to it. The folder must exist on the hub or have
   sessions that ran in it. It can't be `/`, your home folder or a folder above it, and it can't sit inside or around
-  another project set up this way. `chronicle hub project list` lists the hub's projects and marks the ones set up here.
+  another project set up this way. `chronicle hub project list` lists the hub's projects and marks the ones set up here. On the dashboard, **Settings › Devices › Shared projects**
+  shows the same, with who sees each project and which computers send to it, and a **Shared** badge marks them in
+  **Projects**. At the hub computer itself, that card also shares another project or stops sharing one.
   `chronicle hub project remove <folder>` undoes one: the hub's own sessions go back to their own folders, and what
   other computers sent stays where it was filed until they send it again.
 - **Which projects a person sees.** `--project` takes the name or the path of any project on the hub, set up here or

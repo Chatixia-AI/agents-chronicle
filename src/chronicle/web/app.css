@@ -1728,3 +1728,16 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .ir-value .mcp-code { flex: 1; min-width: 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ir-value .codeline { min-width: 0; overflow-wrap: anywhere; padding: 4px 8px; }
 .ir-value .btn { flex: none; }
+
+/* Settings › Devices › Shared projects */
+.sp-list { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; gap: 0; }
+.sp-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--border); min-width: 0; }
+.sp-row:first-child { border-top: 0; }
+.sp-main { display: grid; gap: 3px; min-width: 0; font-size: 13px; }
+.sp-name { font-weight: 600; }
+.sp-path { font-size: 12px; overflow-wrap: anywhere; }
+.sp-line { overflow-wrap: anywhere; }
+.sp-form { display: flex; gap: 8px; align-items: flex-start; flex-wrap: wrap; margin: 4px 0 6px; }
+.sp-fields { display: grid; gap: 6px; flex: 1 1 280px; min-width: 0; }
+.sp-fields select, .sp-fields .input { width: 100%; min-width: 0; box-sizing: border-box; }
+.pname .badge, h1 .badge { margin-left: 6px; vertical-align: middle; }
