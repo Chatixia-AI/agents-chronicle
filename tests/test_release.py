@@ -44,3 +44,13 @@ def test_date_renames_the_unreleased_heading():
     assert "## 0.7.0 (2026-10-05)\n\n- **New:**" in out and "Unreleased" not in out
     with pytest.raises(ValueError):
         release.date(out, "0.7.1", "2026-10-06")
+
+
+def test_not_ready_until_the_last_changelog_pull_request_is_merged():
+    assert release.not_ready(CHANGELOG, ["v0.6.1"]) is None
+    # v0.7.0 is out but its changelog pull request is not merged: its lines are still under Unreleased
+    assert "merge the changelog pull request for 0.7.0" in release.not_ready(CHANGELOG, ["v0.6.1", "v0.7.0"])
+    dated = release.date(CHANGELOG, "0.7.0", "2026-10-05")
+    assert "nothing under '## Unreleased'" in release.not_ready(dated, ["v0.7.0"])
+    assert release.not_ready(dated.replace("## 0.7.0", "## Unreleased\n\n- Next.\n\n## 0.7.0"), ["v0.7.0"]) is None
+    assert release.not_ready(CHANGELOG, []) is None  # the first release

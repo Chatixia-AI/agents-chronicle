@@ -112,6 +112,7 @@ Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ
 | --- | --- |
 | `uv tool install agents-chronicle` | **Check for updates** で新しいリリースが見つかったあと、`uv tool upgrade agents-chronicle` |
 | `uv tool install .`（チェックアウトから） | インストール後にチェックアウトのファイルが変わったとき、`uv tool upgrade --reinstall agents-chronicle`（ネットワーク確認なし） |
+| チェックアウトで `uv sync` / `uv run`（editable） | 実行しません。カードに **git pull to update** と表示されます |
 | `pipx` または `pip` | `pipx upgrade agents-chronicle` または `pip install --upgrade agents-chronicle` |
 | デスクトップアプリ | 実行しません。**Download** で最新リリースを開き、アプリケーションフォルダにドラッグします |
 
@@ -119,5 +120,28 @@ Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ
 `chronicle ui`（またはその launchd エージェント）で動くダッシュボードはアップデート後に自動で再起動し、開いているタブも再読み込みされます。
 コマンドラインの `chronicle app` は終了して開き直してください。同期や分析の実行中は、終わるまでボタンは待ちます。
 ターミナルからは同じコマンドを直接実行できます。
+
+バージョンを固定せずにインストールしてください。`uv tool install 'agents-chronicle==0.7.0'` とすると uv がインストールの記録に
+`==0.7.0` を残し、`uv tool upgrade`（ボタンも同じ）はそれより先に進みません。`uv tool install --force agents-chronicle`
+で固定が外れます。
+
+ソースのチェックアウトのバージョンは git のタグで決まります。`v0.7.0` タグの位置では `0.7.0`、その 3 コミット後は
+`0.7.1.dev3+g1a2b3c4` になるので、Status ページのバージョンで最後のリリースからどれだけ進んでいるかが分かります。
+
+### チェックアウトから PyPI のインストールへ
+
+チェックアウトから Chronicle を動かしている Mac でアップデートボタンを使うには、PyPI からインストールし、`chronicle install`
+でフック、MCP サーバー、バックグラウンドエージェントを新しい `chronicle` に切り替えます。`~/.claude-chronicle` のデータは
+そのまま残ります。インストールし直してもデータには触れません。
+
+```bash
+uv tool install --force --python 3.13 'agents-chronicle[app]'   # --force: チェックアウトを指す ~/.local/bin/chronicle を置き換える
+chronicle --version                                              # PyPI のバージョン
+chronicle install                                                # すべてをこちらに向ける
+chronicle status                                                 # フック、MCP サーバー、ダッシュボードのエージェントがすべて ✓
+```
+
+以後、ダッシュボードの Updates カードには **uv tool from PyPI** と表示されます。チェックアウトは別のポートで
+`uv run chronicle …`（`uv run chronicle ui --port 8799`）として使い続けられ、リリース前の変更を試せます。
 
 うまく動かない場合は、[トラブルシューティング](troubleshooting.md)を参照してください。

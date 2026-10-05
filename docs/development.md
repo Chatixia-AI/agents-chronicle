@@ -6,7 +6,7 @@
 
 ```bash
 uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot, Bob and Antigravity stores
-# redeploy: --reinstall is required, uv caches local builds keyed on pyproject.toml only
+# redeploy: --reinstall picks up uncommitted edits too (uv rebuilds on its own only when pyproject.toml, the commit or a tag changes)
 uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
 ```
 
@@ -50,7 +50,8 @@ workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/re
 from the latest tag, runs the tests, creates the tag and the GitHub release (the Unreleased section is its notes),
 publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`) and attaches the DMG to the release
 (signed and notarized when the `MACOS_*` / `APPLE_*` secrets are set; see the workflow header). Last, it opens a
-pull request that renames `## Unreleased` to `## <version> (<date>)`; merge it before the next release. If GitHub
+pull request that renames `## Unreleased` to `## <version> (<date>)`. Merge it before the next release: until then
+the released lines are still under Unreleased, and the next run stops at its first step saying so. If GitHub
 Actions may not create pull requests in this repository, the run's summary links to one ready to open.
 `dry run`, the default, runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
 Publishing a release tagged `v<version>` on GitHub by hand still works too.
@@ -65,6 +66,8 @@ Publishing a release tagged `v<version>` on GitHub by hand still works too.
    `MACOS_CERT_PASSWORD`, `MACOS_CODESIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`
    (an app-specific password from account.apple.com). Without them the DMG is ad-hoc signed and users have to
    approve it in Privacy & Security.
+4. Optional: Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests** lets the
+   release open the changelog pull request itself instead of linking to it.
 
 ## Documentation site
 

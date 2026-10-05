@@ -116,6 +116,7 @@ first and let the app connect Claude Code, so the launchd agents do not run alon
 | --- | --- |
 | `uv tool install agents-chronicle` | `uv tool upgrade agents-chronicle`, after **Check for updates** finds a newer release |
 | `uv tool install .` (a checkout) | `uv tool upgrade --reinstall agents-chronicle`, offered when the checkout's files changed after the install; no network check |
+| `uv sync` / `uv run` in a checkout (editable) | Nothing: the card says **git pull to update** |
 | `pipx` or `pip` | `pipx upgrade agents-chronicle` or `pip install --upgrade agents-chronicle` |
 | The desktop app | Nothing: **Download** opens the latest release to drag into Applications |
 
@@ -130,5 +131,28 @@ commits and changed files a reinstall would bring in.
 A dashboard run by `chronicle ui` (or its launchd agent) restarts itself afterwards and open tabs reload; a
 `chronicle app` from the command line needs quitting and reopening. The button waits while a sync or analysis runs.
 From a terminal, run the same command yourself.
+
+Install without a version pin: `uv tool install 'agents-chronicle==0.7.0'` keeps `==0.7.0` in uv's record of the
+install, and `uv tool upgrade` (the button included) then never goes past it. `uv tool install --force
+agents-chronicle` drops the pin.
+
+A source checkout is versioned by its git tags: at the `v0.7.0` tag it is `0.7.0`, and three commits later
+`0.7.1.dev3+g1a2b3c4`, so the version on the Status page says how far it is past the last release.
+
+### From a checkout to a PyPI install
+
+To get the Update button on a Mac that runs Chronicle from a checkout, install it from PyPI and let `chronicle
+install` move the hooks, MCP servers and background agents over to the new `chronicle`. Your data in
+`~/.claude-chronicle` stays where it is; reinstalling never touches it.
+
+```bash
+uv tool install --force --python 3.13 'agents-chronicle[app]'   # --force replaces a ~/.local/bin/chronicle that points into the checkout
+chronicle --version                                              # the PyPI version
+chronicle install                                                # point everything at it
+chronicle status                                                 # hooks, MCP server and dashboard agent all ✓
+```
+
+The dashboard then shows **uv tool from PyPI** on its Updates card. The checkout keeps working with `uv run
+chronicle …` on another port (`uv run chronicle ui --port 8799`) for trying changes before they are released.
 
 Something not working? See [Troubleshooting](troubleshooting.md).
