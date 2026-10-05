@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+- **Shared projects on the dashboard:** on a hub, **Settings › Devices › Shared projects** shows which projects leave
+  the computer: each one's folder, who sees it, which computers send to it and how many sessions it holds. At the hub
+  computer itself you can share another project, picked from the hub's projects or typed as a folder, or stop sharing
+  one; admins elsewhere see the card but can't change it, since it decides what leaves the hub. Shared projects carry
+  a **Shared** badge in **Projects** and on their page, and sharing or stopping goes into the audit log.
+  [Projects and who sees them](docs/devices.md#projects-and-who-sees-them)
+
+## 0.8.0 (2026-10-05)
+
 - **Projects on the hub, and who sees them:** `chronicle hub project add <folder>` sets up a project on the hub
   before anyone sent to it: a folder on the hub computer and everything below it, named after the folder. The hub's
   own sessions there are filed under it at once, with their knowledge, and other computers can

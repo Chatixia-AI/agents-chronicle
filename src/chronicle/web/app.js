@@ -1866,7 +1866,7 @@ route(/^\/projects$/, async () => {
     { key: "kb", label: t("Knowledge base"), desc: true, value: (p) => p.kb_updated },
   ], (p) => h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a")) go(href(p)); } },
     h("td", { class: "title-cell" }, h("div", { class: "t" }, h("a", { href: href(p), class: "plain" }, p.label)),
-      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"))),
+      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"), p.shared ? [" ", sharedBadge()] : null)),
     h("td", { class: "num" }, fmtNum(p.sessions)),
     h("td", { class: "num" }, fmtDur(p.active_s)),
     h("td", { class: "num" }, fmtNum(p.knowledge)),
@@ -1904,7 +1904,7 @@ function projectCard(p, href) {
   return h("a", { class: "card proj-card", href },
     h("div", { class: "pc-head" },
       h("div", { style: { minWidth: 0 } },
-        h("div", { class: "pname" }, p.label, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, tn(n, "{n} {agent} session", "{n} {agent} sessions", { agent: agentName(a) })))),
+        h("div", { class: "pname" }, p.label, p.shared ? sharedBadge() : null, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, tn(n, "{n} {agent} session", "{n} {agent} sessions", { agent: agentName(a) })))),
         h("div", { class: "ppath", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : ` · ${t("not on disk")}`)),
       p.kb_updated ? h("span", { class: "badge", title: t("Knowledge base updated {when}", { when: fmtDT(p.kb_updated) }) }, icon("knowledge"), "KB")
         : h("span", { class: "badge muted-badge", title: t("No knowledge base yet") }, t("no KB"))),
@@ -2131,7 +2131,7 @@ route(/^\/project$/, async (params) => {
     h("tbody", null, p.sessions.map((x) => sessionRow(x))))));
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/projects" }, t("Projects")), " / "),
-      h("h1", null, p.label), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)), synth),
+      h("h1", null, p.label, p.shared ? [" ", sharedBadge()] : null), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)), synth),
     tiles,
     h("div", { class: "section-gap" }, kbCard),
     p.artifacts?.total ? h("div", { class: "section-gap" }, artifactsCard(p.artifacts.recent, { project: false,
@@ -3878,6 +3878,8 @@ function auditText(a) {
     revoke: () => t("{actor} revoked a computer or browser of {person}", vars),
     projects: () => t("{actor} changed which projects {person} sees", vars),
     "shared-token": () => (on ? t("{actor} turned the shared hub token on", vars) : t("{actor} turned the shared hub token off", vars)),
+    "project-add": () => t("{actor} shared the project {path}", { ...vars, path: a.detail?.path || "" }),
+    "project-remove": () => t("{actor} stopped sharing the project {path}", { ...vars, path: a.detail?.path || "" }),
   }[String(a.action).replace("_", "-")]?.() || `${actor}: ${a.action}`;
 }
 // What an admin passes on to the person: shown once, since the hub keeps only the code's hash
@@ -4154,8 +4156,83 @@ route(/^\/devices$/, async () => {
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
     h("div", { class: "grid" }, thisCard, phone, computers, dv.role === "hub" && dv.can_admin ? peopleCard(dv) : null,
+      dv.role === "hub" && dv.can_admin ? sharedProjectsCard() : null,
       dv.role === "hub" && dv.store ? teamStoreCard(dv) : null));
 });
+
+// Settings › Devices › Shared projects (on a hub): which of its projects leave this computer, who sees each, which
+// computers send to it; set one up or stop sharing it (only at the hub itself: it decides what leaves this computer).
+const sharedBadge = () => h("span", { class: "badge accent", title: t("Shared from this hub: its summaries and project lessons go to the people given it") }, icon("devices"), t("Shared"));
+function sharedProjectsCard() {
+  const box = h("section", { class: "card shared-card" }, cardHead(t("Shared projects"), { iconName: "projects" }), h("div", { class: "muted" }, t("Loading…")));
+  const send = async (path, body) => {
+    try {
+      const r = await post(path, body);
+      if (r.error) { toast(r.error, 7000); return null; }
+      return r;
+    } catch (e) { if (!e.handled) toast(e.message, 7000); return null; }
+  };
+  const load = async () => {
+    try { draw(await api("/api/projects/shared")); } catch (e) {
+      if (!e.handled) box.replaceChildren(cardHead(t("Shared projects"), { iconName: "projects" }), h("div", { class: "warn-line" }, e.message));
+    }
+  };
+  const row = (x, here) => {
+    const stop = here ? h("button", { class: "btn small danger", type: "button", onclick: async () => {
+      if (!confirm(t("Stop sharing {name}? This computer's sessions there go back to their own folders and stop going to the team store. What others sent stays, and people keep it in their list until you change it.", { name: x.name }))) return;
+      stop.disabled = true;
+      const r = await send("/api/projects/shared/remove", { path: x.path });
+      if (r) { toast(t("{name} is no longer shared.", { name: x.name })); projectsCache = null; draw(r); } else stop.disabled = false;
+    } }, t("Stop sharing")) : null;
+    const who = x.people.length ? x.people.map((p) => p.name).join(", ") : t("no one limited to it yet");
+    return h("li", { class: "sp-row" },
+      h("div", { class: "sp-main" },
+        h("div", null, h("a", { href: `#/project?path=${encodeURIComponent(x.path)}`, class: "sp-name" }, x.name), " ",
+          h("span", { class: "muted" }, tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }))),
+        h("div", { class: "codeline sp-path", title: x.path }, x.path),
+        h("div", { class: "sp-line" }, h("span", { class: "muted" }, t("Seen by")), " ", who,
+          x.everyone ? h("span", { class: "muted" }, t(" · and {n} who see every project", { n: fmtNum(x.everyone) })) : null),
+        x.folders.length ? h("div", { class: "sp-line" }, h("span", { class: "muted" }, t("Sent from")), " ",
+          x.folders.map((f, i) => [i ? ", " : null, h("b", null, f.computer), " ", h("span", { class: "codeline" }, f.folder)])) : null),
+      stop);
+  };
+  const addForm = (data) => {
+    const pick = h("select", { "aria-label": t("Project to share") },
+      h("option", { value: "" }, t("Pick one of this hub's projects…")),
+      data.candidates.map((c) => h("option", { value: c.path, title: c.path }, `${c.name} · ${tn(c.sessions, "{n} session", "{n} sessions", { n: fmtNum(c.sessions) })} · ${shortPath(c.path)}`)));
+    const folder = h("input", { class: "input", placeholder: t("or a folder on this computer, e.g. ~/work/client-x"), autocomplete: "off", spellcheck: "false",
+      "aria-label": t("Folder to share") });
+    const go2 = h("button", { class: "btn primary", type: "submit" }, t("Share project"));
+    const form = h("form", { class: "sp-form", onsubmit: async (e) => {
+      e.preventDefault();
+      const f = folder.value.trim() || pick.value; // ~ is expanded by the hub
+      if (!f) { toast(t("Pick a project or type its folder.")); return; }
+      go2.disabled = true;
+      const r = await send("/api/projects/shared/add", { folder: f });
+      go2.disabled = false;
+      if (!r) return;
+      toast(r.result?.existed ? t("{name} was already shared.", { name: r.result.name })
+        : t("Shared {name}: {n} sessions of this hub are in it. Give people access in People › Change.", { name: r.result.name, n: fmtNum(r.result.sessions ?? 0) }), 7000);
+      projectsCache = null;
+      draw(r);
+    } }, h("div", { class: "sp-fields" }, pick, folder), go2);
+    return [h("div", { class: "subhead" }, t("Share another project")), form,
+      h("p", { class: "muted" }, t("The folder and everything below it becomes one project. This computer's sessions there are filed under it, and other computers can add their own folder to it before anything was sent."))];
+  };
+  const draw = (data) => {
+    const here = data.here !== false;
+    box.replaceChildren(); append(box, [
+      cardHead(t("Shared projects"), { iconName: "projects", hint: data.shared.length ? tn(data.shared.length, "{n} project", "{n} projects") : null }),
+      h("p", null, data.store
+        ? t("Only these projects leave this computer: each analyzed session's summary and project lessons go to the team store and to the people given the project. Prompts, transcripts and every other project stay here.")
+        : t("Only these projects leave this computer: people given them see each analyzed session's summary and project lessons on this hub's dashboard. Prompts, transcripts and every other project stay here.")),
+      data.shared.length ? h("ul", { class: "sp-list" }, data.shared.map((x) => row(x, here)))
+        : h("p", { class: "muted" }, t("No project is shared yet.")),
+      here ? addForm(data) : h("p", { class: "muted" }, t("Projects are shared, or stop being shared, at the hub computer itself: it decides what leaves it."))]);
+  };
+  load();
+  return box;
+}
 
 // =====================================================================================
 // Suggestions (one approval queue of proposed fixes) and What goes wrong (recurring failure causes)
