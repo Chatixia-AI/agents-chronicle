@@ -208,7 +208,7 @@ class App:
         return to_iso(utcnow() - timedelta(days=int(days)))
 
     # ------------------------------------------------------------------ endpoints
-    def overview(self, q: dict) -> dict:
+    def overview(self, q: dict, limited: bool = False) -> dict:
         c = self.conn
         days = q.get("days") or "90"
         since = self._since_from_days(days)
@@ -305,7 +305,7 @@ class App:
             "days": days, "project": project, "agent": agent, "agents": agents, "totals": totals, "previous": prev, "daily": daily_list,
             "calendar": calendar, "hours": hours, "models": models, "tools": tools, "projects": projects,
             "outcomes": outcomes, "work_types": sorted(work_types.items(), key=lambda x: -x[1]),
-            "recent": recent, "knowledge": knowledge, "status": self.status_small(),
+            "recent": recent, "knowledge": knowledge, "status": self.status_small(limited=limited),
         }
 
     def _k(self, k: dict) -> dict:
@@ -329,7 +329,7 @@ class App:
             rows.append(d)
         return rows
 
-    def sessions(self, q: dict) -> dict:
+    def sessions(self, q: dict, limited: bool = False) -> dict:
         where, params = ["1=1"], []
         if q.get("project"):
             where.append("project_path = ?")
@@ -365,7 +365,12 @@ class App:
         if q.get("until"):
             where.append("started_at < ?")
             params.append(q["until"].replace("+00:00", "Z"))
-        if q.get("q"):
+        if q.get("q") and limited:  # transcripts aren't theirs to search: titles and summaries only
+            for term in q["q"].split()[:8]:
+                like = "%" + term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_") + "%"
+                where.append("(title LIKE ? ESCAPE '\\' OR summary LIKE ? ESCAPE '\\')")
+                params += [like, like]
+        elif q.get("q"):
             ids = [s["session_id"] for s in search_sessions(self.conn, q["q"], project=q.get("project"), limit=500)]
             if not ids:
                 return {"total": 0, "items": []}
@@ -383,6 +388,17 @@ class App:
         offset = int(q.get("offset") or 0)
         items = self._session_rows(w, params, f"{sort} {order} NULLS LAST", limit, offset)
         return {"total": total, "items": items}
+
+    def session_summary(self, sid: str) -> dict | None:
+        """A session as someone limited to projects sees it (access.py): its summary and project lessons."""
+        from .access import session_page
+
+        real = self.conn.execute("SELECT id FROM sessions WHERE id = ?", (sid,)).fetchone()
+        if not real:
+            return None
+        s = session_record(self.conn, real[0])
+        s["knowledge"] = [self._reason(k) for k in s["knowledge"]]
+        return session_page(s)
 
     def session(self, sid: str) -> dict | None:
         real = resolve_session_id(self.conn, sid)
@@ -819,9 +835,14 @@ class App:
 
         return self.jobs.start(f"review:{week or 'last'}", job)
 
-    def status_small(self) -> dict:
+    def status_small(self, limited: bool = False) -> dict:
         from .update import available, recall
         from .worker import PAUSE_KEY, count_pending
+
+        if limited:  # the hub's own queue, jobs and updates are not theirs to see
+            return {"pending": {"ready": 0, "queued": 0}, "analysis": {"auto": False, "max_per_run": 0, "label": ""}, "paused_until": None,
+                    "last_sync": None, "jobs": {}, "version": __version__, "update": None, "ui_build": UI_BUILD,
+                    "hub_url": None, "limited": True}
 
         recall(self.conn)  # a check made by another dashboard process, or before a restart
         self._maybe_check_daily()
@@ -933,9 +954,11 @@ class App:
     def people_info(self) -> dict:
         from . import people
 
+        from .hub import hub_projects
+
         return {"people": people.listing(self.conn), "shared_token": self.cfg.hub_shared_token,
                 "address": self.cfg.hub_address or None, "audit": people.audit_log(self.conn, 50),
-                "roles": list(people.ROLES)}
+                "roles": list(people.ROLES), "projects": hub_projects(self.conn)}
 
     def _invite(self, person: dict, by: dict | None, address: str) -> dict:
         """A new invite for `person`, with the command and the link to pass on. The code is shown this once."""
@@ -952,15 +975,34 @@ class App:
                              "opened at; set it with `chronicle hub enable --url`")
         return out
 
+    def _projects_body(self, body: dict) -> list[str] | None:
+        """`projects` from the dashboard: "all" for every project, else a list of this hub's project paths."""
+        from . import people
+        from .hub import hub_projects
+
+        raw = body.get("projects")
+        if raw == "all":
+            return None
+        if not isinstance(raw, list):
+            raise people.PeopleError("say which projects they see, or every project")
+        known = {p["path"] for p in hub_projects(self.conn)}
+        unknown = [x for x in raw if x not in known]
+        if unknown:
+            raise people.PeopleError("{project} is not a project on this hub", project=str(unknown[0]))
+        return people.clean_projects(raw)
+
     def action_people(self, verb: str, body: dict, by: dict | None, address: str) -> tuple[dict, int]:
-        """add, invite, role, remove, revoke or shared-token, done by `by` (None: at the hub itself) for the audit."""
+        """add, invite, role, access, remove, revoke or shared-token, done by `by` (None: at the hub itself) for the
+        audit."""
         from . import people
         from .config import load_config, set_config_value
 
         try:
             if verb == "add":
-                person = people.add(self.conn, str(body.get("name") or ""), str(body.get("email") or ""),
-                                    str(body.get("role") or "member"), by=by)
+                role = str(body.get("role") or "member")
+                projects = [] if role == "admin" else self._projects_body(body)  # an admin sees all; if made a member, nothing yet
+                person = people.add(self.conn, str(body.get("name") or ""), str(body.get("email") or ""), role, by=by,
+                                    projects=projects)
                 return self._invite(person, by, address), 200
             if verb == "shared-token":
                 on = bool(body.get("on"))
@@ -981,6 +1023,8 @@ class App:
                 return self._invite(person, by, address), 200
             if verb == "role":
                 people.set_role(self.conn, pid, str(body.get("role") or ""), by=by)
+            elif verb == "access":
+                people.set_projects(self.conn, pid, self._projects_body(body), by=by)
             elif verb == "remove":
                 people.remove(self.conn, pid, by=by)
             elif verb == "revoke":
@@ -1342,6 +1386,7 @@ def make_handler(app: App, port: int):
     class Handler(BaseHTTPRequestHandler):
         server_version = f"chronicle/{__version__}"
         viewer: dict | None = None  # who is viewing (_viewer), None meaning an admin
+        limited = False  # the viewer sees only some projects (access.py): set per request in _get
 
         def log_message(self, fmt, *args):  # quiet
             log.debug("%s - %s", self.address_string(), fmt % args)
@@ -1533,13 +1578,18 @@ def make_handler(app: App, port: int):
                 return self._json({"error": "unauthorized"}, 401)
             if person and person["role"] == "readonly" and p in HUB_PUSH:
                 return self._json({"error": "read-only people can't send to the hub"}, 403)
+            from .people import projects_of
+
+            if p in ("/api/hub/file", "/api/hub/analyses") and projects_of(person) is not None:
+                hub._drain(self.rfile, length)  # transcripts from someone limited to projects: never kept
+                return self._json({"error": str(hub.limited_error(person))}, 403)
             try:
                 if p == "/api/hub/file":
                     return self._json(hub.receive_file(app.cfg, app.conn, q, self.rfile, length))
                 if p == "/api/hub/analyses":
                     return self._json(hub.receive_analyses(app.cfg, app.conn, q, self.rfile, length))
                 if p == "/api/hub/sessions":
-                    return self._json(hub.receive_sessions(app.cfg, app.conn, q, self.rfile, length))
+                    return self._json(hub.receive_sessions(app.cfg, app.conn, q, self.rfile, length, person))
                 body = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 if not isinstance(body, dict):
                     return self._json({"error": "bad json"}, 400)
@@ -1550,9 +1600,9 @@ def make_handler(app: App, port: int):
                 if p == "/api/hub/signin":
                     return self._json(hub.signin_code_for(app.cfg, app.conn, person))
                 if p == "/api/hub/hello":
-                    return self._json(hub.hello(app.cfg, app.conn, body))
+                    return self._json(hub.hello(app.cfg, app.conn, body, person))
                 if p == "/api/hub/lessons":
-                    return self._json(hub.team_lessons(app.cfg, body))
+                    return self._json(hub.team_lessons(app.cfg, body, person, app.conn))
                 if p == "/api/hub/done":
                     hub.check_machine(app.cfg, str(body.get("machine") or ""))
                     app.ingest.request()
@@ -1645,6 +1695,14 @@ def make_handler(app: App, port: int):
                     self.viewer, refused = self._viewer()
                     if refused:
                         return self._json(*refused)
+                    from . import access, people
+
+                    scope = people.projects_of(self.viewer)
+                    if scope is not None:  # someone limited to projects: a few pages, of their projects only
+                        if not access.allowed(p):
+                            return self._json({"error": tr("you see only some projects on this hub"), "limited": True}, 403)
+                        access.limit(app.conn, scope)
+                        self.limited = True
                 if p == "/api/me":
                     return self._json(self._me())
                 if p == "/api/people":
@@ -1652,9 +1710,9 @@ def make_handler(app: App, port: int):
                         return self._json({"error": tr("only an admin of this hub can do this")}, 403)
                     return self._json(app.people_info())
                 if p == "/api/overview":
-                    return self._json(app.overview(q))
+                    return self._json(app.overview(q, limited=self.limited))
                 if p == "/api/sessions":
-                    return self._json(app.sessions(q))
+                    return self._json(app.sessions(q, limited=self.limited))
                 if p == "/api/export":  # a download: one session's file, or a .zip of several
                     from .session_export import ExportError
 
@@ -1666,6 +1724,9 @@ def make_handler(app: App, port: int):
                         return self._json({"error": str(exc)}, 400)
                 m = re.fullmatch(r"/api/sessions/([\w-]+)", p)
                 if m:
+                    if self.limited:
+                        s = app.session_summary(m.group(1))
+                        return self._json(s) if s else self._json({"error": tr("not found")}, 404)
                     s = app.session(m.group(1))
                     return self._json({**s, "local": self._local()}) if s else self._json({"error": tr("not found")}, 404)
                 m = re.fullmatch(r"/api/sessions/([\w-]+)/events", p)
@@ -1721,7 +1782,7 @@ def make_handler(app: App, port: int):
                 if p == "/api/map":
                     return self._json(app.map())
                 if p == "/api/jobs":
-                    return self._json(app.status_small())
+                    return self._json(app.status_small(limited=self.limited))
                 if p == "/api/update":
                     return self._json(app.update_info(remote=False))
                 if p == "/api/imports":
@@ -1828,7 +1889,7 @@ def make_handler(app: App, port: int):
                         except HubError as exc:
                             return self._json({"error": tr(str(exc))}, 400)
                     return self._json(app.action_share_mode(str(body.get("share") or "")))
-                m = re.fullmatch(r"/api/people/(add|invite|role|remove|revoke|shared-token)", p)
+                m = re.fullmatch(r"/api/people/(add|invite|role|access|remove|revoke|shared-token)", p)
                 if m:
                     if not self._can_admin():
                         return self._json({"error": tr("only an admin of this hub can do this")}, 403)

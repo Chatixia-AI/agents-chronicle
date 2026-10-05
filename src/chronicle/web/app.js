@@ -1174,7 +1174,7 @@ route(/^\/sessions$/, async (params) => {
       total > n ? h("button", { class: "text-link", type: "button", onclick: pickAllMatching }, t("Select all {n} matching", { n: fmtNum(total) })) : null,
       h("span", { class: "sel-spacer" }),
       h("button", { class: "btn small", type: "button", onclick: () => { [...picked].forEach((id) => setPick(id, false)); drawSel(); } }, t("Clear")),
-      exportMenu(() => [...picked], { small: true, up: true }),
+      limited() ? null : exportMenu(() => [...picked], { small: true, up: true }),
       analyze].filter(Boolean));
   }
   const tbody = h("tbody");
@@ -1320,7 +1320,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     toast(r.started ? t("Analysis started (via {agent}). This page refreshes when it finishes.", { agent: analyzer() }) : t("Analysis already running"));
     watchJob(`analyze:${sx.id}`);
   } }, sx.analysis_status === "done" ? t("Re-analyze") : t("Analyze now"));
-  if (sx.source === "history" || sx.source === "remote") analyzing.hidden = true; // remote: analyzed where its transcript is
+  if (sx.source === "history" || sx.source === "remote" || sx.limited) analyzing.hidden = true; // remote: analyzed where its transcript is
   const head = h("div", { class: "session-head" },
     h("div", { style: { minWidth: 0, flex: "1 1 320px" } },
       h("h1", null, sx.title || t("(untitled session)")),
@@ -1332,11 +1332,11 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
         sx.git_branch ? h("span", null, tx("branch {branch}", { branch: h("code", null, sx.git_branch) })) : null,
         sx.primary_model ? h("span", null, h("code", null, sx.primary_model)) : null,
         sx.cc_version ? h("span", { class: "muted" }, `${agentName(sx.agent)} ${sx.cc_version}`) : null,
-        sx.source_present === 0 && sx.source !== "history" ? h("span", { class: "badge", title: t("The agent deleted the original; Chronicle's archive keeps it") }, t("original deleted · archived")) : null,
+        sx.source_present === 0 && sx.source !== "history" && !sx.limited ? h("span", { class: "badge", title: t("The agent deleted the original; Chronicle's archive keeps it") }, t("original deleted · archived")) : null,
         sx.source === "remote" ? h("span", { class: "badge", title: t("Analyzed on the computer it ran on, which keeps its transcript") }, t("transcript on {machine}", { machine: sx.machine_name || t("another machine") })) : null,
         sx.source === "codex-import" ? h("span", { class: "badge accent", title: t("Claude Code deleted this transcript; Chronicle recovered it from the copy Codex Desktop imported") }, h("span", { class: "sdot" }), t("recovered via Codex")) : null)),
     h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source),
-      exportMenu(() => [sx.id], { raw: RAW_SOURCES.includes(sx.source) }), analyzing));
+      sx.limited ? null : exportMenu(() => [sx.id], { raw: RAW_SOURCES.includes(sx.source) }), analyzing));
   setCrumbs([[t("Sessions"), "#/sessions"], [sx.project_name || "–", `#/project?path=${encodeURIComponent(sx.project_path || "")}`], [sx.title || t("(untitled session)")]], token);
   const sfact = (label, value, note, bad) => h("div", { class: "sfact" }, h("b", null, value), h("span", null, label, note ? h("small", { class: bad ? "bad" : "" }, ` · ${note}`) : null));
   const tiles = h("div", { class: "sfacts" },
@@ -1433,13 +1433,15 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     const after = [...promptList.children].find((x) => +x.dataset.seq > ev.seq);
     promptList.insertBefore(li, after || null);
   };
-  const transcript = sx.source === "remote"
+  const transcript = sx.limited
+    ? h("section", { class: "card" }, h("p", { class: "muted" }, t("On this hub you see each session's summary and project lessons. Its transcript stays with whoever ran it.")))
+    : sx.source === "remote"
     ? h("section", { class: "card" }, h("p", { class: "muted" }, t("This session was analyzed on {machine}, which keeps its transcript. Only its summary and project lessons were shared.", { machine: sx.machine_name || t("another machine") })))
     : transcriptCard(sx, params.seq ? +params.seq : null, params.agent || "", onPrompt, queryTerms(params.q));
   tabs.transcript = transcript;
   tabs.details = h("div", { class: "grid cols-main" },
     h("div", { class: "grid", style: { alignContent: "start" } }, summary, knowledge),
-    h("div", { class: "grid", style: { alignContent: "start" } }, madeCard, ctxCard, toolsCard, filesCard, extrasCard));
+    h("div", { class: "grid", style: { alignContent: "start" } }, ...(sx.limited ? [] : [madeCard, ctxCard, toolsCard, filesCard, extrasCard])));
   const tabBar = h("div", { class: "seg s-tabs", role: "group", "aria-label": t("Session view") },
     h("button", { type: "button", "data-tab": "transcript", onclick: () => showTab("transcript") }, t("Transcript")),
     h("button", { type: "button", "data-tab": "details", onclick: () => showTab("details") }, t("Details")));
@@ -1460,13 +1462,15 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   const summaryP = sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary)
     : sx.waiting ? h("p", { class: "s-summary s-waiting" }, icon("queued"), " ", t("Not analyzed yet: {reason}.", { reason: sx.waiting.text })) : null;
   markTerms(summaryP, queryTerms(params.q)); // opened from Search: the terms stay marked here and in the transcript
-  const page = h("div", { class: `session-page ${sessionOutline ? "with-outline" : ""}` },
+  // someone limited to projects: the summary and lessons only, so no transcript tab and no outline of prompts
+  const page = h("div", { class: `session-page ${sessionOutline && !sx.limited ? "with-outline" : ""}` },
     h("div", { class: "s-main" }, head, tiles,
       summaryP, kchips,
-      h("div", { class: "s-tabbar" }, tabBar, outlineBtn),
+      sx.limited ? h("p", { class: "muted" }, t("On this hub you see each session's summary and project lessons. Its transcript stays with whoever ran it."))
+        : h("div", { class: "s-tabbar" }, tabBar, outlineBtn),
       tabs.transcript, tabs.details),
-    outline);
-  showTab(Object.hasOwn(tabs, params.tab || "") ? params.tab : defaultTab, false);
+    sx.limited ? null : outline);
+  showTab(sx.limited ? "details" : Object.hasOwn(tabs, params.tab || "") ? params.tab : defaultTab, false);
   trackOutline(promptList);
   return page;
 });
@@ -1722,7 +1726,7 @@ function knowledgeTable(items) {
 
 // The section's landing page: one card per way into the knowledge, each with a glance at what is inside
 route(/^\/knowledge$/, async (params) => {
-  if (params.q || params.kind || params.project || params.source) { // older links filtered the list here
+  if (limited() || params.q || params.kind || params.project || params.source) { // older links filtered the list here
     history.replaceState(null, "", `#/knowledge/all?${new URLSearchParams(params)}`);
     lastHash = location.hash;
     return knowledgeListView(params);
@@ -2408,7 +2412,8 @@ let glossaryTerms = null, glossaryRes = [], glossaryIndex = {}, glossaryLoaded =
 const escRe = (t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 async function loadGlossary(force) {
   if (glossaryTerms && !force && Date.now() - glossaryLoaded < 300000) return;
-  try { glossaryTerms = await api("/api/glossary/terms"); } catch (e) { glossaryTerms = []; }
+  if (limited()) glossaryTerms = []; // the glossary spans every project of this hub
+  else try { glossaryTerms = await api("/api/glossary/terms"); } catch (e) { glossaryTerms = []; }
   glossaryLoaded = Date.now();
   glossaryIndex = {};
   const insensitive = [], sensitive = [];
@@ -3871,6 +3876,7 @@ function auditText(a) {
     join: () => t("{person} joined from {computer}", vars),
     signin: () => t("{person} signed in to the dashboard", vars),
     revoke: () => t("{actor} revoked a computer or browser of {person}", vars),
+    projects: () => t("{actor} changed which projects {person} sees", vars),
     "shared-token": () => (on ? t("{actor} turned the shared hub token on", vars) : t("{actor} turned the shared hub token off", vars)),
   }[String(a.action).replace("_", "-")]?.() || `${actor}: ${a.action}`;
 }
@@ -3912,6 +3918,24 @@ function peopleCard(dv) {
     }
   };
   const roleOptions = (roles, selected) => roles.map((r) => h("option", { value: r, selected: r === selected, title: ROLE_HINT[r] || "" }, ROLE_LABEL[r] || r));
+  let hubProjects = []; // [{path, name, sessions, set_up}] from /api/people
+  const projectName = (path) => hubProjects.find((x) => x.path === path)?.name || path.split("/").pop() || path;
+  const projectsText = (p) => (p.role === "admin" || p.projects == null ? t("Every project")
+    : p.projects.length ? p.projects.map(projectName).join(", ") : t("No project yet"));
+  // which projects someone sees: every one, or only those ticked (a member or read-only person sees nothing else)
+  const projectPicker = (selected) => {
+    const every = h("input", { type: "radio", name: `pp-scope-${Math.random().toString(36).slice(2)}`, checked: selected == null });
+    const only = h("input", { type: "radio", name: every.name, checked: selected != null });
+    const boxes = hubProjects.map((x) => h("label", { class: "pp-proj", title: x.path },
+      h("input", { type: "checkbox", value: x.path, checked: (selected || []).includes(x.path), onchange: () => { only.checked = true; } }),
+      h("span", null, x.name), h("small", { class: "muted" }, x.sessions ? tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }) : t("set up, no sessions yet"))));
+    const el = h("fieldset", { class: "pp-scope" }, h("legend", null, t("Projects they see")),
+      h("label", { class: "pp-proj" }, every, h("span", null, t("Every project on this hub"))),
+      h("label", { class: "pp-proj" }, only, h("span", null, t("Only these projects: their summaries and project lessons, never transcripts"))),
+      h("div", { class: "pp-projs" }, boxes.length ? boxes : h("span", { class: "muted" }, tx("No projects yet: set one up on the hub with {command}.",
+        { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>") }))));
+    return { el, value: () => (every.checked ? "all" : boxes.map((b) => b.querySelector("input")).filter((i) => i.checked).map((i) => i.value)) };
+  };
 
   const tokenRow = (p, x, kind) => {
     const label = kind === "computer" ? x.name || t("A computer") : uaLabel(x.label);
@@ -3950,15 +3974,33 @@ function peopleCard(dv) {
     } }, t("Remove"));
     const computers = p.computers || [], browsers = p.browsers || [], invites = p.invites || [];
     const lastInvite = invites[invites.length - 1];
-    return h("tr", null,
+    const scope = h("td", { class: "pp-scope-cell" }, h("span", null, projectsText(p)), p.role === "admin" ? null
+      : h("button", { class: "link-btn", type: "button", onclick: () => editScope() }, t("Change")));
+    const editRow = h("tr", { class: "pp-edit", hidden: true });
+    const editScope = () => { // under the person, across the table: the list of projects needs the width
+      const picker = projectPicker(p.projects);
+      const save = h("button", { class: "btn small primary", type: "button", onclick: async () => {
+        const projects = picker.value();
+        if (Array.isArray(projects) && !projects.length && !confirm(t("{name} will see no project on this hub. Save anyway?", { name: p.name }))) return;
+        save.disabled = true;
+        const r = await send("/api/people/access", { id: p.id, projects });
+        save.disabled = false;
+        if (r) { toast(t("{name} now sees: {projects}.", { name: p.name, projects: projectsText({ ...p, projects: r.people.find((x) => x.id === p.id)?.projects }) })); load(); }
+      } }, t("Save"));
+      const cancel = h("button", { class: "btn small", type: "button", onclick: () => { editRow.hidden = true; editRow.replaceChildren(); } }, t("Cancel"));
+      editRow.replaceChildren(h("td", { colspan: "5" }, picker.el, h("div", { class: "ts-actions" }, save, cancel)));
+      editRow.hidden = false;
+    };
+    return [h("tr", null,
       h("td", null, h("b", null, p.name), me ? h("span", { class: "muted" }, t(" (you)")) : null,
         p.email ? h("div", { class: "muted" }, p.email) : null,
         lastInvite ? h("div", { class: "muted" }, t("Invite open until {when}", { when: fmtDT(lastInvite.expires_at) })) : null),
       h("td", null, sel),
+      scope,
       h("td", null, computers.length || browsers.length
         ? [...computers.map((c) => tokenRow(p, c, "computer")), ...browsers.map((b) => tokenRow(p, b, "browser"))]
         : h("span", { class: "muted" }, lastInvite ? t("Not joined yet") : t("No computer or browser yet: make a new invite"))),
-      h("td", { class: "pp-actions" }, reinvite, remove));
+      h("td", { class: "pp-actions" }, reinvite, remove)), editRow];
   };
 
   const inviteForm = (roles, first) => {
@@ -3966,13 +4008,18 @@ function peopleCard(dv) {
     const email = h("input", { class: "input", name: "email", type: "email", autocomplete: "off", spellcheck: "false", placeholder: t("optional") });
     const role = h("select", { name: "role" }, roleOptions(roles, first ? "admin" : "member"));
     const hint = h("div", { class: "muted" }, ROLE_HINT[role.value] || "");
-    role.addEventListener("change", () => (hint.textContent = ROLE_HINT[role.value] || ""));
+    const picker = projectPicker([]); // nothing until granted: tick their projects, or choose every project
+    const showPicker = () => { picker.el.hidden = role.value === "admin"; }; // admins see everything
+    role.addEventListener("change", () => { hint.textContent = ROLE_HINT[role.value] || ""; showPicker(); });
+    showPicker();
     const submit = h("button", { class: "btn primary", type: "submit" }, t("Create invite"));
     const form = h("form", { class: "people-form", onsubmit: async (e) => {
       e.preventDefault();
       if (!name.value.trim()) { name.focus(); return; }
+      const projects = role.value === "admin" ? "all" : picker.value();
+      if (Array.isArray(projects) && !projects.length) { toast(t("Choose the projects they see, or every project."), 5000); return; }
       submit.disabled = true;
-      const r = await send("/api/people/add", { name: name.value.trim(), email: email.value.trim(), role: role.value });
+      const r = await send("/api/people/add", { name: name.value.trim(), email: email.value.trim(), role: role.value, projects });
       submit.disabled = false;
       if (!r) return;
       form.reset();
@@ -3983,6 +4030,7 @@ function peopleCard(dv) {
       h("label", null, t("Name"), name),
       h("label", null, t("Email"), email),
       h("label", null, t("Role"), role)),
+    picker.el,
     h("div", { class: "ts-actions" }, submit, hint));
     return [h("div", { class: "subhead" }, t("Invite someone")), form,
       h("div", { class: "muted" }, t("Email is optional; it lets a company sign-in in front of the hub recognize the person."))];
@@ -4015,11 +4063,12 @@ function peopleCard(dv) {
   const draw = (data) => {
     const people = data.people || [];
     const roles = data.roles || ["admin", "member", "readonly"];
+    hubProjects = data.projects || [];
     box.replaceChildren(); append(box, [ // append() flattens the arrays and skips nulls
       cardHead(t("People"), { iconName: "preference", hint: people.length ? tn(people.length, "{n} person", "{n} people") : null }),
       people.length ? [
         h("div", { class: "table-wrap" }, h("table", { class: "data pp-table" },
-          h("thead", null, h("tr", null, ...[t("Person"), t("Role"), t("Computers and browsers"), ""].map((x) => h("th", null, x)))),
+          h("thead", null, h("tr", null, ...[t("Person"), t("Role"), t("Projects"), t("Computers and browsers"), ""].map((x) => h("th", null, x)))),
           h("tbody", null, people.map((p) => personRow(p, roles))))),
         h("p", { class: "muted" }, t("Admins invite people and change this hub's settings; members' computers send here and get their teammates' lessons back; read-only people only open this dashboard. Whoever is at this computer is always an admin."))]
       : [
@@ -4167,6 +4216,7 @@ function diffEl(text) {
 
 let unseenCount = 0;
 async function pollUnseen() {
+  if (limited()) return; // suggestions are this hub's own, not theirs
   try { drawUnseen((await api("/api/suggestions/unseen")).unseen || 0); } catch (e) { /* an older server, or restarting */ }
 }
 function drawUnseen(n) {
@@ -4372,6 +4422,7 @@ function suggestionRow(x) {
   return row;
 }
 async function suggestionsHomeCard(box, project) {
+  if (limited()) return; // the hub's own fixes, not theirs
   let data;
   // the top 3 are all Home shows; a project page filters in the browser, so it takes the whole list
   try { data = await api("/api/suggestions", project ? { status: "new" } : { status: "new", limit: 3 }); } catch (e) { return; }
@@ -4643,6 +4694,10 @@ function renderRail() {
     return a;
   };
   const settings = SECTIONS.find((x) => x.key === "settings");
+  if (limited()) { // no transcripts to search, no settings of this hub to see
+    rail.replaceChildren(...SECTIONS.filter((x) => LIMITED_SECTIONS.has(x.key)).map(link));
+    return;
+  }
   rail.replaceChildren(...SECTIONS.filter((x) => x !== settings).map(link),
     link({ key: "search", label: t("Search all sessions"), href: "#/search", hint: t("Full text of every session (⌘K jumps anywhere)") }),
     h("div", { class: "spacer" }), link(settings));
@@ -4727,12 +4782,19 @@ async function sessionsSidebar(box, title) {
 async function knowledgeSidebar(box) {
   const data = await api("/api/knowledge", { limit: 1 });
   const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
+  const kinds = Object.keys(KIND).filter((k) => data.counts[k]).map((k) => sbRow(kindPlural(k), `#/knowledge/all?kind=${k}`, k, data.counts[k], ["/knowledge/all", "kind", k]));
+  if (limited()) { // the lessons of their projects; the glossary, map, playbook and reviews span every project
+    box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Knowledge")), h("span", null, fmtNum(total))),
+      h("div", { class: "sb-scroll" }, sbRow(t("All knowledge"), "#/knowledge/all", "knowledge", total, ["/knowledge/all", "kind", ""]),
+        h("div", { class: "sb-group" }, t("Kinds")), kinds));
+    return;
+  }
   box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Knowledge")), h("span", null, fmtNum(total))),
     h("div", { class: "sb-scroll" },
       sbRow(t("Overview"), "#/knowledge", "overview", null, ["/knowledge"]),
       sbRow(t("All knowledge"), "#/knowledge/all", "knowledge", total, ["/knowledge/all", "kind", ""]),
       h("div", { class: "sb-group" }, t("Kinds")),
-      Object.keys(KIND).filter((k) => data.counts[k]).map((k) => sbRow(kindPlural(k), `#/knowledge/all?kind=${k}`, k, data.counts[k], ["/knowledge/all", "kind", k])),
+      kinds,
       h("div", { class: "sb-group" }, t("Explore")),
       sbRow(t("Glossary"), "#/glossary", "glossary", glossaryTerms?.length || null, ["/glossary"]),
       sbRow(t("Map"), "#/map", "map", null, ["/map"]),
@@ -4833,7 +4895,7 @@ const pal = { sel: 0, items: [], seq: 0, open: false, timer: 0, query: "" };
 function paletteCommands() {
   const dark = isDark();
   const goTo = t("Go to"), cmds = t("Commands"), model = t("uses the analysis model");
-  const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, run: () => go(href) });
+  const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, href, run: () => go(href) });
   return [
     nav(t("Home"), "#/", "home"), nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
     nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
@@ -4855,7 +4917,7 @@ function paletteCommands() {
       toast(r.started ? t("{agent} is rebuilding the glossary…", { agent: analyzerShort() }) : t("Already running"));
       watchJob("glossary:all");
     } },
-  ].filter((x) => !x.admin || canAdmin());
+  ].filter((x) => (!x.admin || canAdmin()) && (!limited() || !x.href || ["#/", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
 }
 async function paletteSearch(q) {
   const lq = q.toLowerCase();
@@ -4949,6 +5011,10 @@ const ROLE_LABEL = { admin: t("Admin"), member: t("Member"), readonly: t("Read-o
 // may use the controls that change things: an admin, someone at the hub computer, or anyone on a hub without people
 // (the server's POST rule). The hub's own settings (People, team store) follow the stricter can_admin.
 function canAdmin() { return !ME || (ME.viewer?.role ?? "admin") === "admin"; }
+// someone limited to some projects of this hub: the server answers only Home, Sessions, Knowledge and Projects for
+// them, each session as its summary and project lessons (access.py); the rest of the dashboard is hidden
+function limited() { return Array.isArray(ME?.viewer?.projects) && ME.viewer.role !== "admin"; }
+const LIMITED_SECTIONS = new Set(["home", "sessions", "knowledge", "projects"]);
 async function loadMe() {
   try { ME = await api("/api/me"); } catch (e) { ME = null; return; } // an older server, or the sign-in screen is up
   applyViewer();
@@ -4957,6 +5023,8 @@ async function loadMe() {
 // Someone signed in (not at the hub computer): their name, role and Sign out in the toolbar.
 function applyViewer() {
   document.documentElement.classList.toggle("not-admin", !canAdmin());
+  document.documentElement.classList.toggle("limited", limited());
+  if (limited()) renderRail();
   $("#sync-btn").parentElement.hidden = !canAdmin();
   const v = ME?.viewer;
   $("#viewer-pill")?.remove();

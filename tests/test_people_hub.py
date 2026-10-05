@@ -220,10 +220,10 @@ def test_people_from_the_command_line(hubcfg, monkeypatch, capsys):
     assert "New invite for Ada" in out and CODE_RE.search(out).group(0) != code
     assert [p["name"] for p in people.listing(conn)] == ["Ada"]
 
-    assert main(["hub", "invite", "Vic", "--email", "vic@example.com", "--role", "readonly"]) == 0
+    assert main(["hub", "invite", "Vic", "--email", "vic@example.com", "--role", "readonly", "--all-projects"]) == 0
     out = _out(capsys)
     assert "read-only" in out and "hub join" not in out and "/signin?code=" in out  # a browser only
-    assert main(["hub", "invite", "Max", "--email", "not-an-email"]) == 1
+    assert main(["hub", "invite", "Max", "--email", "not-an-email", "--all-projects"]) == 1
     assert "not an email address" in _out(capsys)
 
     assert main(["hub", "people"]) == 0

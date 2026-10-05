@@ -12,8 +12,8 @@ one that is switched on most of the time, such as a desktop Mac, a Mac mini or a
 analyzed (and paid for) once, and there is never anything to merge.
 
 A hub can also serve a team. Each person joins with an invite and a role ([People and roles](#people-and-roles)),
-and the company network can take the place of Tailscale ([Reaching the hub without
-Tailscale](#reaching-the-hub-without-tailscale)).
+and sees every project or only some ([Projects and who sees them](#projects-and-who-sees-them)). The company network
+can take the place of Tailscale ([Reaching the hub without Tailscale](#reaching-the-hub-without-tailscale)).
 
 ## Your phone
 
@@ -84,13 +84,14 @@ matching project of its own:
    chronicle hub add-folder ~/work/client-notes --project demo-app
    ```
 
-   `--project` takes a project's name or its path on the hub; `chronicle hub folders --list` lists them. The folder
-   and everything below it go to that project, including sessions already on the hub: they move with their knowledge,
-   and both projects' knowledge bases are rebuilt. The more specific match wins, so a repository inside the folder
-   whose git remote the hub knows still follows its remote. A folder inside a repository the hub files under another
-   project is refused, because a repository belongs to one project. `chronicle hub folders` shows what goes where,
-   and `chronicle hub remove-folder <folder>` takes one back out. The hub's **Settings › Devices** lists the folders
-   each computer added.
+   `--project` takes a project's name or its path on the hub; `chronicle hub folders --list` lists them. A project
+   nobody has sent to yet can be set up on the hub first ([Projects and who sees
+   them](#projects-and-who-sees-them)). The folder and everything below it go to that project, including sessions
+   already on the hub: they move with their knowledge, and both projects' knowledge bases are rebuilt. The more
+   specific match wins, so a repository inside the folder whose git remote the hub knows still follows its remote. A
+   folder inside a repository the hub files under another project is refused, because a repository belongs to one
+   project. `chronicle hub folders` shows what goes where, and `chronicle hub remove-folder <folder>` takes one back
+   out. The hub's **Settings › Devices** lists the folders each computer added.
 3. **By `[hub] path_map`**, for projects without a remote, in the hub's [configuration](configuration.md#hub):
 
    ```toml
@@ -176,8 +177,9 @@ unless the connection works, the password is never shown again, and only an admi
   network only the hub reaches. Its tables live in the schema `team`, with an audit log of every push and pull
   (counts only), and each upgrade step runs once, recorded by name.
 
-Not yet: lessons from sessions the hub analyzes itself (`share = "everything"`) don't go to Postgres, and when the
-same lesson arrives in two languages, the latest wording wins.
+Not yet: of the sessions the hub analyzes itself, only its own sessions in a project set up on it go to Postgres
+([Projects and who sees them](#projects-and-who-sees-them)); those other computers send as transcripts
+(`share = "everything"`) don't. When the same lesson arrives in two languages, the latest wording wins.
 
 ### Leaving
 
@@ -196,8 +198,9 @@ Tailscale.
 | `member` | their computers send to the hub and get teammates' lessons back; they see the hub's dashboard |
 | `readonly` | they see the hub's dashboard; they send nothing and change nothing |
 
-Members and read-only people can look through everything on the hub's dashboard, but only admins change anything
-there: settings, Sync, analyses, pinning and dismissing. A member's own Chronicle works as before.
+Members and read-only people see the projects they were given, every project or only some ([Projects and who sees
+them](#projects-and-who-sees-them)); admins always see every project. Only admins change anything on the hub's
+dashboard: settings, Sync, analyses, pinning and dismissing. A member's own Chronicle works as before.
 
 Until you add the first person, a hub works as it always did: computers send with the shared token, and the
 dashboard lets in whoever reaches it (through Tailscale, whoever `[server] allowed_users` allows). Once it has
@@ -215,11 +218,14 @@ demote or remove the hub's last admin; at the hub itself you can.
 On the hub, run:
 
 ```bash
-chronicle hub invite "Ana Lima" --email ana@example.com --role member
+chronicle hub invite "Ana Lima" --email ana@example.com --role member --all-projects
 ```
 
 or use **Settings › Devices › People › Invite someone** in the hub's dashboard. `--role` is `member` when you leave
-it out. The email is optional, but company sign-in finds people by it. You get:
+it out. The email is optional, but company sign-in finds people by it. A member or read-only person sees nothing
+until you say which projects: `--all-projects` for every project, or `--project <name>` for one (repeat it for
+more; [Projects and who sees them](#projects-and-who-sees-them)). Inviting someone new without either is refused. An
+admin always sees every project. You get:
 
 - a code, such as `K7PQ-M2XD-9HNA`;
 - the command for Ana's computer: `chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge`;
@@ -232,7 +238,7 @@ email, or use **New invite** next to the person. One code joins one computer or 
 with a laptop and a phone needs two. Case and dashes don't matter when a code is typed.
 
 The command and the link use the hub's address, `[hub] address`, which `chronicle hub enable --url <address>` sets.
-`chronicle hub people` lists everyone with their role and computers.
+`chronicle hub people` lists everyone with their role, the projects they see and their computers.
 
 ### Joining a computer
 
@@ -264,6 +270,68 @@ A read-only person only looks. Send them the browser link rather than the join c
 computer joined with their code sends ("read-only people can't send to the hub"). Make them a member to let their
 computer send.
 
+### Projects and who sees them
+
+A member or read-only person sees every project on the hub, or only some. Someone limited to projects sees only
+those on the hub's dashboard, and their computers share knowledge only, for those projects only. Admins always see
+every project. People added before projects could be chosen see every project, as they did.
+
+A project can be set up on the hub before anyone sends to it. Say the hub owner keeps Resona in
+`~/Projects/Work/Resona`, and Aki and Ben should see Resona and nothing else. On the hub:
+
+```bash
+chronicle hub project add ~/Projects/Work/Resona
+chronicle hub invite Aki --email aki@example.com --project Resona
+chronicle hub invite Ben --email ben@example.com --project Resona
+```
+
+On Aki's computer (and the same on Ben's, with Ben's code):
+
+```bash
+chronicle hub join https://chronicle.example.internal --code XXXX-XXXX-XXXX
+chronicle hub add-folder ~/work/Resona --project Resona
+```
+
+- **A project set up on the hub** is a folder on the hub computer and everything below it, named after the folder.
+  The hub's own sessions there are filed under it at once, with their knowledge, and so are new ones. Other computers
+  can add a folder to it right away, before anything was sent to it. The folder must exist on the hub or have
+  sessions that ran in it. It can't be `/`, your home folder or a folder above it, and it can't sit inside or around
+  another project set up this way. `chronicle hub project list` lists the hub's projects and marks the ones set up here.
+  `chronicle hub project remove <folder>` undoes one: the hub's own sessions go back to their own folders, and what
+  other computers sent stays where it was filed until they send it again.
+- **Which projects a person sees.** `--project` takes the name or the path of any project on the hub, set up here or
+  not, and can be repeated; `--all-projects` gives every project.
+  `chronicle hub access <email|id> --project <name>` (or `--all-projects`) changes it later, from their next request;
+  what their computers already sent stays. `chronicle hub people` shows what each person sees. On the hub's
+  dashboard, **Settings › Devices › People** lets an admin choose the projects when inviting someone and change them
+  later.
+- **Joining.** A computer that joins as someone limited to projects shares knowledge only, with or without
+  `--share knowledge` ([Sharing knowledge only](#sharing-knowledge-only)), and `chronicle hub join` lists the projects
+  it shares. `add-folder` then files the sessions in `~/work/Resona` under Resona. A repository whose git remote the
+  hub already files under Resona goes there without a folder being added.
+- **What their computers send.** Only the sessions the hub files under their projects: those in a folder added to
+  one of them, or in a repository whose git remote the hub files there. Other sessions stay on the computer. The hub
+  refuses transcripts from them, drops anything else they send, and tells their computers only about their projects
+  (names and git remotes). The teammates' lessons they get back come only from sessions filed under those projects.
+- **What they see on the hub's dashboard.** **Home**, **Sessions**, **Knowledge** and **Projects**, for their
+  projects only, with each project's knowledge base. Only analyzed sessions are listed, each as its summary and
+  project lessons: no prompts, transcript, files, shell commands or tool calls, and no export. Searching sessions
+  matches titles and summaries only. Lessons about a person (preferences and global ones) never show. Everything
+  else, such as the Glossary, the Map, Artifacts, Reviews, Suggestions, What goes wrong and the hub's settings,
+  answers "you see only some projects on this hub". The hub enforces this itself: it answers them on those pages
+  only, and every request they make sees only their projects' rows in its database.
+- **The hub owner's lessons.** With a team store ([Teammates' lessons, and a team store in
+  Postgres](#teammates-lessons-and-a-team-store-in-postgres)), the hub's own analyzed sessions in a project set up on
+  it go to Postgres like a member's: details (times, counts, models), the project's folder, and the summary and
+  project lessons as the analysis wrote them; no prompts, transcripts or lessons about you. The summary and lessons are
+  not redacted, so they can name files or commands the session dealt with. So Aki's and Ben's agents get the hub owner's Resona lessons too. The hub sends them whenever
+  a computer asks it for teammates' lessons.
+- **Notes inside the project.** On the hub computer, the start-of-session notes and the MCP tool `project_knowledge`
+  use the project's knowledge in any folder inside a project set up there.
+- **The shared token is not limited.** A computer that sends with the hub's shared token is nobody in particular, so
+  no project limit applies to it. Once everyone has joined with an invite, turn it off with
+  `chronicle hub shared-token off` ([below](#the-shared-token)); `chronicle hub access` reminds you while it is on.
+
 ### The shared token
 
 Computers that joined with `--token` keep sending with the hub's shared token after people are added, so nobody is
@@ -275,7 +343,8 @@ chronicle hub shared-token off
 
 or with the switch in **Settings › Devices › People**. From then on the hub refuses the shared token, and a computer
 that still uses it has to join again with a code. `chronicle hub shared-token on` turns it back on. The shared token
-never opens the dashboard.
+never opens the dashboard. It belongs to nobody in particular, so no [project
+limit](#projects-and-who-sees-them) applies to a computer that sends with it.
 
 ### Removing someone
 
@@ -285,13 +354,15 @@ request. What their computers sent stays on the hub.
 
 To cut off one computer or one browser and keep the person, a lost laptop say, use **Revoke** next to it in the
 same list. That computer can join again with a new code. `chronicle hub role ana@example.com readonly` changes a
-role. These commands take an email or the id that `chronicle hub people` shows.
+role, and `chronicle hub access ana@example.com --project demo-app` the projects someone sees. These commands take an
+email or the id that `chronicle hub people` shows.
 
 ### The audit log
 
-The hub records who added, invited, changed the role of, removed or revoked whom, and each time a computer joins or
-a browser signs in, with the time. What is done at the hub itself is recorded as **this computer**. **Settings ›
-Devices › People** shows the latest entries. Codes, tokens and browser sessions are stored only as hashes.
+The hub records who added, invited, changed the role or the projects of, removed or revoked whom, and each time a
+computer joins or a browser signs in, with the time. What is done at the hub itself is recorded as **this
+computer**. **Settings › Devices › People** shows the latest entries. Codes, tokens and browser sessions are stored
+only as hashes.
 
 ## Reaching the hub without Tailscale
 

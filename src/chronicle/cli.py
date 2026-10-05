@@ -1597,6 +1597,15 @@ def cmd_hub(args) -> int:
             token, who = got["token"], got.get("person") or {}
             console.print(f"The hub {got.get('hub') or url} knows you as [bold]{who.get('name')}[/] ({who.get('role')}).",
                           highlight=False)
+            if got.get("share") == "knowledge":  # limited to projects: summaries and project lessons, never transcripts
+                if args.share == "everything":
+                    console.print(f"{who.get('name')} sees only some projects on this hub, so this computer can share "
+                                  "knowledge only; joining with --share knowledge instead.", highlight=False)
+                args.share = "knowledge"
+                names = ", ".join(p.get("name") or p["path"] for p in got.get("projects") or []) or "none yet"
+                console.print(f"Projects you share with it: [bold]{names}[/]. Add your folder for each one: "
+                              "`chronicle hub add-folder <folder> --project <name>`; sessions elsewhere stay here.",
+                              highlight=False)
         hub.write_token(cfg, token)
         _set_config_value(cfg, "hub", "url", json.dumps(url))
         if args.share:
@@ -1656,8 +1665,11 @@ def cmd_hub(args) -> int:
     if action == "store":
         return _hub_store(cfg, console)
 
-    if action in ("people", "invite", "role", "remove", "shared-token"):
+    if action in ("people", "invite", "role", "access", "remove", "shared-token"):
         return _hub_people(cfg, console, args)
+
+    if action == "project":
+        return _hub_project(cfg, console, args)
 
     if action == "signin":
         if not cfg.is_spoke:
@@ -1739,6 +1751,32 @@ def _hub_store(cfg, console) -> int:
 ROLE_WORDS = {"admin": "an admin", "member": "a member", "readonly": "read-only"}
 
 
+def _projects_arg(conn, args) -> tuple[list[str] | None, str | None]:
+    """--project … (hub project names or paths) or --all-projects as people.add takes it: (projects, problem)."""
+    from . import hub
+
+    if args.all_projects and args.project:
+        return None, "Pass either --project or --all-projects, not both."
+    if args.all_projects:
+        return None, None
+    known = hub.hub_projects(conn)
+    out = []
+    for name in args.project or []:
+        project, problem = _pick_project(known, name)
+        if problem:
+            return None, problem + "\n`chronicle hub project add <folder>` sets up a project before anything was sent to it."
+        out.append(project["path"])
+    return out, None
+
+
+def _projects_words(conn, projects: list[str] | None) -> str:
+    from .ingest import project_name_for
+
+    if projects is None:
+        return "every project"
+    return ", ".join(project_name_for(x) for x in projects) or "no project yet"
+
+
 def _find_person(conn, key: str | None) -> dict | None:
     """A person on this hub by email, or by the id `chronicle hub people` shows."""
     from . import people
@@ -1775,7 +1813,7 @@ def _hub_people(cfg, console, args) -> int:
             console.print(f"{n} {'person' if n == 1 else 'people'} on this hub · shared token "
                           f"{'on' if cfg.hub_shared_token else 'off'}", highlight=False)
             for p in rows:
-                bits = [p["email"] or "no email", p["role"]]
+                bits = [p["email"] or "no email", p["role"], "sees " + _projects_words(conn, p["projects"])]
                 if p["invites"]:
                     bits.append(f"invite open until {local_str(p['invites'][-1]['expires_at'])}")
                 console.print(f"  {p['id']:>3}  [bold]{p['name']}[/] · " + " · ".join(bits), highlight=False)
@@ -1786,22 +1824,36 @@ def _hub_people(cfg, console, args) -> int:
                 if p["browsers"]:
                     n = len(p["browsers"])
                     console.print(f"       {n} browser{'s' * (n != 1)} signed in to the dashboard", highlight=False)
-            console.print("[dim]`chronicle hub role <email|id> <role>` changes a role, `chronicle hub remove <email|id>` "
-                          "removes someone, `chronicle hub invite <name>` makes a new code.[/]", highlight=False)
+            console.print("[dim]`chronicle hub role <email|id> <role>` changes a role, `chronicle hub access <email|id> "
+                          "--project <name>` the projects they see, `chronicle hub remove <email|id>` removes someone, "
+                          "`chronicle hub invite <name>` makes a new code.[/]", highlight=False)
             return 0
 
         if action == "invite":
             name = (args.url or "").strip()
             if not name:
-                console.print("Usage: chronicle hub invite <name> [--email <email>] [--role admin|member|readonly]")
+                console.print("Usage: chronicle hub invite <name> [--email <email>] [--role admin|member|readonly] "
+                              "--project <name> … | --all-projects")
                 return 2
             existing = _find_person(conn, args.email) if args.email else None
             if existing is None and (name.isdigit() or "@" in name):  # `hub invite bob@example.com`: a new code for Bob
                 existing = _find_person(conn, name)
+            role = args.role or (existing["role"] if existing else "member")
+            projects, problem = _projects_arg(conn, args)
+            if problem:
+                console.print(problem, highlight=False)
+                return 1
+            chose = bool(args.project or args.all_projects)
+            if not existing and role != "admin" and not chose:  # nothing until granted: the inviter says what they see
+                console.print(f"Which projects should {name} see? Add --project <name> (repeat it for more), or "
+                              "--all-projects. `chronicle hub project list` shows the hub's projects.", highlight=False)
+                return 2
             try:
                 if existing and args.role and args.role != existing["role"]:
                     existing = people.set_role(conn, existing["id"], args.role)
-                person = existing or people.add(conn, name, args.email, args.role or "member")
+                if existing and chose:
+                    existing = people.set_projects(conn, existing["id"], projects)
+                person = existing or people.add(conn, name, args.email, role, projects=projects)
                 code = people.invite(conn, person["id"])
             except people.PeopleError as exc:
                 console.print(f"Can't invite {name}: {exc}", highlight=False)
@@ -1811,8 +1863,9 @@ def _hub_people(cfg, console, args) -> int:
             address = cfg.hub_address or (_hub_url_guess(cfg) or "")
             where = address or "<hub address>"
             email = f" ({person['email']})" if person["email"] else ""
+            sees = "" if person["role"] == "admin" else f", seeing {_projects_words(conn, people.projects_of(person))}"
             console.print(f"{'New invite for' if existing else 'Added'} [bold]{person['name']}[/]{email}, "
-                          f"{ROLE_WORDS[person['role']]}. The invite code works once, until {local_str(expires)}:\n",
+                          f"{ROLE_WORDS[person['role']]}{sees}. The invite code works once, until {local_str(expires)}:\n",
                           highlight=False)
             console.print(f"  [bold]{code}[/]\n", highlight=False)
             if person["role"] != "readonly":
@@ -1827,6 +1880,35 @@ def _hub_people(cfg, console, args) -> int:
                           "browser; `chronicle hub invite` again makes another.[/]", highlight=False)
             if not hub.read_token(cfg):
                 console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
+            return 0
+
+        if action == "access":
+            if not args.url or not (args.project or args.all_projects):
+                console.print("Usage: chronicle hub access <email|id> --project <name> … | --all-projects")
+                return 2
+            person = _find_person(conn, args.url)
+            if not person:
+                console.print(f"No one on this hub has the email or id {args.url}. `chronicle hub people` lists them.",
+                              highlight=False)
+                return 1
+            projects, problem = _projects_arg(conn, args)
+            if problem:
+                console.print(problem, highlight=False)
+                return 1
+            try:
+                person = people.set_projects(conn, person["id"], projects)
+            except people.PeopleError as exc:
+                console.print(f"Can't change what {person['name']} sees: {exc}", highlight=False)
+                return 1
+            if person["role"] == "admin":
+                console.print(f"{person['name']} is an admin and sees every project whatever this says; it applies "
+                              "if their role changes.", highlight=False)
+                return 0
+            console.print(f"{person['name']} now sees {_projects_words(conn, people.projects_of(person))}.", highlight=False)
+            if projects is not None and cfg.hub_shared_token:
+                console.print("[yellow]The hub's shared token is on[/]: a computer sending with it is nobody in "
+                              "particular and is not limited. `chronicle hub shared-token off` once everyone joined "
+                              "with an invite.", highlight=False)
             return 0
 
         if action in ("role", "remove"):
@@ -1878,6 +1960,59 @@ def _hub_people(cfg, console, args) -> int:
         if legacy:
             console.print(f"[yellow]{len(legacy)} computer{'s' * (len(legacy) != 1)} joined with the shared token[/] and "
                           f"need an invite to keep sending: {', '.join(legacy)}", highlight=False)
+        return 0
+    finally:
+        conn.close()
+
+
+def _hub_project(cfg, console, args) -> int:
+    """`chronicle hub project add | remove | list`: projects set up on this hub ahead of time, each a folder here."""
+    from . import hub
+
+    if cfg.is_spoke:
+        console.print(f"Projects belong to the hub; this computer sends to the hub at {cfg.hub_url}. To file a folder "
+                      "here under one of its projects: `chronicle hub add-folder <folder> --project <name>`.",
+                      highlight=False)
+        return 1
+    verb = (args.url or "list").lower()
+    if verb not in ("add", "remove", "list"):
+        console.print("Usage: chronicle hub project add <folder> | remove <folder> | list")
+        return 2
+    conn = _conn(cfg)
+    try:
+        if verb == "list":
+            set_up = set(hub.declared_projects(conn))
+            rows = hub.hub_projects(conn)
+            if not rows:
+                console.print("No projects on this hub yet. `chronicle hub project add <folder>` sets one up.")
+                return 0
+            for p in rows:
+                mark = " · set up here" if p["path"] in set_up else ""
+                console.print(f"  {p['name']:<32} {p['sessions']:>5}  {p['path']}{mark}", highlight=False)
+            return 0
+        if not args.value:
+            console.print(f"Usage: chronicle hub project {verb} <folder>")
+            return 2
+        try:
+            got = hub.add_project(cfg, conn, args.value) if verb == "add" else hub.remove_project(cfg, conn, args.value)
+        except hub.HubError as exc:
+            console.print(f"Can't {verb} that project: {exc}", highlight=False)
+            return 1
+        if verb == "remove":
+            console.print(f"{got['path']} is no longer a project set up here; {got['moved']} session"
+                          f"{'s' * (got['moved'] != 1)} of this computer went back to their own folders.", highlight=False)
+            return 0
+        if got.get("existed"):
+            console.print(f"[bold]{got['name']}[/] ({got['path']}) is already set up.", highlight=False)
+            return 0
+        n = got["sessions"]
+        console.print(f"Set up [bold]{got['name']}[/] ({got['path']}): this folder and everything below it is one "
+                      f"project, with {n} session{'s' * (n != 1)} so far.", highlight=False)
+        console.print("Give people access: `chronicle hub invite <name> --email <email> --project "
+                      f"{got['name']}`. On their computers: `chronicle hub add-folder <their folder> --project "
+                      f"{got['name']}`.", highlight=False)
+        if not hub.read_token(cfg):
+            console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
         return 0
     finally:
         conn.close()
@@ -1962,8 +2097,8 @@ def _hub_folders(cfg, console, args) -> int:
         cfg = load_config(cfg.home)
         console.print(f"Sessions in {key} are filed by their git remote or their own folder again.", highlight=False)
     else:
-        if not args.project:
-            console.print("Which project on the hub? `--project <name>` (`chronicle hub folders --list` shows them).")
+        if not args.project or len(args.project) > 1:
+            console.print("Which project on the hub? One `--project <name>` (`chronicle hub folders --list` shows them).")
             return 2
         if not Path(folder).is_dir():
             console.print(f"{folder} is not a folder.", highlight=False)
@@ -1973,7 +2108,7 @@ def _hub_folders(cfg, console, args) -> int:
         except hub.HubError as exc:
             console.print(f"Can't reach the hub: {exc}", highlight=False)
             return 1
-        project, problem = _pick_project(hello.get("projects") or [], args.project)
+        project, problem = _pick_project(hello.get("projects") or [], args.project[-1])
         if problem:
             console.print(problem, highlight=False)
             return 1
@@ -2322,13 +2457,14 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("hub", help="one archive for several computers: this one records them all (enable), "
                                    "or sends its sessions to one that does (join)")
     s.add_argument("action", nargs="?", choices=["status", "enable", "join", "leave", "disable", "folders", "add-folder",
-                                                 "remove-folder", "store", "people", "invite", "role", "remove",
-                                                 "shared-token", "signin"], default="status")
+                                                 "remove-folder", "store", "people", "invite", "role", "access",
+                                                 "remove", "shared-token", "signin", "project"], default="status")
     s.add_argument("url", nargs="?", metavar="address|folder|name|email",
                    help="with join: the hub's address; with add-folder and remove-folder: a folder on this computer; "
-                        "with invite: the person's name; with role and remove: their email or id; with shared-token: "
-                        "on or off")
-    s.add_argument("value", nargs="?", metavar="role", help="with role: admin, member or readonly")
+                        "with invite: the person's name; with role, access and remove: their email or id; with "
+                        "shared-token: on or off; with project: add, remove or list")
+    s.add_argument("value", nargs="?", metavar="role|folder",
+                   help="with role: admin, member or readonly; with project add and remove: a folder on this computer")
     s.add_argument("--token", help="with join: the token the hub's `chronicle hub enable` printed")
     s.add_argument("--code", help="with join: the invite code the hub's admin gave you (instead of --token)")
     s.add_argument("--url", dest="url_opt",
@@ -2336,7 +2472,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--email", help="with invite: the person's email (how a company sign-in finds them)")
     s.add_argument("--role", choices=["admin", "member", "readonly"], help="with invite: their role (member by default)")
     s.add_argument("--rotate", action="store_true", help="with enable: make a new token (computers must join again)")
-    s.add_argument("--project", help="with add-folder: the project on the hub its sessions belong to (name or path)")
+    s.add_argument("--project", action="append",
+                   help="with add-folder: the project on the hub its sessions belong to (name or path); with invite "
+                        "and access: a project the person sees (repeat it for more)")
+    s.add_argument("--all-projects", action="store_true",
+                   help="with invite and access: the person sees every project on the hub")
     s.add_argument("--share", choices=["everything", "knowledge"],
                    help="with join: send transcripts for the hub to analyze (everything, the default), or analyze here "
                         "and send only summaries and project lessons (knowledge)")

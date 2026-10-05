@@ -166,11 +166,11 @@ def test_people_api_and_its_audit(team):
     url, s, app = team["url"], team["sessions"], team["app"]
     ada = _as(s["Ada"])
     assert _call(url, "/api/people/add", {"name": "Cy", "email": "cy@example.com"}, _as(s["Bob"]))[0] == 403
-    code, r = _call(url, "/api/people/add", {"name": "Cy", "email": "cy@example.com", "role": "member"}, ada)
+    code, r = _call(url, "/api/people/add", {"name": "Cy", "email": "cy@example.com", "role": "member", "projects": "all"}, ada)
     assert code == 200 and r["person"]["role"] == "member" and r["expires_at"] and r["note"]
     assert r["link"].endswith(f"/signin?code={r['code']}") and f"--code {r['code']} --share knowledge" in r["join"]
     cy = r["person"]["id"]
-    code, r = _call(url, "/api/people/add", {"name": "Cy", "email": "cy@example.com"}, ada)
+    code, r = _call(url, "/api/people/add", {"name": "Cy", "email": "cy@example.com", "projects": "all"}, ada)
     assert code == 400 and "already on this hub" in r["error"]
 
     app.cfg.hub_address = "https://hub.example.com"

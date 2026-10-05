@@ -73,7 +73,11 @@
 | `url` | `""` | セッションをハブに送るコンピューターで：ハブのアドレス。`chronicle hub join` が設定し、`chronicle hub leave` が消します。設定されている間、このコンピューターは記録・分析をせずにハブへ送ります |
 | `path_map` | `{}` | ハブで：ほかのコンピューターのフォルダーのうち、こちらのフォルダーと同じプロジェクトを持つもの。例：`{ "/home/me/code" = "/Users/me/Projects" }`。git リモートのあるプロジェクトは先にリモートで対応付けます |
 | `folders` | `{}` | ハブに送るコンピューターで：セッションをハブのプロジェクトに入れるこちらのフォルダー（その下も含む）。例：`{ "/Users/me/work/notes" = "/Users/hub/Projects/demo-app" }`。`chronicle hub add-folder` が設定します（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
-| `share` | `"everything"` | ハブに送るコンピューターで：`"everything"` はトランスクリプトを送り、ハブが記録・分析します。`"knowledge"` はこちらで記録・分析を続け、各セッションの情報、要約、プロジェクトのナレッジだけを送ります（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)） |
+| `share` | `"everything"` | ハブに送るコンピューターで：`"everything"` はトランスクリプトを送り、ハブが記録・分析します。`"knowledge"` はこちらで記録・分析を続け、各セッションの情報、要約、プロジェクトのナレッジだけを送ります（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)）。一部のプロジェクトに限られた人として参加したコンピューターは `"knowledge"` でなければなりません。`chronicle hub join --code` がそう設定し、ハブはそのコンピューターからのトランスクリプトを受け付けません |
 | `store` | `""` | ハブで：`"postgres"` にすると、チームの記録を Postgres にも残し（接続は Chronicle のフォルダーの `team-store.env`）、ナレッジを共有するコンピューターにチームメイトのナレッジを返します（[チームメイトのナレッジと、Postgres のチームストア](devices.md#チームメイトのナレッジとpostgres-のチームストア)） |
-| `shared_token` | `true` | 利用者のいるハブで：コンピューターが専用のトークンの代わりにハブの共有トークンで送ることを許す。全員が招待で参加し終えたらオフにします（`chronicle hub shared-token off`）（[共有トークン](devices.md#共有トークン)） |
+| `shared_token` | `true` | 利用者のいるハブで：コンピューターが専用のトークンの代わりにハブの共有トークンで送ることを許す。共有トークンで送るコンピューターは特定の誰でもなく、プロジェクトの制限はかかりません。全員が招待で参加し終えたらオフにします（`chronicle hub shared-token off`）（[共有トークン](devices.md#共有トークン)） |
 | `address` | `""` | ハブで：ほかのコンピューターやブラウザーからつなぐときのハブのアドレス。例：`"https://chronicle.example.internal"`。ハブが渡す参加コマンドとサインインリンクに使います。`chronicle hub enable --url` が設定します（[利用者とロール](devices.md#利用者とロール)） |
+
+ハブで用意したプロジェクト（`chronicle hub project add`）と、各自に見えるプロジェクト（`chronicle hub invite`、
+`chronicle hub access`）は、このファイルではなくハブのデータベースに保存されます
+（[見えるプロジェクトを人ごとに決める](devices.md#見えるプロジェクトを人ごとに決める)）。
