@@ -58,7 +58,7 @@ def _on_session_end(payload: dict, *, ended: bool) -> int:
 
     transcript = payload.get("transcript_path")
     home = chronicle_home()
-    if load_config(home, create=False).is_spoke:  # this computer sends its sessions to a hub, which records them
+    if load_config(home, create=False).sends_files:  # this computer sends its sessions to a hub, which records them
         spawn_detached([*self_command(), "push", "--quiet"], home / "logs" / "hooks.log")
         return 0
     args = [*self_command(), "ingest-session"]
@@ -87,6 +87,7 @@ def _on_session_start(payload: dict) -> int:
 def build_session_context(cfg, cwd: str) -> str | None:
     """A compact digest of what previous sessions learned about this project."""
     from .db import connect
+    from .hub import team_from
     from .ladder import STAGE_ORDER_SQL, STAGE_RANK, TRUSTED, stage_label
 
     def trust_tag(i: dict) -> str:
@@ -113,7 +114,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
         else:
             rows = conn.execute(
                 "SELECT k.kind, k.title, k.stage, k.session_id, k.confirmed_json FROM knowledge k WHERE k.status = 'active' "
-                "AND k.project_path = ? AND k.kind IN ('gotcha', 'fix', 'fact', 'decision', 'preference') "
+                "AND k.project_path = ? AND k.source != 'team' AND k.kind IN ('gotcha', 'fix', 'fact', 'decision', 'preference') "
                 f"ORDER BY k.pinned DESC, {STAGE_ORDER_SQL}, k.id DESC LIMIT 12",
                 (cwd,),
             ).fetchall()
@@ -121,6 +122,16 @@ def build_session_context(cfg, cwd: str) -> str | None:
                 lines.append("Chronicle notes from past coding-agent sessions in this project:")
                 lines += [f"- [{r['kind']}" + (f" · {stage_label(r)}" if r["stage"] in TRUSTED else "") + f"] {one_line(r['title'], 200)}"
                           for r in rows]
+        team = conn.execute(  # teammates' lessons the team hub sent (hub.apply_team_lessons)
+            "SELECT k.kind, k.title, k.stage, k.session_id, k.confirmed_json, k.source_ref FROM knowledge k "
+            f"WHERE k.status = 'active' AND k.source = 'team' AND k.project_path = ? "
+            f"ORDER BY k.pinned DESC, {STAGE_ORDER_SQL}, k.updated_at DESC LIMIT 6", (cwd,),
+        ).fetchall()
+        if team:
+            lines.append("From teammates' sessions in this project (via the team hub):")
+            lines += [f"- [{r['kind']}" + (f" · {stage_label(r)}" if r["stage"] in TRUSTED else "") + f"] "
+                      f"{one_line(r['title'], 200)}" + (f" (from {', '.join(who)})" if (who := team_from(r)) else "")
+                      for r in team]
         recent = conn.execute(
             "SELECT started_at, title, outcome FROM sessions WHERE project_path = ? AND source != 'history' "
             "ORDER BY started_at DESC LIMIT 3", (cwd,),

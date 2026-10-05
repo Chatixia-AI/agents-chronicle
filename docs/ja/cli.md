@@ -34,7 +34,7 @@
 | `chronicle status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
 | `chronicle tailnet on\|off\|status [--anyone]` | Tailscale Serve でダッシュボードをスマートフォンやほかのデバイスから開けるようにする。通すのはあなたの Tailscale ログインだけ（`--anyone` で tailnet の全員）（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `chronicle hub enable [--rotate]` | このコンピューターをほかのコンピューターのハブにする。ほかのコンピューターで実行する `chronicle hub join` のコマンドを表示 |
-| `chronicle hub join <address> --token <token>` / `hub leave` | このコンピューターのセッションをここで記録せずにハブへ送る、またはやめる（[ほかのコンピューター](devices.md#ほかのコンピューター)） |
+| `chronicle hub join <address> --token <token> [--share knowledge]` / `hub leave` | このコンピューターのセッションをここで記録せずにハブへ送る、またはやめる（[ほかのコンピューター](devices.md#ほかのコンピューター)）。`--share knowledge`：こちらで記録・分析を続け、要約とプロジェクトのナレッジだけを送る（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)） |
 | `chronicle hub status` / `hub disable` | このハブに送ってくるコンピューターの一覧／受け付けをやめる |
 | `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | ハブに参加したコンピューターで：フォルダーのセッションをハブのプロジェクトに入れる／外す／どこに入るかを表示（`--list`：ハブのプロジェクト一覧）（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
 | `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |

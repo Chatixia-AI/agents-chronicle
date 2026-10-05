@@ -296,9 +296,46 @@ JA: dict[str, str] = {
     # ---- artifacts: opening a file
     "this file can no longer be opened": "このファイルはもう開けません",
     "files open only on the computer Chronicle runs on": "ファイルは Chronicle が動いているコンピューターでだけ開けます",
+    # ---- Devices: what this computer sends, the team store
+    "change this on the computer itself, not from another device": "ほかのデバイスからではなく、そのコンピューター自身で変更してください",
+    "this computer sends to a hub: the team store is set up on the hub": "このコンピューターはハブに送っています。チームストアはハブで設定します",
+    "this computer has not joined a hub": "このコンピューターはハブに参加していません",
+    "unknown share mode {share!r}": "不明な共有方法 {share!r}",
+    "the database server's address is missing": "データベースサーバーのアドレスがありません",
+    "the database name is missing": "データベース名がありません",
+    "the user name is missing": "ユーザー名がありません",
+    "the port must be a number from 1 to 65535": "ポートは 1 から 65535 までの数字にしてください",
+    "the password is missing": "パスワードがありません",
     "that file is not on this computer": "そのファイルはこのコンピューターにありません",
     "that kind of file is not opened from here": "その種類のファイルはここからは開きません",
     "opening files is not supported on this system": "このシステムではファイルを開けません",
     "could not open it: {error}": "開けませんでした：{error}",
     "not available": "利用できません",
+    # ---- people on a hub: signing in, roles, invites
+    "sign in to this hub": "このハブにサインインしてください",
+    "you're not on this hub; ask an admin to add you": "あなたはこのハブに登録されていません。管理者に追加を頼んでください",
+    "only an admin of this hub can do this": "これができるのはこのハブの管理者だけです",
+    "Could not sign in": "サインインできませんでした",
+    "Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
+    "(Settings › Devices).":
+        "このハブの管理者に新しい招待を頼むか、自分の Chronicle（「設定」›「デバイス」）からハブのダッシュボードを開き直してください。",
+    "Open the dashboard": "ダッシュボードを開く",
+    "no such computer or browser session": "そのコンピューターまたはブラウザーのセッションはありません",
+    "this hub has no address set ([hub] address), so these use the address this page was opened at; set it with "
+    "`chronicle hub enable --url`":
+        "このハブにはアドレスが設定されていない（[hub] address）ため、このページを開いたアドレスを使っています。"
+        "`chronicle hub enable --url` で設定してください",
+    "a name is needed": "名前が必要です",
+    "role must be one of: {roles}": "役割は {roles} のいずれかにしてください",
+    "{email} is not an email address": "{email} はメールアドレスではありません",
+    "{email} is already on this hub": "{email} はすでにこのハブにいます",
+    "no such person": "その人はいません",
+    "this is the hub's last admin: make someone else an admin first":
+        "このハブの最後の管理者です。先にほかの人を管理者にしてください",
+    "that code isn't known on this hub": "このハブはそのコードを知りません",
+    "that code was already used; ask an admin for a new one": "そのコードは使用済みです。管理者に新しいコードを頼んでください",
+    "that code has expired; ask an admin for a new one": "そのコードは期限切れです。管理者に新しいコードを頼んでください",
+    "that person is no longer on this hub": "その人はもうこのハブにいません",
+    "this computer has not joined a hub (`chronicle hub join`)": "このコンピューターはハブに参加していません（`chronicle hub join`）",
+    "the hub sent no sign-in code": "ハブからサインインのコードが届きませんでした",
 }

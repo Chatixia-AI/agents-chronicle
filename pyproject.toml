@@ -36,6 +36,8 @@ app = [
     "pyobjc-framework-servicemanagement>=11 ; sys_platform == 'darwin'",
     "pywebview>=6.2,<7 ; sys_platform == 'darwin'",  # desktop.py extends its Cocoa app delegate
 ]
+# on a hub that keeps the team's record in Postgres ([hub] store = "postgres"); members never need it
+team = ["psycopg[binary]>=3.2"]
 
 [build-system]
 requires = ["hatchling", "hatch-fancy-pypi-readme>=24"]

@@ -48,6 +48,9 @@
 | `server.host` / `port` | `127.0.0.1` / `8765` | ダッシュボード。このポートが使用中の場合、アプリは空いているポートを使います |
 | `server.allowed_hosts` | `[]` | 127.0.0.1 と localhost のほかにダッシュボードが応答する名前。Tailscale の名前など。`chronicle tailnet on` が設定します（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `server.allowed_users` | `[]` | それらの名前で Tailscale Serve 経由でアクセスしたとき、通す Tailscale ログイン（空の場合は tailnet の全員）。`chronicle tailnet on` があなたのログインを設定します |
+| `server.auth_header` | `""` | 認証プロキシ経由の会社のサインイン：サインインした人のメールアドレスを運ぶリクエストヘッダー。例：`"X-Forwarded-Email"`。`trusted_proxies` からのリクエストで、ハブに追加された人の場合だけ信頼します。空の場合は招待かサインインリンクでサインインします（[会社のサインイン](devices.md#会社のサインイン)） |
+| `server.trusted_proxies` | `["127.0.0.1", "::1"]` | ダッシュボードが `auth_header` と `X-Forwarded-Proto` を信頼するプロキシのアドレス（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
+| `server.behind_proxy` | `false` | このコンピューター上のリバースプロキシがダッシュボードに転送する：それを通るリクエストはハブ自身から（常に管理者）とは見なされず、管理者はサインインするか `chronicle hub` コマンドを使う（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
 | `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |
 | `updates.notify` | `false` | バックグラウンド同期が 1 日 1 回 pypi.org に問い合わせ、新しいリリースごとに 1 回デスクトップ通知を表示する（Status › Updates、または `chronicle install --notify-updates`） |
@@ -70,3 +73,7 @@
 | `url` | `""` | セッションをハブに送るコンピューターで：ハブのアドレス。`chronicle hub join` が設定し、`chronicle hub leave` が消します。設定されている間、このコンピューターは記録・分析をせずにハブへ送ります |
 | `path_map` | `{}` | ハブで：ほかのコンピューターのフォルダーのうち、こちらのフォルダーと同じプロジェクトを持つもの。例：`{ "/home/me/code" = "/Users/me/Projects" }`。git リモートのあるプロジェクトは先にリモートで対応付けます |
 | `folders` | `{}` | ハブに送るコンピューターで：セッションをハブのプロジェクトに入れるこちらのフォルダー（その下も含む）。例：`{ "/Users/me/work/notes" = "/Users/hub/Projects/demo-app" }`。`chronicle hub add-folder` が設定します（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
+| `share` | `"everything"` | ハブに送るコンピューターで：`"everything"` はトランスクリプトを送り、ハブが記録・分析します。`"knowledge"` はこちらで記録・分析を続け、各セッションの情報、要約、プロジェクトのナレッジだけを送ります（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)） |
+| `store` | `""` | ハブで：`"postgres"` にすると、チームの記録を Postgres にも残し（接続は Chronicle のフォルダーの `team-store.env`）、ナレッジを共有するコンピューターにチームメイトのナレッジを返します（[チームメイトのナレッジと、Postgres のチームストア](devices.md#チームメイトのナレッジとpostgres-のチームストア)） |
+| `shared_token` | `true` | 利用者のいるハブで：コンピューターが専用のトークンの代わりにハブの共有トークンで送ることを許す。全員が招待で参加し終えたらオフにします（`chronicle hub shared-token off`）（[共有トークン](devices.md#共有トークン)） |
+| `address` | `""` | ハブで：ほかのコンピューターやブラウザーからつなぐときのハブのアドレス。例：`"https://chronicle.example.internal"`。ハブが渡す参加コマンドとサインインリンクに使います。`chronicle hub enable --url` が設定します（[利用者とロール](devices.md#利用者とロール)） |

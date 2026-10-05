@@ -152,7 +152,7 @@ class Background:
             cfg = load_config()
             cfg.ensure_dirs()
             release_check_safely(cfg)
-            if cfg.is_spoke:  # this Mac sends its sessions to a hub, which records and analyzes them
+            if cfg.sends_files:  # this Mac sends its sessions to a hub, which records and analyzes them
                 from .hub import push
 
                 log.info("app push: %s", push(cfg).summary())

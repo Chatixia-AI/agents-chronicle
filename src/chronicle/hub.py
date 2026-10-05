@@ -8,6 +8,10 @@ lost push is simply redone by the next one.
 
 A spoke that already analyzed sessions with its own Chronicle sends those results once, when it first joins, so
 the hub does not pay to analyze the same sessions again.
+
+With `[hub] store = "postgres"` the hub also keeps the team's record in Postgres (team_store.py), and each computer
+that shares knowledge gets its teammates' lessons for its own projects back after every push, kept read-only in its
+own database (knowledge.source 'team') where its MCP tools and start-of-session notes find them.
 """
 
 from __future__ import annotations
@@ -24,6 +28,7 @@ import re
 import secrets
 import shutil
 import socket
+import sqlite3
 import subprocess
 import sys
 import tempfile
@@ -60,12 +65,30 @@ ANALYSIS_COLS = ("analysis_status", "analysis_reason", "analyzed_at", "analysis_
 KNOWLEDGE_COLS = ("kind", "title", "body", "tags_json", "scope", "confidence", "evidence", "source", "agent",
                   "source_ref", "fingerprint", "status", "pinned", "created_at", "updated_at")
 
+# [hub] share = "knowledge": what a computer sends about a session it analyzed itself. Never its prompts, commands,
+# file paths or transcript; the hub stores it with source 'remote' and never analyzes it again (receive_sessions).
+SHARED_COLS = ("agent", "started_at", "ended_at", "duration_s", "active_s", "git_branch", "cc_version", "primary_model",
+               "models_json", "tools_json", "skills_json", "mcp_json", "prs_json", "n_prompts", "n_api_calls",
+               "n_tool_calls", "n_tool_errors", "n_interrupts", "n_compactions", "n_api_errors", "n_subagents", "n_files",
+               "lines_added", "lines_removed", "input_tokens", "output_tokens", "cache_read_tokens",
+               "cache_write_tokens", "sub_tokens", "est_cost_usd", "sub_cost_usd", "peak_context", "ended_flag")
+SHARED_AGENTS = ("claude", "codex", "copilot", "bob", "antigravity")  # coding agents; imported chats stay personal
+SHARE_BATCH = 200
+SHARE_KV = "hub-share:"  # + machine id: what that computer sends, as it last said
+SESSION_ID_RE = re.compile(r"^[\w.:-]{1,128}$")
+TEAM_FILE = "team-lessons.json"  # on a computer that shares knowledge: the team lessons it holds, as of the last pull
+TEAM_SOURCE = "team"  # knowledge.source of a teammate's lesson the hub sent; fingerprint "team:<lesson id on the hub>"
+
 
 class HubError(Exception):
     pass
 
 
 class HubUnreachable(HubError):
+    pass
+
+
+class HubUnauthorized(HubError):
     pass
 
 
@@ -149,6 +172,20 @@ def token_ok(cfg: Config, authorization: str | None) -> bool:
     if not expected or cfg.is_spoke or not authorization or not authorization.startswith("Bearer "):
         return False
     return hmac.compare_digest(authorization[7:].strip().encode(), expected.encode())
+
+
+def authorize(cfg: Config, conn, authorization: str | None, machine_id: str | None = None) -> tuple[bool, dict | None]:
+    """Who may call /api/hub/*: (ok, person). The hub's shared token is let in (person None) while the hub has no
+    people, or while `[hub] shared_token` stays on; a person's own computer token (from `hub join --code`) is let in
+    as that person, from the computer it was issued to. Nothing is let in once this computer stopped being a hub."""
+    from . import people
+
+    if not read_token(cfg) or cfg.is_spoke or not authorization or not authorization.startswith("Bearer "):
+        return False, None
+    if token_ok(cfg, authorization):
+        return bool(cfg.hub_shared_token or not people.has_people(conn)), None
+    person = people.computer_person(conn, authorization[7:].strip(), machine_id or None)
+    return (True, person) if person else (False, None)
 
 
 # ------------------------------------------------------------------ git remotes
@@ -401,7 +438,9 @@ class HubClient:
     def request(self, method: str, path: str, *, params: dict | None = None, body=None, length: int | None = None,
                 headers: dict | None = None) -> dict:
         target = path + (f"?{urlencode(params)}" if params else "")
-        hdrs = {"Authorization": f"Bearer {self.token}", "User-Agent": f"chronicle/{__version__}", **(headers or {})}
+        hdrs = {"User-Agent": f"chronicle/{__version__}", **(headers or {})}
+        if self.token:  # none when redeeming an invite: the code is the credential
+            hdrs["Authorization"] = f"Bearer {self.token}"
         if isinstance(body, (dict, list)):
             body = json.dumps(body).encode()
             hdrs["Content-Type"] = "application/json"
@@ -425,8 +464,8 @@ class HubClient:
         except ValueError:
             payload = {"error": data[:200].decode(errors="replace")}
         if resp.status == 401:
-            raise HubError("the hub did not accept this computer's token; run `chronicle hub join` again with the "
-                           "command `chronicle hub enable` prints on the hub")
+            raise HubUnauthorized("the hub did not accept this computer's token; join it again with a new invite "
+                                  "(`chronicle hub invite` on the hub) or the command `chronicle hub enable` prints there")
         if resp.status >= 400:
             raise HubError(f"hub error {resp.status}: {payload.get('error') or payload}")
         return payload
@@ -442,13 +481,19 @@ class PushReport:
     errors: list[str] = field(default_factory=list)
     hub: str = ""
     seconds: float = 0.0
+    kind: str = "files"  # or "knowledge": sessions this computer analyzed itself
+    team: int | None = None  # teammates' lessons held here after the pull (a hub with a team store sends them)
 
     def summary(self) -> str:
-        parts = [f"{self.sent} file{'s' * (self.sent != 1)} sent ({self.bytes / 1e6:.1f} MB)", f"{self.unchanged} unchanged"]
+        what = "session" if self.kind == "knowledge" else "file"
+        verb = "shared" if self.kind == "knowledge" else "sent"
+        parts = [f"{self.sent} {what}{'s' * (self.sent != 1)} {verb} ({self.bytes / 1e6:.1f} MB)", f"{self.unchanged} unchanged"]
         if self.skipped:
             parts.append(f"{self.skipped} excluded")
         if self.analyses:
             parts.append(f"{self.analyses} earlier analyses handed over")
+        if self.team is not None:
+            parts.append(f"{self.team} team lesson{'s' * (self.team != 1)} here")
         if self.errors:
             parts.append(f"{len(self.errors)} errors")
         return f"to {self.hub}: " + ", ".join(parts) + f" in {self.seconds:.1f}s"
@@ -474,7 +519,7 @@ def hello_info(cfg: Config, roots: list[Root]) -> dict:
     me = local_machine(cfg)
     return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "platform": platform_label(),
             "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
-            "folders": cfg.hub_folders}
+            "folders": cfg.hub_folders, "share": cfg.hub_share}
 
 
 def _check_protocol(hello: dict) -> None:
@@ -498,8 +543,47 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
     return hello
 
 
+def redeem_invite(cfg: Config, url: str, code: str, client: HubClient | None = None) -> dict:
+    """Trade an invite code for this computer's own token at the hub (`chronicle hub join --code`).
+
+    Returns the hub's answer: {"token", "person", "hub"}. The caller keeps the token (write_token).
+    """
+    me = local_machine(cfg)
+    client = client or HubClient(url, "")
+    try:
+        got = client.request("POST", "/api/hub/join", body={"code": code, "machine": me["id"], "name": me["name"],
+                                                             "platform": platform_label(), "version": __version__})
+    except HubUnauthorized:  # a hub that predates invites asks every caller for its shared token
+        raise HubError(f"the hub at {client.url} doesn't take invite codes yet: update Chronicle there, or join with "
+                       "the command its `chronicle hub enable` prints") from None
+    finally:
+        client.close()
+    if not isinstance(got.get("token"), str) or not got["token"]:
+        raise HubError(f"the hub at {client.url} sent no token")
+    return got
+
+
+def dashboard_signin(cfg: Config, client: HubClient | None = None) -> str:
+    """A short-lived link that opens the hub's dashboard as the person this computer joined as (no password)."""
+    token = read_token(cfg)
+    if not cfg.hub_url or not token:
+        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+    client = client or HubClient(cfg.hub_url, token)
+    try:
+        got = client.request("POST", "/api/hub/signin", body={"machine": local_machine(cfg)["id"]})
+    finally:
+        client.close()
+    code = got.get("code")
+    if not isinstance(code, str) or not code:
+        raise HubError("the hub sent no sign-in code")
+    return f"{cfg.hub_url}/signin?code={quote(code, safe='-_')}"
+
+
 def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
-    """Send the hub every session file it lacks (or has an older copy of)."""
+    """Send the hub every session file it lacks (or has an older copy of); with [hub] share = "knowledge", what
+    this computer learned instead (push_knowledge)."""
+    if cfg.shares_knowledge:
+        return push_knowledge(cfg, progress=progress, client=client)
     token = read_token(cfg)
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
@@ -562,6 +646,232 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
     report.seconds = time.monotonic() - t0
     _record_push(cfg, report)
     return report
+
+
+def _shared_records(cfg: Config, have: dict) -> tuple[list[dict], int, int]:
+    """(records the hub lacks or has an older analysis of, unchanged, excluded) for push_knowledge."""
+    from .db import connect
+
+    out: list[dict] = []
+    unchanged = excluded = 0
+    if not cfg.db_path.exists():
+        return out, 0, 0
+    conn = connect(cfg.db_path, readonly=True)
+    remotes: dict[str, str | None] = {}
+    try:
+        cols = ", ".join(("id", "project_path") + SHARED_COLS + ANALYSIS_COLS)
+        marks = ", ".join("?" for _ in SHARED_AGENTS)
+        rows = conn.execute(f"SELECT {cols} FROM sessions WHERE analysis_status = 'done' "
+                            f"AND source NOT IN ('history', 'remote') AND agent IN ({marks})", SHARED_AGENTS).fetchall()
+        for r in rows:
+            rec = dict(r)
+            if cfg.is_excluded(rec["project_path"]):
+                excluded += 1
+                continue
+            if have.get(rec["id"]) == rec["analyzed_at"]:
+                unchanged += 1
+                continue
+            path = rec["project_path"]
+            if path and path not in remotes:
+                info = git_info(path)
+                remotes[path] = info[1] if info else None
+            rec["remote"] = remotes.get(path) if path else None
+            rec["language"] = cfg.analysis.language  # what its summary and lessons are written in
+            # lessons about the project only: ones about the person (global, preferences) stay on this computer
+            rec["knowledge"] = [dict(k) for k in conn.execute(
+                f"SELECT {', '.join(KNOWLEDGE_COLS)} FROM knowledge WHERE session_id = ? AND source = 'analysis' "
+                "AND scope = 'project' AND kind != 'preference' AND status != 'dismissed'", (rec["id"],)).fetchall()]
+            out.append(rec)
+    finally:
+        conn.close()
+    return out, unchanged, excluded
+
+
+def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
+    """[hub] share = "knowledge": send the hub each analyzed session's details, analysis and project lessons that it
+    lacks or has an older analysis of. Transcripts never leave this computer."""
+    token = read_token(cfg)
+    if not cfg.hub_url or not token:
+        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+    t0 = time.monotonic()
+    report = PushReport(hub=cfg.hub_url, kind="knowledge")
+    client = client or HubClient(cfg.hub_url, token)
+    me = local_machine(cfg)
+    try:
+        info = hello_info(cfg, spoke_roots(cfg))
+        hello = client.request("POST", "/api/hub/hello", body=info)
+        _check_protocol(hello)
+        _record_folders(cfg, hello)
+        have = hello.get("knowledge")
+        if not isinstance(have, dict):
+            raise HubError(f"the hub runs Chronicle {hello.get('version')}, which can't take knowledge only; update it")
+        records, report.unchanged, report.skipped = _shared_records(cfg, have)
+        for i in range(0, len(records), SHARE_BATCH):
+            batch = records[i:i + SHARE_BATCH]
+            if progress:
+                progress(f"sharing {i + len(batch)} of {len(records)} sessions")
+            body = gzip.compress(json.dumps({"version": 1, "sessions": batch}).encode(), mtime=0)
+            try:
+                client.request("POST", "/api/hub/sessions", params={"machine": me["id"]}, body=body,
+                               headers={"Content-Type": "application/gzip"})
+            except HubUnreachable:
+                raise
+            except HubError as exc:
+                report.errors.append(str(exc))
+                continue
+            report.sent += len(batch)
+            report.bytes += len(body)
+        if report.sent:
+            client.request("POST", "/api/hub/done", body={"machine": me["id"]})
+        if hello.get("team"):  # the hub keeps a team store: bring back what teammates learned in these projects
+            try:
+                report.team = pull_team_lessons(cfg, client, info["repos"])
+            except HubUnreachable:
+                raise
+            except HubError as exc:
+                report.errors.append(f"team lessons: {exc}")
+    finally:
+        client.close()
+    report.seconds = time.monotonic() - t0
+    _record_push(cfg, report)
+    return report
+
+
+def pull_team_lessons(cfg: Config, client: HubClient, repos: dict) -> int:
+    """Ask the hub for teammates' lessons in this computer's projects and keep them here, read-only (source 'team').
+    Returns how many this computer holds. Nothing changes when the hub's answer is the one it already has."""
+    from .db import connect
+
+    state = last_team(cfg) or {}
+    if state.get("version") and cfg.db_path.exists():  # "unchanged" only counts if the lessons are still here
+        conn = connect(cfg.db_path, readonly=True)
+        try:
+            held = conn.execute("SELECT COUNT(*) FROM knowledge WHERE source = ?", (TEAM_SOURCE,)).fetchone()[0]
+        finally:
+            conn.close()
+        if held != state.get("lessons"):
+            state = {}
+    remotes = sorted({v[1] for v in repos.values() if isinstance(v, list) and len(v) == 2 and v[1]})
+    data = client.request("POST", "/api/hub/lessons", body={
+        "machine": local_machine(cfg)["id"], "remotes": remotes, "projects": sorted(set(cfg.hub_folders.values())),
+        "version": state.get("version")})
+    if not data.get("team"):
+        return 0
+    if data.get("unchanged"):
+        held = int(state.get("lessons") or 0)
+    else:
+        held = apply_team_lessons(cfg, data, repos)
+        state = {"version": data.get("version"), "lessons": held, "hub": data.get("hub")}
+    try:  # "at" is when this computer last asked, whether or not the answer changed
+        (cfg.home / TEAM_FILE).write_text(json.dumps({**state, "at": utcnow_iso()}))
+    except OSError:
+        pass
+    return held
+
+
+def team_from(row) -> list[str]:
+    """The computers whose sessions stated a teammate's lesson (knowledge.source_ref of a 'team' item)."""
+    try:
+        ref = json.loads(row["source_ref"] or "{}")
+    except (ValueError, TypeError, KeyError, IndexError):
+        return []
+    return [str(c) for c in ref.get("from") or []] if isinstance(ref, dict) else []
+
+
+def last_team(cfg: Config) -> dict | None:
+    try:
+        return json.loads((cfg.home / TEAM_FILE).read_text())
+    except (OSError, ValueError):
+        return None
+
+
+def apply_team_lessons(cfg: Config, data: dict, repos: dict) -> int:
+    """Keep the hub's lessons in this computer's own database, each filed under the folder here that holds its place
+    (a repository, or a hub project without one): where this computer's own sessions there were filed, else the clone
+    of that repository with the most sessions, else a folder added to that hub project. Lessons with no folder here
+    are skipped. A lesson the hub no longer sends is removed; one dismissed here stays dismissed. Returns how many are
+    held."""
+    from . import ladder
+    from .db import connect
+    from .util import dumps
+
+    places = data.get("places") if isinstance(data.get("places"), dict) else {}
+    clones: dict[str, list[str]] = {}
+    for cwd, v in repos.items():
+        if isinstance(v, list) and len(v) == 2 and v[1]:
+            clones.setdefault(v[1], []).append(cwd)
+    added = {}
+    for folder, project in sorted(cfg.hub_folders.items()):
+        added.setdefault(project, folder)
+    conn = connect(cfg.db_path)
+    try:
+        def name_of(path: str) -> str:
+            r = conn.execute("SELECT project_name FROM sessions WHERE project_path = ? AND project_name IS NOT NULL "
+                             "LIMIT 1", (path,)).fetchone()
+            return r[0] if r else (Path(path).name or path)
+
+        def here(at: str, project: str | None) -> tuple[str, str] | None:
+            info = places.get(at) if isinstance(places.get(at), dict) else {}
+            mine = info.get("mine")
+            if isinstance(mine, str):
+                r = conn.execute("SELECT project_path, project_name FROM sessions WHERE id = ?", (mine,)).fetchone()
+                if r and r[0]:
+                    return r[0], r[1] or name_of(r[0])
+            found = sorted(clones.get(info.get("remote"), [])) if isinstance(info.get("remote"), str) else []
+            if found:
+                marks = ",".join("?" * len(found))
+                used = dict(conn.execute(f"SELECT project_path, COUNT(*) FROM sessions WHERE project_path IN ({marks}) "
+                                         "GROUP BY project_path", found).fetchall())
+                best = max(found, key=lambda c: used.get(c, 0))
+                return best, name_of(best)
+            for p in (info.get("project"), project):
+                if isinstance(p, str) and p in added:
+                    return added[p], name_of(added[p])
+            return None
+
+        where: dict[tuple, tuple[str, str] | None] = {}
+        held: set[str] = set()
+        changed: list[int] = []
+        now = utcnow_iso()
+        for k in data.get("lessons") or []:
+            if not isinstance(k, dict) or not isinstance(k.get("id"), int) or not k.get("title") or not k.get("kind"):
+                continue
+            spot = (str(k.get("place") or ""), k.get("project") if isinstance(k.get("project"), str) else None)
+            if spot not in where:
+                where[spot] = here(*spot)
+            if not where[spot]:
+                continue
+            path, name = where[spot]
+            fp = f"{TEAM_SOURCE}:{k['id']}"
+            held.add(fp)
+            sessions = [str(s) for s in k.get("session_ids") or [] if isinstance(s, str)][:ladder.MAX_CONFIRMATIONS]
+            ref = dumps({"lesson": k["id"], "hub": data.get("hub"), "from": [str(c) for c in k.get("computers") or []][:10],
+                         "sessions": int(k.get("sessions") or len(sessions)), "language": k.get("language")})
+            tags = k.get("tags") if isinstance(k.get("tags"), list) else None
+            values = {"project_path": path, "project_name": name, "kind": str(k["kind"])[:40], "title": str(k["title"]),
+                      "body": k.get("body") if isinstance(k.get("body"), str) else None,
+                      "tags_json": dumps(tags) if tags else None, "scope": "project", "source": TEAM_SOURCE,
+                      "agent": None, "source_ref": ref, "confirmed_json": dumps(sessions) if sessions else None,
+                      "created_at": k.get("created_at") or now, "updated_at": k.get("updated_at") or now}
+            have = conn.execute("SELECT id FROM knowledge WHERE fingerprint = ?", (fp,)).fetchone()
+            if have:  # its status and pin are this computer's own choice: kept
+                conn.execute("UPDATE knowledge SET " + ", ".join(f"{c} = ?" for c in values) + " WHERE id = ?",
+                             [*values.values(), have[0]])
+                changed.append(have[0])
+            else:
+                cols = [*values, "fingerprint", "session_id"]
+                cur = conn.execute(f"INSERT INTO knowledge({', '.join(cols)}) VALUES ({', '.join('?' * len(cols))})",
+                                   [*values.values(), fp, None])
+                changed.append(cur.lastrowid)
+        gone = [r[0] for r in conn.execute("SELECT id, fingerprint FROM knowledge WHERE source = ?", (TEAM_SOURCE,))
+                if r[1] not in held]
+        if gone:
+            conn.execute(f"DELETE FROM knowledge WHERE id IN ({','.join('?' * len(gone))})", gone)
+        ladder.refresh(conn, changed)
+        conn.commit()
+        return len(held)
+    finally:
+        conn.close()
 
 
 def _record_push(cfg: Config, report: PushReport) -> None:
@@ -642,10 +952,34 @@ def inventory(cfg: Config, machine_id: str) -> dict[str, dict[str, list]]:
     return out
 
 
+def _store(cfg: Config):
+    """The hub's team store (team_store.py) when `[hub] store` names one, else None; its errors as HubError."""
+    from .team_store import TeamStoreError, get
+
+    try:
+        return get(cfg)
+    except TeamStoreError as exc:
+        raise HubError(str(exc)) from None
+
+
+def _in_store(call, *args):
+    from .team_store import TeamStoreError
+
+    try:
+        return call(*args)
+    except TeamStoreError as exc:
+        raise HubError(str(exc)) from None
+
+
 def hello(cfg: Config, conn, body: dict) -> dict:
     machine_id = check_machine(cfg, str(body.get("machine") or ""))
     if int(body.get("protocol", 0)) != PROTOCOL:
         return {"protocol": PROTOCOL, "version": __version__}
+    # the team store holds what computers share as knowledge; one that sends transcripts never waits on it
+    store = _store(cfg) if body.get("share") == "knowledge" else None
+    if store:
+        _in_store(store.computer_seen, machine_id, str(body.get("name") or "")[:120] or None,
+                  str(body.get("platform") or "")[:40] or None, str(body.get("version") or "")[:40] or None)
     repos = body.get("repos") if isinstance(body.get("repos"), dict) else {}
     repos = {str(k): [str(v[0]), str(v[1])] for k, v in repos.items() if isinstance(v, list) and len(v) == 2}
     now = utcnow_iso()
@@ -659,21 +993,68 @@ def hello(cfg: Config, conn, body: dict) -> dict:
     conn.commit()
     from .db import kv_get, kv_set
 
-    folders, moved = folders_of(conn, machine_id), 0
+    folders, moved, refiled = folders_of(conn, machine_id), 0, False
     if "folders" in body:  # an older spoke doesn't send them: keep what it had
         sent = clean_folders(body.get("folders"))
         if sent != folders:
             kv_set(conn, FOLDERS_KV + machine_id, json.dumps(sent))
             conn.commit()
             moved = refile(cfg, conn, machine_id, set(folders) | set(sent))
-            folders = sent
+            folders, refiled = sent, True
     remotes = ProjectResolver(cfg, conn).local_remotes()
     report = folders_report(conn, machine_id, folders, repos, remotes)
+    share = "knowledge" if body.get("share") == "knowledge" else "everything"
+    kv_set(conn, SHARE_KV + machine_id, share)
     conn.commit()  # local_remotes caches what git said
     me = local_machine(cfg)
+    if store:  # the store is the team's record: what it lacks is sent again, and folders that changed refile it all
+        shared = {} if refiled else _in_store(store.shared, machine_id)
+    else:
+        shared = {r[0]: r[1] for r in conn.execute(
+            "SELECT id, analyzed_at FROM sessions WHERE machine_id = ? AND source = 'remote'", (machine_id,))}
     return {"protocol": PROTOCOL, "version": __version__, "hub": me["name"],
             "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}"),
-            "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved}
+            "projects": hub_projects(conn), "remotes": remotes, "folders": report, "moved": moved,
+            "knowledge": shared, "team": bool(store)}
+
+
+def join_with_code(cfg: Config, conn, body: dict) -> dict:
+    """POST /api/hub/join: a computer redeems an invite for a push token of its own. The code is the credential, so
+    this is called without a token; the computer is recorded only once its code was good."""
+    from . import people
+
+    if not read_token(cfg) or cfg.is_spoke:
+        raise HubError("this computer is not a hub")
+    machine_id = check_machine(cfg, str(body.get("machine") or ""))
+    code, name = str(body.get("code") or ""), str(body.get("name") or "")[:120] or None
+    # a read-only person's computer could never send: refuse before the code is used, so it still opens a browser
+    invited = people.peek_invite(conn, code)
+    if invited and invited["role"] == "readonly":
+        raise HubError(f"{invited['name']} is read-only on this hub: read-only people see its dashboard but don't send "
+                       "to it. Open the invite link in a browser instead; the code still works there.")
+    try:
+        person, token = people.join_computer(conn, code, machine_id, name)
+    except people.PeopleError as exc:
+        raise HubError(str(exc)) from None
+    now = utcnow_iso()
+    conn.execute(
+        "INSERT INTO machines(id, name, platform, version, role, first_seen, last_seen, person_id) VALUES (?,?,?,?,?,?,?,?) "
+        "ON CONFLICT(id) DO UPDATE SET person_id = excluded.person_id",
+        (machine_id, name, str(body.get("platform") or "")[:40] or None, str(body.get("version") or "")[:40] or None,
+         "spoke", now, now, person["id"]),
+    )
+    conn.commit()
+    return {"token": token, "person": people.public(person), "hub": local_machine(cfg)["name"]}
+
+
+def signin_code_for(cfg: Config, conn, person: dict | None) -> dict:
+    """POST /api/hub/signin: a short-lived code that opens the dashboard as the person whose computer asks. A computer
+    sending with the shared token is nobody in particular, so it can't."""
+    from . import people
+
+    if person is None:
+        raise HubError("join with an invite to sign in")
+    return {"code": people.signin_code(conn, person)}
 
 
 def receive_file(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
@@ -740,6 +1121,100 @@ def _drain(rfile, left: int) -> None:
         if not chunk:
             return
         left -= len(chunk)
+
+
+def _cell(value):
+    """A value another computer sent, as SQLite can store it."""
+    if value is None or isinstance(value, (str, int, float)):
+        return value
+    return json.dumps(value) if isinstance(value, (dict, list)) else str(value)
+
+
+def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
+    """Sessions another computer analyzed itself ([hub] share = "knowledge"): their details, analysis and project
+    lessons, without a transcript. Stored with source 'remote', filed like any session of that computer, and never
+    analyzed here. A session the hub has the transcript of keeps its own record."""
+    from .ingest import best_title, project_name_for
+
+    machine_id = check_machine(cfg, params.get("machine", ""))
+    if length > 64 << 20:
+        _drain(rfile, length)
+        raise HubError("sessions too large")
+    try:
+        data = json.loads(gzip.decompress(rfile.read(length)))
+    except (OSError, ValueError, EOFError) as exc:
+        raise HubError(f"bad sessions: {exc}") from None
+    if not isinstance(data, dict) or not isinstance(data.get("sessions"), list):
+        raise HubError("bad sessions")
+    r = ProjectResolver(cfg, conn)
+    now = utcnow_iso()
+    stored = kept = 0
+    accepted = []
+    for rec in data["sessions"][:SHARE_BATCH * 2]:
+        sid = str(rec.get("id") or "") if isinstance(rec, dict) else ""
+        if not SESSION_ID_RE.match(sid) or rec.get("agent") not in SHARED_AGENTS:
+            continue
+        have = conn.execute("SELECT source FROM sessions WHERE id = ?", (sid,)).fetchone()
+        if have and have["source"] != "remote":
+            kept += 1  # its transcript is here: the hub's own record wins
+            continue
+        recorded = str(rec.get("project_path") or "") or None
+        remote = rec.get("remote") if isinstance(rec.get("remote"), str) else None
+        project = r.resolve(machine_id, recorded, remote)
+        name = project_name_for(project)
+        row = {c: _cell(rec.get(c)) for c in SHARED_COLS + ANALYSIS_COLS}
+        row.update(id=sid, source="remote", machine_id=machine_id, project_path=project, project_name=name,
+                   machine_path=recorded if recorded != project else None, source_present=1, ingested_at=now,
+                   analysis_status="done", title=best_title({"llm_title": rec.get("llm_title")}),
+                   ended_flag=1 if rec.get("ended_flag") else 0)
+        # lessons about the project only: one about the person should not have been sent, and is not kept
+        lessons = [k for k in rec.get("knowledge") or [] if isinstance(k, dict) and k.get("title") and k.get("kind")
+                   and k.get("scope") == "project" and k.get("kind") != "preference"]
+        accepted.append((sid, {**rec, "knowledge": lessons}, row, remote))
+    store = _store(cfg)
+    if store and accepted:  # the team's record first: if it fails, nothing is kept and the computer sends it again
+        from .team_store import payload
+
+        _in_store(store.put_sessions, machine_id, [
+            payload(rec, project=row["project_path"], project_name=row["project_name"], remote=remote,
+                    title=row["title"], details_cols=SHARED_COLS) for _, rec, row, remote in accepted])
+    for sid, rec, row, _ in accepted:
+        cols = list(row)
+        try:
+            conn.execute(f"INSERT INTO sessions({', '.join(cols)}) VALUES ({', '.join('?' for _ in cols)}) "
+                         "ON CONFLICT(id) DO UPDATE SET " + ", ".join(f"{c} = excluded.{c}" for c in cols if c != "id"),
+                         [row[c] for c in cols])
+        except sqlite3.Error as exc:  # one bad record must not lose the rest of the batch
+            log.warning("shared session %s from %s not stored: %s", sid, machine_id, exc)
+            continue
+        project, name = row["project_path"], row["project_name"]
+        conn.execute("DELETE FROM knowledge WHERE session_id = ? AND source = 'analysis'", (sid,))
+        for k in rec["knowledge"]:
+            krow = {c: _cell(k.get(c)) for c in KNOWLEDGE_COLS}
+            krow.update(session_id=sid, project_path=project, project_name=name, source="analysis")
+            conn.execute(f"INSERT OR IGNORE INTO knowledge({', '.join(krow)}) VALUES ({', '.join('?' for _ in krow)})",
+                         list(krow.values()))
+        stored += 1
+    if stored:
+        conn.execute("UPDATE machines SET last_push = ? WHERE id = ?", (now, machine_id))
+    conn.commit()
+    return {"ok": True, "stored": stored, "kept": kept}
+
+
+def team_lessons(cfg: Config, body: dict) -> dict:
+    """What teammates learned in the projects a computer works on, from the team store (pull_team_lessons asks).
+    {"team": False} when this hub keeps no team store; {"unchanged": True} when the computer already has this answer."""
+    machine_id = check_machine(cfg, str(body.get("machine") or ""))
+    store = _store(cfg)
+    if not store:
+        return {"team": False}
+    remotes = [normalize_remote(x) or x for x in body.get("remotes") or [] if isinstance(x, str) and len(x) <= 300][:500]
+    projects = [x for x in body.get("projects") or [] if isinstance(x, str) and x.startswith("/") and len(x) <= 1024]
+    data = _in_store(store.lessons_for, machine_id, remotes, projects[:MAX_FOLDERS])
+    version = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:32]
+    if body.get("version") == version:
+        return {"team": True, "version": version, "unchanged": True}
+    return {"team": True, "version": version, "hub": local_machine(cfg)["name"], **data}
 
 
 def receive_analyses(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
@@ -912,6 +1387,8 @@ def machine_of(cfg: Config, path: Path | str | None) -> str | None:
 
 def machines(conn, cfg: Config) -> list[dict]:
     """Every computer the hub knows, with its session counts, this one first."""
+    from .db import kv_get
+
     register_local(conn, cfg)
     conn.commit()
     me = local_machine(cfg)["id"]
@@ -923,6 +1400,7 @@ def machines(conn, cfg: Config) -> list[dict]:
         m.pop("repos_json", None)
         m["folders"] = [] if m["id"] == me else [
             {"folder": f, "project": p, "name": Path(p).name or p} for f, p in sorted(folders_of(conn, m["id"]).items())]
+        m["share"] = None if m["id"] == me else (kv_get(conn, SHARE_KV + m["id"]) or "everything")
         m["sessions"], m["last_session"] = counts.get(m["id"], (0, None))
         m["this"] = m["id"] == me
         out.append(m)
@@ -1017,3 +1495,13 @@ def resolver(cfg: Config, conn, *, fresh: bool = False) -> ProjectResolver:
 
 def join_command(url: str, token: str) -> str:
     return f"chronicle hub join {url} --token {quote(token, safe='-_')}"
+
+
+def invite_command(address: str, code: str) -> str:
+    """What an invited person runs on their computer: it joins as them and shares knowledge only."""
+    return f"chronicle hub join {address} --code {code} --share knowledge"
+
+
+def invite_link(address: str, code: str) -> str:
+    """The same invite opened in a browser: the hub's dashboard, without a computer joining."""
+    return f"{address}/signin?code={quote(code, safe='-_')}"

@@ -2,6 +2,34 @@
 
 ## Unreleased
 
+- **People and roles on a hub, without Tailscale:** an admin invites each person as an admin, a member or read-only,
+  with `chronicle hub invite <name> --email … --role …` or **Settings › Devices › People** on the hub. The invite is a
+  one-time code, valid for 7 days and shown once, passed on by chat. A member's computer joins with
+  `chronicle hub join <address> --code …` and gets a token of its own; a browser opens the invite link. Members open
+  the hub's dashboard from their own Chronicle with a short sign-in link, no password. Read-only people see the
+  dashboard and send nothing, and only admins change anything there. Removing a person, or revoking one computer or
+  browser, takes effect at once, and every invite, role change, removal, join and sign-in goes into an audit log.
+  Computers that joined with the hub's shared token keep working until `chronicle hub shared-token off`. Whoever is
+  at the hub computer itself is always an admin. A hub can now sit on the company network or VPN behind an HTTPS
+  proxy (`[hub] address`), with company sign-in through an auth proxy's header (`[server] auth_header`,
+  `trusted_proxies`) for people added on the hub. [People and roles](docs/devices.md#people-and-roles)
+- **Teammates' lessons, and a team store in Postgres:** a hub with `[hub] store = "postgres"` (the connection in
+  `team-store.env`, the driver from `agents-chronicle[team]`) also keeps what computers share in Postgres: each
+  session's details and summary, its project lessons, and an audit log. Lessons belong to their git repository
+  wherever each person cloned it, so the same lesson from two people becomes one item that remembers whose sessions
+  stated it. After each push, a computer that shares knowledge gets its teammates' lessons for its own repositories
+  back, read-only: its MCP tools answer with them, marked as teammates', and the start-of-session notes list them
+  under **From teammates' sessions**. Only the hub connects to the database. `chronicle hub store` sets it up and
+  shows what it holds, and so does **Settings › Devices › Team store** on the hub itself (tested before it is saved; the
+  password never comes back to the browser). On a member, **Settings › Devices** switches what it sends and shows its
+  teammates' lessons. [Teammates' lessons, and a team store in Postgres](docs/devices.md#teammates-lessons-and-a-team-store-in-postgres)
+- **Share knowledge, keep transcripts:** `chronicle hub join … --share knowledge` (or `[hub] share = "knowledge"`)
+  lets a computer add to the hub's knowledge without sending its transcripts. It keeps recording and analyzing its
+  own sessions with its own Claude Code or Codex login, and after each analysis sends the hub only the session's
+  details, its summary and its lessons about the project. Prompts, shell commands, file paths, transcripts and
+  lessons about the person stay on the computer. The hub files these sessions like any other, adds their lessons to
+  the project's knowledge base, never analyzes them again, and shows **transcript on <computer>** on their pages.
+  [Sharing knowledge only](docs/devices.md#sharing-knowledge-only)
 - **Add a folder to a project on the hub:** on a computer that sends its sessions to a hub,
   `chronicle hub add-folder <folder> --project <name>` files the sessions in that folder, and every folder below it,
   under one of the hub's projects: a notes folder, a scratch folder, or a repository the hub doesn't know. Sessions
