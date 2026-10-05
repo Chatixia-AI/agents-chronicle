@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.7.1 (2026-10-05)
 
 - **Moving a checkout install to PyPI, documented:** [Updating](docs/install.md#updating) now says that a checkout run
   with `uv sync` or `uv run` has no Update button, and **From a checkout to a PyPI install** moves the hooks, MCP
