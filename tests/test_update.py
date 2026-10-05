@@ -102,6 +102,23 @@ def test_checkout_notification_key_follows_commits(method, tmp_path):
     assert update.available()["key"] != first["key"]
 
 
+def test_checkout_version_comes_from_git_tags(tmp_path):
+    """With a dynamic version (hatch-vcs), the checkout builds as its latest vX.Y.Z tag, or the next dev release."""
+    import subprocess
+
+    (tmp_path / "pyproject.toml").write_text('[project]\nname = "agents-chronicle"\ndynamic = ["version"]\n')
+    git = ["git", "-C", str(tmp_path), "-c", "user.name=t", "-c", "user.email=t@t"]
+    subprocess.run([*git, "init", "-q"], check=True)
+    subprocess.run([*git, "add", "."], check=True)
+    subprocess.run([*git, "commit", "-qm", "First"], check=True)
+    assert update._checkout_version(str(tmp_path)) is None  # no tag yet
+    subprocess.run([*git, "tag", "v0.7.0"], check=True)
+    assert update._checkout_version(str(tmp_path)) == "0.7.0"
+    subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "Second"], check=True)
+    sha = subprocess.run([*git, "rev-parse", "--short", "HEAD"], capture_output=True, text=True).stdout.strip()
+    assert update._checkout_version(str(tmp_path)) == f"0.7.1.dev1+g{sha}"
+
+
 def test_app_and_source_installs_do_not_run_commands(method, monkeypatch):
     method(kind="app")
     monkeypatch.setattr(update, "urlopen", lambda req, timeout: io.BytesIO(b'{"info": {"version": "99.0.0"}}'))

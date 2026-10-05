@@ -125,10 +125,20 @@ def checkout_changes(source: str, since: float) -> dict:
 
 
 def _checkout_version(source: str) -> str | None:
+    """The version the checkout builds as: pyproject.toml's, or (dynamic, hatch-vcs) the one its git tags give."""
     try:
         return tomllib.loads((Path(source).expanduser() / "pyproject.toml").read_text())["project"]["version"]
     except (OSError, KeyError, tomllib.TOMLDecodeError):
+        pass
+    m = re.fullmatch(r"v(\d+(?:\.\d+)*)-(\d+)-(g[0-9a-f]+)",
+                     (_git(source, "describe", "--tags", "--long", "--match", "v[0-9]*") or "").strip())
+    if not m:
         return None
+    tag, distance, sha = m.groups()
+    if distance == "0":
+        return tag
+    *head, last = tag.split(".")  # commits after v0.7.0 build as 0.7.1.devN, like hatch-vcs
+    return ".".join([*head, str(int(last) + 1)]) + f".dev{distance}+{sha}"
 
 
 def check(remote: bool = False, detail: bool = False) -> dict:

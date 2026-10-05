@@ -1,7 +1,12 @@
 name: Release
 
-# Publishing a GitHub release tagged vX.Y.Z (matching pyproject.toml) runs the tests, publishes
-# agents-chronicle to PyPI (trusted publishing, no token) and attaches Chronicle-X.Y.Z-arm64.dmg to the release.
+# Releasing is one button: Actions → Release → Run workflow on main, and pick patch, minor or major. The version
+# lives in the git tags (hatch-vcs), so nothing is committed first. The run works out the next version from the
+# latest vX.Y.Z tag, runs the tests, creates the tag and the GitHub release (the changelog's "## Unreleased"
+# section is its notes), publishes agents-chronicle to PyPI (trusted publishing, no token), attaches
+# Chronicle-X.Y.Z-arm64.dmg, and opens a pull request that dates the changelog section.
+# "dry run" (the default) runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
+# Publishing a release tagged vX.Y.Z on GitHub by hand runs the same tests, PyPI and DMG jobs.
 #
 # The DMG is signed and notarized when these repository secrets exist, otherwise it is ad-hoc signed:
 #   MACOS_CERT_P12            base64 of the "Developer ID Application" certificate + key (.p12)
@@ -12,36 +17,96 @@ name: Release
 on:
   release:
     types: [published]
-  workflow_dispatch:  # dry run: builds the DMG as a workflow artifact, publishes nothing
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version goes up (dry run publishes nothing)
+        type: choice
+        options: [dry run, patch, minor, major]
+        default: dry run
 
 permissions: {}  # each job asks for what it needs
 
+concurrency:
+  group: release  # one release at a time, so two runs never pick the same version
+  cancel-in-progress: false
+
 jobs:
+  plan:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      version: ${{ steps.plan.outputs.version }}  # empty on a dry run
+      create: ${{ steps.plan.outputs.create }}    # "true" when this run creates the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          fetch-depth: 0  # every tag, to find the latest
+          persist-credentials: false
+      - id: plan
+        env:
+          EVENT: ${{ github.event_name }}
+          BUMP: ${{ inputs.bump }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+        run: |
+          if [ "$EVENT" = release ]; then
+            if ! [[ "$RELEASE_TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+              echo "::error::Release tag $RELEASE_TAG is not vX.Y.Z"
+              exit 1
+            fi
+            echo "version=${RELEASE_TAG#v}" >> "$GITHUB_OUTPUT"
+          elif [ "$BUMP" != "dry run" ]; then
+            if [ "$GITHUB_REF" != refs/heads/main ]; then
+              echo "::error::Releases come from main; this run is on $GITHUB_REF"
+              exit 1
+            fi
+            VERSION=$(python3 packaging/release.py next "$BUMP")
+            echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+            echo "create=true" >> "$GITHUB_OUTPUT"
+            echo "Releasing Chronicle **$VERSION** ($BUMP)" >> "$GITHUB_STEP_SUMMARY"
+          fi
+
   test:
+    needs: plan
     runs-on: macos-14
     permissions:
       contents: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          fetch-depth: 0  # the version comes from the tags
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: false  # a release never restores a cache another run could have written
-      - name: Verify tag matches package version
-        if: github.event_name == 'release'
-        run: |
-          TAG="${GITHUB_REF_NAME#v}"
-          PKG=$(uv run --no-project python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
-          if [ "$TAG" != "$PKG" ]; then
-            echo "::error::Tag v$TAG does not match pyproject.toml version $PKG"
-            exit 1
-          fi
       - run: uv run --locked pytest -q
 
+  release:
+    needs: [plan, test]
+    if: needs.plan.outputs.create == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write  # create the tag and the release
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Create the tag and the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          python3 packaging/release.py notes "$VERSION" > "$RUNNER_TEMP/notes.md"
+          gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "Chronicle $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+
   pypi:
-    needs: test
-    if: github.event_name == 'release'
+    needs: [plan, test, release]
+    # on a published release the release job is skipped: the tag is already there
+    if: >-
+      !cancelled() && needs.plan.outputs.version != '' && needs.test.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.release.result)
     runs-on: ubuntu-latest
     environment: pypi
     permissions:
@@ -50,23 +115,40 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: v${{ needs.plan.outputs.version }}
+          fetch-depth: 0  # the version comes from the tag
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: false  # a release never restores a cache another run could have written
       - run: uv build
+      - name: Check the build carries the release's version
+        env:
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          ls dist
+          if [ ! -f "dist/agents_chronicle-$VERSION-py3-none-any.whl" ]; then
+            echo "::error::The build is not version $VERSION"
+            exit 1
+          fi
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
 
   macos-app:
-    needs: test
+    needs: [plan, test, release]
+    if: >-
+      !cancelled() && needs.test.result == 'success'
+      && contains(fromJSON('["success", "skipped"]'), needs.release.result)
     runs-on: macos-14  # Apple silicon; PyInstaller cannot cross-build, so an Intel build needs an Intel runner
     permissions:
       contents: write  # upload the DMG to the release
     env:
       HAS_CERT: ${{ secrets.MACOS_CERT_P12 != '' }}
+      VERSION: ${{ needs.plan.outputs.version }}  # empty on a dry run
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          ref: ${{ needs.plan.outputs.version != '' && format('v{0}', needs.plan.outputs.version) || github.sha }}
+          fetch-depth: 0  # the version comes from the tags
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
@@ -98,14 +180,48 @@ jobs:
         run: ./packaging/macos/build.sh
 
       - name: Attach DMG to the release
-        if: github.event_name == 'release'
+        if: env.VERSION != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "$GITHUB_REF_NAME" dist/Chronicle-*.dmg --clobber
+        run: gh release upload "v$VERSION" dist/Chronicle-*.dmg --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Keep DMG as a workflow artifact
-        if: github.event_name != 'release'
+        if: env.VERSION == ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
           name: Chronicle-dmg
           path: dist/Chronicle-*.dmg
+
+  changelog:
+    needs: [plan, pypi]
+    if: needs.plan.outputs.create == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write       # push the branch
+      pull-requests: write  # open the pull request
+      actions: write        # start CI on the branch: a push made with this token starts no workflows
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Open a pull request that dates the changelog
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.plan.outputs.version }}
+        run: |
+          BRANCH="changelog-$VERSION"
+          python3 packaging/release.py date "$VERSION" "$(date -u +%F)"
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$(git rev-parse HEAD)" > /dev/null
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/CHANGELOG.md" -f branch="$BRANCH" \
+            -f message="Changelog: $VERSION" -f content="$(base64 -w0 CHANGELOG.md)" \
+            -f sha="$(git rev-parse HEAD:CHANGELOG.md)" > /dev/null
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"  # the required test check
+          if URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "Changelog: $VERSION" \
+              --body "Dates the changelog's Unreleased section for the $VERSION release."); then
+            echo "Changelog pull request: $URL" >> "$GITHUB_STEP_SUMMARY"
+          else
+            # Settings › Actions › General › "Allow GitHub Actions to create and approve pull requests" opens it here
+            echo "Open the changelog pull request: https://github.com/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1" \
+              >> "$GITHUB_STEP_SUMMARY"
+          fi

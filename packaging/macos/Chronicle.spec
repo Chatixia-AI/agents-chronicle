@@ -2,14 +2,16 @@
 #   CHRONICLE_CODESIGN_IDENTITY  "Developer ID Application: …" to sign for distribution (default: ad-hoc)
 #   CHRONICLE_TARGET_ARCH        arm64 (default: the building Python's architecture)
 import os
-import tomllib
+import re
+from importlib.metadata import version
 from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_submodules, copy_metadata
 
 ROOT = Path(SPECPATH).parents[1]
 HERE = Path(SPECPATH)
-VERSION = tomllib.loads((ROOT / "pyproject.toml").read_text())["project"]["version"]
+# the installed package's version (from the git tag); the bundle takes its release numbers only (0.7.1.dev3+g… -> 0.7.1)
+VERSION = re.match(r"\d+(?:\.\d+)*", version("agents-chronicle")).group(0)
 BUNDLE_ID = "io.github.kayeungadrian-tam.chronicle"  # keep in sync with chronicle.install.APP_BUNDLE_ID
 IDENTITY = os.environ.get("CHRONICLE_CODESIGN_IDENTITY") or None
 

@@ -41,11 +41,19 @@ reformats it. `uvx pre-commit run --all-files` runs everything by hand. A test t
 
 ## Releasing
 
-Bump `version` in `pyproject.toml`, then publish a GitHub release tagged `v<version>`.
-`.github/workflows/release.yml` runs the tests, publishes `agents-chronicle` to PyPI (trusted publishing,
-environment `pypi`) and attaches the DMG to the release (signed and notarized when the `MACOS_*` / `APPLE_*`
-secrets are set; see the workflow header). Running the workflow by hand (**Actions → Release → Run workflow**)
-is a dry run: tests plus a DMG kept as a workflow artifact, nothing published.
+The version is not written anywhere: it comes from the git tags (hatch-vcs). A tagged commit builds as that version
+(`v0.7.0` → `0.7.0`), and commits after it as the next patch's dev release (`0.7.1.dev3+g1a2b3c4`), which is what a
+source checkout shows on the Status page.
+
+To release, add what changed under `## Unreleased` in `CHANGELOG.md` as you go, then run **Actions → Release → Run
+workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/release.yml` works out the next version
+from the latest tag, runs the tests, creates the tag and the GitHub release (the Unreleased section is its notes),
+publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`) and attaches the DMG to the release
+(signed and notarized when the `MACOS_*` / `APPLE_*` secrets are set; see the workflow header). Last, it opens a
+pull request that renames `## Unreleased` to `## <version> (<date>)`; merge it before the next release. If GitHub
+Actions may not create pull requests in this repository, the run's summary links to one ready to open.
+`dry run`, the default, runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
+Publishing a release tagged `v<version>` on GitHub by hand still works too.
 
 ### One-time setup before the first release
 

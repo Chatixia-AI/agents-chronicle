@@ -9,14 +9,15 @@
 set -euo pipefail
 cd "$(dirname "$0")/../.."
 
-VERSION=$(uv run --no-sync python -c "import tomllib; print(tomllib.load(open('pyproject.toml','rb'))['project']['version'])")
+uv sync --locked --extra app --group build
+# the version comes from the git tag (hatch-vcs): v0.7.0 -> 0.7.0, later commits -> 0.7.1.dev3+g1a2b3c4
+VERSION=$(uv run --no-sync python -c "from importlib.metadata import version; print(version('agents-chronicle'))")
 ARCH=${CHRONICLE_TARGET_ARCH:-$(uname -m)}
 IDENTITY=${CHRONICLE_CODESIGN_IDENTITY:-}
 APP=dist/Chronicle.app
 DMG=dist/Chronicle-$VERSION-$ARCH.dmg
 
 echo "==> Chronicle $VERSION ($ARCH), ${IDENTITY:-ad-hoc signature}"
-uv sync --locked --extra app --group build
 uv run --no-sync pyinstaller --noconfirm --clean --distpath dist --workpath build/pyinstaller \
     packaging/macos/Chronicle.spec
 
