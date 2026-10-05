@@ -16,6 +16,9 @@
   lessons. On the hub, the start-of-session notes and `project_knowledge` in any folder inside such a project use
   that project's knowledge. Admins always see everything, and people added before this release still see every
   project. [Projects and who sees them](docs/devices.md#projects-and-who-sees-them)
+
+## 0.7.1 (2026-10-05)
+
 - **Moving a checkout install to PyPI, documented:** [Updating](docs/install.md#updating) now says that a checkout run
   with `uv sync` or `uv run` has no Update button, and **From a checkout to a PyPI install** moves the hooks, MCP
   servers and background agents to `uv tool install 'agents-chronicle[app]'` without touching your data. Installing
