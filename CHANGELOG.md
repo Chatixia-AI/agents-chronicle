@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.9.0 (2026-10-05)
 
 - **Shared projects on the dashboard:** on a hub, **Settings › Devices › Shared projects** shows which projects leave
   the computer: each one's folder, who sees it, which computers send to it and how many sessions it holds. At the hub
