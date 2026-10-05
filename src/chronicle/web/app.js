@@ -4197,16 +4197,58 @@ function sharedProjectsCard() {
       stop);
   };
   const addForm = (data) => {
-    const pick = h("select", { "aria-label": t("Project to share") },
-      h("option", { value: "" }, t("Pick one of this hub's projects…")),
-      data.candidates.map((c) => h("option", { value: c.path, title: c.path }, `${c.name} · ${tn(c.sessions, "{n} session", "{n} sessions", { n: fmtNum(c.sessions) })} · ${shortPath(c.path)}`)));
-    const folder = h("input", { class: "input", placeholder: t("or a folder on this computer, e.g. ~/work/client-x"), autocomplete: "off", spellcheck: "false",
-      "aria-label": t("Folder to share") });
+    // one search box: type part of a project's name or folder to filter this hub's projects, or a folder (/… or ~/…)
+    let chosen = null, matches = [], active = -1;
+    const listId = `sp-list-${Math.random().toString(36).slice(2)}`;
+    const input = h("input", { class: "input", type: "search", placeholder: t("Search this hub's projects, or type a folder like ~/work/client-x"),
+      autocomplete: "off", spellcheck: "false", role: "combobox", "aria-autocomplete": "list", "aria-expanded": "false",
+      "aria-controls": listId, "aria-label": t("Project to share") });
+    const list = h("ul", { class: "sp-options", id: listId, role: "listbox", hidden: true });
+    const asFolder = (q) => q.startsWith("/") || q.startsWith("~");
+    const choose = (c) => {
+      chosen = c;
+      input.value = c.folder ? c.path : `${c.name} — ${shortPath(c.path)}`;
+      close();
+    };
+    const close = () => { list.hidden = true; active = -1; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); };
+    const mark = (i) => {
+      active = i;
+      [...list.children].forEach((li, j) => li.setAttribute("aria-selected", String(j === i)));
+      if (i >= 0 && list.children[i]) { input.setAttribute("aria-activedescendant", list.children[i].id); list.children[i].scrollIntoView({ block: "nearest" }); }
+    };
+    const filter = () => {
+      chosen = null;
+      const q = input.value.trim(), terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+      matches = data.candidates.filter((c) => terms.every((w) => `${c.name} ${c.path}`.toLowerCase().includes(w))).slice(0, 8);
+      if (asFolder(q)) matches = [{ path: q, name: q, folder: true }, ...matches];
+      list.replaceChildren(...matches.map((c, i) => h("li", { id: `${listId}-${i}`, role: "option", "aria-selected": "false", class: "sp-option",
+        onmousedown: (e) => { e.preventDefault(); choose(c); } },
+        c.folder ? [icon("projects"), h("span", null, tx("Share the folder {path}", { path: h("b", null, c.path) }))]
+          : [h("b", null, c.name), h("span", { class: "muted" }, ` ${tn(c.sessions, "{n} session", "{n} sessions", { n: fmtNum(c.sessions) })}`),
+            h("small", { class: "muted sp-opt-path" }, shortPath(c.path))])),
+        ...(q && !matches.length ? [h("li", { class: "sp-option muted", "aria-disabled": "true" }, t("No project matches. Type a folder, starting with / or ~, to share it."))] : []));
+      list.hidden = !matches.length && !q; // focused and empty: the busiest projects; typed: matches, or why none
+      input.setAttribute("aria-expanded", String(!list.hidden));
+      mark(matches.length ? 0 : -1);
+    };
+    input.addEventListener("input", filter);
+    input.addEventListener("focus", filter);
+    input.addEventListener("blur", () => setTimeout(close, 100));
+    input.addEventListener("keydown", (e) => {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (list.hidden) filter();
+        if (matches.length) mark((active + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+      } else if (e.key === "Enter" && !list.hidden && active >= 0 && matches[active]) {
+        e.preventDefault(); choose(matches[active]);
+      } else if (e.key === "Escape" && !list.hidden) { e.preventDefault(); close(); }
+    });
     const go2 = h("button", { class: "btn primary", type: "submit" }, t("Share project"));
     const form = h("form", { class: "sp-form", onsubmit: async (e) => {
       e.preventDefault();
-      const f = folder.value.trim() || pick.value; // ~ is expanded by the hub
-      if (!f) { toast(t("Pick a project or type its folder.")); return; }
+      const q = input.value.trim();
+      const f = chosen ? chosen.path : asFolder(q) ? q : matches.length === 1 ? matches[0].path : ""; // ~ is expanded by the hub
+      if (!f) { toast(t("Pick a project from the list, or type its folder.")); input.focus(); return; }
       go2.disabled = true;
       const r = await send("/api/projects/shared/add", { folder: f });
       go2.disabled = false;
@@ -4215,7 +4257,7 @@ function sharedProjectsCard() {
         : t("Shared {name}: {n} sessions of this hub are in it. Give people access in People › Change.", { name: r.result.name, n: fmtNum(r.result.sessions ?? 0) }), 7000);
       projectsCache = null;
       draw(r);
-    } }, h("div", { class: "sp-fields" }, pick, folder), go2);
+    } }, h("div", { class: "sp-fields sp-combo" }, input, list), go2);
     return [h("div", { class: "subhead" }, t("Share another project")), form,
       h("p", { class: "muted" }, t("The folder and everything below it becomes one project. This computer's sessions there are filed under it, and other computers can add their own folder to it before anything was sent."))];
   };

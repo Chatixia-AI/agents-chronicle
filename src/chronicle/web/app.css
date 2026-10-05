@@ -1741,3 +1741,13 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .sp-fields { display: grid; gap: 6px; flex: 1 1 280px; min-width: 0; }
 .sp-fields select, .sp-fields .input { width: 100%; min-width: 0; box-sizing: border-box; }
 .pname .badge, h1 .badge { margin-left: 6px; vertical-align: middle; }
+.sp-combo { position: relative; }
+.sp-options { position: absolute; z-index: 20; top: calc(100% + 4px); left: 0; right: 0; margin: 0; padding: 4px; list-style: none;
+  max-height: 300px; overflow: auto; background: var(--surface); border: 1px solid var(--border); border-radius: 10px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.14); }
+.sp-option { display: grid; grid-template-columns: auto auto 1fr; align-items: baseline; gap: 2px 6px; padding: 7px 10px; border-radius: 7px;
+  cursor: pointer; font-size: 13px; min-width: 0; }
+.sp-option .icon { width: 14px; height: 14px; align-self: center; }
+.sp-option .sp-opt-path { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.sp-option[aria-selected="true"], .sp-option:hover { background: var(--hover); }
+.sp-option[aria-disabled="true"] { cursor: default; background: none; display: block; }
