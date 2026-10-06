@@ -9,8 +9,8 @@ from chronicle.copilot_parser import (load_chat, load_usage, parse_copilot_agent
 from chronicle.db import connect as db_connect
 from chronicle.ingest import sync
 
-from copilot_fixture import (AGENT_ID, BOB_EMPTY, BOB_TASK, CHAT_ID, EMPTY_CHAT, FOLDER, write_bob_home,
-                             write_copilot_home, write_vscode_user)
+from copilot_fixture import (AGENT_ID, BOB_EMPTY, BOB_SUB, BOB_TASK, BOB_TOOLS, CHAT_ID, EMPTY_CHAT, FOLDER,
+                             write_bob_home, write_copilot_home, write_vscode_user)
 
 
 @pytest.fixture()
@@ -55,12 +55,35 @@ def test_copilot_agent_session(stores):
 
 def test_bob_task(stores):
     tasks = load_tasks(stores["bob"])
-    assert {t["id"] for t in tasks} == {BOB_TASK, BOB_EMPTY}
+    assert {t["id"] for t in tasks} == {BOB_TASK, BOB_EMPTY, BOB_TOOLS}
     ps = parse_bob_task(next(t for t in tasks if t["id"] == BOB_TASK))
     assert ps.project_path == FOLDER and ps.first_prompt == "Show progress by site" and ps.custom_title == "Dashboard by site"
     assert ps.tool_calls[0].name == "list_files" and ps.n_api_errors == 1
     assert ps.api_calls[0].cost_usd == 0.02
     assert parse_bob_task(next(t for t in tasks if t["id"] == BOB_EMPTY)) is None
+
+
+def test_bob_tool_calls_files_and_subagents(stores):
+    """Bob's own toolCalls shape: every call is kept, the files it writes are artifacts at their real paths, and a
+    subagent's work counts as the subagent's."""
+    ps = parse_bob_task(next(t for t in load_tasks(stores["bob"]) if t["id"] == BOB_TOOLS))
+    assert ps.n_prompts == 1 and ps.first_prompt == "Make an explainer page"
+    main = [c for c in ps.tool_calls if not c.agent_id]
+    assert [c.name for c in main] == ["spawn_subagent", "create_html_artifact", "write_file"]
+    assert [c.is_error for c in main] == [False, True, False] and main[0].duration_ms == 40
+    assert main[2].file_path == f"{FOLDER}/docs/explainer.html"  # relative to the task's directory
+    made = {a["path"]: a for a in ps.outputs}
+    assert set(made) == {f"{FOLDER}/docs/explainer.html", f"{FOLDER}/notes/findings.md"}
+    assert made[f"{FOLDER}/docs/explainer.html"]["kind"] == "page" and not made[f"{FOLDER}/docs/explainer.html"]["agent_id"]
+    assert made[f"{FOLDER}/notes/findings.md"]["agent_id"] == BOB_SUB
+    sub = ps.subagents[BOB_SUB]
+    assert (sub.agent_type, sub.n_tool_calls, sub.tool_use_id) == ("explore", 1, "t1")
+    assert sub.description == "Find how the dashboard groups sites" and round(sub.est_cost_usd, 3) == 0.012
+    t = ps.totals()
+    assert round(t["cost"], 3) == 0.35 and round(t["sub_cost"], 3) == 0.012  # per-message spend, not the task total again
+    assert ps.peak_context == 30000
+    page = ps.files[f"{FOLDER}/docs/explainer.html"]
+    assert (page.writes, page.edits, page.lines_added) == (1, 0, 2)  # lines from the diff in the result's _meta.changes
 
 
 def test_sync_copilot_and_bob(stores):
@@ -86,7 +109,7 @@ def test_connect_registers_mcp_and_keeps_other_servers(stores):
 
     cfg = stores["cfg"]
     status = {c["name"]: c for c in all_status(cfg, db_connect(cfg.db_path))}
-    assert status["copilot"]["detected"] and not status["copilot"]["connected"] and status["bob"]["on_disk"] == 1
+    assert status["copilot"]["detected"] and not status["copilot"]["connected"] and status["bob"]["on_disk"] == 2
     connect(cfg, "copilot", "/opt/bin/chronicle")
     connect(cfg, "bob", "/opt/bin/chronicle")
     cfg = load_config(cfg.home)

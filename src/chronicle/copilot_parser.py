@@ -140,12 +140,13 @@ def finish_session(ps: ParsedSession, stamps: list[str]) -> ParsedSession:
 class _Builder:
     """Appends events in order with sequence numbers."""
 
-    def __init__(self, ps: ParsedSession, where: str | None = None):
+    def __init__(self, ps: ParsedSession, where: str | None = None, agent_id: str = ""):
         self.ps, self.seq, self.stamps = ps, 0, []
         self.where = where  # files the agent writes live there (claude.ai's sandbox), not on this machine
+        self.agent_id = agent_id  # a subagent's events and tool calls; "" is the main thread
 
     def event(self, ts, role, kind, text, **kw) -> Event:
-        ev = Event("", self.seq, ts, role, kind, truncate(safe_text(text), TEXT_LIMITS.get(kw.pop("limit_key", None) or kind, 2_000)), **kw)
+        ev = Event(self.agent_id, self.seq, ts, role, kind, truncate(safe_text(text), TEXT_LIMITS.get(kw.pop("limit_key", None) or kind, 2_000)), **kw)
         self.seq += 1
         self.ps.events.append(ev)
         if ts:
@@ -163,7 +164,7 @@ class _Builder:
 
     def tool(self, ts, call_id, name, args: dict, *, result=None, is_error=False, duration_ms=None, mcp=None) -> ToolCall:
         summary, fp, cmd = tool_summary(name, args)
-        call = ToolCall("", call_id, ts, safe_text(name), mcp, safe_text(summary), fp, cmd, is_error=bool(is_error),
+        call = ToolCall(self.agent_id, call_id, ts, safe_text(name), mcp, safe_text(summary), fp, cmd, is_error=bool(is_error),
                         duration_ms=duration_ms, result_chars=len(result) if isinstance(result, str) else None)
         self.ps.tool_calls.append(call)
         self.ps.tools[call.name] += 1
@@ -173,9 +174,10 @@ class _Builder:
         if not is_error:
             if fp and name.rsplit(".", 1)[-1].lower() in _WRITE_TOOLS:
                 content = args.get("content") if isinstance(args.get("content"), str) else args.get("file_text")
-                artifacts.file_written(self.ps, fp, content=content, ts=ts, tool_use_id=call_id, where=self.where)
+                artifacts.file_written(self.ps, fp, content=content, ts=ts, agent_id=self.agent_id, tool_use_id=call_id,
+                                       where=self.where)
             artifacts.from_tool(self.ps, call.name, args, result if isinstance(result, str) else "", ts=ts,
-                                tool_use_id=call_id, command=cmd)
+                                agent_id=self.agent_id, tool_use_id=call_id, command=cmd)
         self.event(ts, "assistant", "tool_use", f"{call.name}: {summary}" if summary and summary != name else call.name,
                    tool_name=call.name, tool_use_id=call_id, meta={"input": truncate(json.dumps(args, ensure_ascii=False, default=str), 1_500)} if args else None)
         if result is not None:

@@ -18,6 +18,12 @@
 - **The dashboard's default port is 11524**, out of the way of other local servers that like 8765. New installs use
   it; an existing install keeps the `port = 8765` its `config.toml` already has (`chronicle config set server.port
   11524` moves it). The VS Code extension, unless `chronicle.url` is set, finds the dashboard on either port.
+- **Bob's tool calls are recorded:** Bob now writes tool calls as `toolCalls` rather than the OpenAI-style
+  `tool_calls`, so Chronicle recorded none of them: Bob sessions showed 0 tool calls, no files, and the files Bob
+  wrote never appeared as artifacts. Both shapes are read now. Bob's relative paths (`docs/x.html`) resolve against
+  the task's folder, lines added and removed come from the diff Bob keeps with each change, a call Bob marks failed
+  counts as an error, and a subagent's calls and files are the subagent's. Cost comes from what Bob reports for each
+  message, which used to read $0.00 when the task total had no token counts.
 
 ## 0.11.0 (2026-10-06)
 
