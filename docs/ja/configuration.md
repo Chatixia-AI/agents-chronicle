@@ -24,7 +24,7 @@
 | キー | 既定値 | |
 | --- | --- | --- |
 | `auto` | `true` | アイドルになったセッションを自動で分析する |
-| `backend` | `claude` | セッションを分析するもの：あなた自身のログインで `claude`（Claude Code）または `codex`（Codex）、またはモデルプロバイダーの API：`anthropic`、`bedrock`、`openai`、`azure`、`openrouter`、`ollama`、`openai-compatible`（[`[providers.<name>]`](#providersname) を参照）。**Status › Analysis** でも変更できます |
+| `backend` | `claude` | セッションを分析するもの：あなた自身のログインで `claude`（Claude Code）または `codex`（Codex）、またはモデルプロバイダーの API：`anthropic`、`bedrock`、`openai`、`azure`、`openrouter`、`ollama`、`openai-compatible`（[`[providers.<name>]`](#providers) を参照）。**Status › Analysis** でも変更できます |
 | `model` / `effort` | `sonnet` / `medium` | Claude：`claude --model` の任意のエイリアス。`effort` は Codex の推論の強さにも使われます（`max` は `xhigh` になります） |
 | `codex_model` | `""` | Codex のモデル。例：`gpt-5.5`。空の場合は Codex の既定のモデルを使います |
 | `screen_model` | `haiku` | 取り込んだチャットを選別するモデル（`chronicle screen`）。各チャットの冒頭だけを、1 回の呼び出しで 60 件ずつ読みます |
@@ -38,7 +38,7 @@
 | `timeout_seconds` | `900` | 呼び出し 1 回あたりの実時間の上限 |
 | `claude_bin` / `codex_bin` | `""` | `claude` / `codex` のパス（空の場合は自動で検出） |
 
-## `[providers.<name>]`
+## `[providers.*]`
 
 `analysis.backend = "<name>"` のときの設定です。一覧は[モデルプロバイダー](analysis.md#モデルプロバイダー)にあります。
 **Status › Analysis** か `chronicle config set providers.<name>.<key> <value>` で設定します。API キーはここには置きません：
