@@ -56,7 +56,27 @@
         </button>
         <div class="glass tinted"><button class="text-btn" id="sync-btn" type="button" title="Sync transcripts and process the analysis queue">Sync</button></div>
       </div>
-      <main id="app" tabindex="-1"></main>
+      <div class="loadbar" id="loadbar" aria-hidden="true" hidden><i></i></div>
+      <div class="loadnote glass" id="loadnote" role="status" aria-live="polite" hidden></div>
+      <!-- the first page's placeholder, until app.js has its data; render() replaces it -->
+      <main id="app" tabindex="-1" aria-busy="true">
+        <div class="skeleton" aria-hidden="true">
+          <div class="sk-head"><i class="sk sk-title"></i><i class="sk sk-sub"></i></div>
+          <div class="sk-filters"><i class="sk sk-seg"></i><i class="sk sk-seg wide"></i></div>
+          <div class="kpis">
+            <div class="tile hero"><i class="sk sk-label"></i><i class="sk sk-big"></i><i class="sk sk-line"></i><i class="sk sk-line short"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+            <div class="tile"><i class="sk sk-label"></i><i class="sk sk-value"></i><i class="sk sk-foot"></i></div>
+          </div>
+          <div class="card"><i class="sk sk-label"></i><i class="sk sk-line"></i><i class="sk sk-line"></i><i class="sk sk-line short"></i></div>
+        </div>
+      </main>
     </div>
     <footer class="statusbar" id="statusbar">
       <div class="st-left">

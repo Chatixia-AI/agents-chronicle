@@ -27,6 +27,10 @@
 - **Search when sharing a project:** **Team › Shared projects** now has one search box instead of a
   list and a folder field. Typing filters the hub's projects by name or folder (arrow keys and Enter pick one); a
   folder starting with `/` or `~` can be shared as it is.
+- **Pages that say they're loading:** a page that takes more than a moment shows a thin bar along the top of the
+  content area, and the dashboard's first open shows grey blocks in the shape of Home instead of a blank area. After
+  4 seconds a note under the toolbar says the page is still loading and counts the seconds, adding what the dashboard
+  is busy with when a sync or import is running. With reduced motion there is no shimmer and the bar stays still.
 
 ## 0.9.0 (2026-10-05)
 
