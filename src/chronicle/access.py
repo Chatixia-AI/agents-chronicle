@@ -20,7 +20,7 @@ import re
 import sqlite3
 
 # GET endpoints a limited person may call; /api/sessions/<id> (the summary page) is matched separately
-LIMITED_GET = frozenset({"/api/me", "/api/overview", "/api/sessions", "/api/projects", "/api/project",
+LIMITED_GET = frozenset({"/api/me", "/api/overview", "/api/team", "/api/sessions", "/api/projects", "/api/project",
                          "/api/knowledge", "/api/jobs", "/api/diagram"})
 SESSION_PAGE = re.compile(r"/api/sessions/[\w-]+")
 

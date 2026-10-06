@@ -77,6 +77,7 @@ One archive for several computers ([Phone and other computers](devices.md#your-o
 | `store` | `""` | on the hub: `"postgres"` also keeps the team's record in Postgres (connection in `team-store.env` in Chronicle's folder) and sends computers that share knowledge their teammates' lessons ([Teammates' lessons, and a team store in Postgres](devices.md#teammates-lessons-and-a-team-store-in-postgres)) |
 | `shared_token` | `true` | on the hub, once it has people: computers may still send with the hub's shared token instead of a token of their own. A computer sending with it is nobody in particular and is not limited to any project. Turn off when everyone has joined with an invite (`chronicle hub shared-token off`) ([The shared token](devices.md#the-shared-token)) |
 | `address` | `""` | on the hub: its address as other computers and browsers reach it, e.g. `"https://chronicle.example.internal"`, used in the join commands and sign-in links it hands out. Set by `chronicle hub enable --url` ([People and roles](devices.md#people-and-roles)) |
+| `name` | `""` | on the hub: the name its dashboard shows, e.g. `"Resona team"`; the hub computer's name when empty ([The hub's dashboard](devices.md#the-hubs-dashboard)) |
 
 The projects set up on a hub (`chronicle hub project add`) and the projects each person sees (`chronicle hub invite`,
 `chronicle hub access`) live in the hub's database, not in this file ([Projects and who sees

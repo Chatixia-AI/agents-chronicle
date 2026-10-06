@@ -1565,7 +1565,7 @@ def machine_of(cfg: Config, path: Path | str | None) -> str | None:
 
 
 def machines(conn, cfg: Config) -> list[dict]:
-    """Every computer the hub knows, with its session counts, this one first."""
+    """Every computer the hub knows, with its session counts and whose it is, this one first."""
     from .db import kv_get
 
     register_local(conn, cfg)
@@ -1574,7 +1574,8 @@ def machines(conn, cfg: Config) -> list[dict]:
     counts = {r[0]: (r[1], r[2]) for r in conn.execute(
         "SELECT COALESCE(machine_id, ?), COUNT(*), MAX(ended_at) FROM sessions WHERE source != 'history' GROUP BY 1", (me,))}
     out = []
-    for r in conn.execute("SELECT * FROM machines ORDER BY role = 'this' DESC, last_seen DESC").fetchall():
+    for r in conn.execute("SELECT m.*, p.name AS person FROM machines m LEFT JOIN people p ON p.id = m.person_id "
+                          "AND p.removed_at IS NULL ORDER BY m.role = 'this' DESC, m.last_seen DESC").fetchall():
         m = dict(r)
         m.pop("repos_json", None)
         m["folders"] = [] if m["id"] == me else [

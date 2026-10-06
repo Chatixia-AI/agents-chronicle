@@ -1751,3 +1751,40 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .sp-option .sp-opt-path { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .sp-option[aria-selected="true"], .sp-option:hover { background: var(--hover); }
 .sp-option[aria-disabled="true"] { cursor: default; background: none; display: block; }
+
+/* A hub's dashboard: a teal tint on the chrome and a Hub marker in the toolbar, so it never passes for your own */
+:root { --hub: #1baf7a; --hub-ink: #0b7a52; --hub-wash: rgba(27, 175, 122, 0.12); }
+@media (prefers-color-scheme: dark) {
+  :root:where(:not([data-theme="light"])) { --hub: #199e70; --hub-ink: #4fd3a0; --hub-wash: rgba(25, 158, 112, 0.18); }
+}
+:root[data-theme="dark"] { --hub: #199e70; --hub-ink: #4fd3a0; --hub-wash: rgba(25, 158, 112, 0.18); }
+:root.on-hub { --shell-tint-1: color-mix(in srgb, var(--hub) 16%, transparent); }
+.hub-pill { gap: 7px; padding: 0 12px 0 10px; font-size: 12.5px; min-width: 0; max-width: 280px; flex: 0 1 auto; }
+.hub-pill:hover { text-decoration: none; color: var(--ink); }
+.hub-pill .icon { width: 14px; height: 14px; flex: none; color: var(--hub-ink); }
+.hub-pill .hp-kind { flex: none; font-size: 11px; font-weight: 650; color: var(--hub-ink); background: var(--hub-wash); padding: 1px 7px; border-radius: 999px; }
+.hub-pill .hp-name { font-weight: 550; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+@media (max-width: 860px) { .hub-pill .hp-name, .hub-pill > .icon { display: none; } .hub-pill { padding: 0 8px; flex: none; } }
+@media (max-width: 600px) { .hub-pill { display: none; } } /* no room: the tint and the page title still say it */
+@media (min-width: 601px) { .on-hub .crumbs { min-width: 150px; } } /* the pill's name gives way first */
+
+/* Team Home */
+.kpis.team-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.btn.with-icon { display: inline-flex; align-items: center; gap: 6px; color: var(--ink); text-decoration: none; }
+.btn.with-icon .icon { width: 14px; height: 14px; color: var(--ink-2); }
+@media (max-width: 640px) { .kpis.team-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+.avatar { --av: var(--series-1); display: inline-grid; place-items: center; width: 30px; height: 30px; border-radius: 50%; flex: none;
+  font-size: 11.5px; font-weight: 650; letter-spacing: 0.02em; color: var(--ink);
+  background: color-mix(in srgb, var(--av) 22%, var(--surface)); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--av) 40%, transparent); }
+.who-tag { display: inline-flex; align-items: center; gap: 6px; min-width: 0; max-width: 160px; font-size: 12.5px; }
+.who-tag .avatar { width: 20px; height: 20px; font-size: 9px; }
+.who-tag > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.who-list { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
+.who-item { cursor: default; }
+.who-item:hover { background: transparent; }
+table.team-projects td { vertical-align: middle; }
+.attention-card { border-left: 3px solid var(--warning); }
+.attention { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
+.attention li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 4px; }
+.attention li > .icon { width: 30px; height: 18px; color: var(--muted); }
+.attention li > span:nth-child(2) { color: var(--ink); }

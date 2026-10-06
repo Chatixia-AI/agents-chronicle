@@ -126,6 +126,8 @@ shared_token = true
 # On the hub: its address as the other computers and browsers reach it (e.g. "https://chronicle.example.internal"),
 # for the join commands and sign-in links it hands out. `chronicle hub enable --url` sets it.
 address = ""
+# On the hub: the name its dashboard shows, e.g. "Resona team". Empty: this computer's name.
+name = ""
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -216,6 +218,7 @@ class Config:
     hub_store: str = ""
     hub_shared_token: bool = True
     hub_address: str = ""
+    hub_name: str = ""
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -365,6 +368,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         hub_store=store if store in STORES else "",
         hub_shared_token=bool(hub.get("shared_token", True)),
         hub_address=str(hub.get("address") or "").strip().rstrip("/"),
+        hub_name=str(hub.get("name") or "").strip()[:80],
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
