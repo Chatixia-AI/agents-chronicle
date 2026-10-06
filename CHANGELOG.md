@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.0 (2026-10-06)
 
 - **Analyze with a model provider's API:** besides Claude Code and Codex, sessions can be analyzed through the
   Anthropic API, Claude in Amazon Bedrock (a Bedrock API key, or your AWS sign-in with SigV4), the OpenAI API, Azure
