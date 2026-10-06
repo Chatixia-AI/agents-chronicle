@@ -399,7 +399,7 @@ network or over the company VPN. Say the hub should be reached at `https://chron
 
    ```nginx
    location / {
-       proxy_pass http://127.0.0.1:8765;
+       proxy_pass http://127.0.0.1:11524;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
        proxy_set_header X-Forwarded-Proto $scheme;
@@ -419,7 +419,7 @@ network or over the company VPN. Say the hub should be reached at `https://chron
    When the proxy runs on the hub itself, keep `host = "127.0.0.1"` and the default `trusted_proxies`, and add
    `behind_proxy = true`: a proxied request can look exactly like one made at the hub, which is always an admin, so
    with it set no request through the dashboard counts as made at the hub. Admins then sign in like everyone, or use
-   the `chronicle hub` commands at the hub. With `0.0.0.0`, let only the proxy reach port 8765 through the firewall.
+   the `chronicle hub` commands at the hub. With `0.0.0.0`, let only the proxy reach the dashboard's port (11524) through the firewall.
    Restart the dashboard afterwards.
 
 With Tailscale instead, `chronicle tailnet on --anyone` lets everyone in your tailnet reach the hub over HTTPS

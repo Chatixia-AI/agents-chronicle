@@ -22,7 +22,7 @@ narrow sidebar: the date and time, the agent and project, the branch, what it di
 button on the row, opens the session in the dashboard.
 
 It reads from the dashboard you already run (`chronicle ui`, or the background service `chronicle install` sets up),
-over `http://127.0.0.1:8765`. It sends nothing anywhere else and needs no account.
+over `http://127.0.0.1:11524` (or `:8765`, where older installs run it). It sends nothing anywhere else and needs no account.
 
 ## Install
 
@@ -41,7 +41,7 @@ the lists say to update.
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `chronicle.url` | `http://127.0.0.1:8765` | Where the dashboard runs. Change it if you set `[server] port` in Chronicle's [configuration](configuration.md). |
+| `chronicle.url` | empty: `http://127.0.0.1:11524`, else `:8765` | Where the dashboard runs. Change it if you set `[server] port` in Chronicle's [configuration](configuration.md). |
 | `chronicle.includeReads` | `true` | Also list sessions, and files, that were only read. Turn it off to see only what sessions changed. |
 | `chronicle.showIgnoredFiles` | `false` | Also show files git ignores (screenshots, build output, caches) in **Chronicle: Files in Workspace**. |
 

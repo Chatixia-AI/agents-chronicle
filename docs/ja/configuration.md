@@ -63,7 +63,7 @@
 | `synthesis.auto` / `model` / `min_new_items` | `true` / `sonnet` / `3` | 新しい項目がこの件数たまると、プロジェクトのナレッジベースを再構築する |
 | `export.markdown` | `true` | すべてを Markdown 保管庫にミラーする |
 | `export.notes_dir` | `""` | 保管庫の場所（空の場合：`~/.claude-chronicle/notes`） |
-| `server.host` / `port` | `127.0.0.1` / `8765` | ダッシュボード。このポートが使用中の場合、アプリは空いているポートを使います |
+| `server.host` / `port` | `127.0.0.1` / `11524` | ダッシュボード。このポートが使用中の場合、アプリは空いているポートを使います。11524 が既定になる前のインストールは `config.toml` に `port = 8765` を持ったままです。移すには `chronicle config set server.port 11524` を実行し、ダッシュボードを再起動して（`launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`）。ハブとして送ってくるコンピューターでは、それぞれ `chronicle config set hub.url http://<hub>:11524` で新しいアドレスを設定します |
 | `server.allowed_hosts` | `[]` | 127.0.0.1 と localhost のほかにダッシュボードが応答する名前。Tailscale の名前など。`chronicle tailnet on` が設定します（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `server.allowed_users` | `[]` | それらの名前で Tailscale Serve 経由でアクセスしたとき、通す Tailscale ログイン（空の場合は tailnet の全員）。`chronicle tailnet on` があなたのログインを設定します |
 | `server.auth_header` | `""` | 認証プロキシ経由の会社のサインイン：サインインした人のメールアドレスを運ぶリクエストヘッダー。例：`"X-Forwarded-Email"`。`trusted_proxies` からのリクエストで、ハブに追加された人の場合だけ信頼します。空の場合は招待かサインインリンクでサインインします（[会社のサインイン](devices.md#会社のサインイン)） |

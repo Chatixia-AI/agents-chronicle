@@ -113,13 +113,13 @@ def test_asks_whether_to_run_in_the_background(machine, monkeypatch, capsys, ans
     monkeypatch.setattr("chronicle.install.launchd_status", lambda label="": {"loaded": False})
     monkeypatch.setattr("chronicle.install.install_launchd", lambda cfg, exe, interval=900, dry_run=False: calls.append("sync") or [])
     monkeypatch.setattr("chronicle.install.install_ui_agent",
-                        lambda cfg, exe, dry_run=False: calls.append("ui") or ["dashboard always available at http://127.0.0.1:8765/"])
+                        lambda cfg, exe, dry_run=False: calls.append("ui") or ["dashboard always available at http://127.0.0.1:11524/"])
     asked = _answer(monkeypatch, {"background": answer, "Open": "n"})
     assert main(["install", "--exe", "/opt/bin/chronicle", "--no-sync"]) == 0
     out = capsys.readouterr().out
     assert any("starting at login" in q for q in asked)
     if answer == "y":
-        assert calls == ["sync", "ui"] and "Dashboard: http://127.0.0.1:8765/" in out and any(q.startswith("Open") for q in asked)
+        assert calls == ["sync", "ui"] and "Dashboard: http://127.0.0.1:11524/" in out and any(q.startswith("Open") for q in asked)
     else:
         assert calls == [] and "Not running in the background: Claude Code sessions are still recorded" in out
         assert "chronicle ui --open" in out

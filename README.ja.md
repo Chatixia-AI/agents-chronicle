@@ -75,7 +75,7 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
 
 2. **いつも通りエージェントを使う。** 各セッションは終了時に記録され、バックグラウンドで分析されます。
 
-3. **眺める。** ダッシュボード <http://127.0.0.1:8765/>（または `chronicle ui --open`）を開いて **⌘K** を押すか、
+3. **眺める。** ダッシュボード <http://127.0.0.1:11524/>（または `chronicle ui --open`）を開いて **⌘K** を押すか、
    エージェントに「先週何を学んだ？」と聞きます。
 
 エージェントはあとから **Settings › Sources**、`chronicle connect <agent>`、または `chronicle install` の再実行で追加できます。

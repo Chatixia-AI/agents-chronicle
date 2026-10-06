@@ -63,7 +63,7 @@ Settings for `analysis.backend = "<name>"`; [Model providers](analysis.md#model-
 | `synthesis.auto` / `model` / `min_new_items` | `true` / `sonnet` / `3` | rebuild a project's knowledge base once it gains this many new items |
 | `export.markdown` | `true` | mirror everything into the Markdown vault |
 | `export.notes_dir` | `""` | where the vault lives (empty: `~/.claude-chronicle/notes`) |
-| `server.host` / `port` | `127.0.0.1` / `8765` | the dashboard; the app uses a free port when this one is taken |
+| `server.host` / `port` | `127.0.0.1` / `11524` | the dashboard; the app uses a free port when this one is taken. Installs made before 11524 became the default keep `port = 8765` in their `config.toml`; to move, run `chronicle config set server.port 11524`, then restart the dashboard (`launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`). Computers that send to it as a hub then need its new address: `chronicle config set hub.url http://<hub>:11524` on each |
 | `server.allowed_hosts` | `[]` | other names the dashboard answers to besides 127.0.0.1 and localhost, e.g. its Tailscale name; `chronicle tailnet on` sets it ([Phone and other computers](devices.md#your-phone)) |
 | `server.allowed_users` | `[]` | reached by one of those names through Tailscale Serve, only these Tailscale logins get in (empty: everyone in your tailnet); `chronicle tailnet on` sets it to yours |
 | `server.auth_header` | `""` | company sign-in through an auth proxy: the request header that carries the signed-in person's email, e.g. `"X-Forwarded-Email"`. Believed only from `trusted_proxies`, and only for people added on the hub. Empty: people sign in with an invite or a sign-in link ([Company sign-in](devices.md#company-sign-in)) |

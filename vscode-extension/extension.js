@@ -6,19 +6,34 @@ const vscode = require("vscode");
 const AGENTS = { claude: "Claude Code", codex: "Codex", copilot: "Copilot", bob: "IBM Bob", antigravity: "Antigravity", "claude-ai": "Claude.ai", chatgpt: "ChatGPT" };
 
 const setting = (key, fallback) => vscode.workspace.getConfiguration("chronicle").get(key, fallback);
-const baseUrl = () => String(setting("url", "http://127.0.0.1:8765")).replace(/\/+$/, "");
+// Without a chronicle.url of your own: the default port, then 8765, the port older installs keep in config.toml
+const DEFAULT_URLS = ["http://127.0.0.1:11524", "http://127.0.0.1:8765"];
+let answered = null; // the default address that answered last
+const ownUrl = () => {
+  const i = vscode.workspace.getConfiguration("chronicle").inspect("url");
+  const v = i?.workspaceFolderValue ?? i?.workspaceValue ?? i?.globalValue;
+  return v ? String(v).replace(/\/+$/, "") : null;
+};
+const baseUrl = () => ownUrl() || answered || DEFAULT_URLS[0];
 const includeReads = () => setting("includeReads", true);
 
 // GET one API path: { data }, or { error } worded for the view's message line.
 async function api(path) {
-  try {
-    const res = await fetch(`${baseUrl()}${path}`, { signal: AbortSignal.timeout(5000) });
+  const own = ownUrl();
+  const urls = own ? [own] : [...new Set([answered, ...DEFAULT_URLS].filter(Boolean))];
+  for (const url of urls) {
+    let res;
+    try {
+      res = await fetch(`${url}${path}`, { signal: AbortSignal.timeout(5000) });
+    } catch {
+      continue; // nothing there: try the next address
+    }
+    if (!own) answered = url;
     if (res.status === 404) return { error: "This Chronicle is too old for the extension: update it (uv tool upgrade agents-chronicle)." };
     if (!res.ok) return { error: `Chronicle answered ${res.status}: check chronicle.url in Settings.` };
     return { data: await res.json() };
-  } catch {
-    return { error: `Chronicle isn't running at ${baseUrl()}. Start it with: chronicle ui` };
   }
+  return { error: `Chronicle isn't running at ${urls.join(" or ")}. Start it with: chronicle ui` };
 }
 
 function ago(iso) {

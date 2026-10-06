@@ -15,6 +15,9 @@
   `mcp_settings.json`, which Bob copies to `mcp.json` once, so if Bob Shell had run before you connected, it never
   saw the server. Disconnecting removes it from both files, and the Sources card checks `mcp.json`. Bob Shell's tasks
   were already recorded: they're in the same `~/.bob/db/bob.db` as the IDE's.
+- **The dashboard's default port is 11524**, out of the way of other local servers that like 8765. New installs use
+  it; an existing install keeps the `port = 8765` its `config.toml` already has (`chronicle config set server.port
+  11524` moves it). The VS Code extension, unless `chronicle.url` is set, finds the dashboard on either port.
 
 ## 0.11.0 (2026-10-06)
 
