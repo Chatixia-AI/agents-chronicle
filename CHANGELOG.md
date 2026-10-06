@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **Updating reloads the page:** after **Update to …** finishes, a "Restarting Chronicle…" cover stays over the page
+  while the dashboard restarts, and the page reloads itself as soon as the new version answers (it used to wait for
+  the next 20-second status check). If the restart takes over a minute, the cover says so and offers a Reload button.
 - **Chronicle Enterprise lives in `ee/`:** features a company needs to run Chronicle across its teams (single
   sign-on, policies, audit export, admin reports) will be built in `ee/` under the Chronicle Enterprise License and
   ship as a separate package. Everything else, the hub and its team features included, stays MIT, and the

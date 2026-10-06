@@ -4312,6 +4312,7 @@ function updatesCard() {
       if (!r.started) { toast(r.error || t("An update is already running")); run.disabled = false; run.textContent = label; return; }
       try { sessionStorage.setItem("chronicle-updating", u.current); } catch (e) { /* private mode */ }
       toast(u.restartable ? t("Updating Chronicle; the dashboard restarts when it is done") : t("Updating Chronicle…"), 6000);
+      restartAfterUpdate = !!u.restartable;
       watchJob("update");
     } }, label) : null;
     const setting = (key, path, label) => {
@@ -5956,7 +5957,7 @@ function showSignin() {
 }
 
 // ------------------------------------------------------------------ jobs, status bar, theme
-let watched = new Set(), pollTimer, uiBuild = null;
+let watched = new Set(), pollTimer, uiBuild = null, restartAfterUpdate = false;
 function watchJob(name) { watched.add(name); pollStatus(); }
 async function pollStatus() {
   clearTimeout(pollTimer);
@@ -5984,6 +5985,12 @@ async function pollStatus() {
     pollUnseen();
     for (const name of [...watched]) {
       const j = jobs[name];
+      if (name === "update" && restartAfterUpdate && (!j || j.state === "done")) {
+        watched.delete(name);
+        if (!j) { location.reload(); return; } // the restart came before this poll: a fresh process knows no update job
+        awaitRestart();
+        continue;
+      }
       if (j && j.state !== "running") {
         watched.delete(name);
         toast(j.state === "done" ? t("Done: {result}", { result: String(j.result || jobLabel(name)).slice(0, 160) }) : t("Failed: {result}", { result: String(j.result).slice(0, 200) }), 6000);
@@ -5993,6 +6000,27 @@ async function pollStatus() {
     }
   } catch (e) { /* server restarting */ }
   pollTimer = setTimeout(pollStatus, busy || watched.size || !$("#activity").hidden ? 2500 : 20000);
+}
+
+// after an update the dashboard restarts itself on the new code: cover the page, and reload it once the new process answers
+function awaitRestart() {
+  const note = h("div", { class: "muted" }, t("The update is installed. This page reloads by itself when the dashboard is back."));
+  document.body.append(h("div", { id: "restart-wait", role: "alertdialog", "aria-modal": "true", "aria-label": t("Restarting Chronicle") },
+    h("div", { class: "rw-card" }, icon("sync", "spin"), h("b", null, t("Restarting Chronicle…")), note)));
+  const since = Date.now();
+  const tick = async () => {
+    try {
+      const res = await fetch("/api/jobs", { cache: "no-store", headers: { "X-Chronicle-Lang": LANG } });
+      if (res.ok && !(await res.json()).jobs?.update) { location.reload(); return; } // a fresh process: it has no record of the update
+    } catch (e) { /* down while it restarts */ }
+    if (Date.now() - since > 60000 && !note.dataset.late) {
+      note.dataset.late = "1";
+      note.replaceChildren(t("The dashboard is taking longer than usual to come back."), " ",
+        h("button", { class: "btn small", type: "button", onclick: () => location.reload() }, t("Reload")));
+    }
+    setTimeout(tick, 1000);
+  };
+  setTimeout(tick, 1000);
 }
 
 // ------------------------------------------------------------------ activity panel (click the status bar)
