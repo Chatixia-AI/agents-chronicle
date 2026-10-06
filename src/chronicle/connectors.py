@@ -406,6 +406,20 @@ def bob_home() -> Path:
     return Path(os.environ.get("BOB_HOME", "~/.bob")).expanduser()
 
 
+def bob_mcp_files(home: Path) -> tuple[Path, Path]:
+    """Bob's global MCP configs: mcp.json (Bob 2.x, which Bob Shell reads) and mcp_settings.json (older Bob IDE).
+    Bob 2.x copies mcp_settings.json to mcp.json once, only while mcp.json does not exist yet."""
+    settings = home / "settings"
+    return settings / "mcp.json", settings / "mcp_settings.json"
+
+
+def _bob_mcp_registered(home: Path) -> bool:
+    current, legacy = bob_mcp_files(home)
+    if current.exists():
+        return _mcp_json_has(current, "mcpServers")
+    return _mcp_json_has(legacy, "mcpServers")  # Bob copies it to mcp.json on its next start
+
+
 def bob_status(cfg: Config, conn: sqlite3.Connection) -> dict:
     from .bob_parser import bob_db, load_tasks
 
@@ -414,7 +428,7 @@ def bob_status(cfg: Config, conn: sqlite3.Connection) -> dict:
     with_prompt = sum(1 for t in tasks if t["messages"])
     connected = bool(cfg.bob_dirs)
     app = next((a for a in ("/Applications/IBM Bob.app", "/Applications/IBM Bob - Insiders.app") if Path(a).exists()), None)
-    mcp = _mcp_json_has(home / "settings" / "mcp_settings.json", "mcpServers")
+    mcp = _bob_mcp_registered(home)
     return {
         "name": "bob",
         "label": "IBM Bob",
@@ -435,7 +449,7 @@ def bob_status(cfg: Config, conn: sqlite3.Connection) -> dict:
             {"key": "recording", "label": tr("Recording"), "ok": connected,
              "detail": tr("scanned every sync") if connected else tr("not scanned (connect to start)")},
             {"key": "mcp", "label": tr("MCP server in Bob"), "ok": mcp,
-             "detail": f"{_tilde(home)}/settings/mcp_settings.json"},
+             "detail": _tilde(bob_mcp_files(home)[0])},
             {"key": "chats", "label": tr("IDE chat history"), "ok": None, "optional": True,
              "detail": tr("Bob IDE keeps no conversation files on this Mac; only tasks in its task database are recorded")},
         ],
@@ -451,17 +465,21 @@ def connect_bob(cfg: Config, exe: str) -> list[str]:
         actions.append(tr("recording {where}", where=_tilde(home)))
     if home.is_dir():
         command, args = _split_exe(exe)
-        actions.append(_mcp_json_set(cfg, home / "settings" / "mcp_settings.json", "mcpServers",
-                                     {"command": command, "args": args, "disabled": False, "alwaysAllow": []}, "IBM Bob"))
+        entry = {"command": command, "args": args, "disabled": False, "alwaysAllow": []}
+        current, legacy = bob_mcp_files(home)
+        if not current.exists() and legacy.exists():
+            # Do Bob's own migration first, so writing mcp.json doesn't keep the user's other servers from moving over.
+            shutil.copy2(legacy, current)
+        actions += [_mcp_json_set(cfg, path, "mcpServers", entry, "IBM Bob") for path in (current, legacy)]
     return actions
 
 
 def disconnect_bob(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "bob_dirs", "[]")
     actions = [tr("stopped recording {label} (recorded sessions are kept)", label="IBM Bob")]
-    path = bob_home() / "settings" / "mcp_settings.json"
-    if _mcp_json_has(path, "mcpServers"):
-        actions.append(_mcp_json_set(cfg, path, "mcpServers", None, "IBM Bob"))
+    for path in bob_mcp_files(bob_home()):
+        if _mcp_json_has(path, "mcpServers"):
+            actions.append(_mcp_json_set(cfg, path, "mcpServers", None, "IBM Bob"))
     return actions
 
 

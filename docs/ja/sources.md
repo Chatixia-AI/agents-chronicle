@@ -44,8 +44,10 @@ GPT-5 の料金で見積もります。
 
 **IBM Bob** は任意で接続します（`chronicle connect bob`）。`~/.bob/db/bob.db` からタスクとメッセージを読み取り専用で読み込み、
 そのデータベースの SQLite スナップショットをアーカイブします。`~/.bob` 内のそれ以外（ログイン状態など）は読みません。
-Bob IDE は会話ファイルをローカルに保存しないため、記録されるのはこのデータベース内のタスクだけです。接続すると
-`~/.bob/settings/mcp_settings.json` に MCP サーバーが登録されます。
+Bob IDE と Bob Shell（`bob` コマンド）はどちらもこのデータベースにタスクを保存するため、両方のタスクが記録されます。
+IDE はそれ以外の会話ファイルをローカルに保存しません。接続すると、Bob 2.x と Bob Shell が読む
+`~/.bob/settings/mcp.json` と、古い Bob IDE 向けの `~/.bob/settings/mcp_settings.json` に MCP サーバーが登録されます。
+`mcp.json` がまだない場合は、Bob 自身と同じように先に `mcp_settings.json` からコピーするので、ほかの MCP サーバーも引き継がれます。
 
 **Google Antigravity** は任意で接続します（`chronicle connect antigravity`）。Antigravity は各会話を
 `~/.gemini/antigravity/conversations/` に独自の形式（古いバージョンでは暗号化、新しいバージョンでは SQLite データベース）で
