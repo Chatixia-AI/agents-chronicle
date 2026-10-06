@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased
+
+- **Bob Shell gets the MCP server:** `chronicle connect bob` now also registers the MCP server in
+  `~/.bob/settings/mcp.json`, the file Bob 2.x and Bob Shell (`bob`) read. It used to write only
+  `mcp_settings.json`, which Bob copies to `mcp.json` once, so if Bob Shell had run before you connected, it never
+  saw the server. Disconnecting removes it from both files, and the Sources card checks `mcp.json`. Bob Shell's tasks
+  were already recorded: they're in the same `~/.bob/db/bob.db` as the IDE's.
+
 ## 0.11.0 (2026-10-06)
 
 - **A hub opens on Activity:** on a hub with people, the dashboard now opens on **Activity** (the charts of every

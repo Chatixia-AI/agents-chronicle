@@ -46,9 +46,11 @@ Connecting also registers the MCP server in VS Code (`User/mcp.json`) and the Co
 Both files are backed up to `~/.claude-chronicle/backups/` first, and other servers in them are kept.
 
 **IBM Bob** is opt-in (`chronicle connect bob`). It reads tasks and messages from `~/.bob/db/bob.db`, read-only,
-and archives a SQLite snapshot of that database; nothing else in `~/.bob` (e.g. login state) is read. The Bob IDE
-keeps no conversation files locally, so only the tasks in that database are recorded. Connecting registers the MCP
-server in `~/.bob/settings/mcp_settings.json`.
+and archives a SQLite snapshot of that database; nothing else in `~/.bob` (e.g. login state) is read. The Bob IDE and
+Bob Shell (the `bob` command) both keep their tasks in that database, so tasks from either are recorded; the IDE keeps
+no other conversation files locally. Connecting registers the MCP server in `~/.bob/settings/mcp.json`, which Bob 2.x
+and Bob Shell read, and in `~/.bob/settings/mcp_settings.json` for older Bob IDE versions. If `mcp.json` doesn't exist
+yet, it is first copied from `mcp_settings.json`, as Bob itself does, so your other MCP servers carry over.
 
 **Google Antigravity** is opt-in (`chronicle connect antigravity`). Antigravity keeps each conversation in its own
 store under `~/.gemini/antigravity/conversations/` (encrypted in older versions, a SQLite database in newer ones), and

@@ -38,7 +38,7 @@ Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) の�
 | Claude Code | ユーザースコープ、`claude mcp add` で（`chronicle install` または `chronicle connect claude`） |
 | Codex | `~/.codex/config.toml`、`codex mcp add` で（`chronicle connect codex`） |
 | GitHub Copilot | VS Code の `User/mcp.json` と `~/.copilot/mcp-config.json`（`chronicle connect copilot`） |
-| IBM Bob | `~/.bob/settings/mcp_settings.json`（`chronicle connect bob`） |
+| IBM Bob（IDE と Bob Shell） | `~/.bob/settings/mcp.json` と `mcp_settings.json`（`chronicle connect bob`） |
 | Google Antigravity | `~/.gemini/config/mcp_config.json`（`chronicle connect antigravity`） |
 
 **ほかのクライアント**にはサーバーだけを追加します。Chronicle はそのセッションを記録しません。**Settings › MCP ›

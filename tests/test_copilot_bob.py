@@ -102,6 +102,30 @@ def test_connect_registers_mcp_and_keeps_other_servers(stores):
     assert load_config(cfg.home).copilot_dirs == [] and load_config(cfg.home).bob_dirs == []
 
 
+def test_bob_shell_reads_mcp_json(stores):
+    from chronicle.connectors import bob_status, connect, disconnect
+
+    cfg, settings = stores["cfg"], stores["bob"] / "settings"
+    current, legacy = settings / "mcp.json", settings / "mcp_settings.json"
+    servers = lambda p: set(json.loads(p.read_text())["mcpServers"])  # noqa: E731
+    mcp_ok = lambda: next(c for c in bob_status(load_config(cfg.home), db_connect(cfg.db_path))["checks"]  # noqa: E731
+                          if c["key"] == "mcp")["ok"]
+
+    # No mcp.json yet: Bob's migration (mcp_settings.json → mcp.json) is done first, so other servers move over too.
+    legacy.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
+    connect(cfg, "bob", "/opt/bin/chronicle")
+    assert servers(current) == servers(legacy) == {"other", "chronicle"} and mcp_ok()
+    disconnect(cfg, "bob")
+    assert servers(current) == servers(legacy) == {"other"} and not mcp_ok()
+
+    # mcp.json already exists (Bob Shell 2.x ran before): Bob never reads mcp_settings.json again.
+    legacy.write_text(json.dumps({"mcpServers": {"chronicle": {"command": "/opt/bin/chronicle"}}}))
+    current.write_text(json.dumps({"mcpServers": {"shell-only": {"command": "y"}}}))
+    assert not mcp_ok()
+    connect(cfg, "bob", "/opt/bin/chronicle")
+    assert servers(current) == {"shell-only", "chronicle"} and mcp_ok()
+
+
 def test_mcp_clients_get_the_server_and_keep_their_settings(env, monkeypatch):
     from chronicle import connectors
     from chronicle.connectors import connect, disconnect, mcp_clients_status

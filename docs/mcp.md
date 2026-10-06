@@ -38,7 +38,7 @@ All tools are marked read-only (`readOnlyHint`), so clients that honour the hint
 | Claude Code | user scope, with `claude mcp add` (`chronicle install` or `chronicle connect claude`) |
 | Codex | `~/.codex/config.toml`, with `codex mcp add` (`chronicle connect codex`) |
 | GitHub Copilot | VS Code `User/mcp.json` and `~/.copilot/mcp-config.json` (`chronicle connect copilot`) |
-| IBM Bob | `~/.bob/settings/mcp_settings.json` (`chronicle connect bob`) |
+| IBM Bob (IDE and Bob Shell) | `~/.bob/settings/mcp.json` and `mcp_settings.json` (`chronicle connect bob`) |
 | Google Antigravity | `~/.gemini/config/mcp_config.json` (`chronicle connect antigravity`) |
 
 **Other clients** only get the server. Chronicle doesn't record their sessions. Add one from **Settings › MCP › Other MCP
