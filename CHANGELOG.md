@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0 (2026-10-06)
 
 - **A hub opens on Activity:** on a hub with people, the dashboard now opens on **Activity** (the charts of every
   session), with its own rail icon. The team's page (what needs attention, team projects) moves to its own
