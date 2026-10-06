@@ -24,7 +24,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | Key | Default | |
 | --- | --- | --- |
 | `auto` | `true` | analyze sessions automatically once they go idle |
-| `backend` | `claude` | what analyzes sessions: `claude` (Claude Code) or `codex` (Codex) through your own login, or a model provider's API: `anthropic`, `bedrock`, `openai`, `azure`, `openrouter`, `ollama`, `openai-compatible` (see [`[providers.<name>]`](#providersname)). Also in **Status › Analysis** |
+| `backend` | `claude` | what analyzes sessions: `claude` (Claude Code) or `codex` (Codex) through your own login, or a model provider's API: `anthropic`, `bedrock`, `openai`, `azure`, `openrouter`, `ollama`, `openai-compatible` (see [`[providers.<name>]`](#providers)). Also in **Status › Analysis** |
 | `model` / `effort` | `sonnet` / `medium` | Claude: any `claude --model` alias. `effort` also sets Codex's reasoning effort (`max` becomes `xhigh`) |
 | `codex_model` | `""` | Codex model, e.g. `gpt-5.5`; empty uses Codex's default |
 | `screen_model` | `haiku` | model that screens imported chats (`chronicle screen`); it reads only each chat's opening, 60 chats a call |
@@ -38,7 +38,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `timeout_seconds` | `900` | wall-clock limit per call |
 | `claude_bin` / `codex_bin` | `""` | path to `claude` / `codex` (found automatically when empty) |
 
-## `[providers.<name>]`
+## `[providers.*]`
 
 Settings for `analysis.backend = "<name>"`; [Model providers](analysis.md#model-providers) has the list. Set them in
 **Status › Analysis** or with `chronicle config set providers.<name>.<key> <value>`. API keys are not kept here:
