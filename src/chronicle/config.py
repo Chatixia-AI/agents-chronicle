@@ -148,6 +148,12 @@ notify = false
 enabled = true
 # Show a desktop notification when new suggestions arrive.
 notify = false
+
+[systems]
+# The Systems map reads a few manifest files in each project folder (package.json, pyproject.toml, compose files,
+# Dockerfiles, Terraform, CI workflows, vite configs, .env.example, deploy configs), read-only and nothing else.
+# Off: the map uses only what sessions recorded.
+read_manifests = true
 """
 
 
@@ -225,6 +231,7 @@ class Config:
     update_notify: bool = False
     suggestions_enabled: bool = True
     suggestions_notify: bool = False
+    systems_read_manifests: bool = True
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -375,6 +382,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         update_notify=bool(_section(data, "updates").get("notify", False)),
         suggestions_enabled=bool(_section(data, "suggestions").get("enabled", True)),
         suggestions_notify=bool(_section(data, "suggestions").get("notify", False)),
+        systems_read_manifests=bool(_section(data, "systems").get("read_manifests", True)),
     )
     if cfg.analysis.language not in LANGUAGES:
         import logging

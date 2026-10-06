@@ -17,6 +17,7 @@
 | `chronicle export [--full]` | Rewrite the Markdown vault |
 | `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | Export sessions: one file, or a .zip of several (`raw`: the original transcript) |
 | `chronicle glossary [term] [-p project] [--rebuild --all] [--themes]` | Your vocabulary: internal names, acronyms, domain terms with definitions and usage; `--themes` groups big categories into themes for the Map |
+| `chronicle systems [NAME] [--links] [--evidence] [--json]` | The [Systems map](dashboard.md#systems-map): every project as a system, grouped by folder, with what it runs on; NAME for one system's parts, connections and evidence (`--evidence`: with example commands) |
 | `chronicle review [2026-W39\|current]` | Weekly engineering review written by the analysis model (automatic for each completed week) |
 | `chronicle import <zip> [--analyze] [--screen]` | Import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or `conversations.json`); repeatable. `--screen` screens them right after. See [Sources](sources.md) |
 | `chronicle screen [--source chatgpt\|claude-ai] [--sample N] [--dry-run] [--redo]` | Sort imported chats into worth analyzing, maybe and not worth it, reading only each chat's opening ([Screening imported chats](sources.md#screening-imported-chats)) |

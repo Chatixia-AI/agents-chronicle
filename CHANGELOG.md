@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- **A map of your systems:** **Projects › Systems map** draws every folder your agents worked in as a system, grouped
+  by the folders they live in, with lines where one project edited or read another's files or its glossary says how
+  it uses the other. Open a system for its parts in five rows (ways in, code, data, delivery, and what it runs on or
+  uses): its frontend calling the backend's `/api`, the Postgres it stores in, the Terraform that provisions its App
+  Service, the VM it is deployed to over ssh. Nothing is drawn by a model: every part and line comes from the project's
+  manifests (package manifests, compose files, Dockerfiles, Terraform, CI workflows, vite proxies, deploy configs, read
+  only) and what sessions did (servers they started, hosts and clouds they reached, machines they ssh'd into, files
+  they touched), and clicking it shows that evidence, each command linked to its session. `chronicle systems [NAME]`
+  prints the same in the terminal; `[systems] read_manifests = false` draws from sessions only.
+  [Systems map](docs/dashboard.md#systems-map)
 - **The hub's dashboard is the team's:** once a hub has people, its **Home** shows the team projects (set up on the
   hub, or sent to by other computers) with the sessions and new lessons of the last 7, 30 or 90 days, who worked on
   each, and the newest lessons and sessions with the person they came from. Admins also see what needs attention:

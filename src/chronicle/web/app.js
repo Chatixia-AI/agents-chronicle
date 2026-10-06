@@ -57,6 +57,10 @@ const ICONS = {
   prompts: ["M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", "M8 8h8", "M8 12h5"],
   knowledge: ["M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z", "M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"],
   projects: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
+  systems: [["rect", { x: 3, y: 3, width: 7, height: 6, rx: 1.5 }], ["rect", { x: 14, y: 3, width: 7, height: 6, rx: 1.5 }],
+    ["rect", { x: 8.5, y: 15, width: 7, height: 6, rx: 1.5 }], "M6.5 9v3h11V9", "M12 12v3"],
+  cloud: ["M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"],
+  terminal: ["m4 17 6-6-6-6", "M12 19h8"],
   glossary: ["M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20", "m8 13 4-7 4 7", "M9.1 11h5.8"],
   home: ["m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M9 22V12h6v10"],
   settings: ["M4 21v-7", "M4 10V3", "M12 21v-9", "M12 8V3", "M20 21v-5", "M20 12V3", "M1 14h6", "M9 8h6", "M17 16h6"],
@@ -762,7 +766,7 @@ function setParams(params) {
   lastHash = location.hash;
   const now = parseHash();
   markSidebar(now.path, now.params);
-  if (!/^\/(session\/|project$)/.test(path)) setCrumbs(defaultCrumbs(now.path, now.params)); // those pages name themselves
+  if (!/^\/(session\/|project$)/.test(path) && !(path === "/systems" && now.params.system)) setCrumbs(defaultCrumbs(now.path, now.params)); // those pages name themselves
 }
 let renderSeq = 0;
 async function render() {
@@ -800,6 +804,7 @@ function navKey(path) {
   if (path.startsWith("/mcp")) return "mcp";
   if (path.startsWith("/glossary")) return "glossary";
   if (path.startsWith("/map")) return "map";
+  if (path.startsWith("/systems")) return "systems";
   if (path.startsWith("/devices")) return "devices";
   if (path.startsWith("/appearance")) return "appearance";
   if (path.startsWith("/search")) return "search";
@@ -2233,7 +2238,8 @@ route(/^\/project$/, async (params) => {
     h("tbody", null, p.sessions.map((x) => sessionRow(x))))));
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/projects" }, t("Projects")), " / "),
-      h("h1", null, p.label, p.shared ? [" ", sharedBadge()] : null), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)), synth),
+      h("h1", null, p.label, p.shared ? [" ", sharedBadge()] : null), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)),
+      h("div", { class: "head-actions" }, h("a", { class: "btn", href: `#/systems?system=${encodeURIComponent(path)}` }, icon("systems"), t("System map")), synth)),
     tiles,
     h("div", { class: "section-gap" }, kbCard),
     p.artifacts?.total ? h("div", { class: "section-gap" }, artifactsCard(p.artifacts.recent, { project: false,
@@ -3348,6 +3354,556 @@ route(/^\/map$/, async (params) => {
   }
   return page;
 });
+
+// =====================================================================================
+// Systems: every folder your agents worked in as a system, grouped by where it lives, and each system's parts in
+// five roles, all from evidence (manifests and what sessions did). Click anything to see why it is there.
+// =====================================================================================
+const SY_ROLES = [["way_in", t("Ways in")], ["code", t("Code")], ["data", t("Data")], ["delivery", t("Delivery")], ["runtime", t("Runs on & uses")]];
+const SY_ROLE_NAME = Object.fromEntries(SY_ROLES);
+const SY_HUE = { way_in: "var(--series-1)", code: "var(--series-7)", data: "var(--series-3)", delivery: "var(--series-4)", runtime: "var(--series-2)" };
+const SY_KIND = {
+  ui: t("UI"), api: t("API"), cli: t("Command line"), extension: t("Extension"), desktop: t("Desktop app"), mcp: t("MCP server"),
+  worker: t("Worker"), service: t("Service"), library: t("Package"), component: t("Folder"), store: t("Data store"), ci: t("CI"),
+  infra: t("Infrastructure"), image: t("Container image"), deployed: t("Deployed"), server: t("Server"), platform: t("Platform"),
+  external: t("External service"),
+};
+const SY_EDGE = { calls: tc("edge", "calls"), "depends on": t("depends on"), uses: t("uses"), "stores in": t("stores in"),
+  "deploys to": t("deploys to"), "deployed as": t("deployed as"), "runs on": t("runs on"), provisions: t("provisions") };
+const syEdgeLabel = (l) => SY_EDGE[l] || (l && l.startsWith("calls ") ? t("calls {path}", { path: l.slice(6) }) : l || "");
+function syEvText(ev) { // what commands showed, in the dashboard's language
+  if (ev.kind !== "commands" || !ev.key) return ev.text;
+  const sessions = tn(ev.sessions, "{n} session", "{n} sessions", { n: fmtNum(ev.sessions) });
+  const head = ev.key === "host" ? tn(ev.n, "reached in {n} command", "reached in {n} commands", { n: fmtNum(ev.n) })
+    : ev.key.startsWith("cli:") ? tn(ev.n, "{tool} in {n} command", "{tool} in {n} commands", { tool: ev.key.slice(4), n: fmtNum(ev.n) })
+      : ev.key.startsWith("port:") ? tn(ev.n, "started on :{port} in {n} command", "started on :{port} in {n} commands", { port: ev.key.slice(5), n: fmtNum(ev.n) })
+        : ev.text;
+  return `${head} · ${sessions}`;
+}
+const SY_GROUP_HUES = [1, 2, 3, 7, 4, 5, 6, 8].map((n) => `var(--series-${n})`);
+const SY_CARD = { w: 212, h: 76, gap: 12 }, SY_PAD = 14, SY_HEAD = 30, SY_ITEM_GAP = 18;
+const SY_NODE = { w: 198, h: 62, gap: 22, line: 16, row: 58, perLine: 4 };
+const syState = { views: {} }; // the camera per view (landscape, or one system), kept while you move between them
+
+let syCtx;
+function syClip(text, px, size = 13, weight = 400) { // the text, cut with … to fit px
+  syCtx ||= document.createElement("canvas").getContext("2d");
+  syCtx.font = `${weight} ${size}px ${getComputedStyle(document.body).fontFamily}`;
+  if (syCtx.measureText(text).width <= px) return text;
+  let lo = 0, hi = text.length;
+  while (lo < hi) { const mid = (lo + hi + 1) >> 1; if (syCtx.measureText(text.slice(0, mid) + "…").width <= px) lo = mid; else hi = mid - 1; }
+  return text.slice(0, lo) + "…";
+}
+
+// ------------------------------------------------------------------ the canvas: pan, zoom, fit (as on the Map)
+function syCanvas(key) {
+  const svg = s("svg", { class: "mm-svg sy-svg", role: "img" });
+  const defs = s("defs", null, ["sy-arrow", "sy-arrow-on"].map((id) => s("marker", { id, viewBox: "0 0 10 10", refX: 9, refY: 5,
+    markerWidth: 7, markerHeight: 7, orient: "auto-start-reverse" }, s("path", { d: "M0,1 L9,5 L0,9 z", class: id }))));
+  const viewG = s("g");
+  svg.append(defs, viewG);
+  const box = h("div", { class: "mm-canvas sy-canvas" }, svg);
+  const cam = syState.views[key] ||= { k: 1, tx: 24, ty: 24, placed: false };
+  const apply = () => {
+    viewG.setAttribute("transform", `translate(${cam.tx},${cam.ty}) scale(${cam.k})`);
+    box.style.backgroundSize = `${22 * cam.k}px ${22 * cam.k}px`;
+    box.style.backgroundPosition = `${cam.tx}px ${cam.ty}px`;
+  };
+  let anim = 0;
+  const animateTo = (k, tx, ty) => {
+    const id = ++anim, from = { ...cam }, t0 = performance.now(), ms = reducedMotion() ? 0 : 320;
+    const step = (now) => {
+      if (id !== anim) return;
+      const p = ms ? Math.min(1, (now - t0) / ms) : 1, e = 1 - Math.pow(1 - p, 3);
+      cam.k = from.k + (k - from.k) * e; cam.tx = from.tx + (tx - from.tx) * e; cam.ty = from.ty + (ty - from.ty) * e;
+      apply();
+      if (p < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  };
+  const zoom = (f, cx = box.clientWidth / 2, cy = box.clientHeight / 2) => {
+    anim++;
+    const k = Math.max(0.15, Math.min(2.5, cam.k * f));
+    cam.tx = cx - (cx - cam.tx) * (k / cam.k); cam.ty = cy - (cy - cam.ty) * (k / cam.k); cam.k = k;
+    apply();
+  };
+  const fit = (b, maxK = 1.1, animate = true, minK = 0.15) => {
+    const W = box.clientWidth, H = box.clientHeight;
+    if (!W || !H || !b.w) return;
+    const k = Math.max(minK, Math.min(maxK, (W - 56) / b.w, (H - 70) / b.h));
+    const tx = Math.max(28, (W - b.w * k) / 2) - b.x * k, ty = Math.max(28, (H - b.h * k) / 2) - b.y * k;
+    if (animate) animateTo(k, tx, ty); else { cam.k = k; cam.tx = tx; cam.ty = ty; apply(); }
+  };
+  const centerOn = (x, y) => animateTo(cam.k, box.clientWidth / 2 - x * cam.k, box.clientHeight / 2 - y * cam.k);
+  let drag = null;
+  const state = { moved: false };
+  svg.addEventListener("pointerdown", (e) => { drag = { x: e.clientX, y: e.clientY, tx: cam.tx, ty: cam.ty }; state.moved = false; });
+  svg.addEventListener("pointermove", (e) => {
+    if (!drag) return;
+    const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
+    if (!state.moved && Math.hypot(dx, dy) < 4) return;
+    if (!state.moved) { state.moved = true; anim++; svg.setPointerCapture(e.pointerId); box.classList.add("dragging"); hideTip(); }
+    cam.tx = drag.tx + dx; cam.ty = drag.ty + dy;
+    apply();
+  });
+  const endDrag = () => { drag = null; box.classList.remove("dragging"); setTimeout(() => (state.moved = false)); };
+  svg.addEventListener("pointerup", endDrag);
+  svg.addEventListener("pointercancel", endDrag);
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    anim++;
+    const r = svg.getBoundingClientRect();
+    if (e.ctrlKey || e.metaKey) zoom(Math.exp(-e.deltaY * 0.01), e.clientX - r.left, e.clientY - r.top);
+    else { cam.tx -= e.deltaX; cam.ty -= e.deltaY; apply(); }
+  }, { passive: false });
+  const toolBtn = (label, content, onclick) => h("button", { type: "button", title: label, "aria-label": label, onclick }, content);
+  const tools = (onFit) => h("div", { class: "mm-tools" },
+    toolBtn(t("Zoom out"), "−", () => zoom(1 / 1.25)), toolBtn(t("Zoom in"), "+", () => zoom(1.25)),
+    toolBtn(t("Fit to screen"), s("svg", { viewBox: "0 0 24 24", class: "icon", "aria-hidden": "true" }, s("path", { d: MAP_TOOL_ICONS.fit })), onFit));
+  return { svg, viewG, box, cam, apply, fit, centerOn, tools, state };
+}
+
+// a curve from one box to another, leaving and arriving on the sides that face each other
+function syCurve(a, b) {
+  const ac = { x: a.x + a.w / 2, y: a.y + a.h / 2 }, bc = { x: b.x + b.w / 2, y: b.y + b.h / 2 };
+  const dx = bc.x - ac.x, dy = bc.y - ac.y;
+  if (Math.abs(dx) * 0.6 >= Math.abs(dy) || Math.abs(dx) > (a.w + b.w) / 2) {
+    const sx = dx >= 0 ? a.x + a.w : a.x, ex = dx >= 0 ? b.x : b.x + b.w, c = Math.max(40, Math.abs(ex - sx) * 0.45) * (dx >= 0 ? 1 : -1);
+    return { d: `M${sx},${ac.y} C${sx + c},${ac.y} ${ex - c},${bc.y} ${ex},${bc.y}`, mx: (sx + ex) / 2, my: (ac.y + bc.y) / 2 };
+  }
+  const sy = dy >= 0 ? a.y + a.h : a.y, ey = dy >= 0 ? b.y : b.y + b.h, c = Math.max(30, Math.abs(ey - sy) * 0.45) * (dy >= 0 ? 1 : -1);
+  return { d: `M${ac.x},${sy} C${ac.x},${sy + c} ${bc.x},${ey - c} ${bc.x},${ey}`, mx: (ac.x + bc.x) / 2, my: (sy + ey) / 2 };
+}
+
+// ------------------------------------------------------------------ landscape layout: folders as boxes, systems as cards
+function syLayoutGroup(g, groups, byId, hidden) {
+  const kids = g.groups.map((id) => syLayoutGroup(groups[id], groups, byId, hidden)).filter((k) => k.count);
+  const sys = g.systems.map((id) => byId[id]).filter((x) => x && !hidden(x))
+    .sort((a, b) => b.sessions - a.sessions || a.label.localeCompare(b.label));
+  const items = [];
+  if (sys.length) {
+    const cols = Math.min(sys.length, 4, Math.max(1, Math.ceil(Math.sqrt(sys.length * 1.4))));
+    const rows = Math.ceil(sys.length / cols);
+    items.push({ kind: "block", sys, cols, w: cols * (SY_CARD.w + SY_CARD.gap) - SY_CARD.gap, h: rows * (SY_CARD.h + SY_CARD.gap) - SY_CARD.gap });
+  }
+  kids.sort((a, b) => b.w * b.h - a.w * a.h).forEach((k) => items.push({ kind: "group", node: k, w: k.w, h: k.h }));
+  const area = items.reduce((a, it) => a + (it.w + SY_ITEM_GAP) * (it.h + SY_ITEM_GAP), 0);
+  const target = Math.max(...items.map((it) => it.w), 0, Math.sqrt(area * (g.id === "" ? 1.3 : 2.4))); // folders inside wide, the whole map squarer
+  let x = 0, y = 0, rowH = 0, width = 0;
+  for (const it of items) { // shelves: left to right, a new row when the next would pass the target width
+    if (x > 0 && x + it.w > target) { x = 0; y += rowH + SY_ITEM_GAP; rowH = 0; }
+    it.x = x; it.y = y;
+    x += it.w + SY_ITEM_GAP; rowH = Math.max(rowH, it.h); width = Math.max(width, x - SY_ITEM_GAP);
+  }
+  const pad = g.id ? SY_PAD : 0, top = g.id ? SY_HEAD : 0;
+  return { g, items, pad, top, w: width + 2 * pad, h: (items.length ? y + rowH : 0) + top + pad,
+    count: sys.length + kids.reduce((a, k) => a + k.count, 0) };
+}
+function syPlace(node, ox, oy, out, depth = 0, hue = null) {
+  if (node.g.id) out.groups.push({ g: node.g, x: ox, y: oy, w: node.w, h: node.h, depth, hue, count: node.count });
+  for (const it of node.items) {
+    const bx = ox + node.pad + it.x, by = oy + node.top + it.y;
+    if (it.kind === "block") {
+      it.sys.forEach((sys, i) => out.cards.push({ sys, hue, x: bx + (i % it.cols) * (SY_CARD.w + SY_CARD.gap),
+        y: by + Math.floor(i / it.cols) * (SY_CARD.h + SY_CARD.gap), w: SY_CARD.w, h: SY_CARD.h }));
+    } else {
+      syPlace(it.node, bx, by, out, depth + 1, hue || SY_GROUP_HUES[out.hues++ % SY_GROUP_HUES.length]);
+    }
+  }
+  return out;
+}
+
+route(/^\/systems$/, async (params) => (params.system ? systemView(params) : landscapeView(params)));
+
+async function landscapeView(params) {
+  const data = await api("/api/systems");
+  const groups = Object.fromEntries(data.groups.map((g) => [g.id, g]));
+  const byId = Object.fromEntries(data.systems.map((x) => [x.id, x]));
+  const showSmall = params.small === "1", showLinks = params.links !== "0";
+  const hidden = (x) => !showSmall && x.sessions <= 1 && !data.links.some((l) => l.from === x.id || l.to === x.id);
+  const tree = syLayoutGroup(groups[""], groups, byId, hidden);
+  const lay = syPlace(tree, 0, 0, { groups: [], cards: [], hues: 0 });
+  const cardOf = Object.fromEntries(lay.cards.map((c) => [c.sys.id, c]));
+  const maxSessions = Math.max(1, ...data.systems.map((x) => x.sessions));
+  const cv = syCanvas("landscape");
+  const groupG = s("g", { class: "sy-groups" }), linkG = s("g", { class: "sy-links" }), cardG = s("g", { class: "sy-cards" });
+  cv.viewG.append(groupG, linkG, cardG);
+  const aside = h("aside", { class: "mm-detail sy-detail" });
+  let selected = params.focus || null, query = "";
+  const refresh = (changes) => { setParams({ small: showSmall ? "1" : "", links: showLinks ? "" : "0", focus: selected || "", ...changes }); render(); };
+
+  for (const gb of lay.groups) {
+    const g = s("g", { class: `sy-group d${Math.min(gb.depth, 3)}` });
+    g.style.setProperty("--c", gb.hue || "var(--accent)");
+    g.append(s("rect", { x: gb.x, y: gb.y, width: gb.w, height: gb.h, rx: 14 }),
+      s("text", { x: gb.x + SY_PAD, y: gb.y + 20, class: "sy-gtitle" }, syClip(gb.g.label, gb.w - 70, 13, 600)),
+      s("text", { x: gb.x + gb.w - SY_PAD, y: gb.y + 20, class: "sy-gcount", "text-anchor": "end" }, fmtNum(gb.count)));
+    groupG.append(g);
+  }
+  const links = showLinks ? data.links.filter((l) => cardOf[l.from] && cardOf[l.to]) : [];
+  const linkEls = links.map((l) => {
+    const c = syCurve(cardOf[l.from], cardOf[l.to]);
+    const p = s("path", { d: c.d, class: `sy-link ${l.kind}`, "marker-end": "url(#sy-arrow)" });
+    p.dataset.from = l.from; p.dataset.to = l.to;
+    hoverable(p, () => [`${byId[l.from].label} → ${byId[l.to].label}`, l.kind === "files" ? l.evidence[0].text : t("mentioned in its glossary"),
+      l.evidence[0].text && l.kind !== "files" ? syOne(l.evidence[0].text, 140) : ""], { focusable: false });
+    return p;
+  });
+  linkG.append(...linkEls);
+  const cardEls = {};
+  for (const c of lay.cards) {
+    const x = c.sys, g = s("g", { class: "sy-card", tabindex: "0", role: "button", "aria-label": x.label, transform: `translate(${c.x},${c.y})` });
+    g.style.setProperty("--c", c.hue || "var(--accent)");
+    const sub = [tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }), x.last ? ago(x.last) : ""].filter(Boolean).join(" · ");
+    const third = x.stack.length ? x.stack.slice(0, 3).join(" · ") : x.platforms.slice(0, 3).join(" · ");
+    const runs = x.deployed.length ? x.deployed.map((d0) => d0.label) : [];
+    const bar = Math.max(6, (SY_CARD.w - 28) * Math.log(1 + x.sessions) / Math.log(1 + maxSessions));
+    g.append(s("rect", { class: "sy-cbox", width: c.w, height: c.h, rx: 10 }),
+      s("rect", { class: "sy-cstripe", x: 0, y: 10, width: 3.5, height: c.h - 20, rx: 1.75 }),
+      s("text", { x: 14, y: 22, class: "sy-ctitle" }, syClip(x.label, c.w - 28 - (runs.length ? 18 : 0), 13.5, 600)),
+      s("text", { x: 14, y: 40, class: "sy-csub" }, syClip(sub, c.w - 28, 12)),
+      s("text", { x: 14, y: 57, class: "sy-cstack" }, syClip(third || (x.on_disk ? "" : t("not on this computer")), c.w - 28, 11.5)),
+      s("rect", { class: "sy-cbar-bg", x: 14, y: c.h - 9, width: c.w - 28, height: 3, rx: 1.5 }),
+      s("rect", { class: "sy-cbar", x: 14, y: c.h - 9, width: bar, height: 3, rx: 1.5 }));
+    if (runs.length) {
+      const ic = icon("cloud", "sy-cicon");
+      setAttrs(ic, { x: c.w - 28, y: 9, width: 15, height: 15 });
+      g.append(ic);
+    }
+    hoverable(g, () => [x.label, shortPath(x.path || x.id), [tn(x.n_parts, "{n} part", "{n} parts", { n: fmtNum(x.n_parts) }),
+      runs.length ? t("runs as {names}", { names: runs.slice(0, 3).join(t(", ")) }) : ""].filter(Boolean).join(" · ")], { focusable: false });
+    g.addEventListener("click", (e) => { e.stopPropagation(); if (!cv.state.moved) select(x.id); });
+    g.addEventListener("dblclick", (e) => { e.stopPropagation(); go(`#/systems?system=${encodeURIComponent(x.id)}`); });
+    g.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { e.preventDefault(); go(`#/systems?system=${encodeURIComponent(x.id)}`); }
+      else if (e.key === " ") { e.preventDefault(); select(x.id); }
+    });
+    cardEls[x.id] = g;
+    cardG.append(g);
+  }
+  cv.svg.addEventListener("click", () => { if (!cv.state.moved && selected) select(null); });
+
+  function paint() { // what is selected or matches the search stands out; links of the selection light up
+    const q = query.toLowerCase();
+    const match = (x) => q && (x.label.toLowerCase().includes(q) || (x.path || "").toLowerCase().includes(q) || x.stack.some((st) => st.toLowerCase().includes(q))
+      || x.deployed.some((d0) => d0.label.toLowerCase().includes(q)) || x.services.some((sv) => sv.toLowerCase().includes(q)));
+    for (const [id, el] of Object.entries(cardEls)) {
+      el.classList.toggle("sel", id === selected);
+      el.classList.toggle("hit", !!match(byId[id]));
+      el.classList.toggle("dim", !!q && !match(byId[id]) && id !== selected);
+    }
+    const near = new Set(selected ? links.filter((l) => l.from === selected || l.to === selected).flatMap((l) => [l.from, l.to]) : []);
+    for (const p of linkEls) {
+      const on = selected && (p.dataset.from === selected || p.dataset.to === selected);
+      p.classList.toggle("on", !!on);
+      p.classList.toggle("off", !!selected && !on);
+      p.setAttribute("marker-end", on ? "url(#sy-arrow-on)" : "url(#sy-arrow)");
+    }
+    for (const [id, el] of Object.entries(cardEls)) el.classList.toggle("near", near.has(id) && id !== selected);
+  }
+  function select(id) {
+    selected = id;
+    paint();
+    setParams({ small: showSmall ? "1" : "", links: showLinks ? "" : "0", focus: id || "" });
+    aside.replaceChildren(...syKids(id ? systemSummary(byId[id]) : overview()));
+    aside.scrollTop = 0;
+  }
+  const bounds = { x: 0, y: 0, w: tree.w, h: tree.h };
+
+  // ------------------------------------------------------------------ side panel
+  const linkRow = (l, dir) => {
+    const other = byId[dir === "out" ? l.to : l.from];
+    return h("div", { class: "mm-use sy-linkrow" },
+      h("a", { href: `#/systems?system=${encodeURIComponent(other.id)}`, onclick: (e) => { if (cardEls[other.id]) { e.preventDefault(); select(other.id); const c = cardOf[other.id]; cv.centerOn(c.x + c.w / 2, c.y + c.h / 2); } } },
+        dir === "out" ? "→ " : "← ", other.label),
+      h("span", { class: `sy-lkind ${l.kind}` }, l.kind === "files" ? t("files") : t("glossary")),
+      h("div", { class: "gloss" }, l.kind === "files" ? l.evidence[0].text : l.evidence.map((e) => e.text).filter(Boolean)[0] || ""));
+  };
+  function systemSummary(x) {
+    const out = data.links.filter((l) => l.from === x.id), inc = data.links.filter((l) => l.to === x.id);
+    const gpath = []; for (let g = groups[x.group]; g && g.id; g = groups[g.parent]) gpath.unshift(g.label);
+    return [
+      h("button", { class: "icon-btn mm-close", type: "button", "aria-label": t("Close details"), onclick: () => select(null) }, icon("x")),
+      gpath.length ? h("span", { class: "mm-cat neutral" }, icon("projects"), gpath.join(" › ")) : null,
+      h("h3", null, x.label),
+      h("div", { class: "mono sy-path" }, shortPath(x.path || x.id)),
+      h("div", { class: "mm-stats" },
+        h("span", null, h("b", null, fmtNum(x.sessions)), " ", tn(x.sessions, "session", "sessions")),
+        x.last ? h("span", null, t("last {when}", { when: ago(x.last) })) : null,
+        Object.keys(x.agents).length ? h("span", null, Object.keys(x.agents).map(agentName).join(t(", "))) : null),
+      x.stack.length ? [h("h4", null, t("Built with")), h("div", { class: "mm-chips" }, x.stack.map((st) => h("span", { class: "sy-chip" }, st)))] : null,
+      x.deployed.length ? [h("h4", null, t("Runs on")), h("ul", { class: "mm-klist" }, x.deployed.map((d0) => h("li", null, icon("cloud"),
+        h("span", null, h("b", null, d0.label), d0.platform || d0.what ? h("span", { class: "muted" }, ` · ${[d0.platform, d0.what].filter((v) => v && v !== "deployed" && v !== "server").join(" ") || SY_KIND[d0.what] || ""}`) : null))))] : null,
+      x.services.length ? [h("h4", null, t("Uses")), h("div", { class: "mm-chips" }, x.services.map((sv) => h("span", { class: "sy-chip" }, sv)))] : null,
+      out.length || inc.length ? [h("h4", null, t("Other systems · {n}", { n: out.length + inc.length })),
+        h("div", { class: "mm-uses" }, out.map((l) => linkRow(l, "out")), inc.map((l) => linkRow(l, "in")))] : null,
+      h("div", { class: "mm-links-row" },
+        h("a", { class: "btn small primary", href: `#/systems?system=${encodeURIComponent(x.id)}` }, t("Open system")),
+        x.project ? h("a", { class: "btn small", href: `#/project?path=${encodeURIComponent(x.project)}` }, t("Project page")) : null,
+        x.git ? h("a", { class: "btn small", href: x.git.url, target: "_blank", rel: "noopener" }, x.git.host.includes("github") ? "GitHub" : x.git.host) : null),
+    ];
+  }
+  function overview() {
+    const busiest = [...data.systems].sort((a, b) => b.sessions - a.sessions).slice(0, 8);
+    const shown = lay.cards.length, hiddenN = data.systems.length - shown;
+    return [
+      h("h3", null, t("Your systems")),
+      h("p", { class: "mm-def" }, t("Every folder your agents worked in, grouped by where it lives. Parts and links come from evidence only: the manifests in each project and what sessions did there.")),
+      h("div", { class: "mm-stats" },
+        h("span", null, h("b", null, fmtNum(shown)), " ", tn(shown, "system", "systems")),
+        h("span", null, h("b", null, fmtNum(data.links.length)), " ", tn(data.links.length, "link", "links")),
+        hiddenN ? h("span", null, t("{n} one-session folders hidden", { n: fmtNum(hiddenN) })) : null),
+      h("h4", null, t("Links")),
+      h("div", { class: "sy-legend" },
+        h("div", null, s("svg", { width: 34, height: 10 }, s("path", { d: "M2,5 H32", class: "sy-link files" })), t("sessions in one project edited or read files of another")),
+        h("div", null, s("svg", { width: 34, height: 10 }, s("path", { d: "M2,5 H32", class: "sy-link mentions" })), t("its glossary says how it uses the other"))),
+      h("h4", null, t("Most active")),
+      h("ul", { class: "mm-klist" }, busiest.map((x) => h("li", null, h("span", { class: "mm-date" }, fmtNum(x.sessions)),
+        h("a", { href: "#", onclick: (e) => { e.preventDefault(); if (cardEls[x.id]) { select(x.id); const c = cardOf[x.id]; cv.centerOn(c.x + c.w / 2, c.y + c.h / 2); } } }, x.label)))),
+      h("p", { class: "muted sy-hint" }, t("Click a system for its summary, double-click to open it. Drag to move, pinch or ⌘-scroll to zoom.")),
+      data.read_manifests ? null : h("p", { class: "muted sy-hint" }, t("Manifests are not read ([systems] read_manifests = false): parts come from sessions only.")),
+    ];
+  }
+
+  const search = h("input", { class: "input mm-search", type: "search", placeholder: t("Find systems…"), "aria-label": t("Find systems by name, stack or where they run"),
+    oninput: (e) => {
+      query = e.target.value.trim(); paint();
+      const first = query && lay.cards.find((c) => cardEls[c.sys.id].classList.contains("hit"));
+      if (first && e.inputType !== "deleteContentBackward") cv.centerOn(first.x + first.w / 2, first.y + first.h / 2);
+    } });
+  cv.box.append(cv.tools(() => cv.fit(bounds)));
+  const page = h("div", { class: "mm-page sy-page" },
+    h("div", { class: "page-head" },
+      h("div", null, h("h1", null, t("Systems")),
+        h("div", { class: "sub" }, t("{systems} systems in {groups} folders, and how they connect", { systems: fmtNum(lay.cards.length), groups: fmtNum(lay.groups.length) }))),
+      h("div", { class: "head-actions" },
+        h("button", { type: "button", class: `chip ${showLinks ? "on" : ""}`, "aria-pressed": String(showLinks), onclick: () => refresh({ links: showLinks ? "0" : "" }) }, t("Links")),
+        h("button", { type: "button", class: `chip ${showSmall ? "on" : ""}`, "aria-pressed": String(showSmall), onclick: () => refresh({ small: showSmall ? "" : "1" }) }, t("One-session folders")),
+        search)),
+    data.systems.length ? h("section", { class: "card flush mm-card" }, cv.box, aside)
+      : h("div", { class: "card empty" }, t("No systems yet: they appear once sessions are recorded in project folders.")));
+  aside.append(...syKids(selected && byId[selected] ? systemSummary(byId[selected]) : overview()));
+  paint();
+  if (data.systems.length) {
+    const ro = new ResizeObserver(() => {
+      if (!cv.box.clientWidth) return;
+      if (!cv.cam.placed) { cv.cam.placed = true; cv.fit(bounds, 1, false, 0.62); } // readable cards, from the top left when it is big
+      else cv.apply();
+    });
+    ro.observe(cv.box);
+  }
+  return page;
+}
+const syKids = (items) => [items].flat(Infinity).filter((x) => x != null && x !== false); // a panel's parts, without the gaps
+const syOne = (text, n) => (text && text.length > n ? text.slice(0, n - 1) + "…" : text || "");
+
+// ------------------------------------------------------------------ one system: its parts in five role columns
+function syRows(x) { // roles top to bottom (ways in, code, data, delivery, runs on), each a row of at most four parts a line
+  const roles = SY_ROLES.map(([r]) => r).filter((r) => x.parts.some((p) => p.role === r));
+  const byRole = Object.fromEntries(roles.map((r) => [r, x.parts.filter((p) => p.role === r).sort((a, b) => b.weight - a.weight)]));
+  const nbrs = {};
+  for (const e of x.edges) { (nbrs[e.from] ||= []).push(e.to); (nbrs[e.to] ||= []).push(e.from); }
+  for (let it = 0; it < 6; it++) { // order each row by where its neighbours sit, to cut crossings
+    const pos = {};
+    for (const r of roles) byRole[r].forEach((p, i) => (pos[p.id] = i - (byRole[r].length - 1) / 2));
+    for (const r of roles) {
+      const key = (p) => { const ns = (nbrs[p.id] || []).filter((n) => pos[n] != null); return ns.length ? ns.reduce((a, n) => a + pos[n], 0) / ns.length : pos[p.id]; };
+      byRole[r] = [...byRole[r]].sort((a, b) => key(a) - key(b) || b.weight - a.weight);
+    }
+  }
+  const { w, h, gap, line, row, perLine } = SY_NODE;
+  const widest = Math.min(perLine, Math.max(...roles.map((r) => byRole[r].length)));
+  const fullW = widest * (w + gap) - gap;
+  const nodes = {}, heads = [];
+  let y = 0;
+  roles.forEach((r, ri) => {
+    heads.push({ role: r, y });
+    y += 24;
+    const list = byRole[r];
+    for (let i = 0; i < list.length; i += perLine) {
+      const chunk = list.slice(i, i + perLine), x0 = (fullW - (chunk.length * (w + gap) - gap)) / 2;
+      chunk.forEach((p, j) => (nodes[p.id] = { p, x: x0 + j * (w + gap), y, w, h, row: ri }));
+      y += h + line;
+    }
+    y += row - line;
+  });
+  return { roles, heads, nodes, w: fullW, h: y - row };
+}
+
+async function systemView(params) {
+  let x;
+  try { x = await api("/api/system", { id: params.system }); }
+  catch { return h("div", { class: "card empty" }, t("No such system."), " ", h("a", { href: "#/systems" }, t("All systems"))); }
+  const token = renderSeq;
+  const gpath = (x.group || "").split("/").filter(Boolean);
+  setCrumbs([[t("Projects"), "#/projects"], [t("Systems"), "#/systems"], [x.label]], token);
+  const lay = syRows(x);
+  const cv = syCanvas(`system:${x.id}`);
+  const headG = s("g", { class: "sy-colheads" }), nodeG = s("g", { class: "sy-nodes" });
+  const edgeG = s("g", { class: `sy-edges${x.edges.length > 10 ? " quiet" : ""}` }); // many arrows: their labels show on selection
+  cv.viewG.append(headG, edgeG, nodeG);
+  const aside = h("aside", { class: "mm-detail sy-detail" });
+  const parts = Object.fromEntries(x.parts.map((p) => [p.id, p]));
+  let selected = params.part && parts[params.part] ? params.part : null;
+
+  for (const hd of lay.heads) {
+    const g = s("g", { class: "sy-rowhead" });
+    g.style.setProperty("--c", SY_HUE[hd.role]);
+    g.append(s("line", { x1: SY_ROLE_NAME[hd.role].length * 7.6 + 12, x2: lay.w, y1: hd.y - 2, y2: hd.y - 2 }),
+      s("text", { x: 0, y: hd.y + 2, class: "sy-colhead" }, SY_ROLE_NAME[hd.role].toUpperCase()));
+    headG.append(g);
+  }
+  const edgeEls = x.edges.filter((e) => lay.nodes[e.from] && lay.nodes[e.to]).map((e) => {
+    const a = lay.nodes[e.from], b = lay.nodes[e.to];
+    const c = syCurve(a, b);
+    const g = s("g", { class: `sy-edge ${e.kind || "uses"}` });
+    g.dataset.from = e.from; g.dataset.to = e.to;
+    const path = s("path", { d: c.d, "marker-end": "url(#sy-arrow)" });
+    const label = e.label ? s("text", { x: c.mx, y: c.my - 4, "text-anchor": "middle", class: "sy-elabel" }, syEdgeLabel(e.label)) : null;
+    g.append(path, label);
+    hoverable(g, () => [`${parts[e.from].label} → ${parts[e.to].label}`, syEdgeLabel(e.label), e.evidence?.[0]?.text || ""], { focusable: false });
+    return g;
+  });
+  edgeG.append(...edgeEls);
+  const nodeEls = {};
+  for (const n of Object.values(lay.nodes)) {
+    const p = n.p, g = s("g", { class: `sy-node ${p.role}`, tabindex: "0", role: "button", "aria-label": p.label, transform: `translate(${n.x},${n.y})` });
+    g.style.setProperty("--c", SY_HUE[p.role]);
+    const sub = [SY_KIND[p.kind] || p.kind, p.ports.length ? p.ports.slice(0, 2).map((q) => `:${q.port}`).join(" ") : "",
+      p.what && p.what !== p.kind ? p.what : "", p.platform && p.platform !== p.label ? p.platform : ""].filter(Boolean).join(" · ");
+    const third = p.stack.length ? p.stack.slice(0, 3).join(" · ") : p.folder ? `${p.folder}/` : "";
+    const act = p.activity.sessions;
+    g.append(s("rect", { class: "sy-nbox", width: n.w, height: n.h, rx: 9 }),
+      s("rect", { class: "sy-nstripe", x: 0, y: 9, width: 3.5, height: n.h - 18, rx: 1.75 }),
+      s("text", { x: 13, y: 20, class: "sy-ntitle" }, syClip(p.label, n.w - 26 - (act ? 30 : 0), 13, 600)),
+      s("text", { x: 13, y: 37, class: "sy-nsub" }, syClip(sub, n.w - 26, 11.5)),
+      s("text", { x: 13, y: 53, class: "sy-nstack" }, syClip(third, n.w - 26, 11)));
+    if (act) g.append(s("text", { x: n.w - 11, y: 20, class: "sy-nact", "text-anchor": "end" }, fmtNum(act)));
+    hoverable(g, () => [p.label, sub, act ? tn(act, "{n} session edited or read files here", "{n} sessions edited or read files here", { n: fmtNum(act) }) : ""], { focusable: false });
+    g.addEventListener("click", (e) => { e.stopPropagation(); if (!cv.state.moved) select(p.id === selected ? null : p.id); });
+    g.addEventListener("keydown", (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); select(p.id); } });
+    nodeEls[p.id] = g;
+    nodeG.append(g);
+  }
+  cv.svg.addEventListener("click", () => { if (!cv.state.moved && selected) select(null); });
+  function paint() {
+    const near = new Set(selected ? x.edges.filter((e) => e.from === selected || e.to === selected).flatMap((e) => [e.from, e.to]) : []);
+    for (const [id, el] of Object.entries(nodeEls)) {
+      el.classList.toggle("sel", id === selected);
+      el.classList.toggle("dim", !!selected && id !== selected && !near.has(id));
+    }
+    for (const el of edgeEls) {
+      const on = selected && (el.dataset.from === selected || el.dataset.to === selected);
+      el.classList.toggle("on", !!on);
+      el.classList.toggle("off", !!selected && !on);
+      el.querySelector("path").setAttribute("marker-end", on ? "url(#sy-arrow-on)" : "url(#sy-arrow)");
+    }
+  }
+  function select(id) {
+    selected = id;
+    paint();
+    setParams({ system: params.system, part: id || "" });
+    aside.replaceChildren(...syKids(id ? partDetail(parts[id]) : systemHome()));
+    aside.scrollTop = 0;
+  }
+
+  // ------------------------------------------------------------------ side panel
+  const evItem = (ev) => {
+    if (ev.kind === "commands") {
+      return h("li", { class: "sy-ev" }, icon("terminal"), h("div", null, h("div", null, syEvText(ev)),
+        ev.examples?.length ? h("div", { class: "sy-examples" }, ev.examples.map((ex) => h("div", { class: "sy-example" },
+          h("code", null, ex.text), ex.session ? h("a", { href: `#/session/${ex.session}`, class: "mm-date" }, ex.ts ? fmtDate(ex.ts) : t("session")) : null))) : null));
+    }
+    const ic = { manifest: "file", remote: "cloud", glossary: "glossary", files: "file" }[ev.kind] || "dot";
+    return h("li", { class: "sy-ev" }, icon(ic), h("div", null, ev.text));
+  };
+  const edgeRow = (e, dir) => {
+    const other = parts[dir === "out" ? e.to : e.from];
+    return h("li", null, h("span", { class: "mm-date" }, dir === "out" ? "→" : "←"), h("div", null,
+      h("a", { href: "#", onclick: (ev) => { ev.preventDefault(); select(other.id); const n = lay.nodes[other.id]; cv.centerOn(n.x + n.w / 2, n.y + n.h / 2); } }, other.label),
+      h("span", { class: "muted" }, ` · ${syEdgeLabel(e.label)}`),
+      (e.evidence || []).slice(0, 2).map((ev) => h("div", { class: "muted sy-evline" }, ev.text))));
+  };
+  function partDetail(p) {
+    const out = x.edges.filter((e) => e.from === p.id), inc = x.edges.filter((e) => e.to === p.id);
+    const tag = h("span", { class: "mm-cat" }, h("i", { class: "mm-cdot" }), SY_ROLE_NAME[p.role]);
+    tag.style.setProperty("--c", SY_HUE[p.role]);
+    const a = p.activity;
+    return [
+      h("button", { class: "icon-btn mm-close", type: "button", "aria-label": t("Close details"), onclick: () => select(null) }, icon("x")),
+      tag, h("span", { class: "mm-theme-tag" }, SY_KIND[p.kind] || p.kind),
+      h("h3", null, p.label),
+      p.folder != null && p.folder !== undefined ? h("div", { class: "mono sy-path" }, `${shortPath(x.path || "")}/${p.folder}`.replace(/\/$/, "")) : null,
+      p.platform || p.what || p.resource || p.package ? h("div", { class: "mm-aliases" }, [p.platform, p.what, p.resource, p.package && p.package !== p.label ? p.package : ""].filter(Boolean).join(" · ")) : null,
+      a.sessions ? h("div", { class: "mm-stats" },
+        h("span", null, h("b", null, fmtNum(a.sessions)), " ", tn(a.sessions, "session", "sessions")),
+        a.edits ? h("span", null, h("b", null, fmtNum(a.edits)), " ", tn(a.edits, "edit", "edits")) : null,
+        a.last ? h("span", null, t("last {when}", { when: ago(a.last) })) : null) : null,
+      p.stack.length ? h("div", { class: "mm-chips sy-chips" }, p.stack.map((st) => h("span", { class: "sy-chip" }, st))) : null,
+      p.ports.length || p.calls.length ? [h("h4", null, t("Ports")), h("div", { class: "sy-ports" },
+        p.ports.map((q) => h("span", { class: "sy-chip mono" }, `:${q.port}`, h("em", null, ` ×${q.n}`))),
+        p.calls.length ? h("div", { class: "muted" }, t("agents called it at {paths}", { paths: p.calls.map((c) => `${c.path} ×${c.n}`).join(t(", ")) })) : null)] : null,
+      out.length || inc.length ? [h("h4", null, t("Connections")), h("ul", { class: "mm-klist" }, out.map((e) => edgeRow(e, "out")), inc.map((e) => edgeRow(e, "in")))] : null,
+      p.evidence.length ? [h("h4", null, t("Why it is here")), h("ul", { class: "mm-klist sy-evlist" }, p.evidence.map(evItem))] : null,
+    ];
+  }
+  function systemHome() {
+    const gl = x.links || [];
+    return [
+      gpath.length ? h("span", { class: "mm-cat neutral" }, icon("projects"), gpath.join(" › ")) : null,
+      h("h3", null, x.label),
+      h("div", { class: "mono sy-path" }, shortPath(x.path || x.id)),
+      h("div", { class: "mm-stats" },
+        h("span", null, h("b", null, fmtNum(x.sessions)), " ", tn(x.sessions, "session", "sessions")),
+        x.last ? h("span", null, t("last {when}", { when: ago(x.last) })) : null,
+        Object.keys(x.agents).length ? h("span", null, Object.keys(x.agents).map(agentName).join(t(", "))) : null),
+      h("p", { class: "muted sy-hint" }, t("Click a part to see why it is here: the manifest lines and commands behind it.")),
+      gl.length ? [h("h4", null, t("Other systems · {n}", { n: gl.length })), h("div", { class: "mm-uses" }, gl.map((l) => h("div", { class: "mm-use sy-linkrow" },
+        h("a", { href: `#/systems?system=${encodeURIComponent(l.direction === "out" ? l.to : l.from)}` }, `${l.direction === "out" ? "→" : "←"} ${l.other}`),
+        h("span", { class: `sy-lkind ${l.kind}` }, l.kind === "files" ? t("files") : t("glossary")),
+        h("div", { class: "gloss" }, l.evidence.map((e) => e.text).filter(Boolean)[0] || ""))))] : null,
+      x.remote_runs?.length ? [h("h4", null, t("Also runs on")), h("ul", { class: "mm-klist" }, x.remote_runs.map((r) => h("li", null, icon("cloud"),
+        h("span", null, h("b", null, r.host), ` ${r.path} · `, tn(r.sessions, "{n} session", "{n} sessions", { n: fmtNum(r.sessions) })))))] : null,
+      x.folders?.length ? [h("h4", null, t("Where sessions worked")), h("ul", { class: "mm-klist" }, x.folders.slice(0, 8).map((f) => h("li", null,
+        h("span", { class: "mm-date" }, fmtNum(f.files)), h("span", { class: "mono" }, f.folder))))] : null,
+      x.ports_unplaced?.length ? [h("h4", null, t("Other ports seen")), h("div", { class: "sy-ports" }, x.ports_unplaced.map((q) => h("span", { class: "sy-chip mono" }, `:${q.port}`, h("em", null, ` ×${q.n}`))))] : null,
+      x.recent?.length ? [h("h4", null, t("Recent sessions")), h("ul", { class: "mm-klist" }, x.recent.map((r) => h("li", null,
+        h("span", { class: "mm-date" }, fmtDate(r.started_at)), h("a", { href: `#/session/${r.id}` }, r.title || r.id.slice(0, 8)))))] : null,
+      h("div", { class: "mm-links-row" },
+        x.project ? h("a", { class: "btn small", href: `#/project?path=${encodeURIComponent(x.project)}` }, t("Project page")) : null,
+        x.git ? h("a", { class: "btn small", href: x.git.url, target: "_blank", rel: "noopener" }, x.git.host.includes("github") ? "GitHub" : x.git.host) : null,
+        h("a", { class: "btn small", href: `#/systems?focus=${encodeURIComponent(x.id)}` }, t("All systems"))),
+    ];
+  }
+  const legend = h("div", { class: "mm-legend sy-rolelegend" }, SY_ROLES.filter(([r]) => lay.roles.includes(r)).map(([r, label]) => {
+    const e = h("span", null, h("i", { class: "mm-cdot" }), label); e.style.setProperty("--c", SY_HUE[r]); return e;
+  }));
+  const bounds = { x: -16, y: -16, w: lay.w + 32, h: lay.h + 32 };
+  cv.box.append(legend, cv.tools(() => cv.fit(bounds)));
+  const page = h("div", { class: "mm-page sy-page" },
+    h("div", { class: "page-head" },
+      h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/systems" }, t("Systems")), gpath.length ? ` / ${gpath.join(" / ")}` : "", " /"),
+        h("h1", null, x.label),
+        h("div", { class: "sub" }, [tn(x.parts.filter((p) => p.role === "way_in" || p.role === "code").length, "{n} part of its own", "{n} parts of its own", { n: fmtNum(x.parts.filter((p) => p.role === "way_in" || p.role === "code").length) }),
+          tn(x.parts.filter((p) => !(p.role === "way_in" || p.role === "code")).length, "{n} thing it ships to, stores in or uses", "{n} things it ships to, stores in or uses", { n: fmtNum(x.parts.filter((p) => !(p.role === "way_in" || p.role === "code")).length) }),
+          tn(x.edges.length, "{n} connection", "{n} connections", { n: fmtNum(x.edges.length) })].join(" · "))),
+      h("div", { class: "head-actions" },
+        x.project ? h("a", { class: "btn", href: `#/project?path=${encodeURIComponent(x.project)}` }, t("Project page")) : null,
+        h("a", { class: "btn", href: `#/systems?focus=${encodeURIComponent(x.id)}` }, t("All systems")))),
+    x.parts.length ? h("section", { class: "card flush mm-card" }, cv.box, aside)
+      : h("div", { class: "card empty" }, t("Nothing to draw yet: no manifests were read and sessions left no trace of parts.")));
+  aside.append(...syKids(selected ? partDetail(parts[selected]) : systemHome()));
+  paint();
+  if (x.parts.length) {
+    const ro = new ResizeObserver(() => {
+      if (!cv.box.clientWidth) return;
+      if (!cv.cam.placed) { cv.cam.placed = true; cv.fit(bounds, 1.05, false); }
+      else cv.apply();
+    });
+    ro.observe(cv.box);
+  }
+  return page;
+}
 
 // =====================================================================================
 // Sources: which agents are connected
@@ -4898,9 +5454,9 @@ const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
   { key: "settings", label: t("Settings"), href: "#/status", hint: t("Status, sources, MCP, devices, appearance") },
 ];
 const SECTION_OF = { overview: "home", activity: "home", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
-  projects: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
+  projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
   team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team" };
-const PAGE_LABEL = { activity: t("Activity"), team: t("People"), teamprojects: t("Shared projects"), teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
+const PAGE_LABEL = { activity: t("Activity"), team: t("People"), teamprojects: t("Shared projects"), teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 
 function sectionOf(path, params) {
@@ -5058,6 +5614,7 @@ async function projectsSidebar(box) {
     const q = sbState.projectQ.toLowerCase();
     const shown = projectsCache.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q));
     list.replaceChildren(sbRow(t("All projects"), "#/projects", "overview", projectsCache.length, ["/projects"]),
+      sbRow(t("Systems map"), "#/systems", "systems", null, ["/systems"]),
       h("div", { class: "sb-group" }, t("Most recent first")),
       ...shown.map((p) => sbRow(p.label, `#/project?path=${encodeURIComponent(p.project_path || "")}`, "projects", p.sessions, ["/project", "path", p.project_path || ""])),
       ...(shown.length ? [] : [h("div", { class: "sb-empty" }, t("No projects match"))])); // replaceChildren would print a null
@@ -5157,7 +5714,7 @@ function paletteCommands() {
   const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, href, run: () => go(href) });
   return [
     nav(t("Home"), "#/", "home"), { ...nav(t("Activity"), "#/activity", "status", t("charts of every session")), team: true }, nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
-    nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
+    nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Systems map"), "#/systems", "systems", t("every project, its parts and links")), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
     nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),

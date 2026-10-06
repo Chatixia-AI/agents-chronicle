@@ -64,6 +64,14 @@ Proposed fixes for what keeps going wrong ([Suggestions and What goes wrong](sug
 | `enabled` | `true` | refresh the suggestions after each background sync (no model is called). Nothing is written until you apply one; **Check again** and `chronicle suggest refresh` work either way |
 | `notify` | `false` | show a desktop notification when a background sync finds new suggestions |
 
+## `[systems]`
+
+The [Systems map](dashboard.md#systems-map).
+
+| Key | Default | |
+| --- | --- | --- |
+| `read_manifests` | `true` | read a few manifest files in each project folder (package manifests, compose files, Dockerfiles, Terraform, CI workflows, vite configs, `.env.example`, deploy configs), read-only. `false`: parts come from what sessions did only |
+
 ## `[hub]`
 
 One archive for several computers ([Phone and other computers](devices.md#your-other-computers)).

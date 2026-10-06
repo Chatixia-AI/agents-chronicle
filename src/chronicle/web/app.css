@@ -1102,6 +1102,78 @@ button.mm-theme:hover { background: var(--surface-2); }
   .mm-detail { border-left: 0; border-top: 1px solid var(--border); }
 }
 
+/* Systems: folders as boxes, systems as cards, a system's parts in role columns. Marks carry --c; text stays in ink tokens. */
+.sy-groups rect { fill: color-mix(in srgb, var(--c) 4%, var(--surface)); stroke: color-mix(in srgb, var(--c) 30%, var(--surface)); stroke-width: 1; }
+.sy-group.d1 rect, .sy-group.d2 rect, .sy-group.d3 rect { fill: color-mix(in srgb, var(--c) 3%, var(--surface)); stroke-dasharray: 4 3; }
+.sy-gtitle { font-size: 13px; font-weight: 600; fill: var(--ink); fill: color-mix(in srgb, var(--c) 45%, var(--ink)); }
+.sy-gcount { font-size: 12px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.sy-card, .sy-node { cursor: pointer; outline: none; transition: opacity 0.15s; }
+.sy-cbox { fill: var(--surface); stroke: var(--border-strong); stroke-width: 1; transition: fill 0.12s, stroke 0.12s; }
+.sy-card.hover .sy-cbox { fill: var(--surface-2); }
+.sy-cstripe, .sy-nstripe { fill: var(--c); }
+.sy-ctitle { font-size: 13.5px; font-weight: 600; fill: var(--ink); }
+.sy-csub { font-size: 12px; fill: var(--muted); }
+.sy-cstack { font-size: 11.5px; fill: var(--ink-2); }
+.sy-cbar-bg { fill: var(--surface-3); }
+.sy-cbar { fill: var(--c); opacity: 0.75; }
+.sy-cicon { color: var(--muted); }
+.sy-card.near .sy-cbox { stroke: color-mix(in srgb, var(--accent) 55%, var(--surface)); stroke-width: 1.5; }
+.sy-card.hit .sy-cbox { fill: color-mix(in srgb, var(--c) 12%, var(--surface)); stroke: var(--c); stroke-width: 1.5; }
+.sy-card.sel .sy-cbox, .sy-node.sel .sy-nbox { stroke: var(--accent); stroke-width: 2; }
+.sy-card:focus-visible .sy-cbox, .sy-node:focus-visible .sy-nbox { stroke: var(--accent); stroke-width: 2; }
+.sy-card.dim, .sy-node.dim { opacity: 0.32; }
+
+.sy-link { fill: none; stroke-width: 1.6; transition: opacity 0.15s; }
+.sy-link.files { stroke: var(--accent); stroke: color-mix(in srgb, var(--accent) 55%, var(--surface)); }
+.sy-link.mentions { stroke: var(--baseline); stroke-dasharray: 5 4; }
+.sy-link.on { stroke: var(--accent); stroke-width: 2.2; opacity: 1; }
+.sy-link.mentions.on { stroke: var(--ink-2); }
+.sy-link.off, .sy-edge.off { opacity: 0.12; }
+.sy-arrow { fill: var(--baseline); }
+.sy-arrow-on { fill: var(--accent); }
+
+.sy-rowhead line { stroke: color-mix(in srgb, var(--c) 30%, var(--surface)); stroke-width: 1; }
+.sy-colhead { font-size: 11.5px; font-weight: 600; letter-spacing: 0.06em; fill: var(--ink-2); fill: color-mix(in srgb, var(--c) 60%, var(--ink)); }
+.sy-nbox { fill: color-mix(in srgb, var(--c) 6%, var(--surface)); stroke: color-mix(in srgb, var(--c) 38%, var(--surface)); stroke-width: 1; transition: fill 0.12s; }
+.sy-node.hover .sy-nbox { fill: color-mix(in srgb, var(--c) 13%, var(--surface)); }
+.sy-ntitle { font-size: 13px; font-weight: 600; fill: var(--ink); }
+.sy-nsub { font-size: 11.5px; fill: var(--ink-2); }
+.sy-nstack { font-size: 11px; fill: var(--muted); }
+.sy-nact { font-size: 11.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.sy-edge path { fill: none; stroke: var(--baseline); stroke-width: 1.5; }
+.sy-edge.calls path { stroke: color-mix(in srgb, var(--series-1) 60%, var(--surface)); }
+.sy-edge.depends path { stroke: color-mix(in srgb, var(--series-7) 55%, var(--surface)); }
+.sy-edge.deploys path { stroke: color-mix(in srgb, var(--series-2) 60%, var(--surface)); }
+.sy-edge.provisions path { stroke: color-mix(in srgb, var(--series-4) 65%, var(--surface)); stroke-dasharray: 5 4; }
+.sy-edge.on path { stroke: var(--accent); stroke-width: 2.2; }
+.sy-elabel { font-size: 11px; fill: var(--ink-2); paint-order: stroke; stroke: var(--surface); stroke-width: 4px; stroke-linejoin: round; }
+.sy-edge.on .sy-elabel { fill: var(--ink); font-weight: 500; }
+.sy-edges.quiet .sy-edge:not(.on):not(.hover) .sy-elabel { display: none; }
+
+.sy-path { font-size: 12px; color: var(--muted); margin-top: 4px; overflow-wrap: anywhere; }
+.sy-chip { display: inline-flex; align-items: center; padding: 2px 9px; border-radius: 999px; background: var(--surface-2); font-size: 12px; color: var(--ink-2); }
+.sy-chip em { font-style: normal; color: var(--muted); }
+.sy-chips { margin-top: 12px; }
+.sy-ports { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.sy-ports .muted { flex-basis: 100%; font-size: 12.5px; margin-top: 2px; }
+.sy-legend > div { display: flex; align-items: center; gap: 10px; font-size: 12.5px; color: var(--ink-2); margin: 6px 0; }
+.sy-legend svg { flex: none; overflow: visible; }
+.sy-hint { font-size: 12.5px; margin-top: 18px; line-height: 1.5; }
+.sy-linkrow { position: relative; }
+.sy-lkind { position: absolute; top: 9px; right: 11px; font-size: 10.5px; letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted); }
+.sy-linkrow > a { padding-right: 64px; }
+.sy-evlist { gap: 10px; }
+.sy-ev { display: flex; gap: 9px; align-items: flex-start; }
+.sy-ev > .icon { width: 14px; height: 14px; flex: none; margin-top: 2px; color: var(--muted); }
+.sy-ev > div { min-width: 0; flex: 1; color: var(--ink-2); overflow-wrap: anywhere; }
+.sy-examples { display: grid; gap: 4px; margin-top: 6px; }
+.sy-example { display: flex; gap: 8px; align-items: baseline; min-width: 0; }
+.sy-example code { flex: 1; min-width: 0; font-size: 11.5px; background: var(--code-bg); padding: 2px 6px; border-radius: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sy-evline { font-size: 12px; margin-top: 2px; overflow-wrap: anywhere; }
+.sy-rolelegend { right: auto; }
+.head-actions .btn .icon { width: 15px; height: 15px; margin-right: 6px; vertical-align: -2px; }
+
 /* ------------------------------------------------------------------ session page: header facts, summary, tabs, outline */
 .session-page { display: grid; grid-template-columns: minmax(0, 1fr); gap: 36px; }
 @media (min-width: 1380px) { .session-page.with-outline { grid-template-columns: minmax(0, 1fr) 232px; } }

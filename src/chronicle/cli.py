@@ -1090,6 +1090,86 @@ def cmd_glossary(args) -> int:
     return 0
 
 
+ROLE_TITLES = {"way_in": "Ways in", "code": "Code", "data": "Data", "delivery": "Delivery", "runtime": "Runs on & uses"}
+
+
+def cmd_systems(args) -> int:
+    """The Systems map in the terminal: every system grouped by folder, or one system's parts with their evidence."""
+    from rich.markup import escape
+
+    from .systems import build, landscape, system
+
+    cfg = _cfg()
+    conn = _conn(cfg)
+    data = build(conn, cfg)
+    conn.close()
+    console = _console()
+    if args.name:
+        key = args.name.rstrip("/")
+        found = system(data, key) or next((system(data, s["id"]) for s in data["systems"]
+                                           if s["label"].lower() == key.lower() or s["id"].rsplit("/", 1)[-1].lower() == key.lower()), None)
+        if not found:
+            print(f"no system named {args.name!r} (see `chronicle systems`)")
+            return 1
+        if args.json:
+            print(json.dumps(found, indent=1, ensure_ascii=False, default=str))
+            return 0
+        git = found.get("git") or {}
+        console.print(f"[bold]{escape(found['label'])}[/]  {escape(found['path'] or '')}  "
+                      f"[dim]{found['sessions']} sessions{'  ' + escape(git['url']) if git else ''}[/]")
+        names = {p["id"]: p["label"] for p in found["parts"]}
+        for role, title in ROLE_TITLES.items():
+            parts = sorted((p for p in found["parts"] if p["role"] == role), key=lambda p: -p["weight"])
+            if not parts:
+                continue
+            console.print(f"\n[bold]{title}[/]")
+            for p in parts:
+                bits = [p["kind"], "/".join(p["stack"][:4]), " ".join(f":{x['port']}" for x in p["ports"][:3]),
+                        " · ".join(x for x in (p.get("platform"), p.get("what")) if x)]
+                console.print(f"  [cyan]{escape(p['label'])}[/]  [dim]{escape('  '.join(b for b in bits if b))}[/]")
+                for ev in p["evidence"][: None if args.evidence else 2]:
+                    console.print(f"    [dim]· {escape(ev['text'])}[/]")
+                    for ex in ev.get("examples", [])[: 2 if args.evidence else 0]:
+                        console.print(f"      [dim]$ {escape(ex['text'][:160])}[/]")
+        if found["edges"]:
+            console.print("\n[bold]Connections[/]")
+            for e in found["edges"]:
+                console.print(f"  {escape(names.get(e['from'], e['from']))} [dim]—{escape(e['label'])}→[/] {escape(names.get(e['to'], e['to']))}")
+        if found["links"]:
+            console.print("\n[bold]Other systems[/]")
+            for ln in found["links"]:
+                arrow = "→" if ln["direction"] == "out" else "←"
+                console.print(f"  {arrow} {escape(ln['other'] or '')}  [dim]{escape(ln['evidence'][0]['text'][:140])}[/]")
+        return 0
+    if args.json:
+        print(json.dumps(landscape(data), indent=1, ensure_ascii=False, default=str))
+        return 0
+    groups = {g["id"]: g for g in data["groups"]}
+    by_id = {s["id"]: s for s in data["systems"]}
+
+    def show(gid: str, depth: int) -> None:
+        g = groups[gid]
+        if gid:
+            console.print(f"{'  ' * (depth - 1)}[bold]{escape(g['label'])}[/]")
+        for k in sorted(g["systems"], key=lambda k: -by_id[k]["sessions"]):
+            s = by_id[k]
+            runs = sorted({p["label"] for p in s["parts"] if p["kind"] in ("deployed", "server")})[:3]
+            console.print(f"{'  ' * depth}[cyan]{escape(s['label'])}[/]  [dim]{s['sessions']} sessions"
+                          f"{'  ' + escape('/'.join(s['stack'][:3])) if s['stack'] else ''}"
+                          f"{'  → ' + escape(', '.join(runs)) if runs else ''}[/]")
+        for c in g["groups"]:
+            show(c, depth + 1)
+
+    show("", 0)
+    if args.links:
+        console.print("\n[bold]Links between systems[/]")
+        for ln in data["links"]:
+            console.print(f"  {escape(by_id[ln['from']]['label'])} → {escape(by_id[ln['to']]['label'])}  "
+                          f"[dim]{ln['kind']}: {escape(ln['evidence'][0]['text'][:120])}[/]")
+    console.print(f"\n[dim]{len(data['systems'])} systems, {len(data['links'])} links · `chronicle systems NAME` for one system's parts[/]")
+    return 0
+
+
 def cmd_review(args) -> int:
     from rich.markdown import Markdown
 
@@ -2366,6 +2446,13 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--themes", action="store_true", help="group big categories into themes with the analysis model (the Map's Theme level)")
     s.add_argument("--force", action="store_true", help="with --themes: regroup categories that have not changed")
     s.set_defaults(fn=cmd_glossary)
+
+    s = sub.add_parser("systems", help="the Systems map: every project as a system with its parts, from manifests and sessions")
+    s.add_argument("name", nargs="?", help="one system (its name or folder): its parts, connections and evidence")
+    s.add_argument("--links", action="store_true", help="also list the links between systems")
+    s.add_argument("--evidence", action="store_true", help="with NAME: every piece of evidence, with example commands")
+    s.add_argument("--json", action="store_true")
+    s.set_defaults(fn=cmd_systems)
 
     s = sub.add_parser("review", help="weekly engineering review written by the analysis model (default: last completed week)")
     s.add_argument("week", nargs="?", help="ISO week like 2026-W39, 'current' or 'last'")
