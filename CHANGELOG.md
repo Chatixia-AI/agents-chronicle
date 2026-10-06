@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **A hub opens on Activity:** on a hub with people, the dashboard now opens on **Activity** (the charts of every
+  session), with its own rail icon. The team's page (what needs attention, team projects) moves to its own
+  **Team overview** rail icon at `#/overview`, for every member of the hub. A computer that isn't a hub keeps Home.
 - **Updating reloads the page:** after **Update to …** finishes, a "Restarting Chronicle…" cover stays over the page
   while the dashboard restarts, and the page reloads itself as soon as the new version answers (it used to wait for
   the next 20-second status check). If the restart takes over a minute, the cover says so and offers a Reload button.

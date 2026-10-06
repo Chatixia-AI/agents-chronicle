@@ -854,6 +854,7 @@ function navKey(path) {
   if (path.startsWith("/artifacts")) return "artifacts";
   if (path.startsWith("/team")) return { "/team/projects": "teamprojects", "/team/computers": "teamcomputers", "/team/store": "teamstore" }[path] || "team";
   if (path === "/activity") return "activity";
+  if (path === "/overview") return "teamhome";
   if (path === "/" || path === "") return "overview";
   return "";
 }
@@ -989,9 +990,10 @@ function deltaText(cur, prev, days) {
 // =====================================================================================
 // Overview
 // =====================================================================================
-// Home: on a hub with people, the team's (teamHome); everywhere else, and under Home › Activity, the activity charts
-route(/^\/?$/, (params) => (ME?.hub?.team ? teamHome(params) : activityView(params)));
-route(/^\/activity$/, (params) => activityView(params, true));
+// Home: the activity charts. A hub with people calls it Activity and has the team's own page beside it (Team overview)
+route(/^\/?$/, (params) => activityView(params, !!ME?.hub?.team));
+route(/^\/activity$/, (params) => activityView(params, true)); // an older link
+route(/^\/overview$/, (params) => (ME?.hub?.team ? teamHome(params) : activityView(params)));
 async function activityView(params, own = false) {
   const days = params.days || "90", project = params.project || "", agent = params.agent || "";
   const metric = params.metric || "active_s";
@@ -1219,14 +1221,13 @@ async function teamHome(params) {
     h("div", null, h("h1", null, data.hub?.name || t("Team")),
       h("div", { class: "sub" }, limited() ? t("Your projects on this hub, {period}", { period }) : t("The team's projects on this hub, {period}", { period }))),
     h("div", { class: "head-actions" },
-      segControl(TEAM_PERIODS.map((d) => [d, t("{n}d", { n: d })]), days, (v) => { setParams({ days: v }); render(); }),
-      h("a", { class: "btn with-icon", href: "#/activity", title: t("Charts of every session on this hub") }, icon("status"), t("Activity"))));
+      segControl(TEAM_PERIODS.map((d) => [d, t("{n}d", { n: d })]), days, (v) => { setParams({ days: v }); render(); })));
   const attention = teamAttention(data);
   if (!data.projects.length) {
     return h("div", null, head, attention, h("section", { class: "card section-gap" }, cardHead(t("No team projects yet"), { iconName: "projects" }),
       limited() ? h("p", null, t("No project on this hub is shared with you yet. Ask an admin of this hub."))
         : h("p", null, tx("A project shows up here once it is set up on the hub with {command}, or another computer sends sessions to it. Projects only this computer works on stay under {activity}.",
-          { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>"), activity: h("a", { href: "#/activity" }, t("Activity")) }))));
+          { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>"), activity: h("a", { href: "#/" }, t("Activity")) }))));
   }
   const tiles = h("div", { class: "kpis team-kpis" },
     tile(t("Sessions"), fmtNum(tot.sessions), { iconName: "sessions", delta: period }),
@@ -5506,7 +5507,11 @@ route(/^\/appearance$/, async () => {
 // Shell: rail, section sidebar, toolbar, status bar, command palette
 // =====================================================================================
 const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
-  { key: "home", label: t("Home"), href: "#/", hint: t("Activity at a glance and recent sessions") },
+  { key: "home", href: "#/", // a hub with people names it for what it shows, beside its Team overview
+    get label() { return ME?.hub?.team ? t("Activity") : t("Home"); },
+    get hint() { return ME?.hub?.team ? t("Charts of every session on this hub, and recent sessions") : t("Activity at a glance and recent sessions"); },
+    get icon() { return ME?.hub?.team ? "status" : "home"; } },
+  { key: "teamhome", label: t("Team overview"), href: "#/overview", hint: t("Team projects, and what needs attention"), icon: "overview", team: true },
   { key: "sessions", label: t("Sessions"), href: "#/sessions", hint: t("Every recorded conversation") },
   { key: "knowledge", label: t("Knowledge"), href: "#/knowledge", hint: t("Glossary, map, playbook, weekly reviews") },
   { key: "artifacts", label: t("Artifacts"), href: "#/artifacts", hint: t("Documents, pages, PRs and commits your agents made") },
@@ -5515,7 +5520,7 @@ const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
   { key: "team", label: t("Team"), href: "#/team", hint: t("People, shared projects, computers, team store") }, // a hub's admins
   { key: "settings", label: t("Settings"), href: "#/status", hint: t("Status, sources, MCP, devices, appearance") },
 ];
-const SECTION_OF = { overview: "home", activity: "home", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
+const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
   team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team" };
 const PAGE_LABEL = { activity: t("Activity"), team: t("People"), teamprojects: t("Shared projects"), teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
@@ -5524,7 +5529,7 @@ let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 function sectionOf(path, params) {
   const key = navKey(path);
   if (key === "projects" && params.path === "__global__") return "knowledge"; // the global playbook is knowledge, not a project
-  if (path.startsWith("/session/") && shellSection === "home") return "home"; // opened from Home's list: keep that list
+  if (path.startsWith("/session/") && ["home", "teamhome"].includes(shellSection)) return shellSection; // opened from Home's list: keep that list
   return SECTION_OF[key] || null; // search and unknown pages: no section lit, the sidebar stays as it was
 }
 function sectionLink(key) { const sx = SECTIONS.find((x) => x.key === key); return sx ? [sx.label, sx.href] : ["Chronicle", "#/"]; }
@@ -5538,7 +5543,9 @@ function setCrumbs(items, token = renderSeq) { // [[label, href?], ...]; the las
 }
 function defaultCrumbs(path, params) {
   const key = navKey(path), section = sectionOf(path, params);
-  if (key === "overview") return [[t("Home")]];
+  if (key === "overview") return [[sectionLink("home")[0]]];
+  if (key === "teamhome") return [[t("Team overview")]];
+  if (key === "activity" && ME?.hub?.team) return [[t("Activity")]]; // the section is Activity itself there
   if (key === "knowledge") return path === "/knowledge" ? [[t("Knowledge")]] : [sectionLink("knowledge"), [params.kind ? kindPlural(params.kind) : t("All knowledge")]];
   if (key === "projects" && path === "/projects") return [[t("Projects")]];
   if (key === "sessions" && path === "/sessions") return [[t("Sessions")]];
@@ -5552,7 +5559,7 @@ function renderRail() {
   const rail = $("#rail");
   const link = (sx) => {
     const a = h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label, "aria-describedby": "rail-tip",
-      onclick: () => { hideRailTip(); if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.key === "home" ? "home" : sx.key));
+      onclick: () => { hideRailTip(); if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.icon || sx.key));
     // a tooltip of our own: the native one comes late, and not at all in the app window
     a.addEventListener("mouseenter", () => { if (matchMedia("(hover: hover)").matches) showRailTip(a, sx); });
     a.addEventListener("focus", () => { if (a.matches(":focus-visible")) showRailTip(a, sx); });
@@ -5561,12 +5568,13 @@ function renderRail() {
     return a;
   };
   const settings = SECTIONS.find((x) => x.key === "settings");
+  const shown = SECTIONS.filter((x) => !x.team || ME?.hub?.team);
   if (limited()) { // no transcripts to search, no settings of this hub to see
-    rail.replaceChildren(...SECTIONS.filter((x) => LIMITED_SECTIONS.has(x.key)).map(link));
+    rail.replaceChildren(...shown.filter((x) => LIMITED_SECTIONS.has(x.key)).map(link));
     return;
   }
   const team = SECTIONS.find((x) => x.key === "team");
-  rail.replaceChildren(...SECTIONS.filter((x) => x !== settings && x !== team).map(link),
+  rail.replaceChildren(...shown.filter((x) => x !== settings && x !== team).map(link),
     link({ key: "search", label: t("Search all sessions"), href: "#/search", hint: t("Full text of every session (⌘K jumps anywhere)") }),
     h("div", { class: "spacer" }), ...(ME?.hub && canAdmin() ? [link(team)] : []), link(settings));
   drawUnseen(unseenCount);
@@ -5718,7 +5726,7 @@ async function buildSidebar(section) {
   const mine = ++sbSeq;
   const box = h("div", { class: "sb-body" }); // drawn off-screen, swapped in only if still wanted
   try {
-    if (section === "home") await sessionsSidebar(box, t("Recent sessions"));
+    if (section === "home" || section === "teamhome") await sessionsSidebar(box, t("Recent sessions"));
     else if (section === "sessions") await sessionsSidebar(box, t("Sessions"));
     else if (section === "knowledge") await knowledgeSidebar(box);
     else if (section === "projects") await projectsSidebar(box);
@@ -5775,7 +5783,7 @@ function paletteCommands() {
   const goTo = t("Go to"), cmds = t("Commands"), model = t("uses the analysis model");
   const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, href, run: () => go(href) });
   return [
-    nav(t("Home"), "#/", "home"), { ...nav(t("Activity"), "#/activity", "status", t("charts of every session")), team: true }, nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
+    nav(sectionLink("home")[0], "#/", ME?.hub?.team ? "status" : "home"), { ...nav(t("Team overview"), "#/overview", "overview", t("team projects")), team: true }, nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
     nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Systems map"), "#/systems", "systems", t("every project, its parts and links")), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
@@ -5798,7 +5806,7 @@ function paletteCommands() {
       watchJob("glossary:all");
     } },
   ].filter((x) => (!x.admin || canAdmin()) && (!x.hub || ME?.hub) && (!x.team || ME?.hub?.team)
-    && (!limited() || !x.href || ["#/", "#/activity", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
+    && (!limited() || !x.href || ["#/", "#/overview", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
 }
 async function paletteSearch(q) {
   const lq = q.toLowerCase();
@@ -5895,7 +5903,7 @@ function canAdmin() { return !ME || (ME.viewer?.role ?? "admin") === "admin"; }
 // someone limited to some projects of this hub: the server answers only Home, Sessions, Knowledge and Projects for
 // them, each session as its summary and project lessons (access.py); the rest of the dashboard is hidden
 function limited() { return Array.isArray(ME?.viewer?.projects) && ME.viewer.role !== "admin"; }
-const LIMITED_SECTIONS = new Set(["home", "sessions", "knowledge", "projects"]);
+const LIMITED_SECTIONS = new Set(["home", "teamhome", "sessions", "knowledge", "projects"]);
 async function loadMe() {
   try { ME = await api("/api/me"); } catch (e) { ME = null; return; } // an older server, or the sign-in screen is up
   applyViewer();
