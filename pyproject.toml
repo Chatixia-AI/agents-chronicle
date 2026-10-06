@@ -70,6 +70,10 @@ replacement = '\1https://github.com/Chatixia-AI/agents-chronicle/blob/main/\2'
 [tool.hatch.build.targets.wheel]
 packages = ["src/chronicle"]
 
+# ee/ is under the Chronicle Enterprise License and builds its own package; keep it out of the MIT sdist
+[tool.hatch.build.targets.sdist]
+exclude = ["/ee"]
+
 [dependency-groups]
 build = [
     "pillow>=11",

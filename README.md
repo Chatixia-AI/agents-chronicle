@@ -164,4 +164,6 @@ the dashboard with demo data instead of your own sessions.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE), except the [`ee/`](ee/) directory: the features a company needs to run Chronicle across
+its teams (single sign-on, policies, audit export) are under the [Chronicle Enterprise License](ee/LICENSE) and
+need a subscription in production. The `agents-chronicle` package on PyPI is MIT only.

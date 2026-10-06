@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Chronicle Enterprise lives in `ee/`:** features a company needs to run Chronicle across its teams (single
+  sign-on, policies, audit export, admin reports) will be built in `ee/` under the Chronicle Enterprise License and
+  ship as a separate package. Everything else, the hub and its team features included, stays MIT, and the
+  `agents-chronicle` package stays MIT only. [ee/README.md](ee/README.md)
 - **A map of your systems:** **Projects › Systems map** draws every folder your agents worked in as a system, grouped
   by the folders they live in, with lines where one project edited or read another's files or its glossary says how
   it uses the other. Open a system for its parts in five rows (ways in, code, data, delivery, and what it runs on or

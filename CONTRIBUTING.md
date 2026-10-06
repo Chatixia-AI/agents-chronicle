@@ -15,3 +15,7 @@ Thanks for helping. Chronicle is a small Python project with no build step for t
 When you open a pull request, say what changed and how you checked it, and include a screenshot for UI changes
 (taken from the demo data, not your own sessions). Please keep all data local: Chronicle must not send anything
 anywhere except the analysis calls through the user's own `claude`.
+
+Code outside `ee/` is MIT, and so are your contributions to it. `ee/` is under the
+[Chronicle Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
+core must never import from `ee/` ([ee/README.md](ee/README.md)).
