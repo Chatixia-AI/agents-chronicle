@@ -35,7 +35,7 @@ Ctrl replaces ⌘ outside macOS. In the macOS app, drag the window by its toolba
 Pages: Home (active-time headline with active days and longest run; stat tiles with sparklines and a per-day rate
 until a full prior period exists to compare against; daily chart with a 7-day average; outcome breakdown; activity
 calendar with streaks; busiest hour; projects, tools with failed calls, models and agents), a sortable, filterable
-session list, project cards with 12 weeks of activity, session pages (headline figures, the summary and the knowledge
+session list, project cards with 12 weeks of activity, the [Systems map](#systems-map), session pages (headline figures, the summary and the knowledge
 it produced up top, then **Details**, where a session opens: goal, highlights, open threads, the knowledge items,
 context-window chart with compactions, tools, files, subagents, and the [artifacts](#artifacts) the session made; or
 **Transcript**, where a search result opens: the conversation with one-line tool calls that expand to their input and
@@ -126,6 +126,39 @@ or a connection to see the knowledge it comes from, and switch to **Table** for 
 Excalidraw VS Code extension. The Markdown knowledge base (notes export, `project_knowledge` over MCP) carries it as a
 Mermaid flowchart under **Architecture**. Knowledge bases synthesized before this show no sketch until their next
 synthesis (**Re-synthesize** on the project page). The global playbook has none.
+
+## Systems map
+
+**Projects › Systems map** (or **System map** on a project page) draws every folder your agents worked in as a
+system, inside boxes for the folders they live in (Work › AI-BPO › Cosmo), with lines for how systems connect. A solid
+line means sessions in one project edited or read files of another; a dashed one means the glossary records how one
+project uses the other, and its note is the evidence ("its `run.sh` launches the two workers process_monitor
+monitors"). Click a system for its summary (what it is built with, where it runs, what it uses, its links), double-click
+or **Open system** for its parts. **Find systems** matches names, stacks and where systems run; **One-session folders**
+shows the folders with a single session and no links, hidden by default.
+
+A system's page stacks its parts in five rows: **Ways in** (UIs, command lines, extensions, MCP servers), **Code**
+(APIs, services, packages), **Data** (databases and files), **Delivery** (CI, Terraform, container images) and **Runs
+on & uses** (deployed apps, servers, clouds, APIs). Nothing is drawn by a model, and everything comes from evidence:
+
+- the project's manifests, read-only: `package.json`, `pyproject.toml`, `requirements.txt`, `Cargo.toml`, `go.mod`,
+  compose files (services, ports, `depends_on`, and `http://service:port` in a service's environment), Dockerfiles,
+  Terraform resources, GitHub workflows (what they publish to), vite proxies, `.env.example` and deploy configs
+  (`firebase.json`, `wrangler.toml`, `databricks.yml`, `host.json`, ...). A vite proxy to the port the backend runs on
+  becomes "frontend calls /api backend";
+- what sessions ran: servers started on a port (in the folder they `cd`'d into), hosts reached (Azure App Service,
+  Databricks Apps, IBM Code Engine, Firebase, GitHub Pages, ...), cloud CLIs (`az`, `ibmcloud`, `databricks`,
+  `gcloud`, ...), machines reached with `ssh`, `scp` or `rsync`, and databases opened with `psql` or `duckdb`. A host
+  only counts when a command went there or two sessions named it, so a test's made-up URL never becomes a deployment,
+  and what ran after a `cd` into another project belongs to that project;
+- the files sessions touched, for each part's activity and for links to other projects.
+
+The same thing found twice is one part: the App Service Terraform declares and the host commands reached, or the
+PostgreSQL a dependency names and the one compose runs. Click a part for **Why it is here**: the manifest lines and the
+commands behind it, each command linked to its session. Worktrees count as their repository, a folder that only
+holds other projects is a group, and a project that also ran on another machine (`host:/path`) shows it under **Also
+runs on**. `chronicle systems` prints the same map in the terminal, `chronicle systems NAME --evidence` one system with
+its example commands. To use sessions only, set `[systems] read_manifests = false` ([Configuration](configuration.md#systems)).
 
 ## Glossary
 

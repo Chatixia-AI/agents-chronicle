@@ -34,6 +34,11 @@ archive, over HTTPS inside the tailnet.
 
 ## Details
 
+- **The Systems map reads manifests.** To draw what each project is made of, Chronicle reads a short, fixed list of
+  files in your project folders, read-only: package manifests, compose files, Dockerfiles, Terraform, GitHub workflows,
+  vite configs, `.env.example` and deploy configs, two folder levels deep. Never `.env`, never source code, and
+  nothing is stored or sent: the map is rebuilt from them in memory. A git remote is shown without its credentials.
+  `[systems] read_manifests = false` turns this off ([Systems map](dashboard.md#systems-map)).
 - **Redaction.** API keys, tokens and similar secrets are replaced in the digest before any call. The raw archive
   keeps the original transcripts unchanged, on your disk only.
 - **Analysis runs sandboxed.** No session is written for the analysis itself, none of your hooks, plugins, MCP

@@ -791,6 +791,29 @@ class App:
 
         return map_data(self.conn)
 
+    def systems(self) -> dict:
+        """The Systems map's top level: groups, systems and the links between them (without each system's parts)."""
+        from .systems import cached, landscape
+
+        data = landscape(cached(self.conn, self.cfg))
+        labels = project_labels(self.conn)
+        for s in data["systems"]:
+            s["project"] = next((p for p in s["project_paths"] if p in labels), None)
+        return data
+
+    def system(self, key: str) -> dict | None:
+        """One system's parts, connections and links, with the evidence for each."""
+        from .systems import CHAT_SOURCES, cached, system
+
+        out = system(cached(self.conn, self.cfg), key)
+        if out:
+            labels = project_labels(self.conn)
+            out["project"] = next((p for p in out["project_paths"] if p in labels), None)
+            out["recent"] = self._session_rows(
+                f"project_path IN ({','.join('?' * len(out['project_paths']))}) AND source NOT IN ({','.join('?' * len(CHAT_SOURCES))})",
+                [*out["project_paths"], *CHAT_SOURCES], "started_at DESC", 6) if out["project_paths"] else []
+        return out
+
     def action_themes(self, force: bool) -> bool:
         from .glossary import build_themes
 
@@ -1913,6 +1936,11 @@ def make_handler(app: App, port: int):
                     return self._json(app.glossary_terms())
                 if p == "/api/map":
                     return self._json(app.map())
+                if p == "/api/systems":
+                    return self._json(app.systems())
+                if p == "/api/system":
+                    found = app.system(q.get("id", ""))
+                    return self._json(found) if found else self._json({"error": tr("not found")}, 404)
                 if p == "/api/jobs":
                     return self._json(app.status_small(limited=self.limited))
                 if p == "/api/update":

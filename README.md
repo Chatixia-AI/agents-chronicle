@@ -48,6 +48,8 @@ from the [demo data](docs/development.md#demo-data):
   Gemini CLI can connect too.
 - **A dashboard to browse it all.** Sessions with their full transcripts, statistics, a glossary of your own
   vocabulary drawn as a mindmap, and a weekly review you can take in at a glance. ⌘K jumps anywhere.
+- **A map of your systems.** Every project as a system with its parts (UI, API, database, CI, where it is deployed)
+  and the links between projects, drawn from your manifests and what sessions did, each with the evidence behind it.
 - **What your agents made, in one place.** The documents, pages, diagrams, decks, pull requests and commits from every
   session, each linked to the session that made it and marked when the file has changed or is gone.
 - **On your phone and your other computers.** Open the dashboard on your phone through Tailscale, and keep every
