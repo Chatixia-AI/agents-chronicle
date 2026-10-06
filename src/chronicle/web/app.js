@@ -1132,7 +1132,22 @@ function avatar(name) { // a person's initials on a wash of one categorical colo
   for (const ch of name || "") n = (n * 31 + ch.codePointAt(0)) >>> 0;
   return h("span", { class: "avatar", "aria-hidden": "true", style: `--av: var(--series-${(n % 8) + 1})` }, initials(name));
 }
-function whoTag(name) { return h("span", { class: "who-tag", title: name }, avatar(name), h("span", null, name)); }
+// a person (or a computer no one joined) by name; with a key, a link to their sessions, or to `base` narrowed to them
+function whoTag(name, key, base = "#/sessions") {
+  if (!key) return h("span", { class: "who-tag", title: name }, avatar(name), h("span", null, name));
+  return h("a", { class: "who-tag", href: `${base}?who=${encodeURIComponent(key)}`, title: t("Only {name}'s", { name }) }, avatar(name), h("span", null, name));
+}
+// On a hub with people: a picker that narrows a list to one person's sessions, or one computer's no one joined
+async function whoFilter(value, onChange) {
+  if (!ME?.hub?.team) return null;
+  let items = [];
+  try { items = (await api("/api/team/who")).items; } catch (e) { return null; }
+  if (!items.length && !value) return null;
+  return h("select", { "aria-label": t("Person"), onchange: (e) => onChange(e.target.value) },
+    h("option", { value: "" }, t("Everyone")),
+    items.map((x) => h("option", { value: x.key, selected: x.key === value }, `${x.name} · ${fmtNum(x.sessions)}`)),
+    value && !items.some((x) => x.key === value) ? h("option", { value, selected: true }, t("Someone not listed")) : null);
+}
 
 // for admins: people who can't get in yet, and computers the hub hasn't heard from lately
 function teamAttention(data) {
@@ -1185,11 +1200,11 @@ async function teamHome(params) {
         h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(p.path)}`, title: p.path }, p.label)),
         h("td", { class: "num" }, p.recent ? fmtNum(p.recent) : h("span", { class: "muted" }, "0")),
         h("td", { class: "num" }, p.lessons ? fmtNum(p.lessons) : h("span", { class: "muted" }, "0")),
-        h("td", null, p.people.length ? h("div", { class: "who-list" }, p.people.slice(0, 3).map((x) => whoTag(x.who)),
+        h("td", null, p.people.length ? h("div", { class: "who-list" }, p.people.slice(0, 3).map((x) => whoTag(x.who, x.key)),
           p.people.length > 3 ? h("span", { class: "muted" }, `+${p.people.length - 3}`) : null) : h("span", { class: "muted" }, "–")),
         h("td", { class: "nowrap", title: p.last ? fmtDT(p.last) : "" }, p.last ? ago(p.last) : h("span", { class: "muted" }, t("no sessions yet")))))))));
   const whoCard = h("section", { class: "card" }, cardHead(t("Who's active"), { iconName: "team", hint: period }),
-    data.who.length ? h("div", { class: "session-list" }, data.who.map((x) => h("div", { class: "session-item who-item" },
+    data.who.length ? h("div", { class: "session-list" }, data.who.map((x) => h("a", { class: "session-item", href: `#/sessions?who=${encodeURIComponent(x.who_key)}`, title: t("Only {name}'s", { name: x.who }) },
       avatar(x.who),
       h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, x.who),
         h("div", { class: "m" }, [tn(x.sessions, "{n} session", "{n} sessions"), tn(x.lessons, "{n} lesson", "{n} lessons"), tn(x.projects, "{n} project", "{n} projects")].join(" · "))),
@@ -1221,7 +1236,7 @@ async function teamHome(params) {
 route(/^\/sessions$/, async (params) => {
   const state = { q: params.q || "", project: params.project || "", outcome: params.outcome || "", status: params.status || "",
     days: params.days || "", sort: params.sort || "started_at", order: params.order || "desc", day: params.day || "",
-    agent: params.agent || "", screen: params.screen || "" };
+    agent: params.agent || "", screen: params.screen || "", who: params.who || "" };
   const mode = viewMode("sessions", matchMedia("(max-width: 600px)").matches ? "cards" : "list"); // a phone has no room for the table
   let offset = 0, scale = null, total = 0;
   // ---- selection (list view): pick sessions, then analyze them in one go
@@ -1339,6 +1354,7 @@ route(/^\/sessions$/, async (params) => {
       sel("outcome", [["", t("Any outcome")], ...Object.entries(OUTCOME).map(([k, [, l]]) => [k, l]), ["none", t("Not analyzed")]]),
       sel("status", [["", t("Any status")], ["done", t("Analyzed")], ["pending", t("Queued")], ["stale", t("Needs re-analysis")], ["error", t("Failed")], ["skipped", t("Skipped")]]),
       sel("agent", [["", t("All agents")], ...Object.entries(AGENTS)]),
+      await whoFilter(state.who, (v) => { state.who = v; refresh(); }),
       state.screen || ["chatgpt", "claude-ai"].includes(state.agent) // imported chats: as screening sorted them
         ? sel("screen", [["", t("Any screening")], ...Object.entries(SCREEN).map(([k, [, l]]) => [k, l]), ["none", t("Not screened")]]) : null,
       sel("days", [["", t("All time")], ["7", t("Last {n} days", { n: 7 })], ["30", t("Last {n} days", { n: 30 })], ["90", t("Last {n} days", { n: 90 })]]),
@@ -1357,7 +1373,7 @@ function sessionCard(x) {
       h("div", { class: "t" }, x.title || t("(untitled)"), agentTag(x.agent),
         x.source === "codex-import" ? h("span", { class: "agent-tag", title: t("Claude Code deleted this transcript; recovered from Codex's copy") }, t("recovered")) : null),
       outcomeBadge(x.outcome, x.analysis_status, x.source)),
-    h("div", { class: "m" }, `${x.project_name || "–"} · ${fmtDT(x.started_at)} · ${t("{dur} active", { dur: fmtDur(x.active_s) })}`),
+    h("div", { class: "m" }, [x.project_name || "–", x.who, fmtDT(x.started_at), t("{dur} active", { dur: fmtDur(x.active_s) })].filter(Boolean).join(" · ")),
     x.summary ? h("div", { class: "s" }, x.summary) : screenNote(x),
     x.tags?.length ? h("div", { class: "ktags" }, x.tags.slice(0, 5).map((t) => h("span", { class: "tag" }, t))) : null,
     h("div", { class: "scard-stats" },
@@ -1401,7 +1417,8 @@ function sessionRow(x, scale = null, pick = null) {
       x.source === "codex-import" ? h("span", { class: "agent-tag", title: t("Claude Code deleted this transcript; recovered from Codex's copy") }, t("recovered")) : null),
       x.summary ? h("div", { class: "s" }, x.summary) : screenNote(x),
       x.tags?.length ? h("div", null, x.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null),
-    h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(x.project_path || "")}` }, x.project_name || "–")),
+    h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(x.project_path || "")}` }, x.project_name || "–"),
+      x.who ? h("div", { class: "who-line" }, whoTag(x.who, x.who_key)) : null),
     agentCell(x),
     h("td", { class: "num" }, fmtNum(x.n_prompts)),
     h("td", { class: "num" }, fmtNum(x.n_tool_calls), x.n_tool_errors ? h("div", { class: "muted" }, t("{n} failed", { n: x.n_tool_errors })) : null),
@@ -1779,6 +1796,7 @@ function knowledgeCard(k, { compact = false, hideSession = false } = {}) {
   card.append(h("div", { class: "kfoot" },
     h("span", { class: "kfoot-meta" },
       k.project_name ? h("span", { class: "meta-item", title: k.project_path || "" }, icon("projects"), k.project_name) : null,
+      k.who ? h("span", { class: "meta-item" }, whoTag(k.who, k.who_key, "#/knowledge/all")) : null,
       !hideSession && k.session_id ? h("a", { class: "meta-item session-link", href: `#/session/${k.session_id}`, title: k.session_title || "" }, icon("sessions"), h("span", { class: "ellipsis" }, k.session_title || t("session"))) : null,
       k.created_at ? h("span", { class: "meta-item" }, fmtDate(k.created_at)) : null),
     knowledgeActions(k, card, () => card.remove())));
@@ -1820,7 +1838,8 @@ function knowledgeTable(items) {
       h("td", { class: "title-cell" }, h("div", { class: "t" }, k.title), k.body ? h("div", { class: "s" }, plainText(k.body)) : null),
       h("td", { class: "nowrap" }, scopeOf(k) || "–"),
       h("td", { class: "from-cell" }, k.session_id ? h("a", { href: `#/session/${k.session_id}` }, (k.session_title || t("session")).slice(0, 44))
-        : h("span", { class: "muted" }, k.source === "memory" ? t("{agent} memory", { agent: agentShort(k.agent) }) : "–")),
+        : h("span", { class: "muted" }, k.source === "memory" ? t("{agent} memory", { agent: agentShort(k.agent) }) : "–"),
+        k.who ? h("div", { class: "who-line" }, whoTag(k.who, k.who_key, "#/knowledge/all")) : null),
       h("td", { class: "nowrap" }, stageTag(k.stage, confirmCount(k), k.stage_reason) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, confidenceMeter(k.confidence) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, fmtDate(k.created_at)));
@@ -1920,7 +1939,7 @@ function dayBars(values, days, { height = 90 } = {}) { // active time per day of
 route(/^\/knowledge\/all$/, (params) => knowledgeListView(params));
 async function knowledgeListView(params) {
   setCrumbs(defaultCrumbs("/knowledge/all", params));
-  const state = { q: params.q || "", kind: params.kind || "", project: params.project || "", source: params.source || "" };
+  const state = { q: params.q || "", kind: params.kind || "", project: params.project || "", source: params.source || "", who: params.who || "" };
   const mode = viewMode("knowledge", "cards");
   const box = h("div");
   const count = h("span", { class: "sub" });
@@ -1951,7 +1970,8 @@ async function knowledgeListView(params) {
         oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { state.q = e.target.value; refresh(); }, 250); } }),
       h("select", { onchange: (e) => { state.project = e.target.value; refresh(); } }, await projectOptions(state.project)),
       h("select", { onchange: (e) => { state.source = e.target.value; refresh(); } },
-        [["", t("All sources")], ["analysis", t("Extracted from sessions")], ["memory", t("Agent memory files")]].map(([v, l]) => h("option", { value: v, selected: state.source === v }, l)))),
+        [["", t("All sources")], ["analysis", t("Extracted from sessions")], ["memory", t("Agent memory files")]].map(([v, l]) => h("option", { value: v, selected: state.source === v }, l))),
+      await whoFilter(state.who, (v) => { state.who = v; refresh(); })),
     chipsBox, box);
 }
 

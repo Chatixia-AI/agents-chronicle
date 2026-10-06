@@ -1852,8 +1852,10 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .who-tag .avatar { width: 20px; height: 20px; font-size: 9px; }
 .who-tag > span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .who-list { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; }
-.who-item { cursor: default; }
-.who-item:hover { background: transparent; }
+a.who-tag { color: var(--ink-2); }
+a.who-tag:hover { color: var(--ink); text-decoration: none; }
+a.who-tag:hover > span:last-child { text-decoration: underline; }
+.who-line { margin-top: 4px; }
 table.team-projects td { vertical-align: middle; }
 .attention-card { border-left: 3px solid var(--warning); }
 .attention { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
