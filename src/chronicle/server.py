@@ -77,8 +77,15 @@ SESSION_LIST_COLS = (
     "n_tool_calls, n_tool_errors, n_subagents, n_compactions, n_interrupts, lines_added, lines_removed, n_files, "
     "input_tokens + output_tokens + cache_read_tokens + cache_write_tokens AS tokens, est_cost_usd, primary_model, "
     "git_branch, outcome, sentiment, analysis_status, analysis_reason, tags_json, summary, source_present, peak_context, "
-    "CASE WHEN screen_sig = files_sig THEN screen_verdict END screen_verdict, screen_topic, screen_reason"
+    "CASE WHEN screen_sig = files_sig THEN screen_verdict END screen_verdict, screen_topic, screen_reason, machine_id"
 )
+# whose a session is, on a hub with people: its computer's person, else that computer; keyed "p:<person id>" or
+# "m:<computer id>" (the `who` filter). The hub's own sessions may have no machine_id. WHO_SELECT's one placeholder
+# takes the hub computer's name, WHO_JOIN's its id.
+WHO_SELECT = "p.id AS person_id, COALESCE(p.name, m.name, ?) AS who, COALESCE('p:' || p.id, 'm:' || m.id) AS who_key"
+WHO_JOIN = ("LEFT JOIN machines m ON m.id = COALESCE(s.machine_id, ?) "
+            "LEFT JOIN people p ON p.id = m.person_id AND p.removed_at IS NULL")
+WHO_KEY = re.compile(r"p:\d{1,12}|m:[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}")
 SORTABLE = {"started_at", "ended_at", "active_s", "duration_s", "n_prompts", "n_tool_calls", "tokens", "est_cost_usd",
             "title", "project_name", "agent", "lines_added", "n_tool_errors"}
 
@@ -321,6 +328,59 @@ class App:
             return None
         return {"name": self.cfg.hub_name or local_machine(self.cfg)["name"], "team": has_people(self.conn)}
 
+    def _here(self) -> dict:
+        """This computer, recorded in the machines table, which whose-session joins go through."""
+        from .hub import local_machine, register_local
+
+        here = local_machine(self.cfg)
+        if not self.conn.execute("SELECT 1 FROM machines WHERE id = ?", (here["id"],)).fetchone():
+            register_local(self.conn, self.cfg)
+            self.conn.commit()
+        return here
+
+    def _whos(self) -> dict | None:
+        """{computer id: (who, key)} for labelling rows on a hub with people, None elsewhere; the hub's own sessions,
+        whose machine_id may be empty, under None."""
+        from .people import has_people
+
+        if not has_people(self.conn):
+            return None
+        here = self._here()
+        out = {r["id"]: (r["pname"] or r["name"] or r["id"][:8], f"p:{r['pid']}" if r["pid"] else f"m:{r['id']}")
+               for r in self.conn.execute("SELECT m.id, m.name, p.id pid, p.name pname FROM machines m LEFT JOIN people p "
+                                          "ON p.id = m.person_id AND p.removed_at IS NULL")}
+        out[None] = out.get(here["id"]) or (here["name"], f"m:{here['id']}")
+        return out
+
+    def _label_who(self, rows: list[dict], col: str = "machine_id") -> list[dict]:
+        whos = self._whos()
+        if whos is not None:
+            for r in rows:
+                mid = r.get(col)
+                r["who"], r["who_key"] = whos.get(mid) or (whos[None] if not mid else (mid[:8], f"m:{mid}"))
+        return rows
+
+    def _who_clause(self, key: str, col: str = "machine_id") -> tuple[str, list]:
+        """SQL on sessions for "this person's or this computer's sessions" (a WHO_KEY); matches nothing if malformed."""
+        if not WHO_KEY.fullmatch(key or ""):
+            return "0", []
+        here = self._here()["id"]
+        if key.startswith("p:"):
+            return f"COALESCE({col}, ?) IN (SELECT id FROM machines WHERE person_id = ?)", [here, int(key[2:])]
+        return f"COALESCE({col}, ?) = ?", [here, key[2:]]
+
+    def who_options(self) -> dict:
+        """Who the Sessions and Knowledge pages can be narrowed to on a hub with people: each person and each computer
+        no one joined, with the sessions this viewer can see (through the request's connection)."""
+        from .people import has_people
+
+        if not has_people(self.conn):
+            return {"items": []}
+        here = self._here()
+        return {"items": [{"key": r["who_key"], "name": r["who"], "person": r["person_id"] is not None, "sessions": r["n"]}
+                          for r in self.conn.execute(
+                              f"SELECT {WHO_SELECT}, COUNT(*) n FROM sessions s {WHO_JOIN} GROUP BY who_key ORDER BY n DESC, who", [here["name"], here["id"]]) if r["who_key"]]}
+
     def team(self, q: dict, *, scope: list[str] | None, admin: bool) -> dict:
         """The team Home of a hub. Team projects are the ones set up on the hub and the ones other computers send
         sessions to; a project only this computer works on stays personal (Home › Activity shows it). Sessions and
@@ -328,13 +388,13 @@ class App:
         (access.py), and `scope` keeps the set-up projects to theirs as well. Who: the person whose computer ran the
         session, else that computer's name. People, computers and open invites: admins only."""
         from . import people
-        from .hub import SHARED_AGENTS, declared_projects, local_machine, machines
+        from .hub import SHARED_AGENTS, declared_projects, machines
         from .ingest import project_name_for
 
         c = self.conn
         days = q.get("days") if q.get("days") in TEAM_DAYS else TEAM_DAYS[0]
         since = to_iso(utcnow() - timedelta(days=int(days)))
-        here = local_machine(self.cfg)
+        here = self._here()
         paths = set(declared_projects(c)) | {r[0] for r in c.execute(
             "SELECT DISTINCT project_path FROM sessions WHERE project_path IS NOT NULL AND machine_id IS NOT NULL "
             "AND machine_id != ?", (here["id"],))}
@@ -345,11 +405,7 @@ class App:
                 f"AND s.agent IN ({', '.join('?' for _ in SHARED_AGENTS)})")
         bp = [*paths, *SHARED_AGENTS]
         lesson = f"k.status = 'active' AND k.source = 'analysis' AND k.scope = 'project' AND k.kind != 'preference' AND {base}"
-        # a session's person: through the computer it came from (the hub's own sessions may have no machine_id)
-        who = "p.id AS person_id, COALESCE(p.name, m.name, ?) AS who"
-        join = ("LEFT JOIN machines m ON m.id = COALESCE(s.machine_id, ?) "
-                "LEFT JOIN people p ON p.id = m.person_id AND p.removed_at IS NULL")
-        wp = [here["name"], here["id"]]  # who's placeholder comes before the join's
+        who, join, wp = WHO_SELECT, WHO_JOIN, [here["name"], here["id"]]  # who's placeholder comes before the join's
 
         per = {r["project_path"]: dict(r) for r in c.execute(
             f"SELECT s.project_path, COUNT(*) sessions, SUM(s.started_at >= ?) recent, MAX(s.started_at) last "
@@ -358,8 +414,8 @@ class App:
                                  f"WHERE {lesson} AND k.created_at >= ? GROUP BY s.project_path", [*bp, since]).fetchall())
         active: dict[str, list] = {}
         for r in c.execute(f"SELECT s.project_path, {who}, COUNT(*) n FROM sessions s {join} WHERE {base} "
-                           f"AND s.started_at >= ? GROUP BY s.project_path, person_id, who ORDER BY n DESC", [*wp, *bp, since]):
-            active.setdefault(r["project_path"], []).append({"person_id": r["person_id"], "who": r["who"], "sessions": r["n"]})
+                           f"AND s.started_at >= ? GROUP BY s.project_path, who_key ORDER BY n DESC", [*wp, *bp, since]):
+            active.setdefault(r["project_path"], []).append({"key": r["who_key"], "who": r["who"], "sessions": r["n"]})
         labels = project_labels(c)
         projects = [{"path": path, "label": labels.get(path) or project_name_for(path),
                      "sessions": (per.get(path) or {}).get("sessions", 0), "recent": (per.get(path) or {}).get("recent") or 0,
@@ -367,13 +423,13 @@ class App:
                     for path in paths]
         projects.sort(key=lambda x: (x["recent"], x["last"] or ""), reverse=True)
 
-        lessons_by = {(r[0], r[1]): r[2] for r in c.execute(
-            f"SELECT {who}, COUNT(*) FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} "
-            f"WHERE {lesson} AND k.created_at >= ? GROUP BY person_id, who", [*wp, *bp, since])}
-        everyone = [dict(r) | {"lessons": lessons_by.get((r["person_id"], r["who"]), 0)} for r in c.execute(
+        lessons_by = {r["who_key"]: r["n"] for r in c.execute(
+            f"SELECT {who}, COUNT(*) n FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} "
+            f"WHERE {lesson} AND k.created_at >= ? GROUP BY who_key", [*wp, *bp, since])}
+        everyone = [dict(r) | {"lessons": lessons_by.get(r["who_key"], 0)} for r in c.execute(
             f"SELECT {who}, COUNT(*) sessions, COALESCE(SUM(s.active_s), 0) active_s, MAX(s.started_at) last, "
             f"COUNT(DISTINCT s.project_path) projects FROM sessions s {join} WHERE {base} AND s.started_at >= ? "
-            f"GROUP BY person_id, who ORDER BY sessions DESC LIMIT 100", [*wp, *bp, since])]
+            f"GROUP BY who_key ORDER BY sessions DESC LIMIT 100", [*wp, *bp, since])]
         lessons = [dict(r) for r in c.execute(
             f"SELECT k.id, k.kind, k.title, k.confidence, k.created_at, k.session_id, s.project_path, s.project_name, {who} "
             f"FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} WHERE {lesson} "
@@ -421,7 +477,7 @@ class App:
             d["tags"] = loads(d.pop("tags_json", None), []) or []
             d["analysis_reason"] = analysis_reason(d.get("analysis_reason"))
             rows.append(d)
-        return rows
+        return self._label_who(rows)
 
     def sessions(self, q: dict, limited: bool = False) -> dict:
         where, params = ["1=1"], []
@@ -443,6 +499,10 @@ class App:
         if q.get("agent"):
             where.append("agent = ?")
             params.append(q["agent"])
+        if q.get("who"):  # a person's or a computer's sessions, on a hub with people
+            clause, p = self._who_clause(q["who"])
+            where.append(clause)
+            params += p
         if q.get("screen") in ("analyze", "maybe", "skip"):  # imported chats, as screening sorted them (screen.py)
             where.append("screen_verdict = ? AND screen_sig = files_sig")
             params.append(q["screen"])
@@ -756,9 +816,22 @@ class App:
 
     def knowledge(self, q: dict) -> dict:
         rows = search_knowledge(self.conn, q.get("q") or None, project=q.get("project") or None, kind=q.get("kind") or None,
-                                include_inactive=q.get("status") == "all", limit=min(int(q.get("limit") or 200), 1000))
+                                include_inactive=q.get("status") == "all", limit=min(int(q.get("limit") or 200), 1000),
+                                sessions=self._who_clause(q["who"]) if q.get("who") else None)
         if q.get("source"):
             rows = [r for r in rows if r["source"] == q["source"]]
+        if self._whos() is not None and rows:  # each lesson's person, through the session it came from
+            ids = list({r["session_id"] for r in rows if r.get("session_id")})
+            machine = {}
+            for i in range(0, len(ids), 500):
+                chunk = ids[i:i + 500]
+                machine.update(self.conn.execute(f"SELECT id, machine_id FROM sessions WHERE id IN ({','.join('?' * len(chunk))})",
+                                                 chunk).fetchall())
+            for r in rows:
+                r["session_machine"] = machine.get(r.get("session_id"))
+            self._label_who([r for r in rows if r.get("session_id") in machine], "session_machine")
+            for r in rows:
+                r.pop("session_machine", None)
         counts = {r["kind"]: r["n"] for r in self.conn.execute(
             "SELECT kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY kind")}
         return {"items": [self._reason(r) for r in rows], "counts": counts}
@@ -1841,6 +1914,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.people_info())
                 if p == "/api/overview":
                     return self._json(app.overview(q, limited=self.limited))
+                if p == "/api/team/who":
+                    return self._json(app.who_options())
                 if p == "/api/team":
                     return self._json(app.team(q, scope=people.projects_of(self.viewer), admin=self._can_admin()))
                 if p == "/api/sessions":

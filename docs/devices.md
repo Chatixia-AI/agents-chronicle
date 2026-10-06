@@ -277,6 +277,10 @@ Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**
 A **Hub** marker in the header and a green tint tell the hub's dashboard from your own. The marker shows the hub's
 name, the hub computer's name unless you set one: `chronicle config set hub.name "Resona team"` on the hub.
 
+**Sessions** and **All knowledge** list whose each session and lesson is, under its project, and take a person in the
+filters: everyone's, or one person's (or one computer's that no one joined). A name on the team's Home, a session row
+or a lesson opens that person's sessions or lessons.
+
 ### Read-only people
 
 A read-only person only looks. Send them the browser link rather than the join command: the hub refuses what a

@@ -1409,4 +1409,7 @@ window.CHRONICLE_JA = {
   "team": "チーム",
   "This is the hub's dashboard: {name}": "ハブのダッシュボードです: {name}",
   "Hub": "ハブ",
+  "Only {name}'s": "{name} のものだけ",
+  "Everyone": "全員",
+  "Someone not listed": "一覧にない人",
 };
