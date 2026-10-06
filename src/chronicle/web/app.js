@@ -4370,25 +4370,122 @@ function changesList(c) { // what a checkout reinstall brings in: commits since 
       h("ul", { class: "upd-files" }, shown.map((f) => h("li", null, h("span", { class: "codeline" }, f))),
         files.length > shown.length ? h("li", { class: "muted" }, t("and {n} more", { n: files.length - shown.length })) : null)) : null);
 }
-// Which coding agent analyzes sessions: one of the CLIs installed here, through the user's own login
+// What analyzes sessions: a coding agent installed here (through the user's own login), or a model provider's API
+// (providers.py). An older server sends no "kind": every choice is an agent.
+let apiPane = null; // the provider whose settings are open, while the API tab is chosen without being in use
+const providerModels = {}; // provider -> model ids its endpoint offers, fetched once per page load
 function analyzerPicker(a) {
   const choices = a?.choices || [];
   const current = choices.find((c) => c.name === a.backend);
-  const pick = async (name) => {
-    if (name === a.backend) return;
+  const agents = choices.filter((c) => c.kind !== "api"), apis = choices.filter((c) => c.kind === "api");
+  const apiOn = current?.kind === "api" || apiPane !== null;
+  const use = async (name) => {
     const r = await post("/api/analysis/backend", { backend: name });
     if (r.error) { toast(r.error); return; }
+    apiPane = null;
     toast(t("Sessions are now analyzed with {agent}.", { agent: choices.find((c) => c.name === name)?.label }));
     render();
   };
+  const tabs = [...agents.map((c) =>
+    h("button", { type: "button", role: "radio", class: !apiOn && c.name === a.backend ? "on" : "", "aria-checked": String(!apiOn && c.name === a.backend),
+      disabled: (!c.path || !canAdmin()) && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : t("{agent} is not installed", { agent: c.label }),
+      onclick: () => { if (c.name === a.backend) { apiPane = null; render(); } else use(c.name); } }, c.label)),
+    apis.length ? h("button", { type: "button", role: "radio", class: apiOn ? "on" : "", "aria-checked": String(apiOn), disabled: !canAdmin() && !apiOn,
+      onclick: () => { if (!apiOn) { apiPane = "anthropic"; render(); } } }, t("API provider")) : null];
+  let note;
+  if (apiOn) note = null;
+  else if (current?.path) note = t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: current.label });
+  else note = t("{agent} was not found: sessions wait in the queue until it is installed and signed in.", { agent: current?.label || t("The analysis agent") });
   return h("div", { class: "analyzer" },
-    h("div", { class: "seg", role: "radiogroup", "aria-label": t("Analyzed by") }, choices.map((c) =>
-      h("button", { type: "button", role: "radio", class: c.name === a.backend ? "on" : "", "aria-checked": String(c.name === a.backend),
-        disabled: (!c.path || !canAdmin()) && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : t("{agent} is not installed", { agent: c.label }),
-        onclick: () => pick(c.name) }, c.label))),
-    h("div", { class: "muted" }, current?.path
-      ? t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: current.label })
-      : t("{agent} was not found: sessions wait in the queue until it is installed and signed in.", { agent: current?.label || t("The analysis agent") })));
+    h("div", { class: "seg", role: "radiogroup", "aria-label": t("Analyzed by") }, tabs),
+    note ? h("div", { class: "muted" }, note) : null,
+    apiOn ? providerPane(apis, current, use) : null);
+}
+function providerPane(apis, current, use) {
+  const name = apiPane || (current?.kind === "api" ? current.name : apis[0].name);
+  const p = apis.find((c) => c.name === name) || apis[0];
+  const s = p.settings || {}, d = p.defaults || {}, key = p.key || {};
+  const admin = canAdmin();
+  const pick = h("select", { "aria-label": t("Provider"), disabled: !admin, onchange: (e) => { apiPane = e.target.value; render(); } },
+    apis.map((c) => h("option", { value: c.name, selected: c.name === p.name }, c.label + (c.name === current?.name ? ` · ${t("in use")}` : c.available ? " ✓" : ""))));
+  const listId = `models-${p.name}`;
+  const models = h("datalist", { id: listId }, (providerModels[p.name] || []).map((m) => h("option", { value: m })));
+  const field = (k, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: k, value: s[k] ?? "", autocomplete: "off",
+    spellcheck: "false", disabled: !admin, ...attrs }));
+  const fields = [];
+  if (p.name === "bedrock") fields.push(field("region", t("AWS region"), { placeholder: "us-east-1" }), field("profile", t("AWS profile"), { placeholder: "default" }));
+  if (p.name === "azure") fields.push(field("resource", t("Resource name"), { placeholder: "my-openai" }));
+  fields.push(field("base_url", t("Endpoint"), { placeholder: d.base_url || d.hint || "", type: "url" }),
+    field("model", t("Model"), { placeholder: d.model || (p.name === "azure" ? t("deployment name") : ""), list: listId }),
+    field("small_model", t("Small model (screening)"), { placeholder: d.small_model || t("same as Model"), list: listId }));
+  if (p.dialect === "ollama") fields.push(field("num_ctx", t("Context window (tokens)"), { inputmode: "numeric", placeholder: String(d.num_ctx || "") }));
+  fields.push(field("chunk_chars", t("Characters per call"), { inputmode: "numeric", placeholder: String(d.chunk_chars || "") }));
+  const keyHint = key.source === "stored" ? t("stored; type to replace it")
+    : key.source ? t("from {variable}", { variable: key.source })
+    : key.alt === "aws" ? t("optional: without one, your AWS sign-in is used")
+    : key.alt === "entra" ? t("optional: without one, your az login is used")
+    : key.needed ? t("required") : t("optional");
+  const keyInput = h("input", { class: "input", name: "key", type: "password", autocomplete: "new-password", placeholder: keyHint, disabled: !admin });
+  if (p.dialect !== "ollama") fields.push(h("label", null, key.env ? t("API key ({variable})", { variable: key.env }) : t("API key"), keyInput));
+  const form = h("form", { class: "ts-form", onsubmit: (e) => e.preventDefault() }, fields, models);
+  const values = () => Object.fromEntries([...form.querySelectorAll("input[name]:not([name=key])")].map((x) => [x.name,
+    ["num_ctx", "chunk_chars"].includes(x.name) ? Number(x.value) || 0 : x.value.trim()]));
+  const result = h("div", { class: "ts-result" }, p.available ? null : h("div", { class: "warn-line" }, p.reason));
+  const say = (text, bad) => result.replaceChildren(h("div", { class: bad ? "warn-line" : "muted" }, text));
+  const save = async (extra = {}) => {
+    const body = { provider: p.name, settings: values(), ...extra };
+    if (keyInput.value.trim()) body.key = keyInput.value.trim();
+    const r = await post("/api/analysis/provider", body).catch((e) => ({ error: e.message }));
+    if (r.error) { say(r.error, true); return null; }
+    return r;
+  };
+  const busy = (b, on) => { b.disabled = on; };
+  const saveBtn = h("button", { class: "btn", type: "button", disabled: !admin, onclick: async () => {
+    busy(saveBtn, true);
+    if (await save()) { apiPane = p.name; toast(t("{provider} settings saved.", { provider: p.label })); render(); }
+    busy(saveBtn, false);
+  } }, t("Save"));
+  const testBtn = h("button", { class: "btn", type: "button", disabled: !admin, onclick: async () => {
+    busy(testBtn, true);
+    say(t("Saving and asking {provider}…", { provider: p.label }));
+    if (await save()) {
+      const r = await post("/api/analysis/provider/test", { provider: p.name }).catch((e) => ({ error: e.message }));
+      if (r.error || !r.ok) say(r.error || t("The model answered, but not as asked."), true);
+      else say(t("Works: {model} answered in {seconds}s.", { model: r.model, seconds: (r.ms / 1000).toFixed(1) }));
+      keyInput.value = "";
+    }
+    busy(testBtn, false);
+  } }, t("Test connection"));
+  const inUse = current?.name === p.name;
+  const useBtn = h("button", { class: "btn primary", type: "button", disabled: !admin || inUse, onclick: async () => {
+    busy(useBtn, true);
+    const r = await save();
+    const now = r?.choices?.find((c) => c.name === p.name);
+    if (now && !now.available) say(now.reason, true);
+    else if (r) await use(p.name);
+    busy(useBtn, false);
+  } }, inUse ? t("In use") : t("Use for analysis"));
+  const forget = key.source === "stored" && admin ? h("button", { class: "btn", type: "button", onclick: async () => {
+    if (await save({ key: "" })) { apiPane = p.name; toast(t("API key removed.")); render(); }
+  } }, t("Remove key")) : null;
+  if (admin && !(p.name in providerModels)) {
+    providerModels[p.name] = [];
+    post("/api/analysis/provider/models", { provider: p.name }).then((r) => {
+      providerModels[p.name] = r.models || [];
+      models.replaceChildren(...providerModels[p.name].map((m) => h("option", { value: m })));
+    }).catch(() => {});
+  }
+  let where = "";
+  try { where = new URL(p.path).host; } catch (e) { where = p.path || ""; }
+  return h("div", { class: "provider-pane" },
+    h("div", { class: "provider-pick" }, pick),
+    h("div", { class: "muted" }, p.local ? t("Runs on this computer: transcripts never leave it.")
+      : t("A redacted digest of each session is sent to {host} with your key; the provider's own terms apply.", { host: where || p.label })),
+    form,
+    h("div", { class: "ts-actions" }, testBtn, saveBtn, forget, useBtn),
+    result,
+    h("div", { class: "muted" }, tx("Settings are saved in config.toml under {section}; API keys in provider-keys.json, readable by your user only.",
+      { section: h("span", { class: "codeline" }, `[providers.${p.name}]`) })));
 }
 // What Chronicle writes its knowledge in (analysis.language); an older server sends no languages, so no control
 function knowledgeLangPicker(a) {

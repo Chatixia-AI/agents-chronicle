@@ -130,8 +130,10 @@ API 換算では Sonnet で 1 セッションあたり平均約 $0.38 です。`
 **エージェントが遅くならない？** なりません。セッション終了フックは切り離したプロセスに処理を渡し、数ミリ秒で戻ります。
 分析はあとでバックグラウンドで行います。
 
-**Claude Code は必須？** いいえ。分析は Claude Code と Codex のどちらでも行えます。**Status › Analysis** または
-`chronicle config set analysis.backend codex` で選びます。記録と閲覧はどちらでも使えます。どちらにもログインしていない場合、
+**Claude Code は必須？** いいえ。分析は Claude Code や Codex のほか、あなた自身のキーでモデルプロバイダーの API でも行えます：
+Anthropic、Amazon Bedrock、OpenAI、Azure OpenAI、OpenRouter、OpenAI 互換の任意のサーバー、またはあなたのコンピューター上の
+Ollama。**Status › Analysis** または `chronicle config set analysis.backend <name>` で選びます
+（[モデルプロバイダー](docs/ja/analysis.md#モデルプロバイダー)）。記録と閲覧はどれでも使えます。何も設定していない場合、
 セッションは保管され、分析待ちの列で待ちます。
 
 **Windows や Linux は？** デスクトップアプリは macOS 専用です。Linux では `chronicle install` が同期とダッシュボードを systemd の

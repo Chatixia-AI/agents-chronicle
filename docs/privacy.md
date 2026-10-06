@@ -3,8 +3,9 @@
 [← Chronicle](../README.md) · [Docs index](README.md)
 
 **What leaves your machine:** one thing. When a session is analyzed, a condensed digest of it (secrets redacted
-first) goes to the agent you chose for analysis, through your own login: Anthropic with Claude Code (`claude -p`,
-the default) or OpenAI with Codex (`codex exec`). Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. One other
+first) goes to whatever you chose for analysis: Anthropic with Claude Code (`claude -p`, the default) or OpenAI with
+Codex (`codex exec`), through your own login, or the [model provider](analysis.md#model-providers) you set up, with
+your own key (with Ollama on your computer, nothing leaves it). Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. One other
 connection is the update check: it asks pypi.org for the latest version number and sends nothing about you. It
 runs when you click **Check for updates** on the Status page, and once a day only if you turn on **Check for
 updates daily** or **Notify me about new versions** there (both off by default; `chronicle install` asks about
@@ -45,8 +46,10 @@ archive, over HTTPS inside the tailnet.
   servers or instruction files load, and the model can only answer. `claude -p` runs with
   `--no-session-persistence --safe-mode --tools "" --strict-mcp-config`; `codex exec` runs `--ephemeral` and
   `--ignore-user-config` in a read-only sandbox with every tool feature off, and Chronicle discards any reply that
-  follows a tool call ([details](analysis.md#how-analysis-works)). `analysis.auto = false` turns automatic analysis
-  off.
+  follows a tool call ([details](analysis.md#how-analysis-works)). A model provider gets a plain API request with no
+  tools in it. `analysis.auto = false` turns automatic analysis off.
+- **Provider API keys** live in `provider-keys.json` in Chronicle's folder (mode 600), not in `config.toml`, and the
+  dashboard never sends one back to the browser.
 - **The dashboard** binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding) and requires a custom header
   on state-changing requests (CSRF). In the app window, the page can call only three window actions (theme, drag,
   zoom). Reached through Tailscale Serve, it answers only to the names in `[server] allowed_hosts` and lets in only

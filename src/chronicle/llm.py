@@ -1,6 +1,7 @@
-"""Run a headless coding agent with structured output: Claude Code (`claude -p`) or Codex (`codex exec`).
+"""Run a headless coding agent with structured output: Claude Code (`claude -p`) or Codex (`codex exec`); or, through
+providers.py, a model provider's API.
 
-Analysis runs use the developer's own install and login of the chosen agent (`analysis.backend`).
+Agent runs use the developer's own install and login of the chosen agent (`analysis.backend`).
 Each call is isolated: no session is persisted (so analyses never show up as sessions), user hooks,
 plugins, MCP servers and instruction files are not loaded, and no tools are available, so the model
 can only answer. Codex cannot turn every tool off by flag, so its event stream is also checked: a
@@ -72,7 +73,10 @@ _LIMIT_MARKERS = (
     "log in again",
 )
 
-BACKENDS = {"claude": "Claude Code", "codex": "Codex"}
+AGENTS = {"claude": "Claude Code", "codex": "Codex"}  # backends that run a coding agent's CLI
+# every analysis.backend: the agents, then the model providers' APIs (providers.PROVIDERS)
+BACKENDS = {**AGENTS, "anthropic": "Anthropic API", "bedrock": "Amazon Bedrock", "openai": "OpenAI API",
+            "azure": "Azure OpenAI", "openrouter": "OpenRouter", "ollama": "Ollama", "openai-compatible": "OpenAI-compatible"}
 
 # What a prompt says instead of (or besides) its English-writing rule when [analysis] language is "ja"
 JAPANESE = (
@@ -105,6 +109,29 @@ class Runner:
 
     def available(self) -> bool:
         return bool(self.bin)
+
+    def unavailable_reason(self) -> str:
+        """Why it cannot run now ("" when it can), as a sentence for the dashboard and the CLI."""
+        from .i18n import tr
+
+        return "" if self.available() else tr("{label} (`{cli}`) was not found", label=self.label, cli=self.cli.split()[0])
+
+    def where(self) -> str:
+        """The executable, or the endpoint, that does the analysis."""
+        return self.bin or ""
+
+    def local(self) -> bool:
+        """Transcripts stay on this computer. A coding agent sends them to its own provider."""
+        return False
+
+    @property
+    def chunk_chars(self) -> int:
+        """Characters of condensed transcript per call."""
+        return self.cfg.analysis.chunk_chars
+
+    def describe(self) -> dict:
+        return {"name": self.name, "label": self.label, "kind": "agent", "available": self.available(),
+                "reason": self.unavailable_reason(), "path": self.bin, "model": self.model_label(), "local": False}
 
     def model_label(self, model: str | None = None) -> str:
         raise NotImplementedError
@@ -145,7 +172,12 @@ class Runner:
 
 
 def make_runner(cfg: Config) -> Runner:
-    return CodexRunner(cfg) if cfg.analysis.backend == "codex" else ClaudeRunner(cfg)
+    backend = cfg.analysis.backend
+    if backend in BACKENDS and backend not in AGENTS:
+        from .providers import ApiRunner
+
+        return ApiRunner(cfg, backend)
+    return CodexRunner(cfg) if backend == "codex" else ClaudeRunner(cfg)
 
 
 class ClaudeRunner(Runner):

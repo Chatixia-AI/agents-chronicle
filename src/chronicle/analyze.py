@@ -246,7 +246,7 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
     started = utcnow_iso()
     conn.execute("UPDATE sessions SET analysis_status = 'running' WHERE id = ?", (session_id,))
     conn.commit()
-    header, digest = build_digest(conn, session_id, cfg.analysis.chunk_chars)
+    header, digest = build_digest(conn, session_id, runner.chunk_chars)
     if len(digest.text) < 200 and s["n_prompts"] <= 1:
         conn.execute("UPDATE sessions SET analysis_status='skipped', analysis_reason='too little content' WHERE id=?", (session_id,))
         conn.commit()

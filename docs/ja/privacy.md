@@ -3,8 +3,9 @@
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
 **マシンの外に送られるもの：** 1 つだけです。セッションを分析するとき、そのセッションをまとめた要約（機密情報は先に伏せ字にします）が、
-分析用に選んだエージェントに、あなた自身のログインを通じて送られます：Claude Code（`claude -p`、既定）なら Anthropic に、
-Codex（`codex exec`）なら OpenAI に送られます。
+分析用に選んだものに送られます：あなた自身のログインで Claude Code（`claude -p`、既定）なら Anthropic に、Codex（`codex exec`）
+なら OpenAI に、または設定した[モデルプロバイダー](analysis.md#モデルプロバイダー)にあなた自身のキーで送られます（あなたの
+コンピューターの Ollama なら、何も外に出ません）。
 Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかの接続の 1 つは
 アップデート確認です。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** か **Notify me about new versions** をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、
 同期のたびに `codex cloud` CLI も実行され、Codex のログインで OpenAI からあなた自身のタスクを取得します。こちらから何かを送ることはありません。
@@ -42,7 +43,10 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
   指示ファイルは読み込まれず、モデルは回答することしかできません。`claude -p` は `--no-session-persistence --safe-mode --tools ""
   --strict-mcp-config` 付きで実行されます。`codex exec` は `--ephemeral` と `--ignore-user-config` 付きで、すべてのツール機能を
   切った読み取り専用のサンドボックスで実行され、ツール呼び出しのあとに来た応答は Chronicle が捨てます
-  （[詳細](analysis.md#分析の仕組み)）。`analysis.auto = false` で自動分析をオフにできます。
+  （[詳細](analysis.md#分析の仕組み)）。モデルプロバイダーには、ツールを含まない素の API リクエストを送ります。
+  `analysis.auto = false` で自動分析をオフにできます。
+- **プロバイダーの API キー**は Chronicle のフォルダーの `provider-keys.json`（モード 600）に保存され、`config.toml` には
+  入りません。ダッシュボードがキーをブラウザーに送り返すことはありません。
 - **ダッシュボード**は 127.0.0.1 にのみバインドし、外部の `Host` ヘッダーを拒否し（DNS リバインディング対策）、状態を変更するリクエストには
   独自ヘッダーを必須にしています（CSRF 対策）。アプリのウインドウでは、ページが呼び出せるウインドウ操作は 3 つ（テーマ、ドラッグ、
   ズーム）だけです。Tailscale Serve 経由では `[server] allowed_hosts` の名前にだけ応答し、`[server] allowed_users` の

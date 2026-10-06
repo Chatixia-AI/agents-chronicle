@@ -149,7 +149,12 @@ JA: dict[str, str] = {
     "analysis is paused until {when} (usage limit); it resumes by itself": "使用量の上限のため、分析は {when} まで一時停止しています。自動で再開します",
     "automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`":
         "自動分析がオフです（analysis.auto）。セッションのページか `chronicle analyze` で分析してください",
-    "{label} (`{cli}`) was not found, so nothing can be analyzed": "{label}（`{cli}`）が見つからないため、何も分析できません",
+    "not saved: {keys}": "保存されませんでした：{keys}",
+    "{reason}, so nothing can be analyzed": "{reason}ため、何も分析できません",
+    "{label} (`{cli}`) was not found": "{label}（`{cli}`）が見つかりません",
+    "{label}: set its endpoint (providers.{name}.base_url)": "{label}：エンドポイントを設定してください（providers.{name}.base_url）",
+    "{label}: choose a model (providers.{name}.model)": "{label}：モデルを選んでください（providers.{name}.model）",
+    "{label}: add an API key": "{label}：API キーを追加してください",
 
     # ---- weekly reviews
     "exists": "作成済み",

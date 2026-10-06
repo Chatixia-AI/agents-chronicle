@@ -24,7 +24,7 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | Key | Default | |
 | --- | --- | --- |
 | `auto` | `true` | analyze sessions automatically once they go idle |
-| `backend` | `claude` | which agent analyzes sessions, through your own login: `claude` (Claude Code) or `codex` (Codex). Also in **Status › Analysis** |
+| `backend` | `claude` | what analyzes sessions: `claude` (Claude Code) or `codex` (Codex) through your own login, or a model provider's API: `anthropic`, `bedrock`, `openai`, `azure`, `openrouter`, `ollama`, `openai-compatible` (see [`[providers.<name>]`](#providersname)). Also in **Status › Analysis** |
 | `model` / `effort` | `sonnet` / `medium` | Claude: any `claude --model` alias. `effort` also sets Codex's reasoning effort (`max` becomes `xhigh`) |
 | `codex_model` | `""` | Codex model, e.g. `gpt-5.5`; empty uses Codex's default |
 | `screen_model` | `haiku` | model that screens imported chats (`chronicle screen`); it reads only each chat's opening, 60 chats a call |
@@ -37,6 +37,24 @@ the file. Changes apply on the next sync or worker run. `CHRONICLE_HOME` relocat
 | `chunk_chars` | `150000` | characters of condensed transcript per call; longer sessions are map-reduced |
 | `timeout_seconds` | `900` | wall-clock limit per call |
 | `claude_bin` / `codex_bin` | `""` | path to `claude` / `codex` (found automatically when empty) |
+
+## `[providers.<name>]`
+
+Settings for `analysis.backend = "<name>"`; [Model providers](analysis.md#model-providers) has the list. Set them in
+**Status › Analysis** or with `chronicle config set providers.<name>.<key> <value>`. API keys are not kept here:
+`chronicle config set-key <name>` (or the dashboard) stores them in `provider-keys.json`, readable by your user only.
+
+| Key | Default | |
+| --- | --- | --- |
+| `base_url` | the provider's | the API's address; required for `openai-compatible`, and for `azure` unless `resource` is set |
+| `model` / `small_model` | Claude Sonnet 5.5 / Claude Haiku 4.5 on `anthropic` and `bedrock`, else none | the model for analysis and knowledge bases / for screening imported chats (empty: `model`) |
+| `region` / `profile` | `AWS_REGION`, else `us-east-1` / `AWS_PROFILE` | `bedrock`: the region of its endpoint, and the AWS profile to sign in with when there is no Bedrock API key |
+| `resource` | | `azure`: the resource name, for `https://<resource>.openai.azure.com/openai/v1` |
+| `num_ctx` | `32768` | `ollama`: the context window, in tokens |
+| `chunk_chars` | `analysis.chunk_chars` (`ollama`: `60000`) | characters of condensed transcript per call |
+| `max_output_tokens` | `32000` on `anthropic` / `bedrock`, else the model's own | output limit per call |
+| `json_mode` | `true` (`openai-compatible`: `false`) | OpenAI-style providers: ask for a JSON object |
+| `key_env` | the provider's usual variable | another environment variable to read the key from |
 
 ## `[synthesis]`, `[export]`, `[server]`, `[inject]`, `[updates]`
 

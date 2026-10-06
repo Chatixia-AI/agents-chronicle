@@ -67,13 +67,11 @@ def test_a_stopped_queue_says_why(synced, monkeypatch):
     conn.commit()
     off = replace(cfg, analysis=replace(cfg.analysis, auto=False))
     assert "automatic analysis is off" in count_pending(conn, off)["block"]
-    class Missing:
-        label, cli = "Claude Code", "claude -p"
+    from chronicle.llm import ClaudeRunner
 
-        def available(self):
-            return False
-
-    monkeypatch.setattr("chronicle.worker.make_runner", lambda cfg: Missing())
+    missing = ClaudeRunner(cfg)
+    missing.bin = None  # not installed
+    monkeypatch.setattr("chronicle.worker.make_runner", lambda cfg: missing)
     assert count_pending(conn, cfg)["block"] == "Claude Code (`claude`) was not found, so nothing can be analyzed"
 
 

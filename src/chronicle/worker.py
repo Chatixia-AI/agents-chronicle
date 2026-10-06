@@ -127,7 +127,7 @@ def queue_block(conn, cfg: Config, runner: Runner | None = None) -> str | None:
         return tr("automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`")
     runner = runner or make_runner(cfg)
     if not runner.available():
-        return tr("{label} (`{cli}`) was not found, so nothing can be analyzed", label=runner.label, cli=runner.cli.split()[0])
+        return tr("{reason}, so nothing can be analyzed", reason=runner.unavailable_reason())
     return None
 
 
@@ -192,7 +192,7 @@ def _run_locked(cfg: Config, conn, report: WorkReport, *, session_ids, max_analy
         if paused and paused > to_iso(utcnow()) and not session_ids:
             report.paused_until = paused
         elif not runner.available():
-            report.note = f"{runner.label} ({runner.cli.split()[0]}) not found; analysis skipped"
+            report.note = f"{runner.unavailable_reason()}; analysis skipped"
         else:
             ids = session_ids or pending_sessions(conn, cfg, max_analyses or cfg.analysis.max_per_run)
             _analyze_many(cfg, ids, runner, report, model=model, progress=progress)

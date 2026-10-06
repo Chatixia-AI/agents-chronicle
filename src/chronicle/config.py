@@ -38,8 +38,9 @@ exclude_projects = []
 [analysis]
 # Analyze sessions automatically once they go idle.
 auto = true
-# Which coding agent does the analysis, through your own login: "claude" (Claude Code, `claude -p`)
-# or "codex" (OpenAI Codex, `codex exec`).
+# What does the analysis. A coding agent, through your own login: "claude" (Claude Code, `claude -p`) or "codex"
+# (OpenAI Codex, `codex exec`). Or a model provider's API, set up under [providers.<name>] below: "anthropic",
+# "bedrock", "openai", "azure", "openrouter", "ollama" (models on this computer), or "openai-compatible".
 backend = "claude"
 # Claude model (backend "claude").
 model = "sonnet"
@@ -154,6 +155,15 @@ notify = false
 # Dockerfiles, Terraform, CI workflows, vite configs, .env.example, deploy configs), read-only and nothing else.
 # Off: the map uses only what sessions recorded.
 read_manifests = true
+
+# Model providers for analysis.backend = "<name>". Keys: base_url, model (analysis and knowledge bases),
+# small_model (screening imported chats), max_output_tokens, chunk_chars (characters of transcript per call), and
+# region + profile (bedrock), resource (azure), num_ctx (ollama). API keys are not kept here: the dashboard
+# (Status › Analysis) or `chronicle config set-key <name>` stores them in provider-keys.json, readable by you only;
+# the provider's usual variable (OPENAI_API_KEY, ...) is read when none is stored. For example:
+# [providers.ollama]
+# model = "qwen3:30b"
+# num_ctx = 32768
 """
 
 
@@ -232,6 +242,7 @@ class Config:
     suggestions_enabled: bool = True
     suggestions_notify: bool = False
     systems_read_manifests: bool = True
+    providers: dict[str, dict] = field(default_factory=dict)  # [providers.<name>]: see providers.py
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -383,6 +394,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         suggestions_enabled=bool(_section(data, "suggestions").get("enabled", True)),
         suggestions_notify=bool(_section(data, "suggestions").get("notify", False)),
         systems_read_manifests=bool(_section(data, "systems").get("read_manifests", True)),
+        providers={str(k): v for k, v in _section(data, "providers").items() if isinstance(v, dict)},
     )
     if cfg.analysis.language not in LANGUAGES:
         import logging
@@ -425,4 +437,25 @@ def set_config_value(cfg: "Config", section: str, key: str, value: str) -> None:
             lines[at:stop + 1] = [new_line]
     text = "\n".join(lines).rstrip() + "\n"
     tomllib.loads(text)  # raises before anything is written
+    path.write_text(text)
+
+
+def remove_config_value(cfg: "Config", section: str, key: str) -> None:
+    """Remove `key` from [section] of config.toml (a no-op when it is not there), keeping everything else."""
+    import re
+
+    path = cfg.config_path
+    if not path.exists():
+        return
+    lines = path.read_text().splitlines()
+    header = next((i for i, l in enumerate(lines) if l.strip() == f"[{section}]"), None)
+    if header is None:
+        return
+    end = next((j for j in range(header + 1, len(lines)) if lines[j].lstrip().startswith("[")), len(lines))
+    at = next((j for j in range(header + 1, end) if re.match(rf"^\s*{re.escape(key)}\s*=", lines[j])), None)
+    if at is None:
+        return
+    del lines[at]
+    text = "\n".join(lines).rstrip() + "\n"
+    tomllib.loads(text)
     path.write_text(text)

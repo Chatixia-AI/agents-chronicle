@@ -1906,3 +1906,8 @@ table.team-projects td { vertical-align: middle; }
 .attention li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 4px; }
 .attention li > .icon { width: 30px; height: 18px; color: var(--muted); }
 .attention li > span:nth-child(2) { color: var(--ink); }
+
+/* Status › Analysis: a model provider's settings (providerPane) */
+.provider-pane { display: flex; flex-direction: column; gap: 8px; margin-top: 4px; }
+.provider-pick select { min-width: 220px; }
+.provider-pane .ts-form { margin: 0; }
