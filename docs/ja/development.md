@@ -52,7 +52,8 @@ Run workflow** を実行して `patch`、`minor`、`major` のどれかを選び
 `APPLE_*` シークレットが設定されていれば署名・公証済み。詳細はワークフローの先頭を参照）。最後に、`## Unreleased` を
 `## <version> (<date>)` に変えるプルリクエストを開きます。次のリリースの前にマージしてください。マージするまでは
 リリース済みの内容が Unreleased に残っているため、次の実行は最初のステップでその旨を伝えて止まります。このリポジトリで
-GitHub Actions がプルリクエストを作れない設定の場合は、実行の Summary に開くためのリンクが出ます。
+GitHub Actions がプルリクエストを作れない設定の場合は、公開を終えたあとの最後のステップが失敗し、そのプルリクエストを
+手で開くためのリンクを示します。
 既定の `dry run` はテストを実行して DMG をワークフローの成果物として保存するだけで、何も公開しません。
 GitHub で `v<version>` タグのリリースを手動で公開する方法も引き続き使えます。
 
@@ -66,8 +67,9 @@ GitHub で `v<version>` タグのリリースを手動で公開する方法も�
    `MACOS_CERT_PASSWORD`、`MACOS_CODESIGN_IDENTITY`、`APPLE_ID`、`APPLE_TEAM_ID`、`APPLE_APP_PASSWORD`
    （account.apple.com で発行するアプリ用パスワード）を追加します。これらがない場合、DMG はアドホック署名となり、
    利用者は「プライバシーとセキュリティ」で許可する必要があります。
-4. 任意：Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests** をオンにすると、
-   リリースが変更履歴のプルリクエストをリンクではなく自分で開きます。
+4. Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests** をオンにして、
+   リリースが変更履歴のプルリクエストを自分で開けるようにします。オフのままだと、リリースのたびに最後のステップが
+   失敗し、開くためのリンクを示します。
 
 ## ドキュメントサイト
 

@@ -59,7 +59,8 @@ def not_ready(text: str, tags: list[str]) -> str | None:
     last = ".".join(map(str, latest(tags)))
     if last != "0.0.0" and not re.search(rf"^## {re.escape(last)}\b", text, re.M):
         # the last release's changelog pull request is not merged: its lines are still under Unreleased
-        return f"CHANGELOG.md has no '## {last}' section: merge the changelog pull request for {last} first"
+        return (f"CHANGELOG.md has no '## {last}' section: merge the changelog pull request for {last} first "
+                f"(none open? open one from the changelog-{last} branch: {REPO_URL}/compare/main...changelog-{last}?expand=1)")
     if not unreleased(text):
         return "CHANGELOG.md has nothing under '## Unreleased' to release"
     return None
