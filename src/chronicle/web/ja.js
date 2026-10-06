@@ -149,6 +149,8 @@ window.CHRONICLE_JA = {
   "output {out} · cache read {read} · {cost}": "出力 {out} · キャッシュ読み込み {read} · {cost}",
   "Could not load: {error}": "読み込めませんでした：{error}",
   "Not found": "見つかりません",
+  "Still loading this page…": "このページを読み込んでいます…",
+  "Background work: {job}": "バックグラウンドで実行中：{job}",
   // Shared widgets, Home
   "All projects": "すべてのプロジェクト",
   "Cards": "カード",

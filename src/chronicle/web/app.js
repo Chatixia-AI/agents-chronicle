@@ -768,6 +768,46 @@ function setParams(params) {
   markSidebar(now.path, now.params);
   if (!/^\/(session\/|project$)/.test(path) && !(path === "/systems" && now.params.system)) setCrumbs(defaultCrumbs(now.path, now.params)); // those pages name themselves
 }
+// a page that takes more than a moment gets a bar along the top; one that takes long, a note saying so
+const LOAD_BAR_MS = 200, LOAD_NOTE_MS = 4000;
+const pageLoad = { timers: [], tick: 0, started: 0 };
+function loadStarted() {
+  pageLoad.timers.forEach(clearTimeout);
+  clearInterval(pageLoad.tick);
+  pageLoad.started = Date.now();
+  $("#app").classList.add("loading");
+  $("#app").setAttribute("aria-busy", "true");
+  $("#loadnote").hidden = true;
+  pageLoad.timers = [setTimeout(showLoadBar, LOAD_BAR_MS), setTimeout(showLoadNote, LOAD_NOTE_MS)];
+}
+function loadFinished() {
+  pageLoad.timers.forEach(clearTimeout);
+  clearInterval(pageLoad.tick);
+  $("#app").classList.remove("loading");
+  $("#app").removeAttribute("aria-busy");
+  $("#loadnote").hidden = true;
+  const bar = $("#loadbar");
+  bar.classList.remove("on");
+  setTimeout(() => { if (!bar.classList.contains("on")) bar.hidden = true; }, 300); // after the fade, so the animation stops
+}
+function showLoadBar() {
+  const bar = $("#loadbar");
+  bar.hidden = false;
+  void bar.offsetWidth; // shown first, so the fade-in runs
+  bar.classList.add("on");
+}
+function showLoadNote() {
+  const note = $("#loadnote"), secs = h("span", { class: "ln-secs", "aria-hidden": "true" });
+  const tick = () => { secs.textContent = fmtSecs((Date.now() - pageLoad.started) / 1000); };
+  // a job the dashboard started (a sync, an import) shares the database with this page
+  const running = Object.keys(lastStatus?.jobs || {}).filter((name) => lastStatus.jobs[name].state === "running");
+  note.replaceChildren(h("div", null, h("b", null, t("Still loading this page…")), secs),
+    ...running.slice(0, 1).map((name) => h("div", { class: "ln-why" }, t("Background work: {job}", { job: jobLabel(name) }))));
+  tick();
+  pageLoad.tick = setInterval(tick, 1000);
+  note.hidden = false;
+}
+
 let renderSeq = 0;
 async function render() {
   const { path, params } = parseHash();
@@ -777,7 +817,7 @@ async function render() {
   for (const [pattern, view] of routes) {
     const m = path.match(pattern);
     if (!m) continue;
-    app.classList.add("loading");
+    loadStarted();
     try {
       const [node] = await Promise.all([view(params, ...m.slice(1).map(decodeURIComponent)), loadGlossary()]);
       if (seq !== renderSeq) return;
@@ -787,11 +827,12 @@ async function render() {
       if (seq !== renderSeq) return;
       app.replaceChildren(h("div", { class: "card empty" }, t("Could not load: {error}", { error: err.message })));
     } finally {
-      if (seq === renderSeq) app.classList.remove("loading");
+      if (seq === renderSeq) loadFinished();
     }
     hideTip();
     return;
   }
+  loadFinished(); // a page still loading when the user moved on would otherwise keep its bar
   app.replaceChildren(h("div", { class: "card empty" }, t("Not found")));
 }
 function navKey(path) {
