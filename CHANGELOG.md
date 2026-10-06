@@ -2,7 +2,15 @@
 
 ## Unreleased
 
-- **Search when sharing a project:** **Settings › Devices › Shared projects** now has one search box instead of a
+- **The hub's dashboard is the team's:** once a hub has people, its **Home** shows the team projects (set up on the
+  hub, or sent to by other computers) with the sessions and new lessons of the last 7, 30 or 90 days, who worked on
+  each, and the newest lessons and sessions with the person they came from. Admins also see what needs attention:
+  people who haven't joined or have no way in, and computers not heard from for a week. Projects only the hub
+  computer works on stay off it; **Home › Activity** keeps the charts of every session. People, shared projects,
+  computers and the team store move from **Settings › Devices** to a **Team** section for admins, and **Team ›
+  Computers** says whose each computer is. A **Hub** marker in the header and a green tint tell the hub's dashboard
+  from your own; `[hub] name` names it. [The hub's dashboard](docs/devices.md#the-hubs-dashboard)
+- **Search when sharing a project:** **Team › Shared projects** now has one search box instead of a
   list and a folder field. Typing filters the hub's projects by name or folder (arrow keys and Enter pick one); a
   folder starting with `/` or `~` can be shared as it is.
 

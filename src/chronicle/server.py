@@ -45,6 +45,8 @@ MAX_SELECTION = 1000  # sessions one "analyze selected" may cover
 WEB_DIR = Path(__file__).parent / "web"
 LOOPBACK = ("127.0.0.1", "localhost", "[::1]")
 SESSION_COOKIE = "chronicle_session"  # a person's dashboard session on a hub (people.py)
+TEAM_DAYS = ("7", "30", "90")  # the team Home's periods, first the default
+TEAM_MAX_PROJECTS = 500
 # headers a proxy adds: a request with any of them came through one, so it is not from someone at this computer
 PROXY_HEADERS = ("X-Forwarded-For", "Tailscale-User-Login", "X-Forwarded-Proto", "X-Real-IP", "Forwarded")
 HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub/done", "/api/hub/hello")
@@ -307,6 +309,98 @@ class App:
             "outcomes": outcomes, "work_types": sorted(work_types.items(), key=lambda x: -x[1]),
             "recent": recent, "knowledge": knowledge, "status": self.status_small(limited=limited),
         }
+
+    # ---- a hub's team Home: what the team did lately, by project and by person
+    def hub_info(self) -> dict | None:
+        """This computer as a hub: the name its dashboard shows, and whether it has people (then Home is the team's).
+        None on a computer that isn't a hub."""
+        from .hub import local_machine, read_token
+        from .people import has_people
+
+        if self.cfg.is_spoke or not read_token(self.cfg):
+            return None
+        return {"name": self.cfg.hub_name or local_machine(self.cfg)["name"], "team": has_people(self.conn)}
+
+    def team(self, q: dict, *, scope: list[str] | None, admin: bool) -> dict:
+        """The team Home of a hub. Team projects are the ones set up on the hub and the ones other computers send
+        sessions to; a project only this computer works on stays personal (Home › Activity shows it). Sessions and
+        lessons are read through this request's connection, so someone limited to projects sees theirs only
+        (access.py), and `scope` keeps the set-up projects to theirs as well. Who: the person whose computer ran the
+        session, else that computer's name. People, computers and open invites: admins only."""
+        from . import people
+        from .hub import SHARED_AGENTS, declared_projects, local_machine, machines
+        from .ingest import project_name_for
+
+        c = self.conn
+        days = q.get("days") if q.get("days") in TEAM_DAYS else TEAM_DAYS[0]
+        since = to_iso(utcnow() - timedelta(days=int(days)))
+        here = local_machine(self.cfg)
+        paths = set(declared_projects(c)) | {r[0] for r in c.execute(
+            "SELECT DISTINCT project_path FROM sessions WHERE project_path IS NOT NULL AND machine_id IS NOT NULL "
+            "AND machine_id != ?", (here["id"],))}
+        if scope is not None:
+            paths &= set(scope)
+        paths = sorted(paths)[:TEAM_MAX_PROJECTS]
+        base = (f"s.project_path IN ({', '.join('?' for _ in paths) or 'NULL'}) AND s.source != 'history' "
+                f"AND s.agent IN ({', '.join('?' for _ in SHARED_AGENTS)})")
+        bp = [*paths, *SHARED_AGENTS]
+        lesson = f"k.status = 'active' AND k.source = 'analysis' AND k.scope = 'project' AND k.kind != 'preference' AND {base}"
+        # a session's person: through the computer it came from (the hub's own sessions may have no machine_id)
+        who = "p.id AS person_id, COALESCE(p.name, m.name, ?) AS who"
+        join = ("LEFT JOIN machines m ON m.id = COALESCE(s.machine_id, ?) "
+                "LEFT JOIN people p ON p.id = m.person_id AND p.removed_at IS NULL")
+        wp = [here["name"], here["id"]]  # who's placeholder comes before the join's
+
+        per = {r["project_path"]: dict(r) for r in c.execute(
+            f"SELECT s.project_path, COUNT(*) sessions, SUM(s.started_at >= ?) recent, MAX(s.started_at) last "
+            f"FROM sessions s WHERE {base} GROUP BY s.project_path", [since, *bp])}
+        learned = dict(c.execute(f"SELECT s.project_path, COUNT(*) FROM knowledge k JOIN sessions s ON s.id = k.session_id "
+                                 f"WHERE {lesson} AND k.created_at >= ? GROUP BY s.project_path", [*bp, since]).fetchall())
+        active: dict[str, list] = {}
+        for r in c.execute(f"SELECT s.project_path, {who}, COUNT(*) n FROM sessions s {join} WHERE {base} "
+                           f"AND s.started_at >= ? GROUP BY s.project_path, person_id, who ORDER BY n DESC", [*wp, *bp, since]):
+            active.setdefault(r["project_path"], []).append({"person_id": r["person_id"], "who": r["who"], "sessions": r["n"]})
+        labels = project_labels(c)
+        projects = [{"path": path, "label": labels.get(path) or project_name_for(path),
+                     "sessions": (per.get(path) or {}).get("sessions", 0), "recent": (per.get(path) or {}).get("recent") or 0,
+                     "last": (per.get(path) or {}).get("last"), "lessons": learned.get(path, 0), "people": active.get(path, [])}
+                    for path in paths]
+        projects.sort(key=lambda x: (x["recent"], x["last"] or ""), reverse=True)
+
+        lessons_by = {(r[0], r[1]): r[2] for r in c.execute(
+            f"SELECT {who}, COUNT(*) FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} "
+            f"WHERE {lesson} AND k.created_at >= ? GROUP BY person_id, who", [*wp, *bp, since])}
+        everyone = [dict(r) | {"lessons": lessons_by.get((r["person_id"], r["who"]), 0)} for r in c.execute(
+            f"SELECT {who}, COUNT(*) sessions, COALESCE(SUM(s.active_s), 0) active_s, MAX(s.started_at) last, "
+            f"COUNT(DISTINCT s.project_path) projects FROM sessions s {join} WHERE {base} AND s.started_at >= ? "
+            f"GROUP BY person_id, who ORDER BY sessions DESC LIMIT 100", [*wp, *bp, since])]
+        lessons = [dict(r) for r in c.execute(
+            f"SELECT k.id, k.kind, k.title, k.confidence, k.created_at, k.session_id, s.project_path, s.project_name, {who} "
+            f"FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} WHERE {lesson} "
+            f"ORDER BY k.created_at DESC, k.id DESC LIMIT 12", [*wp, *bp])]
+        recent = [dict(r) for r in c.execute(
+            f"SELECT s.id, s.title, s.agent, s.source, s.project_name, s.project_path, s.started_at, s.ended_at, s.active_s, "
+            f"s.n_prompts, s.outcome, s.analysis_status, {who} FROM sessions s {join} WHERE {base} "
+            f"ORDER BY s.started_at DESC LIMIT 10", [*wp, *bp])]
+        out = {"days": days, "hub": self.hub_info(), "projects": projects, "who": everyone, "lessons": lessons,
+               "recent": recent, "people": None, "computers": None,
+               "totals": {"sessions": sum(x["recent"] for x in projects), "lessons": sum(learned.values()),
+                          "people": len(everyone), "projects": sum(1 for x in projects if x["recent"]),
+                          "team_projects": len(projects)}}
+        if not admin:
+            return out
+        listing = people.listing(c)
+        computers = machines(c, self.cfg)
+        sent = {m["id"]: m["last_push"] for m in computers}
+        out["computers"] = [{"id": m["id"], "name": m["name"] or m["id"][:8], "person": m["person"],
+                             "this": m["this"], "share": m["share"], "sessions": m["sessions"], "last_session": m["last_session"],
+                             "last_push": m["last_push"], "last_seen": m["last_seen"]} for m in computers]
+        out["people"] = [{"id": x["id"], "name": x["name"], "role": x["role"], "projects": x["projects"],
+                          "computers": len(x["computers"]), "browsers": len(x["browsers"]),
+                          "last_push": max((sent.get(m["machine_id"]) or "" for m in x["computers"]), default="") or None,
+                          "last_dashboard": max((b["last_used"] or "" for b in x["browsers"]), default="") or None,
+                          "invites": [i["expires_at"] for i in x["invites"]]} for x in listing]
+        return out
 
     def _k(self, k: dict) -> dict:
         k["tags"] = loads(k.pop("tags_json", None), []) or []
@@ -1528,7 +1622,7 @@ def make_handler(app: App, port: int):
             from . import people
 
             return {"viewer": {**people.public(self.viewer), "here": self._from_here()},
-                    "people_mode": people.has_people(app.conn), "can_admin": self._can_admin()}
+                    "people_mode": people.has_people(app.conn), "can_admin": self._can_admin(), "hub": app.hub_info()}
 
         def _address(self) -> str:
             """The hub's address as others reach it: [hub] address, or a guess from how this page was opened."""
@@ -1747,6 +1841,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.people_info())
                 if p == "/api/overview":
                     return self._json(app.overview(q, limited=self.limited))
+                if p == "/api/team":
+                    return self._json(app.team(q, scope=people.projects_of(self.viewer), admin=self._can_admin()))
                 if p == "/api/sessions":
                     return self._json(app.sessions(q, limited=self.limited))
                 if p == "/api/export":  # a download: one session's file, or a .zip of several

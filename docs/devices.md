@@ -62,9 +62,9 @@ then on:
 
 - **New sessions go to the hub** as each one ends (the SessionEnd hook) and every 15 minutes (the background sync),
   once `chronicle install` has set those up on that computer. `chronicle push` sends them right away.
-- **The hub knows where each session ran.** A session's page says which computer it came from, and **Settings ›
-  Devices** lists the computers, their sessions and when each last sent something (`chronicle hub status` in a
-  terminal).
+- **The hub knows where each session ran.** A session's page says which computer it came from, and **Team ›
+  Computers** lists the computers, whose each is, their sessions and when each last sent something (`chronicle hub
+  status` in a terminal).
 - **Analysis runs only on the hub.** If the computer already analyzed sessions with its own Chronicle, it hands
   those analyses over when it joins, so the hub does not pay to analyze them again.
 - **That computer's own dashboard and MCP tools stop updating.** They keep what they had; open the hub's dashboard
@@ -91,7 +91,7 @@ matching project of its own:
    specific match wins, so a repository inside the folder whose git remote the hub knows still follows its remote. A
    folder inside a repository the hub files under another project is refused, because a repository belongs to one
    project. `chronicle hub folders` shows what goes where, and `chronicle hub remove-folder <folder>` takes one back
-   out. The hub's **Settings › Devices** lists the folders each computer added.
+   out. The hub's **Team › Computers** lists the folders each computer added.
 3. **By `[hub] path_map`**, for projects without a remote, in the hub's [configuration](configuration.md#hub):
 
    ```toml
@@ -138,7 +138,7 @@ the computer. Sessions from GitHub Copilot, IBM Bob and Google Antigravity are s
 On the hub these sessions are filed like any other from that computer (by git remote, an added folder or
 `path_map`) and their lessons join the project's knowledge base. A session page shows **transcript on
 <computer>** instead of the transcript, and the hub never analyzes these sessions again, so it needs no Claude login
-for them. It still builds each project's knowledge base and glossary with its own. **Settings › Devices** marks the
+for them. It still builds each project's knowledge base and glossary with its own. **Team › Computers** marks the
 computer **knowledge only**. A session the hub already has the transcript of keeps the hub's record.
 
 ### Teammates' lessons, and a team store in Postgres
@@ -154,8 +154,8 @@ chronicle config set hub.store postgres
 chronicle hub store                          # connects, sets up its tables, and shows what it holds
 ```
 
-Then restart the dashboard, which is what receives the sessions. Or, once the driver is installed, open **Settings ›
-Devices › Team store** on the hub itself: fill in the connection, **Test connection**, then **Save**. Nothing is saved
+Then restart the dashboard, which is what receives the sessions. Or, once the driver is installed, open **Team › Team
+store** on the hub itself: fill in the connection, **Test connection**, then **Save**. Nothing is saved
 unless the connection works, the password is never shown again, and only an admin can change these settings
 ([People and roles](#people-and-roles)).
 
@@ -221,7 +221,7 @@ On the hub, run:
 chronicle hub invite "Ana Lima" --email ana@example.com --role member --all-projects
 ```
 
-or use **Settings › Devices › People › Invite someone** in the hub's dashboard. `--role` is `member` when you leave
+or use **Team › People › Invite someone** in the hub's dashboard. `--role` is `member` when you leave
 it out. The email is optional, but company sign-in finds people by it. A member or read-only person sees nothing
 until you say which projects: `--all-projects` for every project, or `--project <name>` for one (repeat it for
 more; [Projects and who sees them](#projects-and-who-sees-them)). Inviting someone new without either is refused. An
@@ -264,6 +264,19 @@ replaces the computer's old token.
 
 A browser stays signed in until 30 days after it was last used. **Sign out** in the header ends it.
 
+### The hub's dashboard
+
+Once the hub has people, its **Home** is the team's. It shows the team projects (the ones set up on the hub, and the
+ones other computers send to) with the sessions and new lessons of the last 7, 30 or 90 days in each, who worked on
+them, and the newest lessons and sessions, each with the person whose computer it came from. Admins also see what
+needs attention: people who haven't joined yet or have no way in, and computers the hub hasn't heard from for a week.
+A project only the hub computer works on stays off the team's Home; **Activity** (top right of Home) keeps the charts
+of every session on the hub. Someone limited to projects sees their projects only.
+
+Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**, **Computers** and **Team store**.
+A **Hub** marker in the header and a green tint tell the hub's dashboard from your own. The marker shows the hub's
+name, the hub computer's name unless you set one: `chronicle config set hub.name "Resona team"` on the hub.
+
 ### Read-only people
 
 A read-only person only looks. Send them the browser link rather than the join command: the hub refuses what a
@@ -296,7 +309,7 @@ chronicle hub add-folder ~/work/Resona --project Resona
   The hub's own sessions there are filed under it at once, with their knowledge, and so are new ones. Other computers
   can add a folder to it right away, before anything was sent to it. The folder must exist on the hub or have
   sessions that ran in it. It can't be `/`, your home folder or a folder above it, and it can't sit inside or around
-  another project set up this way. `chronicle hub project list` lists the hub's projects and marks the ones set up here. On the dashboard, **Settings › Devices › Shared projects**
+  another project set up this way. `chronicle hub project list` lists the hub's projects and marks the ones set up here. On the dashboard, **Team › Shared projects**
   shows the same, with who sees each project and which computers send to it, and a **Shared** badge marks them in
   **Projects**. At the hub computer itself, that card also shares another project or stops sharing one.
   `chronicle hub project remove <folder>` undoes one: the hub's own sessions go back to their own folders, and what
@@ -305,7 +318,7 @@ chronicle hub add-folder ~/work/Resona --project Resona
   not, and can be repeated; `--all-projects` gives every project.
   `chronicle hub access <email|id> --project <name>` (or `--all-projects`) changes it later, from their next request;
   what their computers already sent stays. `chronicle hub people` shows what each person sees. On the hub's
-  dashboard, **Settings › Devices › People** lets an admin choose the projects when inviting someone and change them
+  dashboard, **Team › People** lets an admin choose the projects when inviting someone and change them
   later.
 - **Joining.** A computer that joins as someone limited to projects shares knowledge only, with or without
   `--share knowledge` ([Sharing knowledge only](#sharing-knowledge-only)), and `chronicle hub join` lists the projects
@@ -343,14 +356,14 @@ cut off. Once everyone has joined with an invite, turn it off on the hub:
 chronicle hub shared-token off
 ```
 
-or with the switch in **Settings › Devices › People**. From then on the hub refuses the shared token, and a computer
+or with the switch in **Team › People**. From then on the hub refuses the shared token, and a computer
 that still uses it has to join again with a code. `chronicle hub shared-token on` turns it back on. The shared token
 never opens the dashboard. It belongs to nobody in particular, so no [project
 limit](#projects-and-who-sees-them) applies to a computer that sends with it.
 
 ### Removing someone
 
-`chronicle hub remove ana@example.com`, or **Remove** next to the person in **Settings › Devices › People**, takes a
+`chronicle hub remove ana@example.com`, or **Remove** next to the person in **Team › People**, takes a
 person off the hub. Their unused codes, their computers' tokens and their browser sessions stop working at the next
 request. What their computers sent stays on the hub.
 
@@ -363,7 +376,7 @@ email or the id that `chronicle hub people` shows.
 
 The hub records who added, invited, changed the role or the projects of, removed or revoked whom, and each time a
 computer joins or a browser signs in, with the time. What is done at the hub itself is recorded as **this
-computer**. **Settings › Devices › People** shows the latest entries. Codes, tokens and browser sessions are stored
+computer**. **Team › People** shows the latest entries. Codes, tokens and browser sessions are stored
 only as hashes.
 
 ## Reaching the hub without Tailscale

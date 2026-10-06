@@ -142,6 +142,7 @@ const ICONS = {
 };
 ICONS.doc = ICONS.file;
 ICONS.person = ICONS.preference;
+ICONS.team = ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", ["circle", { cx: 9, cy: 7, r: 4 }], "M22 21v-2a4 4 0 0 0-3-3.87", "M16 3.13a4 4 0 0 1 0 7.75"];
 ICONS.other = ICONS.dot;
 function icon(name, cls = "") {
   return s("svg", { class: `icon ${cls}`, viewBox: "0 0 24 24", "aria-hidden": "true" },
@@ -805,6 +806,8 @@ function navKey(path) {
   if (path.startsWith("/suggestions")) return "suggestions";
   if (path.startsWith("/friction")) return "friction";
   if (path.startsWith("/artifacts")) return "artifacts";
+  if (path.startsWith("/team")) return { "/team/projects": "teamprojects", "/team/computers": "teamcomputers", "/team/store": "teamstore" }[path] || "team";
+  if (path === "/activity") return "activity";
   if (path === "/" || path === "") return "overview";
   return "";
 }
@@ -940,7 +943,10 @@ function deltaText(cur, prev, days) {
 // =====================================================================================
 // Overview
 // =====================================================================================
-route(/^\/?$/, async (params) => {
+// Home: on a hub with people, the team's (teamHome); everywhere else, and under Home › Activity, the activity charts
+route(/^\/?$/, (params) => (ME?.hub?.team ? teamHome(params) : activityView(params)));
+route(/^\/activity$/, (params) => activityView(params, true));
+async function activityView(params, own = false) {
   const days = params.days || "90", project = params.project || "", agent = params.agent || "";
   const metric = params.metric || "active_s";
   const data = await api("/api/overview", { days, project, agent });
@@ -1016,7 +1022,7 @@ route(/^\/?$/, async (params) => {
   const sgBox = h("div"); // filled in when the queue has something to review; Home does not wait for it
   suggestionsHomeCard(sgBox, project);
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Home")),
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, own ? t("Activity") : t("Home")),
       h("div", { class: "sub" }, tot.first_at ? t("{sessions} sessions across {projects} projects since {date}", counts) : t("{sessions} sessions across {projects} projects", counts))),
       h("div", { class: "head-actions" },
         segControl([["7", t("7d")], ["30", t("30d")], ["90", t("90d")], ["180", t("180d")], ["all", t("All")]], days, (v) => update({ days: v })),
@@ -1029,7 +1035,7 @@ route(/^\/?$/, async (params) => {
     h("div", { class: "grid cols-2 section-gap" }, cal, hours),
     h("div", { class: "grid cols-3 section-gap" }, projCard, toolCard, modelCard),
     h("div", { class: "grid cols-2 section-gap" }, recent, know));
-});
+}
 
 function groupMcp(tools) {
   const out = {};
@@ -1106,6 +1112,102 @@ function outcomeBreakdown(outcomes) {
     h("div", { class: "legend-list" }, items.map((o) => h("a", { class: `legend-row s-${cls(o.outcome)}`, href: href(o.outcome) },
       icon(OUTCOME[o.outcome] ? o.outcome : o.outcome === "not analyzed" ? "queued" : "dot"),
       h("span", { class: "lname" }, label(o.outcome)), h("span", { class: "lval" }, fmtNum(o.n)), h("span", { class: "lpct" }, pct(o.n))))));
+}
+
+// =====================================================================================
+// Team Home: a hub with people starts here (/api/team). Its team projects are the ones set up on the hub and the
+// ones other computers send to; a project only the hub computer works on stays under Home › Activity.
+// =====================================================================================
+const QUIET_DAYS = 7; // a computer not heard from for longer is named under Needs attention
+const TEAM_PERIODS = ["7", "30", "90"];
+function olderThan(ts, days) { return !ts || Date.now() - new Date(ts).getTime() > days * 86400000; }
+function initials(name) { return (name || "?").trim().split(/\s+/).slice(0, 2).map((w) => [...w][0] || "").join("").toUpperCase(); }
+function avatar(name) { // a person's initials on a wash of one categorical colour, the same for the same name
+  let n = 0;
+  for (const ch of name || "") n = (n * 31 + ch.codePointAt(0)) >>> 0;
+  return h("span", { class: "avatar", "aria-hidden": "true", style: `--av: var(--series-${(n % 8) + 1})` }, initials(name));
+}
+function whoTag(name) { return h("span", { class: "who-tag", title: name }, avatar(name), h("span", null, name)); }
+
+// for admins: people who can't get in yet, and computers the hub hasn't heard from lately
+function teamAttention(data) {
+  if (!data.people) return null;
+  const items = [];
+  for (const p of data.people) {
+    if (p.computers || p.browsers) continue;
+    items.push(p.invites.length
+      ? [avatar(p.name), t("{name} hasn't joined yet. The invite is open until {date}.", { name: p.name, date: fmtDate(p.invites[0]) }), "#/team"]
+      : [avatar(p.name), t("{name} has no computer or browser signed in, and no open invite. Make them a new one.", { name: p.name }), "#/team"]);
+  }
+  for (const c of data.computers || []) {
+    if (c.this || !olderThan(c.last_seen, QUIET_DAYS)) continue;
+    const name = c.person ? `${c.name} (${c.person})` : c.name;
+    items.push([icon("devices"), c.last_seen ? t("{computer} was last heard from {ago}.", { computer: name, ago: ago(c.last_seen) })
+      : t("{computer} hasn't been heard from yet.", { computer: name }), "#/team/computers"]);
+  }
+  if (!items.length) return null;
+  return h("section", { class: "card attention-card section-gap" }, cardHead(t("Needs attention"), { iconName: "gotcha", hint: tn(items.length, "{n} item", "{n} items") }),
+    h("ul", { class: "attention" }, items.map(([lead, text, href]) => h("li", null, lead, h("span", null, text), h("a", { class: "hint link-arrow", href }, t("Open"), icon("arrow"))))));
+}
+
+async function teamHome(params) {
+  const days = TEAM_PERIODS.includes(params.days) ? params.days : TEAM_PERIODS[0];
+  const data = await api("/api/team", { days });
+  const tot = data.totals, period = t("the last {n} days", { n: days });
+  const head = h("div", { class: "page-head" },
+    h("div", null, h("h1", null, data.hub?.name || t("Team")),
+      h("div", { class: "sub" }, limited() ? t("Your projects on this hub, {period}", { period }) : t("The team's projects on this hub, {period}", { period }))),
+    h("div", { class: "head-actions" },
+      segControl(TEAM_PERIODS.map((d) => [d, t("{n}d", { n: d })]), days, (v) => { setParams({ days: v }); render(); }),
+      h("a", { class: "btn with-icon", href: "#/activity", title: t("Charts of every session on this hub") }, icon("status"), t("Activity"))));
+  const attention = teamAttention(data);
+  if (!data.projects.length) {
+    return h("div", null, head, attention, h("section", { class: "card section-gap" }, cardHead(t("No team projects yet"), { iconName: "projects" }),
+      limited() ? h("p", null, t("No project on this hub is shared with you yet. Ask an admin of this hub."))
+        : h("p", null, tx("A project shows up here once it is set up on the hub with {command}, or another computer sends sessions to it. Projects only this computer works on stay under {activity}.",
+          { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>"), activity: h("a", { href: "#/activity" }, t("Activity")) }))));
+  }
+  const tiles = h("div", { class: "kpis team-kpis" },
+    tile(t("Sessions"), fmtNum(tot.sessions), { iconName: "sessions", delta: period }),
+    tile(t("New lessons"), fmtNum(tot.lessons), { iconName: "sparkles", delta: period }),
+    tile(t("People active"), fmtNum(tot.people), { iconName: "team", delta: data.people ? t("of {n} on this hub", { n: fmtNum(data.people.length) }) : period }),
+    tile(t("Projects active"), fmtNum(tot.projects), { iconName: "projects", delta: tn(tot.team_projects, "of {n} team project", "of {n} team projects") }));
+  const projCard = h("section", { class: "card" }, cardHead(t("Team projects"), { iconName: "projects", hint: t("sessions and new lessons, {period}", { period }) }),
+    h("div", { class: "table-wrap" }, h("table", { class: "data team-projects" },
+      h("thead", null, h("tr", null, h("th", null, t("Project")), h("th", { class: "num" }, t("Sessions")), h("th", { class: "num" }, t("Lessons")),
+        h("th", null, t("Who")), h("th", null, t("Latest")))),
+      h("tbody", null, data.projects.map((p) => h("tr", null,
+        h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(p.path)}`, title: p.path }, p.label)),
+        h("td", { class: "num" }, p.recent ? fmtNum(p.recent) : h("span", { class: "muted" }, "0")),
+        h("td", { class: "num" }, p.lessons ? fmtNum(p.lessons) : h("span", { class: "muted" }, "0")),
+        h("td", null, p.people.length ? h("div", { class: "who-list" }, p.people.slice(0, 3).map((x) => whoTag(x.who)),
+          p.people.length > 3 ? h("span", { class: "muted" }, `+${p.people.length - 3}`) : null) : h("span", { class: "muted" }, "–")),
+        h("td", { class: "nowrap", title: p.last ? fmtDT(p.last) : "" }, p.last ? ago(p.last) : h("span", { class: "muted" }, t("no sessions yet")))))))));
+  const whoCard = h("section", { class: "card" }, cardHead(t("Who's active"), { iconName: "team", hint: period }),
+    data.who.length ? h("div", { class: "session-list" }, data.who.map((x) => h("div", { class: "session-item who-item" },
+      avatar(x.who),
+      h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, x.who),
+        h("div", { class: "m" }, [tn(x.sessions, "{n} session", "{n} sessions"), tn(x.lessons, "{n} lesson", "{n} lessons"), tn(x.projects, "{n} project", "{n} projects")].join(" · "))),
+      h("div", { class: "r", title: fmtDT(x.last) }, ago(x.last)))))
+    : h("div", { class: "empty" }, t("Nobody worked on a team project in {period}.", { period })));
+  const lessonsCard = h("section", { class: "card" }, cardHead(t("New lessons"), { iconName: "knowledge", tools: h("a", { href: "#/knowledge/all", class: "hint link-arrow" }, t("Browse"), icon("arrow")) }),
+    data.lessons.length ? h("div", { class: "session-list" }, data.lessons.map((k) => h("a", { class: "session-item", href: `#/session/${k.session_id}`, title: t("Open the session it came from") },
+      h("span", { class: "kind-icon", title: kindLabel(k.kind) }, icon(KIND[k.kind] ? k.kind : "dot")),
+      h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, k.title),
+        h("div", { class: "m" }, [kindLabel(k.kind), k.project_name, k.who, ago(k.created_at)].filter(Boolean).join(" · "))),
+      h("div", { class: "r" }, confidenceMeter(k.confidence)))))
+    : h("div", { class: "empty" }, t("No lessons from team projects yet. Sessions are analyzed automatically once idle.")));
+  const recentCard = h("section", { class: "card" }, cardHead(t("Recent sessions"), { iconName: "sessions", tools: h("a", { href: "#/sessions", class: "hint link-arrow" }, t("All sessions"), icon("arrow")) }),
+    data.recent.length ? h("div", { class: "session-list" }, data.recent.map((x) => {
+      const [cls, ic, label] = outcomeOf(x);
+      return h("a", { class: "session-item", href: `#/session/${x.id}` },
+        h("span", { class: `status-icon ${cls}`, title: label }, icon(ic), h("span", { class: "sr-only" }, label)),
+        h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, x.title || t("(untitled)"), agentTag(x.agent)),
+          h("div", { class: "m" }, [x.project_name, x.who, ago(x.started_at), x.active_s ? t("{dur} active", { dur: fmtDur(x.active_s) }) : null].filter(Boolean).join(" · "))));
+    })) : h("div", { class: "empty" }, t("No sessions yet")));
+  return h("div", null, head, tiles, attention,
+    h("div", { class: "grid cols-main section-gap" }, projCard, whoCard),
+    h("div", { class: "grid cols-2 section-gap" }, lessonsCard, recentCard));
 }
 
 // =====================================================================================
@@ -4091,7 +4193,6 @@ route(/^\/devices$/, async () => {
   const dv = await api("/api/devices");
   const ts = dv.allowed_hosts.find((x) => x.endsWith(".ts.net"));
   const cmd = (text) => h("pre", { class: "mcp-code" }, text);
-  const others = dv.machines.filter((m) => !m.this);
   const role = {
     single: t("Records and analyzes its own sessions."),
     hub: t("The hub: records and analyzes its own sessions and the ones your other computers send it."),
@@ -4126,39 +4227,66 @@ route(/^\/devices$/, async () => {
     : [
       h("p", null, t("Open this dashboard on your phone through Tailscale, a private network between your own devices: nothing is opened to the internet, and only your Tailscale login gets in. Install Tailscale on this computer and your phone, sign both in to the same account, then run here:")),
       cmd("chronicle tailnet on")]);
-  let computers = null;
-  if (dv.role !== "spoke") {
-    const table = h("div", { class: "table-wrap" }, h("table", { class: "data" },
-      h("thead", null, h("tr", null, ...[t("Computer"), t("Platform"), t("Sessions"), t("Latest session"), t("Last sent")].map((x, i) => h("th", { class: i === 2 ? "num" : "" }, x)))),
-      h("tbody", null, ...dv.machines.map((m) => h("tr", null,
-        h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, t(" (this one)")) : null,
-          m.share === "knowledge" ? h("span", { class: "muted", title: t("Analyzes its own sessions and sends only summaries and project lessons") }, t(" · knowledge only")) : null),
-        h("td", null, m.platform || "–"),
-        h("td", { class: "num" }, fmtNum(m.sessions)),
-        h("td", null, m.last_session ? ago(m.last_session) : "–"),
-        h("td", null, m.this ? "–" : m.last_push ? ago(m.last_push) : t("nothing yet")))))));
-    const maps = Object.entries(dv.path_map || {});
-    const added = dv.machines.flatMap((m) => (m.folders || []).map((f) => [m, f]));
-    computers = h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices", hint: dv.role === "hub" ? t("{n} sending here", { n: others.length }) : null }),
-      dv.role === "hub" ? [
-        table,
-        h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "chronicle hub enable" })),
-        maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null,
-        added.length ? [h("div", { class: "subhead" }, t("Folders added on other computers")),
-          h("ul", { class: "bullets" }, added.map(([m, f]) => h("li", null, h("b", null, m.name || m.id.slice(0, 8)), ": ",
-            h("span", { class: "codeline" }, f.folder), " → ", h("span", { title: f.project }, f.name)))),
-          h("p", { class: "muted" }, t("Sessions in these folders go to the project shown, unless a repository inside has a git remote this hub knows."))] : null]
-      : [
+  const computers = dv.role === "hub" ? teamPointer()
+    : dv.role === "single" ? h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices" }),
         h("p", null, t("Keep the sessions of your other computers here too. This computer becomes the hub, the only one that records and analyzes (so each session is analyzed once); the others send it their Claude Code and Codex sessions over your tailnet. Run here:")),
         cmd("chronicle hub enable"),
-        h("p", { class: "muted" }, t("It prints a {command} command to run on each other computer.", { command: "chronicle hub join …" }))]);
-  }
+        h("p", { class: "muted" }, t("It prints a {command} command to run on each other computer.", { command: "chronicle hub join …" }))) : null;
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
-    h("div", { class: "grid" }, thisCard, phone, computers, dv.role === "hub" && dv.can_admin ? peopleCard(dv) : null,
-      dv.role === "hub" && dv.can_admin ? sharedProjectsCard() : null,
-      dv.role === "hub" && dv.store ? teamStoreCard(dv) : null));
+    h("div", { class: "grid" }, thisCard, phone, computers));
 });
+
+// Settings › Devices on a hub: its people, computers, shared projects and team store have a section of their own
+function teamPointer() {
+  const pages = [["#/team", t("People")], ["#/team/projects", t("Shared projects")], ["#/team/computers", t("Computers")], ["#/team/store", t("Team store")]];
+  return h("section", { class: "card" }, cardHead(t("Team"), { iconName: "team" }),
+    h("p", null, t("This computer is the hub. Its people, shared projects, computers and team store are under Team.")),
+    canAdmin() ? h("ul", { class: "bullets" }, pages.map(([href, label]) => h("li", null, h("a", { href }, label))))
+      : h("p", { class: "muted" }, t("Only an admin of this hub sees them.")));
+}
+
+// Team › Computers: every computer the hub hears from, whose it is, and the folders they map
+function computersCard(dv) {
+  const others = dv.machines.filter((m) => !m.this);
+  const maps = Object.entries(dv.path_map || {});
+  const added = dv.machines.flatMap((m) => (m.folders || []).map((f) => [m, f]));
+  const table = h("div", { class: "table-wrap" }, h("table", { class: "data" },
+    h("thead", null, h("tr", null, ...[t("Computer"), t("Person"), t("Sessions"), t("Latest session"), t("Last sent")].map((x, i) => h("th", { class: i === 2 ? "num" : "" }, x)))),
+    h("tbody", null, ...dv.machines.map((m) => h("tr", null,
+      h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, t(" (this one)")) : null,
+        m.share === "knowledge" ? h("span", { class: "muted", title: t("Analyzes its own sessions and sends only summaries and project lessons") }, t(" · knowledge only")) : null,
+        m.platform ? h("div", { class: "muted" }, m.platform) : null),
+      h("td", null, m.person || h("span", { class: "muted" }, "–")),
+      h("td", { class: "num" }, fmtNum(m.sessions)),
+      h("td", null, m.last_session ? ago(m.last_session) : "–"),
+      h("td", { title: m.last_seen ? t("Last heard from {ago}", { ago: ago(m.last_seen) }) : "" }, m.this ? "–" : m.last_push ? ago(m.last_push) : t("nothing yet")))))));
+  return h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices", hint: t("{n} sending here", { n: others.length }) }),
+    table,
+    h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "chronicle hub enable" })),
+    maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null,
+    added.length ? [h("div", { class: "subhead" }, t("Folders added on other computers")),
+      h("ul", { class: "bullets" }, added.map(([m, f]) => h("li", null, h("b", null, m.name || m.id.slice(0, 8)), ": ",
+        h("span", { class: "codeline" }, f.folder), " → ", h("span", { title: f.project }, f.name)))),
+      h("p", { class: "muted" }, t("Sessions in these folders go to the project shown, unless a repository inside has a git remote this hub knows."))] : null);
+}
+
+// Team: a hub's admins manage it here, a page per part
+async function teamPage(title, sub, card) {
+  if (!canAdmin()) return h("div", { class: "card empty" }, t("Only an admin of this hub can see this."));
+  const dv = await api("/api/devices");
+  if (dv.role !== "hub") {
+    return h("div", { class: "narrow-page" }, h("div", { class: "card" },
+      h("p", null, tx("This computer isn't a hub, so it has no team. {page} says how to make it one.", { page: h("a", { href: "#/devices" }, t("Devices")) }))));
+  }
+  return h("div", { class: "narrow-page" },
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, title), h("div", { class: "sub" }, sub))),
+    h("div", { class: "grid" }, card(dv)));
+}
+route(/^\/team$/, () => teamPage(t("People"), t("Who may send to this hub and open its dashboard, with which role and projects."), (dv) => peopleCard(dv)));
+route(/^\/team\/projects$/, () => teamPage(t("Shared projects"), t("Projects set up on this hub: who sees each, and which computers send to it."), () => sharedProjectsCard()));
+route(/^\/team\/computers$/, () => teamPage(t("Computers"), t("Every computer this hub hears from, and whose it is."), (dv) => computersCard(dv)));
+route(/^\/team\/store$/, () => teamPage(t("Team store"), t("The team's record in Postgres, which only this hub connects to."), (dv) => teamStoreCard(dv)));
 
 // Settings › Devices › Shared projects (on a hub): which of its projects leave this computer, who sees each, which
 // computers send to it; set one up or stop sharing it (only at the hub itself: it decides what leaves this computer).
@@ -4766,11 +4894,13 @@ const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
   { key: "artifacts", label: t("Artifacts"), href: "#/artifacts", hint: t("Documents, pages, PRs and commits your agents made") },
   { key: "projects", label: t("Projects"), href: "#/projects", hint: t("A knowledge base for each project") },
   { key: "suggestions", label: t("Suggestions"), href: "#/suggestions", hint: t("Fixes to approve, and what goes wrong") },
+  { key: "team", label: t("Team"), href: "#/team", hint: t("People, shared projects, computers, team store") }, // a hub's admins
   { key: "settings", label: t("Settings"), href: "#/status", hint: t("Status, sources, MCP, devices, appearance") },
 ];
-const SECTION_OF = { overview: "home", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
-  projects: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings" };
-const PAGE_LABEL = { friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
+const SECTION_OF = { overview: "home", activity: "home", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
+  projects: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
+  team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team" };
+const PAGE_LABEL = { activity: t("Activity"), team: t("People"), teamprojects: t("Shared projects"), teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 
 function sectionOf(path, params) {
@@ -4817,9 +4947,10 @@ function renderRail() {
     rail.replaceChildren(...SECTIONS.filter((x) => LIMITED_SECTIONS.has(x.key)).map(link));
     return;
   }
-  rail.replaceChildren(...SECTIONS.filter((x) => x !== settings).map(link),
+  const team = SECTIONS.find((x) => x.key === "team");
+  rail.replaceChildren(...SECTIONS.filter((x) => x !== settings && x !== team).map(link),
     link({ key: "search", label: t("Search all sessions"), href: "#/search", hint: t("Full text of every session (⌘K jumps anywhere)") }),
-    h("div", { class: "spacer" }), link(settings));
+    h("div", { class: "spacer" }), ...(ME?.hub && canAdmin() ? [link(team)] : []), link(settings));
   drawUnseen(unseenCount);
 }
 function showRailTip(a, sx) {
@@ -4956,6 +5087,14 @@ function settingsSidebar(box) {
       sbRow(t("Devices"), "#/devices", "devices", null, ["/devices"]),
       sbRow(t("Appearance"), "#/appearance", "appearance", null, ["/appearance"])));
 }
+function teamSidebar(box) {
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Team"))),
+    h("div", { class: "sb-scroll" },
+      sbRow(t("People"), "#/team", "preference", null, ["/team"]),
+      sbRow(t("Shared projects"), "#/team/projects", "projects", null, ["/team/projects"]),
+      sbRow(t("Computers"), "#/team/computers", "devices", null, ["/team/computers"]),
+      sbRow(t("Team store"), "#/team/store", "data", null, ["/team/store"])));
+}
 async function buildSidebar(section) {
   const mine = ++sbSeq;
   const box = h("div", { class: "sb-body" }); // drawn off-screen, swapped in only if still wanted
@@ -4966,6 +5105,7 @@ async function buildSidebar(section) {
     else if (section === "projects") await projectsSidebar(box);
     else if (section === "artifacts") await artifactsSidebar(box);
     else if (section === "suggestions") await suggestionsSidebar(box);
+    else if (section === "team") teamSidebar(box);
     else settingsSidebar(box);
   } catch (e) {
     box.replaceChildren(h("div", { class: "sb-empty" }, t("Could not load: {error}", { error: e.message })));
@@ -5016,11 +5156,13 @@ function paletteCommands() {
   const goTo = t("Go to"), cmds = t("Commands"), model = t("uses the analysis model");
   const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, href, run: () => go(href) });
   return [
-    nav(t("Home"), "#/", "home"), nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
+    nav(t("Home"), "#/", "home"), { ...nav(t("Activity"), "#/activity", "status", t("charts of every session")), team: true }, nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
     nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
     nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),
+    ...[[t("People"), "#/team", "preference", t("team")], [t("Shared projects"), "#/team/projects", "projects", t("team")], [t("Computers"), "#/team/computers", "devices", t("team")],
+      [t("Team store"), "#/team/store", "data", t("team")]].map((x) => ({ ...nav(...x), hub: true, admin: true })),
     { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow, admin: true },
     { group: cmds, label: t("Toggle sidebar"), icon: "sidebar", hint: "⌘B", run: toggleSidebar },
     { group: cmds, label: dark ? t("Switch to light theme") : t("Switch to dark theme"), icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
@@ -5036,7 +5178,8 @@ function paletteCommands() {
       toast(r.started ? t("{agent} is rebuilding the glossary…", { agent: analyzerShort() }) : t("Already running"));
       watchJob("glossary:all");
     } },
-  ].filter((x) => (!x.admin || canAdmin()) && (!limited() || !x.href || ["#/", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
+  ].filter((x) => (!x.admin || canAdmin()) && (!x.hub || ME?.hub) && (!x.team || ME?.hub?.team)
+    && (!limited() || !x.href || ["#/", "#/activity", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
 }
 async function paletteSearch(q) {
   const lq = q.toLowerCase();
@@ -5143,7 +5286,11 @@ async function loadMe() {
 function applyViewer() {
   document.documentElement.classList.toggle("not-admin", !canAdmin());
   document.documentElement.classList.toggle("limited", limited());
-  if (limited()) renderRail();
+  document.documentElement.classList.toggle("on-hub", !!ME?.hub);
+  renderRail();
+  $("#hub-pill")?.remove();
+  if (ME?.hub) $("#search-pill").before(h("a", { class: "glass hub-pill", id: "hub-pill", href: "#/", title: t("This is the hub's dashboard: {name}", { name: ME.hub.name }) },
+    icon("team"), h("span", { class: "hp-kind" }, t("Hub")), h("span", { class: "hp-name" }, ME.hub.name)));
   $("#sync-btn").parentElement.hidden = !canAdmin();
   const v = ME?.viewer;
   $("#viewer-pill")?.remove();
