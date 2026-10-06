@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.0 (2026-10-06)
 
 - **Chronicle Enterprise lives in `ee/`:** features a company needs to run Chronicle across its teams (single
   sign-on, policies, audit export, admin reports) will be built in `ee/` under the Chronicle Enterprise License and
