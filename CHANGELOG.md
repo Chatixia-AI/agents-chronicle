@@ -12,6 +12,10 @@
   they touched), and clicking it shows that evidence, each command linked to its session. `chronicle systems [NAME]`
   prints the same in the terminal; `[systems] read_manifests = false` draws from sessions only.
   [Systems map](docs/dashboard.md#systems-map)
+- **Whose work, on a hub:** **Sessions** and **All knowledge** show whose each session and lesson is (the person whose
+  computer it came from, else that computer) and filter by person. Names on the team's Home, session rows and lessons
+  open that person's sessions or lessons. `GET /api/team/who` lists who to filter by, within what the viewer may see.
+  [The hub's dashboard](docs/devices.md#the-hubs-dashboard)
 - **The hub's dashboard is the team's:** once a hub has people, its **Home** shows the team projects (set up on the
   hub, or sent to by other computers) with the sessions and new lessons of the last 7, 30 or 90 days, who worked on
   each, and the newest lessons and sessions with the person they came from. Admins also see what needs attention:

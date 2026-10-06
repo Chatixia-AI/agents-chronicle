@@ -1501,4 +1501,7 @@ window.CHRONICLE_JA = {
   "{tool} in {n} commands": "{n} 件のコマンドで {tool}",
   "started on :{port} in {n} command": "{n} 件のコマンドで :{port} で起動",
   "started on :{port} in {n} commands": "{n} 件のコマンドで :{port} で起動",
+  "Only {name}'s": "{name} のものだけ",
+  "Everyone": "全員",
+  "Someone not listed": "一覧にない人",
 };

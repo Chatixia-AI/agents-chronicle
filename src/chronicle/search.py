@@ -121,7 +121,9 @@ def search_sessions(conn: sqlite3.Connection, query: str, *, project: str | None
 
 
 def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, project: str | None = None,
-                     kind: str | None = None, include_inactive: bool = False, limit: int = 30) -> list[dict]:
+                     kind: str | None = None, include_inactive: bool = False, limit: int = 30,
+                     sessions: tuple[str, list] | None = None) -> list[dict]:
+    """`sessions`: (SQL on the sessions table, its params) to keep the lessons of those sessions only."""
     where, params = [], []
     if query and query.strip():
         fts = fts_query(query)
@@ -141,6 +143,9 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
     if kind:
         where.append("k.kind = ?")
         params.append(kind)
+    if sessions:
+        where.append(f"k.session_id IN (SELECT id FROM sessions WHERE {sessions[0]})")
+        params += sessions[1]
     if not include_inactive:
         where.append("k.status = 'active'")
     sql = "SELECT k.*, s.title AS session_title, s.started_at AS session_started FROM knowledge k LEFT JOIN sessions s ON s.id = k.session_id"

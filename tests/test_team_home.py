@@ -129,3 +129,49 @@ def test_a_member_with_every_project_sees_the_team_but_not_its_admin(limited):  
     assert {p["path"] for p in r["projects"]} == {PROJECTS, ELSEWHERE, SET_UP}
     assert r["people"] is None and r["computers"] is None
     assert OTHER not in {p["path"] for p in r["projects"]}
+
+
+def test_narrowing_sessions_and_lessons_to_a_person(limited):  # noqa: F811
+    _team(limited)
+    url, here = limited["url"], hub.local_machine(limited["cfg"])
+    bob = f"p:{limited['bob']['id']}"
+    _, opts = _call(url, "/api/team/who")
+    by = {x["key"]: x for x in opts["items"]}
+    assert by[bob]["name"] == "Bob" and by[bob]["person"] and by[bob]["sessions"] == 1
+    assert by[f"m:{ELSE_MACHINE}"]["name"] == "build-box" and not by[f"m:{ELSE_MACHINE}"]["person"]
+    _, mine = _call(url, f"/api/sessions?who=m:{here['id']}")  # the hub's own, with or without a machine_id
+    assert by[f"m:{here['id']}"]["sessions"] == mine["total"] >= 2
+
+    _, r = _call(url, f"/api/sessions?who={bob}")
+    assert [x["id"] for x in r["items"]] == [BOB_SID] and r["items"][0]["who"] == "Bob" and r["items"][0]["who_key"] == bob
+    assert {x["who"] for x in mine["items"]} == {here["name"]} and OTHER in {x["project_path"] for x in mine["items"]}
+    _, r = _call(url, "/api/sessions?who=p:1%20OR%201")  # not a key: nothing, never everything
+    assert r["total"] == 0
+    _, r = _call(url, f"/api/knowledge?who={bob}")
+    assert [(k["title"], k["who"]) for k in r["items"]] == [("Bob's lesson", "Bob")]
+    _, r = _call(url, f"/api/knowledge?who=m:{ELSE_MACHINE}")
+    assert [k["title"] for k in r["items"]] == ["ELSE-CANARY lesson"]
+
+
+def test_someone_limited_narrows_within_their_projects(limited):  # noqa: F811
+    _team(limited)
+    url, s = limited["url"], _as(limited["bob_session"])
+    _, opts = _call(url, "/api/team/who", headers=s)
+    assert "build-box" not in {x["name"] for x in opts["items"]} and "Bob" in {x["name"] for x in opts["items"]}
+    _, r = _call(url, f"/api/sessions?who=m:{ELSE_MACHINE}", headers=s)
+    assert r["total"] == 0
+    _, r = _call(url, f"/api/knowledge?who=m:{ELSE_MACHINE}", headers=s)
+    assert r["items"] == []
+    assert "ELSE-CANARY" not in str(_call(url, f"/api/knowledge?who=p:{limited['bob']['id']}", headers=s)[1])
+
+
+def test_no_who_on_a_hub_without_people(synced):
+    from test_hub import _serve
+
+    app, httpd, url = _serve(synced["cfg"])
+    try:
+        assert _call(url, "/api/team/who")[1] == {"items": []}
+        items = _call(url, "/api/sessions")[1]["items"]
+        assert items and all("who" not in x for x in items)
+    finally:
+        httpd.shutdown()
