@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **A tidier Status › Analysis:** the card spans the page, with what analyzes on the left and the queue (ready,
+  queued, held, spent), why it waits and the knowledge language on the right. A provider's settings sit in two
+  columns with a Ready / Not set up badge, endpoint and tuning under **Advanced**, and the buttons on one row.
+
 ## 0.12.0 (2026-10-06)
 
 - **Analyze with a model provider's API:** besides Claude Code and Codex, sessions can be analyzed through the
