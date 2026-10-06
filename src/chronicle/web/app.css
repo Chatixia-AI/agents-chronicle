@@ -1363,6 +1363,15 @@ table.data a.proj { overflow-wrap: normal; word-break: normal; white-space: nowr
 :is(.solid, .os-solid) #update-note { -webkit-backdrop-filter: none; backdrop-filter: none; }
 @keyframes upd-in { from { opacity: 0; transform: translateY(8px); } }
 @media (prefers-reduced-motion: reduce) { #update-note, .card.flash, .statusbar #status-update .dot { animation: none; } }
+/* after an update: the dashboard restarts, and the page waits for it under this cover */
+#restart-wait { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--page) 55%, transparent);
+  -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); animation: sk-in 0.2s ease-out; }
+#restart-wait .rw-card { display: grid; justify-items: center; gap: 6px; width: min(360px, 100%); padding: 22px 20px; border-radius: 18px; text-align: center;
+  background: var(--glass-strong); color: var(--ink); font-size: 13px; box-shadow: var(--glass-shadow), 0 12px 40px rgba(0, 0, 0, 0.18), inset 0 0 0 0.5px var(--glass-rim); }
+#restart-wait .rw-card > .icon { width: 22px; height: 22px; color: var(--accent); margin-bottom: 4px; }
+#restart-wait .rw-card b { font-size: 15px; }
+#restart-wait .btn { margin-top: 6px; }
+@media (prefers-reduced-motion: reduce) { #restart-wait { animation: none; } #restart-wait .icon.spin { animation-duration: 3s; } }
 
 /* Sessions list: pick rows, then act on them from a floating bar */
 table.data :is(th, td).pick { width: 1%; padding-right: 0; }
