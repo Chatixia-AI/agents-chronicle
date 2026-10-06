@@ -11,6 +11,8 @@ EMPTY_CHAT = "c0c0c0c0-0000-0000-0000-000000000000"
 AGENT_ID = "a9a9a9a9-1111-2222-3333-444444444444"
 BOB_TASK = "b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0"
 BOB_EMPTY = "b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1b1"
+BOB_TOOLS = "b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"  # Bob's own toolCalls shape, with a subagent inside
+BOB_SUB = "5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b5b"
 FOLDER = "/Users/test/Projects/copilot-app"
 T0 = 1790000000000  # ms
 
@@ -114,6 +116,54 @@ def write_bob_home(root: Path) -> Path:
     ]
     for i, (mid, role, data) in enumerate(msgs):
         db.execute("INSERT INTO messages VALUES (?,?,?,?,?)", (mid, BOB_TASK, role, json.dumps(data), T0 + i * 1000))
+    _bob_tools_task(db)
     db.commit()
     db.close()
     return root
+
+
+def _bob_tools_task(db) -> None:
+    """The shape Bob writes today: toolCalls, results linked by toolUsage.signature, per-message spend, a subagent's
+    conversation inside its spawn_subagent result, and workspace-relative paths."""
+    costs = json.dumps({"cost": 0.35, "contextTokens": 30000})  # no token split, only Bob's own figure
+    db.execute("INSERT INTO tasks VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+               (BOB_TOOLS, f"file:{FOLDER}", None, "Explainer page", "active", None, FOLDER, None, None, None, None, costs,
+                T0, T0 + 60000, "normal", None))
+
+    def call(cid, name, args):
+        return {"id": cid, "name": name, "arguments": args}
+
+    def result(cid, name, args, content, *, error=False, **meta):
+        return {"role": "tool", "content": content, "toolUsage": {"signature": {"id": cid, "name": name, "arguments": args,
+                                                                                "isError": error}},
+                "_meta": {"durationMs": 40, **meta}}
+
+    page = {"path": "docs/explainer.html", "content": "<!DOCTYPE html><html><body>hi</body></html>"}
+    art = {"id": "x", "title": "Explainer", "html": "<script></script>"}
+    notes = {"path": "notes/findings.md", "content": "# Findings"}
+    brief = {"name": "explore", "description": "Find how the dashboard groups sites"}
+    sub = [
+        {"role": "system", "content": "You are a fast codebase exploration agent."},
+        {"role": "user", "content": "Find how the dashboard groups sites", "_meta": {"timestamp": T0 + 3500}},
+        {"role": "assistant", "content": "", "toolCalls": [call("s1", "write_file", notes)],
+         "_meta": {"timestamp": T0 + 3600, "spend": {"cost": 0.01, "contextTokens": 5000}}},
+        result("s1", "write_file", notes, "Created file: notes/findings.md"),
+        {"role": "assistant", "content": "Done.", "_meta": {"timestamp": T0 + 3800, "spend": {"cost": 0.002, "contextTokens": 5200}}},
+    ]
+    msgs = [
+        ("n1", "user", {"role": "user", "content": "<user_message>Make an explainer page</user_message>"}),
+        ("n2", "assistant", {"role": "assistant", "content": "Researching first.", "toolCalls": [call("t1", "spawn_subagent", brief)],
+                             "_meta": {"spend": {"cost": 0.1, "contextTokens": 20000}}}),
+        ("n3", "tool", result("t1", "spawn_subagent", brief, "<task_result>Sites group by region</task_result>",
+                              subagentId=BOB_SUB, agentType="explore") | {"messages": sub}),
+        ("n4", "assistant", {"role": "assistant", "content": "", "toolCalls": [call("t2", "create_html_artifact", art)],
+                             "_meta": {"spend": {"cost": 0.11, "contextTokens": 25000}}}),
+        ("n5", "tool", result("t2", "create_html_artifact", art, "Error from tool create_html_artifact: no <script>", error=True)),
+        ("n6", "assistant", {"role": "assistant", "content": "Writing a file instead.", "toolCalls": [call("t3", "write_file", page)],
+                             "_meta": {"spend": {"cost": 0.128, "contextTokens": 30000}}}),
+        ("n7", "tool", result("t3", "write_file", page, "Created file: docs/explainer.html", changes={
+            f"file://{FOLDER}/docs/explainer.html": {"before": "", "after": page["content"], "patch":
+                "--- a\n+++ b\n@@ -0,0 +1,2 @@\n+<!DOCTYPE html>\n+<html><body>hi</body></html>\n"}})),
+    ]
+    for i, (mid, role, data) in enumerate(msgs):
+        db.execute("INSERT INTO messages VALUES (?,?,?,?,?)", (mid, BOB_TOOLS, role, json.dumps(data), T0 + i * 1000))
