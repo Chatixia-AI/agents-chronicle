@@ -161,4 +161,6 @@ Issue やプルリクエストを歓迎します。テストの実行方法や�
 
 ## ライセンス
 
-[MIT](LICENSE)
+[MIT](LICENSE)。ただし [`ee/`](ee/) ディレクトリは例外です。企業がチーム全体で Chronicle を運用するための機能
+（シングルサインオン、ポリシー、監査ログのエクスポート）は [Chronicle Enterprise License](ee/LICENSE) で提供し、本番利用には
+サブスクリプションが必要です。PyPI の `agents-chronicle` パッケージは MIT のみです。

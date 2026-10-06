@@ -97,6 +97,9 @@ sessions + VS Code chat logs), `bob_parser.py` (Bob tasks), `antigravity_parser.
 Mermaid export), `artifacts.py` (what sessions made, and where each stands), `glossary.py`, `reviews.py`, `worker.py` (queue), `server.py` + `web/`
 (dashboard), `mcp_server.py`, `export_md.py`, `hooks.py` / `install.py`, `desktop.py` (macOS app), `cli.py`; `packaging/macos/` builds the app.
 
+`ee/` is Chronicle Enterprise: its own package (`chronicle_ee`) under the [Chronicle Enterprise License](../ee/LICENSE),
+left out of the MIT wheel and sdist. The core never imports it; [ee/README.md](../ee/README.md) says what belongs there.
+
 ## Demo data
 
 `docs/demo/make_demo.py` builds a Chronicle home from made-up sessions: a fictional developer with five projects

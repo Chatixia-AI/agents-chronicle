@@ -1,0 +1,38 @@
+Chronicle Enterprise License
+
+Copyright (c) 2026 Adrian Tam. All rights reserved.
+
+This license applies to everything in the "ee/" directory of the agents-chronicle repository and to the
+agents-chronicle-enterprise package built from it (the "Enterprise Software"). Everything else in the repository is
+licensed under the MIT license in the LICENSE file at the repository's root.
+
+1. Production use. You may use the Enterprise Software in production only under a valid Chronicle Enterprise
+   subscription agreement with the licensor (a "Subscription"), and only for the number of users and the period that
+   the Subscription covers.
+
+2. Development, testing and evaluation. Without a Subscription you may copy, modify and run the Enterprise Software
+   to develop and test it, and to evaluate it for up to 30 days, but not in production.
+
+3. Modifications. Under a Subscription you may modify the Enterprise Software for your own use. If you send changes
+   to the licensor, for example as a pull request, you grant the licensor a perpetual, worldwide, royalty-free,
+   irrevocable license to use, modify, distribute and sublicense those changes under any terms.
+
+4. Restrictions. Except as a Subscription expressly allows, you may not:
+   a. distribute, sell, rent, lease or sublicense the Enterprise Software, or any modified version of it;
+   b. offer the Enterprise Software to third parties as a hosted or managed service;
+   c. remove, disable or work around any license key check or usage limit in the Enterprise Software;
+   d. remove or change any license, copyright or other notice in the Enterprise Software.
+
+5. Third-party components. Third-party components included in or used by the Enterprise Software are licensed under
+   their own licenses, not this one.
+
+6. Termination. This license ends automatically if you break any of its terms, or when your Subscription ends. You
+   must then stop using the Enterprise Software in production.
+
+7. No warranty. THE ENTERPRISE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+   INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+   NONINFRINGEMENT. IN NO EVENT SHALL THE LICENSOR BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+   ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE ENTERPRISE SOFTWARE OR THE
+   USE OR OTHER DEALINGS IN THE ENTERPRISE SOFTWARE, EXCEPT AS A SUBSCRIPTION AGREEMENT EXPRESSLY PROVIDES.
+
+For a Subscription, see https://chronicle.chatixia.net/.
