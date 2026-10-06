@@ -111,8 +111,8 @@
       "properties": {
         "chronicle.url": {
           "type": "string",
-          "default": "http://127.0.0.1:8765",
-          "markdownDescription": "Address of the Chronicle dashboard (`chronicle ui`). Change it if you set `[server] port` in Chronicle's config."
+          "default": "",
+          "markdownDescription": "Address of the Chronicle dashboard (`chronicle ui`). Empty: `http://127.0.0.1:11524`, else `http://127.0.0.1:8765` (older installs). Set it if you changed `[server] port` in Chronicle's config."
         },
         "chronicle.includeReads": {
           "type": "boolean",

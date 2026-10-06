@@ -207,3 +207,17 @@ def test_mcp_batch_requests(synced):
                          text=True, timeout=60, env={**os.environ})
     replies = json.loads(out.stdout.strip())
     assert [r["id"] for r in replies] == [1, 2] and replies[1]["result"]["tools"]
+
+
+def test_dashboard_port_default_and_existing_installs(tmp_path):
+    """New installs serve the dashboard on 11524; a config.toml written before keeps the 8765 it names."""
+    from chronicle.config import load_config
+
+    fresh = load_config(tmp_path / "new")
+    assert fresh.server_port == 11524 and "port = 11524" in fresh.config_path.read_text()
+    old = tmp_path / "old"
+    old.mkdir()
+    (old / "config.toml").write_text("[server]\nhost = \"127.0.0.1\"\nport = 8765\n")
+    assert load_config(old).server_port == 8765
+    (old / "config.toml").write_text("[server]\n")  # no port at all: the default
+    assert load_config(old).server_port == 11524

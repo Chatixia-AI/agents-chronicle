@@ -26,11 +26,12 @@ checkout.
 **The menu bar says "python3" instead of Chronicle.** Only when running the app from source with an old checkout;
 the DMG build always shows Chronicle.
 
-**The dashboard isn't at :8765.** The app uses a free port when 8765 is taken (for example by the command-line
-install's dashboard agent). **Open in Browser** in the menu-bar menu opens the right one.
+**The dashboard isn't at :11524.** The app uses a free port when 11524 is taken (for example by the command-line
+install's dashboard agent). **Open in Browser** in the menu-bar menu opens the right one. Installs made before
+11524 became the default stay on :8765 (`[server] port` in `config.toml`).
 
 **`chronicle ui` fails with "Address already in use", or the dashboard still shows the old version after
-reinstalling.** The command-line install's launchd agent already serves the dashboard at :8765 and keeps running
+reinstalling.** The command-line install's launchd agent already serves the dashboard at :11524 (:8765 on older installs) and keeps running
 the code it started with. Restart it with `launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`, or update
 from **Settings › Status › Updates**, which restarts it for you ([Updating](install.md#updating)). Use
 `chronicle ui --port <n>` for a second dashboard.

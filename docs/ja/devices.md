@@ -397,7 +397,7 @@ Tailscale はハブにつなぐ方法の一つにすぎません。Tailscale を
 
    ```nginx
    location / {
-       proxy_pass http://127.0.0.1:8765;
+       proxy_pass http://127.0.0.1:11524;
        proxy_set_header Host $host;
        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
        proxy_set_header X-Forwarded-Proto $scheme;
@@ -417,7 +417,7 @@ Tailscale はハブにつなぐ方法の一つにすぎません。Tailscale を
    プロキシがハブ自身で動くときは、`host = "127.0.0.1"` と既定の `trusted_proxies` のままにし、`behind_proxy = true` を
    加えます。プロキシを通ったリクエストは、常に管理者として扱われるハブ自身からのリクエストと見分けがつかないことがある
    ためです。これを設定すると、ダッシュボードへのリクエストはどれもハブ自身からとは見なされず、管理者もほかの人と同じように
-   サインインするか、ハブで `chronicle hub` コマンドを使います。`0.0.0.0` にする場合は、ファイアウォールでポート 8765 には
+   サインインするか、ハブで `chronicle hub` コマンドを使います。`0.0.0.0` にする場合は、ファイアウォールでダッシュボードのポート（11524）には
    プロキシだけが届くようにしてください。設定したら、ダッシュボードを再起動します。
 
 Tailscale を使う場合は、`chronicle tailnet on --anyone` で tailnet の全員が HTTPS でハブにつなげます

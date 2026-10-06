@@ -87,7 +87,7 @@ notes_dir = ""
 
 [server]
 host = "127.0.0.1"
-port = 8765
+port = 11524
 # Other names the dashboard answers to besides 127.0.0.1 and localhost, e.g. its Tailscale name
 # ("pc.tail1234.ts.net"). `chronicle tailnet on` sets this.
 allowed_hosts = []
@@ -221,7 +221,7 @@ class Config:
     export_markdown: bool = True
     notes_dir: Path = Path("~/.claude-chronicle/notes")
     server_host: str = "127.0.0.1"
-    server_port: int = 8765
+    server_port: int = 11524
     server_allowed_hosts: list[str] = field(default_factory=list)
     server_allowed_users: list[str] = field(default_factory=list)
     server_auth_header: str = ""
@@ -372,7 +372,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         export_markdown=bool(export.get("markdown", True)),
         notes_dir=Path(export.get("notes_dir") or (home / "notes")).expanduser(),
         server_host=str(server.get("host", "127.0.0.1")),
-        server_port=int(server.get("port", 8765)),
+        server_port=int(server.get("port", 11524)),
         server_allowed_hosts=[str(h).strip().lower() for h in server.get("allowed_hosts") or [] if str(h).strip()],
         server_allowed_users=[str(u).strip() for u in server.get("allowed_users") or [] if str(u).strip()],
         server_auth_header=str(server.get("auth_header") or "").strip(),

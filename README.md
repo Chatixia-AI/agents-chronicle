@@ -77,7 +77,7 @@ You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/clau
 
 2. **Use your agents as usual.** Each session is recorded when it ends and analyzed in the background.
 
-3. **Explore.** Open the dashboard at <http://127.0.0.1:8765/> (or `chronicle ui --open`) and press **⌘K**, or ask
+3. **Explore.** Open the dashboard at <http://127.0.0.1:11524/> (or `chronicle ui --open`) and press **⌘K**, or ask
    your agent what it learned last week.
 
 Connect more agents later from **Settings › Sources**, `chronicle connect <agent>`, or by re-running

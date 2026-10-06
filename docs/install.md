@@ -86,7 +86,7 @@ For Claude Code, and for the Mac itself, it sets up four things (each can be ski
 | --- | --- |
 | `SessionEnd` hook in `~/.claude/settings.json` | Hands the ended transcript to a detached process that archives, ingests and analyzes it. Returns in milliseconds; a backup of `settings.json` is kept in `~/.claude-chronicle/backups/`. |
 | launchd `com.claude-chronicle.sync` | `chronicle sync --work` every 15 minutes: catches anything the hook missed, processes the analysis queue, synthesizes knowledge bases, exports notes. |
-| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:8765/>. |
+| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:11524/>. |
 | MCP server `chronicle` (user scope) | Lets Claude Code search your past sessions and knowledge. |
 
 Optional: `chronicle install --inject-context` also adds a `SessionStart` hook that gives each new

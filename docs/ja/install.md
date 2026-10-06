@@ -83,7 +83,7 @@ Claude Code と Mac 本体には、次の 4 つを設定します（それぞれ
 | --- | --- |
 | `~/.claude/settings.json` の `SessionEnd` フック | 終了したトランスクリプトを、アーカイブ・取り込み・分析を行う切り離されたプロセスに渡します。フック自体は数ミリ秒で戻ります。`settings.json` のバックアップは `~/.claude-chronicle/backups/` に保存されます。 |
 | launchd `com.claude-chronicle.sync` | 15 分ごとに `chronicle sync --work` を実行します。フックが取りこぼしたものの回収、分析キューの処理、ナレッジベースの統合、ノートの書き出しを行います。 |
-| launchd `com.claude-chronicle.ui` | ダッシュボードを <http://127.0.0.1:8765/> で常時提供します。 |
+| launchd `com.claude-chronicle.ui` | ダッシュボードを <http://127.0.0.1:11524/> で常時提供します。 |
 | MCP サーバー `chronicle`（ユーザースコープ） | Claude Code が過去のセッションとナレッジを検索できるようにします。 |
 
 任意：`chronicle install --inject-context` を使うと、新しいセッションにそのプロジェクトのナレッジベースの短い要約を渡す

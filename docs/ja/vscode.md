@@ -22,7 +22,7 @@ Chronicle 拡張機能は、VS Code のエクスプローラーに 2 つのセ�
 そのセッションが開きます。
 
 データは、すでに動いているダッシュボード（`chronicle ui`、または `chronicle install` が設定するバックグラウンド
-サービス）から `http://127.0.0.1:8765` 経由で読み込みます。ほかの場所には何も送らず、アカウントも不要です。
+サービス）から `http://127.0.0.1:11524`（以前のインストールでは `:8765`）経由で読み込みます。ほかの場所には何も送らず、アカウントも不要です。
 
 ## インストール
 
@@ -41,7 +41,7 @@ code --install-extension chronicle-sessions-0.1.0.vsix
 
 | 設定 | 既定値 | 内容 |
 | --- | --- | --- |
-| `chronicle.url` | `http://127.0.0.1:8765` | ダッシュボードのアドレス。Chronicle の[設定](configuration.md)で `[server] port` を変えた場合は合わせて変更します。 |
+| `chronicle.url` | 空：`http://127.0.0.1:11524`、なければ `:8765` | ダッシュボードのアドレス。Chronicle の[設定](configuration.md)で `[server] port` を変えた場合は合わせて変更します。 |
 | `chronicle.includeReads` | `true` | 読んだだけのセッションとファイルも表示します。オフにすると、セッションが変更したものだけになります。 |
 | `chronicle.showIgnoredFiles` | `false` | git が無視するファイル（スクリーンショット、ビルド出力、キャッシュ）も **Chronicle: Files in Workspace** に表示します。 |
 
