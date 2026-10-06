@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Analyze with a model provider's API:** besides Claude Code and Codex, sessions can be analyzed through the
+  Anthropic API, Claude in Amazon Bedrock (a Bedrock API key, or your AWS sign-in with SigV4), the OpenAI API, Azure
+  OpenAI (an API key, or Microsoft Entra ID through `az login`), OpenRouter, any OpenAI-compatible server (LM Studio,
+  vLLM, ...), or Ollama, where nothing leaves your computer. **Status › Analysis › API provider** sets the endpoint,
+  models and key, tests the connection and switches to it; in the terminal, `chronicle config set
+  providers.<name>.<key>`, `chronicle config set-key <name>` and `analysis.backend = "<name>"`. Keys are kept in
+  `provider-keys.json` (mode 600), never in `config.toml`, and never sent back to the browser. Calls carry no tools, so
+  the model can only answer, and need nothing beyond the standard library. [Model providers](docs/analysis.md#model-providers)
 - **Bob Shell gets the MCP server:** `chronicle connect bob` now also registers the MCP server in
   `~/.bob/settings/mcp.json`, the file Bob 2.x and Bob Shell (`bob`) read. It used to write only
   `mcp_settings.json`, which Bob copies to `mcp.json` once, so if Bob Shell had run before you connected, it never

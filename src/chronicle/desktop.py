@@ -554,8 +554,11 @@ class DesktopApp:
             steps.append("• open Chronicle at login, so sessions are analyzed in the background")
         from .llm import make_runner
 
-        text = ("Chronicle will:\n" + "\n".join(steps) + f"\n\nAnalysis runs through your own {make_runner(self.cfg).label} "
-                "login and counts toward your plan's usage. Everything else stays on this Mac.")
+        runner = make_runner(self.cfg)
+        how = (f"Analysis runs on this Mac with {runner.label}." if runner.local()
+               else f"Analysis runs through your {runner.label} API key or sign-in." if runner.describe()["kind"] == "api"
+               else f"Analysis runs through your own {runner.label} login and counts toward your plan's usage.")
+        text = "Chronicle will:\n" + "\n".join(steps) + f"\n\n{how} Everything else stays on this Mac."
         if self.alert("Connect Claude Code?", text, ["Connect", "Not Now"]) != 0:
             return
         for action in connect(self.cfg, "claude", executable()):

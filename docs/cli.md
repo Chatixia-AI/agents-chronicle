@@ -12,7 +12,7 @@
 | `chronicle search <words>` | Full-text search over transcripts + knowledge (any language, 3+ chars) |
 | `chronicle knowledge [query] [-k gotcha] [-p project]` | Browse extracted knowledge |
 | `chronicle projects` / `chronicle stats [--since 30d]` | Per-project and overall statistics |
-| `chronicle analyze <id> \| --pending [--limit N] [--dry-run] [--backend codex]` | Analyze now (`--dry-run` shows digest sizes, no tokens spent; `--backend` picks the agent for this run only) |
+| `chronicle analyze <id> \| --pending [--limit N] [--dry-run] [--backend codex]` | Analyze now (`--dry-run` shows digest sizes, no tokens spent; `--backend` picks the agent or [model provider](analysis.md#model-providers) for this run only) |
 | `chronicle synthesize [--project P] [--global] [--all]` | Rebuild knowledge bases |
 | `chronicle export [--full]` | Rewrite the Markdown vault |
 | `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | Export sessions: one file, or a .zip of several (`raw`: the original transcript) |
@@ -44,7 +44,8 @@
 | `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | On a computer that joined a hub: file a folder's sessions under a project on the hub, take it back out, or show what goes where (`--list`: the hub's projects) ([Same project, different folders](devices.md#same-project-different-folders)) |
 | `chronicle push` | On a computer that joined a hub: send its new sessions now (the hook and the background sync do this) |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
-| `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` ([Configuration](configuration.md)) |
+| `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` or `providers.ollama.model qwen3:30b` ([Configuration](configuration.md)) |
+| `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | Store a model provider's API key (asked for when left out) in `provider-keys.json`, or remove it |
 
 ## Other ways in
 

@@ -24,7 +24,7 @@
 | キー | 既定値 | |
 | --- | --- | --- |
 | `auto` | `true` | アイドルになったセッションを自動で分析する |
-| `backend` | `claude` | セッションを分析するエージェント（あなた自身のログインを使用）：`claude`（Claude Code）または `codex`（Codex）。**Status › Analysis** でも変更できます |
+| `backend` | `claude` | セッションを分析するもの：あなた自身のログインで `claude`（Claude Code）または `codex`（Codex）、またはモデルプロバイダーの API：`anthropic`、`bedrock`、`openai`、`azure`、`openrouter`、`ollama`、`openai-compatible`（[`[providers.<name>]`](#providersname) を参照）。**Status › Analysis** でも変更できます |
 | `model` / `effort` | `sonnet` / `medium` | Claude：`claude --model` の任意のエイリアス。`effort` は Codex の推論の強さにも使われます（`max` は `xhigh` になります） |
 | `codex_model` | `""` | Codex のモデル。例：`gpt-5.5`。空の場合は Codex の既定のモデルを使います |
 | `screen_model` | `haiku` | 取り込んだチャットを選別するモデル（`chronicle screen`）。各チャットの冒頭だけを、1 回の呼び出しで 60 件ずつ読みます |
@@ -37,6 +37,24 @@
 | `chunk_chars` | `150000` | 1 回の呼び出しに渡す、まとめたトランスクリプトの文字数。これより長いセッションは map-reduce で処理します |
 | `timeout_seconds` | `900` | 呼び出し 1 回あたりの実時間の上限 |
 | `claude_bin` / `codex_bin` | `""` | `claude` / `codex` のパス（空の場合は自動で検出） |
+
+## `[providers.<name>]`
+
+`analysis.backend = "<name>"` のときの設定です。一覧は[モデルプロバイダー](analysis.md#モデルプロバイダー)にあります。
+**Status › Analysis** か `chronicle config set providers.<name>.<key> <value>` で設定します。API キーはここには置きません：
+`chronicle config set-key <name>`（またはダッシュボード）が、あなたのユーザーだけが読める `provider-keys.json` に保存します。
+
+| キー | 既定 | |
+| --- | --- | --- |
+| `base_url` | プロバイダーのもの | API のアドレス。`openai-compatible` では必須、`azure` では `resource` がなければ必須 |
+| `model` / `small_model` | `anthropic` と `bedrock` は Claude Sonnet 5.5 / Claude Haiku 4.5、それ以外はなし | 分析とナレッジベース用のモデル / 取り込んだチャットの選別用（空なら `model`） |
+| `region` / `profile` | `AWS_REGION`、なければ `us-east-1` / `AWS_PROFILE` | `bedrock`：エンドポイントのリージョンと、Bedrock の API キーがないときにサインインする AWS プロファイル |
+| `resource` | | `azure`：`https://<resource>.openai.azure.com/openai/v1` のリソース名 |
+| `num_ctx` | `32768` | `ollama`：コンテキスト長（トークン） |
+| `chunk_chars` | `analysis.chunk_chars`（`ollama` は `60000`） | 1 回の呼び出しで送る要約済みトランスクリプトの文字数 |
+| `max_output_tokens` | `anthropic` / `bedrock` は `32000`、それ以外はモデル自身の上限 | 1 回あたりの出力上限 |
+| `json_mode` | `true`（`openai-compatible` は `false`） | OpenAI 形式のプロバイダー：JSON オブジェクトを求める |
+| `key_env` | プロバイダーの通常の変数 | キーを読む別の環境変数 |
 
 ## `[synthesis]`、`[export]`、`[server]`、`[inject]`、`[updates]`
 

@@ -157,7 +157,7 @@ def cmd_analyze(args) -> int:
 
         total = 0
         for sid in ids:
-            header, d = build_digest(conn, sid, cfg.analysis.chunk_chars)
+            header, d = build_digest(conn, sid, runner.chunk_chars)
             total += d.chars
             print(f"{sid[:8]}  level {d.level}  {d.chars:>9,} chars  {len(d.chunks)} chunk(s)")
         print(f"{len(ids)} session(s), {total:,} chars (~{total // 4:,} input tokens) with {runner.label} "
@@ -430,7 +430,7 @@ def cmd_status(args) -> int:
     console.print(f"  {ok(ui.get('loaded'))} dashboard agent: http://127.0.0.1:{cfg.server_port}/")
     runner = make_runner(cfg)
     console.print(f"  {ok(mcp_registered())} MCP server registered   {ok(runner.available())} analysis by {runner.label}: "
-                  f"{runner.bin or f'`{runner.cli.split()[0]}` not found'}")
+                  f"{runner.where() if runner.available() else runner.unavailable_reason()}")
     console.print(f"  sessions: {sum(counts.values())} · " + " · ".join(f"{k}: {v}" for k, v in sorted(counts.items())))
     console.print(f"  analysis queue: {pending['ready']} ready now, {pending['queued']} queued in all, {pending['held']} held · "
                   f"model {runner.model_label()} · auto={'on' if cfg.analysis.auto else 'off'} · spent {human_cost(spent)}")
@@ -843,16 +843,17 @@ def _choose_analyzer(cfg, console, *, ask, dry_run: bool):
                           f"Analysis in the dashboard, or `chronicle config set analysis.backend {other}`.\n",
                           highlight=False)
         return runner
-    missing = f"{runner.label} (`{runner.cli.split()[0]}`) was not found."
+    missing = f"{runner.unavailable_reason()}."
     if other_found and ask(f"{missing} Analyze sessions with {BACKENDS[other]} instead, through your "
                            f"{BACKENDS[other]} login?", True):
         if not dry_run:
             _set_config_value(cfg, "analysis", "backend", json.dumps(other))
         cfg.analysis.backend = other
         return make_runner(cfg)
-    console.print(f"[yellow]{missing}[/] Chronicle analyzes sessions through your own Claude Code or Codex login; "
-                  "until one is installed and signed in (and chosen as analysis.backend), sessions are recorded but "
-                  "not analyzed, so the Glossary and the Map stay empty.\n", highlight=False)
+    console.print(f"[yellow]{missing}[/] Chronicle analyzes sessions through your own Claude Code or Codex login, or a "
+                  "model provider's API (Status › Analysis in the dashboard); until one is set up (and chosen as "
+                  "analysis.backend), sessions are recorded but not analyzed, so the Glossary and the Map stay empty.\n",
+                  highlight=False)
     return None
 
 
@@ -963,6 +964,8 @@ def cmd_config(args) -> int:
     cfg = _cfg()
     if args.action == "set":
         return _config_set(cfg, args.key, args.value)
+    if args.action in ("set-key", "forget-key"):
+        return _config_key(cfg, args.key, args.value, forget=args.action == "forget-key")
     if args.action == "path":
         print(cfg.config_path)
     elif args.action == "edit":
@@ -984,7 +987,14 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
         print("usage: chronicle config set SECTION.KEY VALUE   (e.g. chronicle config set analysis.backend codex)",
               file=sys.stderr)
         return 2
-    section, name = key.split(".", 1)
+    section, name = key.rsplit(".", 1) if key.startswith("providers.") else key.split(".", 1)
+    if section.startswith("providers."):
+        from .providers import PROVIDERS, SETTINGS
+
+        if section.split(".", 1)[1] not in PROVIDERS or name not in SETTINGS:
+            print(f"usage: chronicle config set providers.PROVIDER.KEY VALUE; PROVIDER is one of: {', '.join(PROVIDERS)}; "
+                  f"KEY one of: {', '.join(SETTINGS)} (API keys: chronicle config set-key PROVIDER)", file=sys.stderr)
+            return 2
     try:
         tomllib.loads(f"v = {value}")
         literal = value
@@ -1007,7 +1017,32 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
 
         runner = make_runner(load_config(cfg.home))
         if not runner.available():
-            print(f"note: `{runner.cli.split()[0]}` was not found; analysis waits until it is installed and signed in")
+            print(f"note: {runner.unavailable_reason()}; analysis waits until it is set up")
+    return 0
+
+
+def _config_key(cfg, provider: str | None, value: str | None, *, forget: bool) -> int:
+    """`chronicle config set-key PROVIDER [KEY]`: store a provider's API key (asked for, unechoed, when not given), or
+    `forget-key PROVIDER` to remove it."""
+    from .providers import PROVIDERS, keys_path, set_key
+
+    if provider not in PROVIDERS:
+        print(f"usage: chronicle config {'forget-key' if forget else 'set-key'} PROVIDER; PROVIDER is one of: "
+              f"{', '.join(PROVIDERS)}", file=sys.stderr)
+        return 2
+    if forget:
+        set_key(cfg, provider, None)
+        print(f"forgot the {PROVIDERS[provider].label} API key")
+        return 0
+    if value is None:
+        import getpass
+
+        value = getpass.getpass(f"{PROVIDERS[provider].label} API key: ")
+    if not value.strip():
+        print("no key given; nothing changed", file=sys.stderr)
+        return 2
+    set_key(cfg, provider, value)
+    print(f"stored the {PROVIDERS[provider].label} API key in {keys_path(cfg)} (readable by you only)")
     return 0
 
 
@@ -2309,6 +2344,8 @@ def _analyze_choice(value: str) -> str:
 
 
 def build_parser() -> argparse.ArgumentParser:
+    from .llm import BACKENDS
+
     p = argparse.ArgumentParser(
         prog="chronicle",
         description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob, "
@@ -2370,7 +2407,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--model")
     s.add_argument("--force", action="store_true")
     s.add_argument("--no-synthesize", action="store_true")
-    s.add_argument("--backend", choices=["claude", "codex"], help="analyze with this agent for this run only")
+    s.add_argument("--backend", choices=list(BACKENDS), help="analyze with this agent or provider for this run only")
     s.add_argument("--dry-run", action="store_true", help="show digest sizes instead of calling the model")
     s.add_argument("--concurrency", type=int, help="parallel analysis processes for this run")
     s.set_defaults(fn=cmd_analyze)
@@ -2527,9 +2564,11 @@ def build_parser() -> argparse.ArgumentParser:
     s.set_defaults(fn=cmd_context)
 
     s = sub.add_parser("config", help="show or edit config.toml")
-    s.add_argument("action", nargs="?", choices=["show", "path", "edit", "set"], default="show")
-    s.add_argument("key", nargs="?", help="with set: SECTION.KEY, e.g. analysis.backend")
-    s.add_argument("value", nargs="?", help="with set: the value (TOML, or a bare word)")
+    s.add_argument("action", nargs="?", choices=["show", "path", "edit", "set", "set-key", "forget-key"], default="show")
+    s.add_argument("key", nargs="?", help="with set: SECTION.KEY, e.g. analysis.backend or providers.ollama.model; "
+                                          "with set-key / forget-key: the provider, e.g. openai")
+    s.add_argument("value", nargs="?", help="with set: the value (TOML, or a bare word); with set-key: the API key "
+                                            "(asked for when left out, so it stays out of your shell history)")
     s.set_defaults(fn=cmd_config)
 
     s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install` and `connect`")

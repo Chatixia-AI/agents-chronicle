@@ -12,7 +12,7 @@
 | `chronicle search <words>` | トランスクリプトとナレッジの全文検索（言語を問わず、3 文字以上） |
 | `chronicle knowledge [query] [-k gotcha] [-p project]` | 抽出されたナレッジの閲覧 |
 | `chronicle projects` / `chronicle stats [--since 30d]` | プロジェクト別と全体の統計 |
-| `chronicle analyze <id> \| --pending [--limit N] [--dry-run] [--backend codex]` | 今すぐ分析（`--dry-run` は要約のサイズを表示するだけで、トークンを使いません。`--backend` はこの実行だけで使うエージェントを選びます） |
+| `chronicle analyze <id> \| --pending [--limit N] [--dry-run] [--backend codex]` | 今すぐ分析（`--dry-run` は要約のサイズを表示するだけで、トークンを使いません。`--backend` はこの実行だけで使うエージェントか[モデルプロバイダー](analysis.md#モデルプロバイダー)を選びます） |
 | `chronicle synthesize [--project P] [--global] [--all]` | ナレッジベースを再構築 |
 | `chronicle export [--full]` | Markdown 保管庫を書き直す |
 | `chronicle export <id>… [--format md\|json\|raw] [--out PATH]` | セッションを書き出す：1 件なら 1 ファイル、複数なら .zip（`raw` は元のトランスクリプト） |
@@ -44,7 +44,8 @@
 | `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | ハブに参加したコンピューターで：フォルダーのセッションをハブのプロジェクトに入れる／外す／どこに入るかを表示（`--list`：ハブのプロジェクト一覧）（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
 | `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |
-| `chronicle config set <section.key> <value>` | 設定を 1 つ変更。例：`chronicle config set analysis.backend codex`（[設定](configuration.md)） |
+| `chronicle config set <section.key> <value>` | 設定を 1 つ変更。例：`chronicle config set analysis.backend codex` や `providers.ollama.model qwen3:30b`（[設定](configuration.md)） |
+| `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | モデルプロバイダーの API キーを `provider-keys.json` に保存（省略すると尋ねます）、または削除 |
 
 ## その他の使い方
 

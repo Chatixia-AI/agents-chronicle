@@ -1322,13 +1322,14 @@ class App:
         self._maybe_check_daily()
         return self.update_info(remote=False)
 
+    def _runner_for(self, backend: str):
+        return make_runner(replace(self.cfg, analysis=replace(self.cfg.analysis, backend=backend)))
+
     def analysis_backends(self) -> dict:
-        """The agent that analyzes sessions, and which of the choices are installed."""
-        runners = {name: make_runner(replace(self.cfg, analysis=replace(self.cfg.analysis, backend=name)))
-                   for name in BACKENDS}
+        """What analyzes sessions, and every choice: the coding agents (installed or not) and the model providers
+        (set up or not). Never an API key, only where one comes from."""
         return {"backend": make_runner(self.cfg).name,
-                "choices": [{"name": r.name, "label": r.label, "path": r.bin, "model": r.model_label()}
-                            for r in runners.values()],
+                "choices": [self._runner_for(name).describe() for name in BACKENDS],
                 "language": self.cfg.analysis.language,  # what Chronicle writes knowledge in, not the dashboard's language
                 "languages": [{"code": code, "label": label} for code, label in LANGUAGES.items()]}
 
@@ -1341,6 +1342,51 @@ class App:
         self.cfg = load_config(self.cfg.home)
         self._cfg_sig = self._config_sig()
         return self.analysis_backends()
+
+    def action_provider(self, body: dict) -> dict:
+        """Save a model provider's settings ([providers.<name>]) and, when given, its API key ("" forgets it)."""
+        from .config import load_config
+        from .providers import PROVIDERS, save_settings, set_key
+
+        name = str(body.get("provider") or "")
+        if name not in PROVIDERS:
+            return {"error": tr("unknown analysis backend {backend!r}", backend=name)}
+        values = body.get("settings") if isinstance(body.get("settings"), dict) else {}
+        refused = save_settings(self.cfg, name, values)
+        if "key" in body and body["key"] is not None:
+            set_key(self.cfg, name, str(body["key"]))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        out = self.analysis_backends()
+        if refused:
+            out["error"] = tr("not saved: {keys}", keys=", ".join(refused))
+        return out
+
+    def action_provider_test(self, name: str) -> dict:
+        """One small call to the provider, with its main model: does the endpoint, the key and the model work?"""
+        from .llm import LLMError
+        from .providers import PROVIDERS
+
+        if name not in PROVIDERS:
+            return {"error": tr("unknown analysis backend {backend!r}", backend=name)}
+        runner = self._runner_for(name)
+        if not runner.available():
+            return {"error": runner.unavailable_reason()}
+        try:
+            res = runner.run('Reply with {"ok": true}.', {"type": "object", "properties": {"ok": {"type": "boolean"}},
+                                                          "required": ["ok"]},
+                             system="You check that a connection works.", effort="low", timeout=120)
+        except LLMError as exc:
+            return {"error": str(exc)[:600]}
+        return {"ok": res.data.get("ok") is True, "model": res.model, "ms": res.duration_ms,
+                "tokens": res.input_tokens + res.output_tokens}
+
+    def provider_models(self, name: str) -> dict:
+        from .providers import PROVIDERS
+
+        if name not in PROVIDERS:
+            return {"models": []}
+        return {"models": self._runner_for(name).list_models()}
 
     def action_language(self, lang: str) -> dict:
         """[analysis] language: what summaries, knowledge and proposed lines are written in from now on."""
@@ -2145,6 +2191,14 @@ def make_handler(app: App, port: int):
                     return self._json(app.update_info(remote=True))
                 if p == "/api/analysis/backend":
                     return self._json(app.action_backend(str(body.get("backend") or "")))
+                if p in ("/api/analysis/provider", "/api/analysis/provider/test", "/api/analysis/provider/models"):
+                    if not self._can_admin():  # an API key, and where transcripts are sent
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    if p == "/api/analysis/provider/test":
+                        return self._json(app.action_provider_test(str(body.get("provider") or "")))
+                    if p == "/api/analysis/provider/models":
+                        return self._json(app.provider_models(str(body.get("provider") or "")))
+                    return self._json(app.action_provider(body if isinstance(body, dict) else {}))
                 if p == "/api/analysis/language":
                     return self._json(app.action_language(str(body.get("language") or "")))
                 if p == "/api/update/daily":

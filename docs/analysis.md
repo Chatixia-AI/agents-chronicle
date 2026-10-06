@@ -52,9 +52,12 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
      cannot switch off every tool by flag, so Chronicle also reads its event stream: a reply that follows any tool
      call is thrown away and the analysis counts as failed.
 
-   `CHRONICLE_INTERNAL=1` makes Chronicle's own hooks inert for these runs. Switch agents in **Status ›
-   Analysis**, with `chronicle config set analysis.backend codex`, or for one run with `chronicle analyze
-   --backend codex`.
+   - **A model provider's API** (`backend = "anthropic"`, `"bedrock"`, `"openai"`, `"azure"`, `"openrouter"`,
+     `"ollama"` or `"openai-compatible"`): one plain HTTP request per call, with no tools in it, so the model can
+     only answer. See [Model providers](#model-providers).
+
+   `CHRONICLE_INTERNAL=1` makes Chronicle's own hooks inert for these runs. Switch in **Status › Analysis**, with
+   `chronicle config set analysis.backend codex`, or for one run with `chronicle analyze --backend codex`.
 4. The JSON reply is validated leniently (with one repair pass) and stored. When a project gains
    `min_new_items` new items, its knowledge base is re-synthesized; items that are outdated, contradicted or
    duplicated get marked *superseded*, each naming the item that replaced it (pinned and memory items are never
@@ -108,7 +111,47 @@ source, and syntheses see each item's stage. Leaving the ladder is a status, not
 its stage and names its successor, and when an established or canonical item is overturned by a newer one (not
 just merged as a duplicate), that week's review lists it under **Overturned**.
 
-Cost: analysis runs through your own Claude Code or Codex login. With Claude, the reported cost is the API
+## Model providers
+
+Instead of a coding agent, analysis can call a model provider's API with your own key. Pick **API provider** in
+**Status › Analysis**, choose the provider, fill in its model (and endpoint where it has no default), add a key,
+then **Test connection** and **Use for analysis**. From the terminal:
+
+```sh
+chronicle config set providers.openai.model gpt-5.5
+chronicle config set-key openai            # asks for the key; it stays out of your shell history
+chronicle config set analysis.backend openai
+```
+
+| Provider | `backend` | Endpoint | Sign-in |
+| --- | --- | --- | --- |
+| Anthropic | `anthropic` | `https://api.anthropic.com` | API key (`ANTHROPIC_API_KEY`) |
+| Claude in Amazon Bedrock | `bedrock` | `https://bedrock-mantle.<region>.api.aws/anthropic`, from `region` | Bedrock API key (`AWS_BEARER_TOKEN_BEDROCK`), or your AWS credentials: environment keys, or whatever `aws configure export-credentials` resolves (SSO, roles, `profile`), signed with SigV4 |
+| OpenAI | `openai` | `https://api.openai.com/v1` | API key (`OPENAI_API_KEY`) |
+| Azure OpenAI | `azure` | `https://<resource>.openai.azure.com/openai/v1`, from `resource` | API key (`AZURE_OPENAI_API_KEY`), or Microsoft Entra ID through `az login` |
+| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` | API key (`OPENROUTER_API_KEY`) |
+| Ollama | `ollama` | `http://localhost:11434` (or `OLLAMA_HOST`) | none: the model runs on your computer and nothing leaves it |
+| Any Chat Completions server | `openai-compatible` | yours, e.g. LM Studio, vLLM, Groq, Gemini's OpenAI endpoint | optional key |
+
+- **Models.** `model` does the analysis and builds knowledge bases; `small_model` screens imported chats
+  (default: `model`). Chronicle's settings name Claude models (`sonnet`, `haiku`): with a provider they mean
+  `model` and `small_model`. Anthropic and Bedrock default to Claude Sonnet 5.5 and Claude Haiku 4.5; the others
+  need a model. On Azure, the model is your deployment's name.
+- **Keys** are stored in `provider-keys.json` in Chronicle's folder, readable by your user only, never in
+  `config.toml`. A stored key wins over the environment variable, so the dashboard (which launchd starts without your
+  shell's variables) and the CLI use the same key. The dashboard never shows a key back, and only the computer
+  itself (or an admin of a hub) can change keys and endpoints.
+- **Local models (Ollama).** Chronicle calls Ollama's own `/api/chat` with `num_ctx` (default 32,768 tokens) and
+  sends 60,000 characters of transcript per call (`chunk_chars`). A prompt that fills the context window is an
+  error, not a silent cut. Lessons are only as good as the model: a 1B model writes thin, generic ones, so pick
+  the largest model your computer runs comfortably.
+- **Output.** OpenAI-style providers are asked for a JSON object (`json_mode`; off for `openai-compatible`, since
+  not every server supports it). A reply cut off at the output limit is an error that names
+  `max_output_tokens`. Anthropic and Bedrock calls send `effort` and allow 32,000 output tokens by default.
+
+Cost: with a provider, the cost is what the API reports (OpenRouter) or an estimate from the token counts at
+Anthropic's or OpenAI's list prices (Anthropic, Bedrock, OpenAI); Azure, Ollama and other servers show tokens only. Otherwise,
+analysis runs through your own Claude Code or Codex login. With Claude, the reported cost is the API
 list-price equivalent: sessions averaged about $0.38 each with Sonnet (digests average ~150k characters), and
 `max_budget_usd` caps each call. Codex reports tokens but no price, so Codex analyses show no cost. On a Claude or
 ChatGPT subscription the usage is drawn from the plan's allowance rather than billed. `chronicle analyze --pending

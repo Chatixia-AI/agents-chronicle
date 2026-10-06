@@ -236,7 +236,7 @@ def screen_chats(cfg: Config, conn: sqlite3.Connection, *, source: str | None = 
         return report
     runner = runner or make_runner(cfg)
     if not runner.available():
-        report.left, report.error = len(rest), f"{runner.label} ({runner.cli.split()[0]}) was not found"
+        report.left, report.error = len(rest), runner.unavailable_reason()
         return report
     context = developer_context(conn)
     batches = [rest[i:i + BATCH] for i in range(0, len(rest), BATCH)]

@@ -47,9 +47,13 @@ Codex、Copilot、Bob、Antigravity のセッションも、ログにデータ�
      スキルの指示も切り、Codex 自身の指示の代わりに Chronicle の指示を使います。Codex はすべてのツールをフラグで切れるわけでは
      ないため、Chronicle はイベントストリームも読みます：ツール呼び出しのあとに来た応答は捨てられ、その分析は失敗として扱われます。
 
-   これらの実行中は `CHRONICLE_INTERNAL=1` によって Chronicle 自身のフックが無効になります。エージェントは **Status ›
-   Analysis**、`chronicle config set analysis.backend codex`、または 1 回の実行だけなら `chronicle analyze
-   --backend codex` で切り替えられます。
+   - **モデルプロバイダーの API**（`backend = "anthropic"`、`"bedrock"`、`"openai"`、`"azure"`、`"openrouter"`、
+     `"ollama"`、`"openai-compatible"`）：呼び出しごとに素の HTTP リクエストを 1 回送ります。ツールは含まないので、モデルは
+     答えることしかできません。[モデルプロバイダー](#モデルプロバイダー)を参照してください。
+
+   これらの実行中は `CHRONICLE_INTERNAL=1` によって Chronicle 自身のフックが無効になります。**Status › Analysis**、
+   `chronicle config set analysis.backend codex`、または 1 回の実行だけなら `chronicle analyze --backend codex` で
+   切り替えられます。
 4. JSON の応答は寛容に検証され（修復は 1 回まで）、保存されます。プロジェクトに `min_new_items` 件の新しい項目がたまると、
    そのプロジェクトのナレッジベースが再統合され、古くなった項目、矛盾する項目、重複した項目は *superseded*（置き換え済み）になり、
    それぞれ置き換えた項目を記録します（ピン留めした項目とメモリー項目は置き換えられません）。重複は裏付けとしても数えられます：
@@ -95,7 +99,47 @@ Codex、Copilot、Bob、Antigravity のセッションも、ログにデータ�
 モデルに渡されます。段階から外れるのは状態（status）の変化です：置き換えられた項目は段階を保ったまま後継の項目を記録し、
 established や canonical の項目が（単なる重複の統合ではなく）新しい項目に覆されると、その週の振り返りの **Overturned** に載ります。
 
-費用：分析はあなた自身の Claude Code または Codex のログインを通じて行われます。Claude の場合、表示される費用は API 定価に換算した
+## モデルプロバイダー
+
+コーディングエージェントの代わりに、あなた自身のキーでモデルプロバイダーの API を呼んで分析することもできます。**Status ›
+Analysis** で **API provider** を選び、プロバイダーを選んでモデル（既定がない場合はエンドポイントも）を入力し、キーを追加してから
+**Test connection**、**Use for analysis** を押します。ターミナルからは：
+
+```sh
+chronicle config set providers.openai.model gpt-5.5
+chronicle config set-key openai            # キーを尋ねます。シェルの履歴には残りません
+chronicle config set analysis.backend openai
+```
+
+| プロバイダー | `backend` | エンドポイント | サインイン |
+| --- | --- | --- | --- |
+| Anthropic | `anthropic` | `https://api.anthropic.com` | API キー（`ANTHROPIC_API_KEY`） |
+| Claude in Amazon Bedrock | `bedrock` | `region` から `https://bedrock-mantle.<region>.api.aws/anthropic` | Bedrock の API キー（`AWS_BEARER_TOKEN_BEDROCK`）、または AWS の認証情報：環境変数のキーか、`aws configure export-credentials` が解決するもの（SSO、ロール、`profile`）で SigV4 署名 |
+| OpenAI | `openai` | `https://api.openai.com/v1` | API キー（`OPENAI_API_KEY`） |
+| Azure OpenAI | `azure` | `resource` から `https://<resource>.openai.azure.com/openai/v1` | API キー（`AZURE_OPENAI_API_KEY`）、または `az login` による Microsoft Entra ID |
+| OpenRouter | `openrouter` | `https://openrouter.ai/api/v1` | API キー（`OPENROUTER_API_KEY`） |
+| Ollama | `ollama` | `http://localhost:11434`（または `OLLAMA_HOST`） | 不要：モデルはあなたのコンピューターで動き、何も外に出ません |
+| Chat Completions 互換のサーバー | `openai-compatible` | 任意。LM Studio、vLLM、Groq、Gemini の OpenAI 互換エンドポイントなど | キーは任意 |
+
+- **モデル。** `model` が分析とナレッジベースの作成を、`small_model` が取り込んだチャットの選別を受け持ちます（既定は
+  `model`）。Chronicle の設定にある Claude のモデル名（`sonnet`、`haiku`）は、プロバイダーでは `model` と `small_model` を
+  指します。Anthropic と Bedrock の既定は Claude Sonnet 5.5 と Claude Haiku 4.5 で、それ以外はモデルの指定が必要です。Azure
+  ではデプロイ名がモデルです。
+- **キー**は Chronicle のフォルダーの `provider-keys.json` に保存され、あなたのユーザーだけが読めます。`config.toml` には
+  入りません。保存したキーは環境変数より優先されるので、ダッシュボード（launchd がシェルの変数なしで起動します）と CLI が
+  同じキーを使います。ダッシュボードはキーを表示し返すことはなく、キーとエンドポイントを変えられるのはそのコンピューター自身
+  （またはハブの管理者）だけです。
+- **ローカルモデル（Ollama）。** Chronicle は Ollama 自身の `/api/chat` を `num_ctx`（既定 32,768 トークン）付きで呼び、
+  1 回あたり 60,000 文字のトランスクリプトを送ります（`chunk_chars`）。プロンプトがコンテキストを埋めた場合は、黙って切らずに
+  エラーにします。教訓の質はモデル次第です。1B のモデルでは薄く一般的なものになるので、コンピューターで無理なく動く最大の
+  モデルを選んでください。
+- **出力。** OpenAI 形式のプロバイダーには JSON オブジェクトを求めます（`json_mode`。対応しないサーバーもあるため
+  `openai-compatible` では既定でオフ）。出力上限で切れた応答は `max_output_tokens` を示すエラーになります。Anthropic と
+  Bedrock の呼び出しは `effort` を送り、既定で 32,000 トークンまで出力できます。
+
+プロバイダーを使う場合の費用は、API が報告する額（OpenRouter）か、トークン数から Anthropic や OpenAI の定価で見積もった額
+（Anthropic、Bedrock、OpenAI）です。Azure、Ollama、その他のサーバーはトークン数だけを表示します。それ以外では、
+分析はあなた自身の Claude Code または Codex のログインを通じて行われます。Claude の場合、表示される費用は API 定価に換算した
 金額です。Sonnet ではセッションあたり平均約 $0.38 でした（要約の平均は約 15 万文字）。`max_budget_usd` で 1 回の呼び出しの上限を
 設定できます。Codex はトークン数を報告しますが価格は報告しないため、Codex による分析には費用が表示されません。Claude や ChatGPT の
 サブスクリプションでは、請求ではなくプランの使用枠から消費されます。`chronicle analyze --pending --dry-run` で、使う前に未分析分の
