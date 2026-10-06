@@ -221,7 +221,11 @@ jobs:
               --body "Dates the changelog's Unreleased section for the $VERSION release."); then
             echo "Changelog pull request: $URL" >> "$GITHUB_STEP_SUMMARY"
           else
-            # Settings › Actions › General › "Allow GitHub Actions to create and approve pull requests" opens it here
-            echo "Open the changelog pull request: https://github.com/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1" \
-              >> "$GITHUB_STEP_SUMMARY"
+            # fail the run: the next release stops at its plan step until this pull request is merged, and a line in
+            # the summary alone goes unnoticed. Settings › Actions › General › "Allow GitHub Actions to create and
+            # approve pull requests" lets this step open it.
+            OPEN="https://github.com/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
+            echo "Open the changelog pull request, then merge it before the next release: $OPEN" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$VERSION is released, but its changelog pull request could not be opened. Open it and merge it before the next release: $OPEN"
+            exit 1
           fi

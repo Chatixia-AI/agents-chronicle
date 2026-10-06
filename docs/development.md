@@ -52,7 +52,8 @@ publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`) an
 (signed and notarized when the `MACOS_*` / `APPLE_*` secrets are set; see the workflow header). Last, it opens a
 pull request that renames `## Unreleased` to `## <version> (<date>)`. Merge it before the next release: until then
 the released lines are still under Unreleased, and the next run stops at its first step saying so. If GitHub
-Actions may not create pull requests in this repository, the run's summary links to one ready to open.
+Actions may not create pull requests in this repository, the run fails at its last step, after publishing, with a
+link to open that pull request by hand.
 `dry run`, the default, runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
 Publishing a release tagged `v<version>` on GitHub by hand still works too.
 
@@ -66,8 +67,8 @@ Publishing a release tagged `v<version>` on GitHub by hand still works too.
    `MACOS_CERT_PASSWORD`, `MACOS_CODESIGN_IDENTITY`, `APPLE_ID`, `APPLE_TEAM_ID` and `APPLE_APP_PASSWORD`
    (an app-specific password from account.apple.com). Without them the DMG is ad-hoc signed and users have to
    approve it in Privacy & Security.
-4. Optional: Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests** lets the
-   release open the changelog pull request itself instead of linking to it.
+4. Settings → Actions → General → **Allow GitHub Actions to create and approve pull requests**, so the release opens
+   the changelog pull request itself. Without it every release ends in a failed step that links to one to open.
 
 ## Documentation site
 
