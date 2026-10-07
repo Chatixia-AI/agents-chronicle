@@ -4792,6 +4792,7 @@ function auditText(a) {
     revoke: () => t("{actor} revoked a computer or browser of {person}", vars),
     projects: () => t("{actor} changed which projects {person} sees", vars),
     "shared-token": () => (on ? t("{actor} turned the shared hub token on", vars) : t("{actor} turned the shared hub token off", vars)),
+    accept: () => (a.detail?.accept === "knowledge" ? t("{actor} made this hub take knowledge only", vars) : t("{actor} let this hub take transcripts again", vars)),
     "project-add": () => t("{actor} shared the project {path}", { ...vars, path: a.detail?.path || "" }),
     "project-remove": () => t("{actor} stopped sharing the project {path}", { ...vars, path: a.detail?.path || "" }),
   }[String(a.action).replace("_", "-")]?.() || `${actor}: ${a.action}`;
@@ -5058,9 +5059,33 @@ function teamPointer() {
       : h("p", { class: "muted" }, t("Only an admin of this hub sees them.")));
 }
 
+// Team › Computers › Knowledge only ([hub] accept): whether this hub takes transcripts at all
+function acceptRow(dv) {
+  const only = dv.accept === "knowledge";
+  const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(only), "aria-label": t("Knowledge only"),
+    onclick: async () => {
+      const accept = only ? "everything" : "knowledge";
+      if (accept === "knowledge" && !confirm(t("Take knowledge only? Computers that send transcripts are turned away until they share knowledge only. Transcripts already here stay."))) return;
+      sw.disabled = true;
+      try {
+        const r = await post("/api/team/accept", { accept });
+        if (r.error) { toast(r.error, 6000); sw.disabled = false; return; }
+      } catch (e) { if (!e.handled) toast(e.message, 6000); sw.disabled = false; return; }
+      toast(accept === "knowledge" ? t("This hub takes knowledge only now.") : t("This hub takes transcripts again."));
+      render();
+    } });
+  return h("div", { class: "set-row" },
+    h("div", null, h("b", null, t("Knowledge only")),
+      h("div", { class: "muted" }, only
+        ? t("On: every computer analyzes its own sessions and sends only summaries and project lessons. One that sends transcripts is turned away until it shares knowledge only.")
+        : t("Off: computers may send their transcripts, which this hub records and analyzes, or share knowledge only. Turn it on to keep every transcript off this hub."))),
+    sw);
+}
+
 // Team › Computers: every computer the hub hears from, whose it is, and the folders they map
 function computersCard(dv) {
   const others = dv.machines.filter((m) => !m.this);
+  const refused = (m) => dv.accept === "knowledge" && !m.this && m.share !== "knowledge";
   const maps = Object.entries(dv.path_map || {});
   const added = dv.machines.flatMap((m) => (m.folders || []).map((f) => [m, f]));
   const table = h("div", { class: "table-wrap" }, h("table", { class: "data" },
@@ -5068,12 +5093,14 @@ function computersCard(dv) {
     h("tbody", null, ...dv.machines.map((m) => h("tr", null,
       h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, t(" (this one)")) : null,
         m.share === "knowledge" ? h("span", { class: "muted", title: t("Analyzes its own sessions and sends only summaries and project lessons") }, t(" · knowledge only")) : null,
+        refused(m) ? h("span", { class: "warn-line", title: t("Run {command} on it, then {push}.", { command: "chronicle config set hub.share knowledge", push: "chronicle push" }) }, t(" · sends transcripts: turned away")) : null,
         m.platform ? h("div", { class: "muted" }, m.platform) : null),
       h("td", null, m.person || h("span", { class: "muted" }, "–")),
       h("td", { class: "num" }, fmtNum(m.sessions)),
       h("td", null, m.last_session ? ago(m.last_session) : "–"),
       h("td", { title: m.last_seen ? t("Last heard from {ago}", { ago: ago(m.last_seen) }) : "" }, m.this ? "–" : m.last_push ? ago(m.last_push) : t("nothing yet")))))));
   return h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices", hint: t("{n} sending here", { n: others.length }) }),
+    acceptRow(dv),
     table,
     h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "chronicle hub enable" })),
     maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null,

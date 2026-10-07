@@ -15,6 +15,13 @@
   invites, and the first admin's invite is printed in the container's log. It won't serve a hub without people,
   since anyone who reaches such a hub counts as its admin. Requests through the dashboard never count as made at the
   hub, so everyone signs in. See [A hub in Docker](docs/docker.md).
+- **A hub that takes knowledge only:** `chronicle config set hub.accept knowledge` on the hub, or **Team › Computers ›
+  Knowledge only** for an admin, keeps every transcript off the hub. It turns away any computer that sends
+  transcripts, whatever token it uses, and tells it to run `chronicle config set hub.share knowledge`. Computers that
+  share knowledge go on as before, and one that joins with an invite is set to share knowledge on its own.
+  **Team › Computers** and `chronicle hub` mark a computer that is turned away. A typo in the setting counts as
+  knowledge only, and the audit log records who changed it.
+  [A hub that takes knowledge only](docs/devices.md#a-hub-that-takes-knowledge-only)
 
 ## 0.12.1 (2026-10-07)
 

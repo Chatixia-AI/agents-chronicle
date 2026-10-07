@@ -1083,6 +1083,7 @@ class App:
             "hub_url": self.cfg.hub_url or None,
             "last_push": last_push(self.cfg) if role == "spoke" else None,
             "share": self.cfg.hub_share if role == "spoke" else None,
+            "accept": self.cfg.hub_accept if role == "hub" else None,
             "team": last_team(self.cfg) if role == "spoke" else None,
             "store": self.team_store_info() if role != "spoke" else None,
             "folders": folders,
@@ -1282,6 +1283,24 @@ class App:
         self.cfg = load_config(self.cfg.home)
         self._cfg_sig = self._config_sig()
         return {"ok": True, "share": self.cfg.hub_share}
+
+    def action_accept(self, accept: str, by: dict | None) -> tuple[dict, int]:
+        """[hub] accept on the hub: transcripts too, or knowledge only from every computer. `by` (None: at the hub
+        itself) goes in the audit."""
+        from . import people
+        from .config import SHARE_MODES, load_config, set_config_value
+        from .hub import read_token
+
+        if self.cfg.is_spoke or not read_token(self.cfg):
+            return {"error": tr("this computer is not a hub")}, 400
+        if accept not in SHARE_MODES:
+            return {"error": tr("unknown share mode {share!r}", share=accept)}, 400
+        set_config_value(self.cfg, "hub", "accept", json.dumps(accept))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        people.audit(self.conn, people.actor_of(by), "accept", None, accept=accept)
+        self.conn.commit()
+        return {"ok": True, "accept": self.cfg.hub_accept}, 200
 
     def action_push(self) -> bool:
         """Send to the hub now; a computer that shares knowledge also gets its teammates' lessons back."""
@@ -1886,11 +1905,9 @@ def make_handler(app: App, port: int):
                 return self._json({"error": "unauthorized"}, 401)
             if person and person["role"] == "readonly" and p in HUB_PUSH:
                 return self._json({"error": "read-only people can't send to the hub"}, 403)
-            from .people import projects_of
-
-            if p in ("/api/hub/file", "/api/hub/analyses") and projects_of(person) is not None:
-                hub._drain(self.rfile, length)  # transcripts from someone limited to projects: never kept
-                return self._json({"error": str(hub.limited_error(person))}, 403)
+            if p in ("/api/hub/file", "/api/hub/analyses") and (refused := hub.transcripts_refused(app.cfg, person)):
+                hub._drain(self.rfile, length)  # transcripts this hub doesn't take: never kept
+                return self._json({"error": str(refused)}, 403)
             try:
                 if p == "/api/hub/file":
                     return self._json(hub.receive_file(app.cfg, app.conn, q, self.rfile, length))
@@ -2221,6 +2238,10 @@ def make_handler(app: App, port: int):
                         return self._json({"error": tr("only an admin of this hub can do this")}, 403)
                     return self._json(*app.action_people(m.group(1), body if isinstance(body, dict) else {},
                                                          self.viewer, self._address()))
+                if p == "/api/team/accept":  # what this hub takes from the computers that send to it
+                    if not self._can_admin():
+                        return self._json({"error": tr("only an admin of this hub can do this")}, 403)
+                    return self._json(*app.action_accept(str(body.get("accept") or ""), self.viewer))
                 if p == "/api/devices/push":
                     return self._json({"started": app.action_push()})
                 if p == "/api/update/check":  # a POST: with the daily check off, the dashboard's only call to PyPI

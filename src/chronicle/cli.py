@@ -1720,11 +1720,15 @@ def cmd_hub(args) -> int:
             token, who = got["token"], got.get("person") or {}
             console.print(f"The hub {got.get('hub') or url} knows you as [bold]{who.get('name')}[/] ({who.get('role')}).",
                           highlight=False)
-            if got.get("share") == "knowledge":  # limited to projects: summaries and project lessons, never transcripts
+            limited = got.get("projects") is not None
+            if got.get("share") == "knowledge":  # summaries and project lessons, never transcripts
                 if args.share == "everything":
-                    console.print(f"{who.get('name')} sees only some projects on this hub, so this computer can share "
-                                  "knowledge only; joining with --share knowledge instead.", highlight=False)
+                    why = (f"{who.get('name')} sees only some projects on this hub" if limited
+                           else "This hub takes knowledge only")
+                    console.print(f"{why}, so this computer can share knowledge only; joining with --share knowledge "
+                                  "instead.", highlight=False)
                 args.share = "knowledge"
+            if limited:
                 names = ", ".join(p.get("name") or p["path"] for p in got.get("projects") or []) or "none yet"
                 console.print(f"Projects you share with it: [bold]{names}[/]. Add your folder for each one: "
                               "`chronicle hub add-folder <folder> --project <name>`; sessions elsewhere stay here.",
@@ -1826,12 +1830,17 @@ def cmd_hub(args) -> int:
     conn.close()
     role = "a hub" if hub.read_token(cfg) else "not a hub (`chronicle hub enable` makes it one)"
     console.print(f"[bold]{hub.local_machine(cfg)['name']}[/] is {role}.", highlight=False)
+    if hub.read_token(cfg) and cfg.hub_accept == "knowledge":
+        console.print("  takes knowledge only: computers that send transcripts are turned away "
+                      "(`chronicle config set hub.accept everything` takes them again)", highlight=False)
     from .util import local_str
 
     for m in rows:
         seen = "this computer" if m["this"] else f"last sent {local_str(m['last_push']) if m['last_push'] else 'nothing yet'}"
         if m.get("share") == "knowledge":
             seen += " · knowledge only"
+        elif not m["this"] and cfg.hub_accept == "knowledge":
+            seen += " · sends transcripts: turned away"
         console.print(f"  {m['name'] or m['id'][:8]:<28} {m['platform'] or '':<8} {m['sessions']:>5} session{'s' * (m['sessions'] != 1)} · {seen}",
                       highlight=False)
         for f in m.get("folders") or []:
