@@ -2083,3 +2083,4 @@ td.pg-cell { width: 1%; text-align: right; }
 .gd-err:empty { display: none; }
 .gd-foot { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 6px; flex-wrap: wrap; }
 .gd-actions { display: flex; gap: 8px; margin-left: auto; }
+.gd > select { width: 100%; }

@@ -105,6 +105,24 @@ matching project of its own:
 Otherwise the session keeps the folder it ran in. A session page shows the original folder when you hover over the
 computer's name.
 
+### A group as one project on the hub
+
+A [group of your projects](dashboard.md#project-groups) can go to the hub as one project. Edit the group on the
+**Projects** page, pick the hub's project under **On the hub**, and save; this computer then sends the group's
+projects there from its next push, as if you had added each of their folders to it. It stays linked:
+
+- A project that joins the group later, by its folder or by hand, goes too.
+- A project you keep out of the group stays here, even inside a folder of one that goes. Sharing knowledge only, it
+  isn't sent at all; a computer that sends transcripts sends everything, and the group only decides where it's filed.
+- A project that leaves the group, or the whole group when you pick **Not shared**, stops going. What it already
+  shared stays in that project on the hub, as when you [leave](#leaving) one.
+- A folder you added by hand, or a repository whose git remote the hub files elsewhere, wins over the group, as
+  above. A project recorded on another computer (such as `server:/root/app`) can't go from here.
+
+The project must already be on the hub (a member's computer can't make one), and the choice is made on this computer
+itself, not from another device. **Settings › Devices › Projects on the hub** shows the group under that project, and
+the group's projects get a cloud icon on the Projects page.
+
 ### What is sent
 
 - From each `claude_dirs` folder: `projects/` (transcripts, subagent threads, memory notes) and `history.jsonl`.

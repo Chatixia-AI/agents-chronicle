@@ -39,9 +39,19 @@ def clean_folder(folder: str) -> str | None:
 
 
 def groups(conn: sqlite3.Connection) -> list[dict]:
-    """Every group, A to Z: {id, name, folders}."""
-    return [{"id": r["id"], "name": r["name"], "folders": json.loads(r["folders_json"] or "[]")}
-            for r in conn.execute("SELECT id, name, folders_json FROM project_groups ORDER BY name COLLATE NOCASE, id")]
+    """Every group, A to Z: {id, name, folders, hub_project} (hub_project: the hub project it's shared as, or None)."""
+    return [{"id": r["id"], "name": r["name"], "folders": json.loads(r["folders_json"] or "[]"), "hub_project": r["hub_project"]}
+            for r in conn.execute("SELECT id, name, folders_json, hub_project FROM project_groups "
+                                  "ORDER BY name COLLATE NOCASE, id")]
+
+
+def share(conn: sqlite3.Connection, group_id: int, hub_project: str | None) -> None:
+    """Share a group as one project on the hub this computer sends to, or (None) stop: from the next push, the
+    group's projects go to that hub project, whichever join it later (hub.group_routes)."""
+    if not conn.execute("SELECT 1 FROM project_groups WHERE id = ?", (group_id,)).fetchone():
+        raise GroupError("That group no longer exists.")
+    conn.execute("UPDATE project_groups SET hub_project = ? WHERE id = ?", (hub_project or None, group_id))
+    conn.commit()
 
 
 def _picks(conn: sqlite3.Connection) -> dict[str, int | None]:

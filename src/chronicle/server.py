@@ -687,7 +687,7 @@ class App:
                              "sessions": 0, "prompts": 0, "active_s": 0, "cost": 0, "tokens": 0, "first": None, "last": None,
                              "analyzed": 0, "knowledge": 0, "kb_updated": None, "exists": Path(path).exists(),
                              "weekly": [0.0] * 12, "outcomes": {}, "agents": {}, "shared": True})
-        on_hub = hub_project_of(self.cfg, [d["project_path"] for d in rows])  # a computer that sends to a hub
+        on_hub = hub_project_of(self.cfg, [d["project_path"] for d in rows], self.conn)  # a computer that sends to a hub
         for d in rows:  # the hub project it's in, by the hub's name for it
             d["hub"] = on_hub.get(d["project_path"])
         placed = assign(self.conn, [d["project_path"] for d in rows if d["project_path"]])
@@ -696,9 +696,19 @@ class App:
         return rows
 
     def project_groups(self) -> dict:
+        """The groups; home: a rule typed as ~/… shows as it'll be kept; hub: on a computer that sends to a hub, the
+        hub's projects as of the last push, which a group can be shared as."""
         from .groups import groups
 
-        return {"groups": groups(self.conn), "home": str(Path.home())}  # home: a rule typed as ~/… shows as it'll be kept
+        return {"groups": groups(self.conn), "home": str(Path.home()),
+                "hub": self._hub_choices() if self.cfg.is_spoke else None}
+
+    def _hub_choices(self) -> dict:
+        from .hub import last_folders
+
+        seen = last_folders(self.cfg) or {}
+        return {"name": seen.get("hub"), "projects": [{"path": p["path"], "name": p.get("name") or Path(p["path"]).name}
+                                                     for p in seen.get("projects") or [] if isinstance(p, dict) and p.get("path")]}
 
     def action_project_groups(self, verb: str, body: dict) -> tuple[dict, int]:
         """Make, change or remove a group of projects, or move projects into one (groups.py)."""
@@ -718,6 +728,14 @@ class App:
                 return {"ok": True, "id": new}, 200
             if verb == "delete":
                 groups.delete(self.conn, gid(body.get("id")))
+                return {"ok": True}, 200
+            if verb == "share":  # shared as one project on the hub this computer sends to, from its next push
+                project = str(body.get("hub_project") or "") or None
+                if project and not self.cfg.is_spoke:
+                    return {"error": tr("This computer doesn't send to a hub.")}, 400
+                if project and project not in {p["path"] for p in self._hub_choices()["projects"]}:
+                    return {"error": tr("The hub has no such project, or you don't see it.")}, 400
+                groups.share(self.conn, gid(body.get("id")), project)
                 return {"ok": True}, 200
             paths = body.get("paths")
             if not isinstance(paths, list) or not paths:
@@ -761,7 +779,7 @@ class App:
         return {
             "project_path": path,
             "shared": path in declared_projects(c),
-            "hub": hub_project_of(self.cfg, [path]).get(path),
+            "hub": hub_project_of(self.cfg, [path], c).get(path),
             "group": group_of(c, path),
             "label": labels.get(path, stats["project_name"]),
             "stats": dict(stats),
@@ -1164,19 +1182,24 @@ class App:
 
     def _my_hub_projects(self, folders: list[dict], recorded: dict) -> list[dict]:
         """The hub's projects this computer is in: through a folder added to one, a repository whose git remote the hub
-        files there (as of the last push), or one it left. Its name as the hub gives it."""
+        files there (as of the last push), a group shared as it, or one it left. Its name as the hub gives it."""
+        from .groups import groups
+
         names = {p["path"]: p.get("name") for p in recorded.get("projects") or [] if isinstance(p, dict) and p.get("path")}
         out: dict[str, dict] = {}
 
         def row(path: str) -> dict:
             return out.setdefault(path, {"path": path, "name": names.get(path) or Path(path).name or path,
-                                         "folders": [], "repos": [], "left": path in self.cfg.hub_left})
+                                         "folders": [], "repos": [], "groups": [], "left": path in self.cfg.hub_left})
 
         for f in folders:
             row(f["project"])["folders"].append(f)
         for path, repos in (recorded.get("remotes") or {}).items():
             if isinstance(repos, list):
                 row(path)["repos"] += [r for r in repos if isinstance(r, dict)]
+        for g in groups(self.conn):
+            if g["hub_project"]:
+                row(g["hub_project"])["groups"].append({"id": g["id"], "name": g["name"]})
         for path in self.cfg.hub_left:
             row(path)
         return sorted(out.values(), key=lambda r: (r["left"], r["name"].lower()))
@@ -2304,8 +2327,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.matches(m.group(1), q))
                 if p == "/api/projects":
                     return self._json(app.projects(scope=people.projects_of(self.viewer)))
-                if p == "/api/project-groups":
-                    return self._json(app.project_groups())
+                if p == "/api/project-groups":  # can_share: what leaves this computer changes only from here
+                    return self._json({**app.project_groups(), "can_share": app.cfg.is_spoke and self._from_here()})
                 if p == "/api/artifacts":
                     return self._json({**app.artifacts(q), "local": self._local()})
                 m = re.fullmatch(r"/api/artifacts/(\d+)/open", p)
@@ -2494,8 +2517,10 @@ def make_handler(app: App, port: int):
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
                     return self._json(*app.action_shared_project(m.group(1), body if isinstance(body, dict) else {},
                                                                  by=self.viewer, here=here))
-                m = re.fullmatch(r"/api/project-groups/(save|delete|move)", p)
+                m = re.fullmatch(r"/api/project-groups/(save|delete|move|share)", p)
                 if m:
+                    if m.group(1) == "share" and not self._from_here():  # what leaves this computer: only from here
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
                     return self._json(*app.action_project_groups(m.group(1), body if isinstance(body, dict) else {}))
                 m = re.fullmatch(r"/api/people/(add|invite|role|access|remove|revoke|shared-token)", p)
                 if m:

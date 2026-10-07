@@ -386,4 +386,5 @@ JA: dict[str, str] = {
     "Folder rules must be a list of folders.": "フォルダーのルールはフォルダーのリストで指定してください。",
     "A folder rule can't be empty or the whole disk.": "フォルダーのルールを空やディスク全体にすることはできません。",
     "Pick a project to move.": "移動するプロジェクトを選んでください。",
+    "This computer doesn't send to a hub.": "このコンピューターはハブに送っていません。",
 }

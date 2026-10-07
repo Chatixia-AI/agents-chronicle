@@ -35,7 +35,7 @@ def test_folder_rules_take_in_whole_folders_and_the_longest_wins(projects):
     assert placed["/Users/me/Work/AI-BPO/Aktio-old"] == work  # Aktio-old is not inside Aktio
     assert placed["/Users/me/Work/AI-BPO/Cosmo/procure"] == work and placed["claude.ai"] is None
     assert groups.assign(conn, [AKTIO])[AKTIO] == (aktio, "folder")
-    assert groups.groups(conn)[0] == {"id": work, "name": "AI-BPO", "folders": ["/Users/me/Work/AI-BPO"]}
+    assert groups.groups(conn)[0] == {"id": work, "name": "AI-BPO", "folders": ["/Users/me/Work/AI-BPO"], "hub_project": None}
 
 
 def test_a_hand_pick_wins_and_is_kept_only_where_the_rules_differ(projects):
@@ -76,7 +76,7 @@ def test_projects_page_filter_and_breadcrumb(projects):
     app = App(projects["cfg"])
     r, code = app.action_project_groups("save", {"name": "Aktio", "folders": [AKTIO, VM]})
     gid = r["id"]
-    assert code == 200 and app.project_groups()["groups"] == [{"id": gid, "name": "Aktio", "folders": [AKTIO, VM]}]
+    assert code == 200 and app.project_groups()["groups"] == [{"id": gid, "name": "Aktio", "folders": [AKTIO, VM], "hub_project": None}]
     rows = {p["project_path"]: p for p in app.projects()}
     assert (rows[AKTIO]["group"], rows[AKTIO]["group_by"]) == (gid, "folder") and rows["claude.ai"]["group"] is None
     assert app.action_project_groups("move", {"paths": ["claude.ai"], "group": gid}) == ({"ok": True}, 200)

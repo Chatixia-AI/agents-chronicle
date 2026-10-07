@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- **Share a group as one project on the hub:** on a computer that sends to a hub, edit a group and pick one of the
+  hub's projects under **On the hub**. Every project in the group goes there from the next push, including ones that
+  join the group later; one you keep out of the group stays on your computer. A project that leaves the group stops
+  going, and what it shared stays on the hub. See [A group as one project on the
+  hub](docs/devices.md#a-group-as-one-project-on-the-hub).
 - **Check for updates finds a new release on the first click:** PyPI's cache servers can keep serving the previous
   version for a few minutes after a release, so one check sometimes said you were up to date. Chronicle now asks up
   to three times and keeps the newest answer.

@@ -861,6 +861,7 @@ function navKey(path) {
 
 // ------------------------------------------------------------------ projects and your groups of them (groups.py)
 let projectsCache = null, groupsCache = [], homeDir = "", projectsLoading = null;
+let groupsHub = null, groupsCanShare = false; // a computer that sends to a hub: its projects there, and whether this is it
 // Each project carries the group it's listed under (p.group); groupsCache: A to Z. Callers use the list returned:
 // another page may drop the cache (projectsCache = null) while they draw, and one request serves all who ask at once.
 async function loadProjects(fresh = false) {
@@ -870,6 +871,8 @@ async function loadProjects(fresh = false) {
     .then(([list, g]) => {
       groupsCache = g?.groups || [];
       homeDir = g?.home || "";
+      groupsHub = g?.hub || null;
+      groupsCanShare = !!g?.can_share;
       return (projectsCache = list);
     }).finally(() => { projectsLoading = null; });
   return projectsLoading;
@@ -943,6 +946,7 @@ function groupMenu(p) {
   return menu;
 }
 function closeGroupDialog() { $("#group-dialog")?.remove(); }
+const hubProjectName = (path) => groupsHub?.projects.find((x) => x.path === path)?.name || String(path || "").split("/").pop();
 // Make or change a group: its name, its folder rules, and the projects in it. Ticks show the group as it will be;
 // a rule takes in whole folders (the longest rule of any group wins), and a tick or untick here wins over the rules.
 // A new group is offered the folder its first picks share, and that folder's name, until either is changed by hand.
@@ -969,6 +973,26 @@ async function groupDialog(g, preset = []) {
   const rulesBox = h("div", { class: "gd-rules" }), countEl = h("span", { class: "muted" }), list = h("div", { class: "gd-list" });
   const err = h("div", { class: "gd-err", role: "alert" });
   let q = "";
+  // a computer that sends to a hub: the group shared as one project there, linked (hub.group_routes)
+  const shareNote = h("div", { class: "muted gd-none" });
+  const shareSel = groupsHub ? h("select", { "aria-label": t("Share on the hub"), disabled: !groupsCanShare, onchange: () => draw() },
+    h("option", { value: "" }, t("Not shared")),
+    [...groupsHub.projects, ...(g?.hub_project && !groupsHub.projects.some((x) => x.path === g.hub_project) ? [{ path: g.hub_project, name: hubProjectName(g.hub_project) }] : [])]
+      .map((x) => h("option", { value: x.path, selected: g?.hub_project === x.path }, x.name))) : null;
+  const drawShare = () => {
+    if (!shareSel) return;
+    const to = shareSel.value, members = projects.filter(inGroup);
+    const away = members.filter((p) => !String(p.project_path || "").startsWith("/")); // recorded on another computer
+    shareNote.replaceChildren(...[
+      !groupsCanShare ? t("Change this on the computer itself, not from another device.")
+        : !groupsHub.projects.length ? t("No projects on the hub yet, as of the last push. Make one there, or join one in Settings › Devices.")
+        : to ? tn(members.length - away.length, "From the next push, its {n} project goes to {name} on the hub, and so does any project that joins the group later. One that leaves it stops going; what it shared stays.",
+          "From the next push, its {n} projects go to {name} on the hub, and so does any project that joins the group later. One that leaves it stops going; what it shared stays.",
+          { n: fmtNum(members.length - away.length), name: hubProjectName(to) })
+        : g?.hub_project ? t("Stops sharing from the next push. What it shared stays on the hub.") : t("Its projects go to the hub only as they would without the group."),
+      to && away.length ? h("div", null, t("Not from here, being recorded on another computer: {names}", { names: away.map((p) => p.label).join(", ") })) : null,
+    ].filter(Boolean));
+  };
   const addRule = () => {
     let f = folderIn.value.trim().replace(/[/\\]+$/, "");
     if (!f) return;
@@ -1000,14 +1024,25 @@ async function groupDialog(g, preset = []) {
         on && byRule(p) ? h("span", { class: "tag" }, t("by folder")) : elsewhere ? h("span", { class: "tag" }, t("in {group}", { group: elsewhere.name })) : null);
     }), ...(shown.length ? [] : [h("div", { class: "muted gd-none" }, t("No projects match"))]));
     countEl.textContent = tn(projects.filter(inGroup).length, "{n} project in this group", "{n} projects in this group");
+    drawShare();
   };
   const save = async () => {
     if (folderIn.value.trim()) addRule(); // typed but not added: what was meant
     const members = projects.filter(inGroup).map((p) => p.project_path);
     const r = await post("/api/project-groups/save", { id: g?.id, name: nameIn.value, folders: rules, members });
     if (r.error) { err.textContent = r.error; return; }
+    const to = shareSel && groupsCanShare ? shareSel.value : null, name = nameIn.value.trim();
+    if (to != null && to !== (g?.hub_project || "")) {
+      g = g || { id: r.id }; // made: a second save edits it, should sharing fail
+      const s = await post("/api/project-groups/share", { id: r.id, hub_project: to || null });
+      if (s.error) { err.textContent = s.error; refreshProjects(); return; }
+      closeGroupDialog();
+      toast(to ? t("Saved {name}. It goes to {project} on the hub from the next push.", { name, project: hubProjectName(to) })
+        : t("Saved {name}. It stops sharing from the next push; what it shared stays on the hub.", { name }));
+      return refreshProjects();
+    }
     closeGroupDialog();
-    toast(g ? t("Saved {name}.", { name: nameIn.value.trim() }) : t("Made the group {name}.", { name: nameIn.value.trim() }));
+    toast(g ? t("Saved {name}.", { name }) : t("Made the group {name}.", { name }));
     refreshProjects();
   };
   const del = h("button", { type: "button", class: "btn danger", onclick: async () => {
@@ -1030,7 +1065,9 @@ async function groupDialog(g, preset = []) {
       h("div", { class: "gd-label" }, t("Projects"), countEl),
       h("input", { class: "input", type: "search", placeholder: t("Filter projects"), "aria-label": t("Filter projects"),
         oninput: (e) => { q = e.target.value.toLowerCase(); draw(); } }),
-      list, err,
+      list,
+      shareSel ? [h("label", { class: "gd-label" }, t("On the hub"), h("span", { class: "muted" }, t("Share the whole group as one project there"))), shareSel, shareNote] : null,
+      err,
       h("div", { class: "gd-foot" }, g ? del : h("span"),
         h("div", { class: "gd-actions" }, h("button", { type: "button", class: "btn", onclick: closeGroupDialog }, t("Cancel")),
           h("button", { type: "submit", class: "btn primary" }, g ? t("Save") : t("Make group"))))));
@@ -1047,6 +1084,8 @@ function groupSection(g, list, body) {
     h("summary", null, icon("right", "pg-caret"), h("h2", null, g ? g.name : t("Other projects")),
       h("span", { class: "pg-meta" }, tn(list.length, "{n} project", "{n} projects"), " · ", tn(sum("sessions"), "{n} session", "{n} sessions", { n: fmtNum(sum("sessions")) }),
         " · ", t("{dur} active", { dur: fmtDur(sum("active_s")) })),
+      g?.hub_project ? h("span", { class: "badge accent", title: t("Every project in this group goes to {name} on the hub, including ones that join it later", { name: hubProjectName(g.hub_project) }) },
+        icon("cloud"), t("On the hub as {name}", { name: hubProjectName(g.hub_project) })) : null,
       g && g.folders.length ? h("span", { class: "pg-rules mono", title: g.folders.join("\n") }, g.folders.map((f) => shortPath(f)).join(" · ")) : null,
       g && canGroup() ? h("button", { type: "button", class: "btn small", onclick: (e) => { e.preventDefault(); groupDialog(g); } }, t("Edit")) : null),
     list.length ? body(list) : h("div", { class: "card empty" }, t("No projects in this group yet.")));
@@ -5009,7 +5048,9 @@ function spokeProjectsCard(dv) {
           ...f.overridden.map((o) => h("div", { class: "muted mp-over" }, t("{repo} goes to {project} instead: the hub knows its git remote", { repo: shortPath(o.repo), project: o.project.split("/").pop() }))))),
         ...p.repos.map((r) => h("div", { class: "mp-src" }, icon("branch"),
           h("span", { class: "codeline", title: r.folder }, shortPath(r.folder)), h("span", { class: "muted" }, t("by its git remote {remote}", { remote: r.remote })))),
-        !p.folders.length && !p.repos.length ? h("div", { class: "muted" }, t("No folder here goes to it now.")) : null),
+        ...(p.groups || []).map((g) => h("div", { class: "mp-src" }, icon("projects"),
+          h("a", { href: "#/projects" }, g.name), h("span", { class: "muted" }, t("your group, with every project in it")))),
+        !p.folders.length && !p.repos.length && !(p.groups || []).length ? h("div", { class: "muted" }, t("No folder here goes to it now.")) : null),
       btn);
   };
   const openJoin = async () => {

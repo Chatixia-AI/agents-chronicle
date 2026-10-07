@@ -1693,4 +1693,18 @@ window.CHRONICLE_JA = {
   "On the hub": "ハブ",
   "On the hub as {name}": "ハブでは {name}",
   "Shared from this hub": "このハブから共有中",
+  // A group shared as one project on the hub
+  "Share on the hub": "ハブで共有",
+  "Not shared": "共有しない",
+  "No projects on the hub yet, as of the last push. Make one there, or join one in Settings › Devices.": "最後に送ったときの時点で、ハブにはまだプロジェクトがありません。ハブで作るか、Settings › Devices で参加してください。",
+  "From the next push, its {n} project goes to {name} on the hub, and so does any project that joins the group later. One that leaves it stops going; what it shared stays.": "次に送るときから、この {n} プロジェクトはハブの {name} に送られます。あとからグループに入るプロジェクトも同じです。グループから外れたものは送られなくなり、共有済みのものは残ります。",
+  "From the next push, its {n} projects go to {name} on the hub, and so does any project that joins the group later. One that leaves it stops going; what it shared stays.": "次に送るときから、この {n} プロジェクトはハブの {name} に送られます。あとからグループに入るプロジェクトも同じです。グループから外れたものは送られなくなり、共有済みのものは残ります。",
+  "Stops sharing from the next push. What it shared stays on the hub.": "次に送るときから共有をやめます。共有済みのものはハブに残ります。",
+  "Its projects go to the hub only as they would without the group.": "プロジェクトは、グループがない場合と同じようにハブに送られます。",
+  "Not from here, being recorded on another computer: {names}": "別のコンピューターで記録されたため、ここからは送られません：{names}",
+  "Saved {name}. It goes to {project} on the hub from the next push.": "{name} を保存しました。次に送るときから、ハブの {project} に送られます。",
+  "Saved {name}. It stops sharing from the next push; what it shared stays on the hub.": "{name} を保存しました。次に送るときから共有をやめます。共有済みのものはハブに残ります。",
+  "Share the whole group as one project there": "グループ全体を、ハブの 1 つのプロジェクトとして共有します",
+  "Every project in this group goes to {name} on the hub, including ones that join it later": "このグループのすべてのプロジェクトがハブの {name} に送られます。あとから入るものも含みます",
+  "your group, with every project in it": "あなたのグループ（中のすべてのプロジェクト）",
 };

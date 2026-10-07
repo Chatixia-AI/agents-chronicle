@@ -77,7 +77,8 @@ sessions, knowledge base and hub sharing.
   shows its group in the breadcrumb.
 
 Groups are kept in this computer's archive and never go to a hub. On a hub with people, admins see and change the
-hub's groups; someone limited to some projects sees none.
+hub's groups; someone limited to some projects sees none. On a computer that sends to a hub, a whole group can be
+shared there as one project: see [A group as one project on the hub](devices.md#a-group-as-one-project-on-the-hub).
 
 ## Suggestions and What goes wrong
 
