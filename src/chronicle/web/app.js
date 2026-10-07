@@ -6020,7 +6020,7 @@ route(/^\/appearance$/, async () => {
       // the language names stay in their own language, so each is findable whichever one is showing
       row(t("Language"), t("System follows your browser's language. The page reloads to switch."),
         segControl([["system", t("System")], ["en", "English"], ["ja", "日本語"]], langPref(), (v) => { if (v !== langPref()) setLang(v); })),
-      row(t("Sidebar"), t("The button at the top left, or ⌘B, shows or hides it. Clicking a section in the rail leaves it as it is."),
+      row(t("Sidebar"), t("The button at the top left, or ⌘B, shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away."),
         h("button", { class: "btn", type: "button", onclick: toggleSidebar }, t("Toggle sidebar")))));
 });
 
@@ -6273,7 +6273,23 @@ function toggleSidebar() {
     const hidden = root.classList.toggle("no-sidebar");
     try { localStorage.setItem("chronicle-sidebar", hidden ? "0" : "1"); } catch (e) { /* private mode */ }
   }
+  peekSidebar(false);
   sidebarExpanded();
+}
+// a hidden sidebar peeks out while the pointer rests on the rail or on it, and hides once the pointer leaves both:
+// it never changes whether the sidebar is shown
+let peekTimer = 0;
+function peekSidebar(on, delay = 0) {
+  clearTimeout(peekTimer);
+  const set = () => document.documentElement.classList.toggle("peek-sidebar", on);
+  if (delay) peekTimer = setTimeout(set, delay); else set();
+}
+function wirePeek() {
+  const canPeek = () => document.documentElement.classList.contains("no-sidebar") && matchMedia("(hover: hover) and (min-width: 861px)").matches;
+  for (const el of [$("#rail"), $("#sidebar")]) {
+    el.addEventListener("mouseenter", () => { if (canPeek()) peekSidebar(true, el.id === "rail" ? 180 : 0); });
+    el.addEventListener("mouseleave", () => peekSidebar(false, 220));
+  }
 }
 function sidebarExpanded() {
   const root = document.documentElement;
@@ -6727,6 +6743,7 @@ $("#sync-btn").prepend(icon("sync"));
 $("#sidebar-btn").addEventListener("click", toggleSidebar);
 $("#sidebar-btn").setAttribute("aria-controls", "sidebar");
 sidebarExpanded();
+wirePeek();
 matchMedia("(max-width: 860px)").addEventListener?.("change", sidebarExpanded);
 $("#back-btn").addEventListener("click", () => history.back());
 $("#fwd-btn").addEventListener("click", () => history.forward());
@@ -6763,6 +6780,7 @@ document.addEventListener("keydown", (e) => {
   else if (mod && !e.shiftKey && !e.altKey && key === "b") { e.preventDefault(); toggleSidebar(); }
   else if (e.key === "Escape" && pal.open) { e.preventDefault(); closePalette(); }
   else if (e.key === "Escape" && document.documentElement.classList.contains("show-sidebar")) document.documentElement.classList.remove("show-sidebar");
+  else if (e.key === "Escape" && document.documentElement.classList.contains("peek-sidebar")) peekSidebar(false);
   else if (e.key === "/" && !mod && !typing && !pal.open) { e.preventDefault(); openPalette(); }
 });
 window.addEventListener("hashchange", render);

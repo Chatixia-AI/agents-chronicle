@@ -240,6 +240,14 @@ h3 { font-size: 14px; }
 
 .sidebar { grid-column: 2; grid-row: 1; min-width: 0; overflow: hidden; display: flex; flex-direction: column; padding-top: 52px; font-size: 13px; }
 .no-sidebar .sidebar { visibility: hidden; }
+/* a hidden sidebar peeks out over the page while the pointer is on the rail, and goes again when it leaves */
+@media (min-width: 861px) {
+  .no-sidebar.peek-sidebar .sidebar { visibility: visible; position: fixed; z-index: 45; left: 52px; top: 0; bottom: 28px; width: 256px;
+    background: var(--shell-base); box-shadow: 12px 0 40px rgba(0, 0, 0, 0.18), inset -1px 0 0 var(--border);
+    animation: sb-peek 0.14s ease-out; }
+}
+@keyframes sb-peek { from { opacity: 0; transform: translateX(-10px); } }
+@media (prefers-reduced-motion: reduce) { .no-sidebar.peek-sidebar .sidebar { animation: none; } }
 .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 14px 6px 12px; }
 .sb-head h2 { font-size: 13px; font-weight: 650; letter-spacing: 0; color: var(--vib-ink); }
 .sb-head span { font-size: 11.5px; color: var(--vib-muted); font-variant-numeric: tabular-nums; }
