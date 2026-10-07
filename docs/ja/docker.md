@@ -136,6 +136,15 @@ docker compose exec hub chronicle hub project list
 あとは各コンピューターがそれぞれのフォルダーをプロジェクトに加えます（次の節）。あるコンピューターが git リポジトリのセッションを送ると、同じリポジトリのほかの
 クローンは自動でそのプロジェクトに入ります。
 
+一部のプロジェクトに限られたメンバーには、新しいプロジェクトを加えるまでそれが見えません。その人の
+**Join a project** では「一致するものはありません。」となります。**Team › People** で、またはサーバーで、その人のプロジェクトを
+変えてください。一覧はまるごと置き換わるので、残すプロジェクトもすべて指定します。`Mobile` が見えている人なら：
+
+```bash
+docker compose exec hub chronicle hub people
+docker compose exec hub chronicle hub access <メールアドレスか ID> --project Mobile --project Website
+```
+
 ## 自分のコンピューターをつなぐ
 
 自分のコンピューターも、チームメイトと同じように参加します。専用の招待と、その招待が表示する `chronicle hub join`
@@ -201,7 +210,7 @@ docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --p
 | 送ってくるコンピューターと、最後に送った時刻を見る | `docker compose exec hub chronicle hub status` |
 | プロジェクトを一覧する | `docker compose exec hub chronicle hub project list` |
 | すでにいる人の新しいコードを作る | `docker compose exec hub chronicle hub invite <メールアドレスか ID>` |
-| 見えるプロジェクトを変える | `docker compose exec hub chronicle hub access <メールアドレスか ID> --project <名前>` |
+| 見えるプロジェクトを変える | `docker compose exec hub chronicle hub access <メールアドレスか ID> --project <名前>…`（残すプロジェクトもすべて指定。一覧は置き換わります） |
 | 利用者を外す | `docker compose exec hub chronicle hub remove <メールアドレスか ID>` |
 | ハブのログを読む | `docker compose logs hub` |
 

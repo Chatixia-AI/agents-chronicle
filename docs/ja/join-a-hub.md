@@ -65,6 +65,10 @@ chronicle hub add-folder ~/code/website --project Website
 ダッシュボードでも同じことができます：**Settings › Devices › Projects on the hub › Join a project** で、
 プロジェクトとあなたのフォルダーを選びます。
 
+ハブにそのプロジェクトがないと言われたり、**Join a project** が「一致するものはありません。」となったりしたら、
+そのプロジェクトはまだあなたに見えていません。あなたが参加したあとに作られたプロジェクトは、ハブの管理者が
+あなたに加えるまで見えません。管理者に頼んでから、もう一度試してください。
+
 ## 4. 確認する
 
 ```bash

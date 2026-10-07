@@ -378,9 +378,14 @@ chronicle hub add-folder ~/work/Resona --project Resona
 - **Which projects a person sees.** `--project` takes the name or the path of any project on the hub, set up here or
   not, and can be repeated; `--all-projects` gives every project.
   `chronicle hub access <email|id> --project <name>` (or `--all-projects`) changes it later, from their next request;
-  what their computers already sent stays. `chronicle hub people` shows what each person sees. On the hub's
-  dashboard, **Team › People** lets an admin choose the projects when inviting someone and change them
-  later; on a hub with more than six projects, a search box finds them by name or folder.
+  what their computers already sent stays. It replaces the list, so name every project they keep:
+  `--project Resona --project Website` gives Ben Website and keeps Resona. `chronicle hub people` shows what each
+  person sees. On the hub's dashboard, **Team › People** lets an admin choose the projects when inviting someone and
+  change them later; on a hub with more than six projects, a search box finds them by name or folder.
+- **A new project isn't added to anyone's list.** Someone limited to projects doesn't see a project created
+  after they were given theirs: it isn't on the hub's dashboard for them, **Join a project** answers "Nothing
+  matches.", and `add-folder` says the hub has no such project. Give it to each person who should see it, as
+  above. Admins, and people who see every project, see it at once.
 - **Joining.** A computer that joins as someone limited to projects shares knowledge only, with or without
   `--share knowledge` ([Sharing knowledge only](#sharing-knowledge-only)), and `chronicle hub join` lists the projects
   it shares. `add-folder` then files the sessions in `~/work/Resona` under Resona. A repository whose git remote the
