@@ -994,10 +994,14 @@ def _forget(conn: sqlite3.Connection, sid: str, delete_transcript: bool) -> list
     conn.execute("DELETE FROM analyses WHERE target = ?", (sid,))
     conn.execute("DELETE FROM sessions WHERE id = ?", (sid,))
     removed.append(f"database rows (incl. {n} knowledge items)")
+    def in_use(path: str) -> bool:  # also another session's: a chat export, Bob's or Copilot's database
+        return conn.execute("SELECT 1 FROM sessions WHERE archive_path = ? OR transcript_path = ? LIMIT 1",
+                            (path, path)).fetchone() is not None
+
     paths = []
-    if row and row["archive_path"]:
+    if row and row["archive_path"] and not in_use(row["archive_path"]):
         paths += [Path(row["archive_path"]), session_dir_for(Path(row["archive_path"]))]
-    if delete_transcript and row and row["transcript_path"]:
+    if delete_transcript and row and row["transcript_path"] and not in_use(row["transcript_path"]):
         paths += [Path(row["transcript_path"]), session_dir_for(Path(row["transcript_path"]))]
     for p in paths:
         if p.is_dir():

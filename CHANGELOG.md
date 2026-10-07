@@ -8,6 +8,10 @@
   a reply that follows any tool call. Bob keeps these runs in its own task list; Chronicle doesn't import them.
 - **Choose the agent's model:** Claude Code's tab sets the models for sessions, knowledge bases and screening (an
   alias or a full id such as `claude-opus-5-5`) and the effort; Codex's sets its model and effort.
+- **Forgetting a session keeps files other sessions share:** `chronicle forget` (and the dashboard's Forget) deleted the
+  session's archive even when it was shared: the snapshot of Bob's database every Bob task points to, or the archived
+  chat export behind every imported ChatGPT or Claude.ai chat. With `--delete-transcript`, forgetting one Bob task
+  deleted Bob's own `~/.bob/db/bob.db`. A file is now removed only once no remaining session uses it.
 - **A tidier Status › Analysis:** the card spans the page, with what analyzes on the left and the queue (ready,
   queued, held, spent), why it waits and the knowledge language on the right. A provider's settings sit in two
   columns with a Ready / Not set up badge, endpoint and tuning under **Advanced**, and the buttons on one row.
