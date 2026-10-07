@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 (2026-10-07)
 
 - **A tidier Status › Analysis:** the card spans the page, with what analyzes on the left and the queue (ready,
   queued, held, spent), why it waits and the knowledge language on the right. A provider's settings sit in two
