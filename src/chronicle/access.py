@@ -26,7 +26,8 @@ SESSION_PAGE = re.compile(r"/api/sessions/[\w-]+")
 
 # tables whose rows are a session's content or another project's: read as empty
 EMPTY = ("events", "tool_calls", "subagents", "session_files", "artifacts", "analyses", "glossary", "glossary_usage",
-         "glossary_themes", "suggestions", "suggestion_scopes", "reviews", "files_state")
+         "glossary_themes", "suggestions", "suggestion_scopes", "reviews", "files_state", "project_groups",
+         "project_group_picks")
 
 # sessions columns a limited person sees; the rest read as NULL
 _ALWAYS = ("id", "source", "agent", "machine_id", "project_path", "project_name", "analysis_status", "llm_title")

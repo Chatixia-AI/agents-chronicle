@@ -496,6 +496,12 @@ class App:
         if q.get("project"):
             where.append("project_path = ?")
             params.append(q["project"])
+        elif str(q.get("group") or "").isdigit():  # every project in one of your groups (groups.py)
+            from .groups import paths_in
+
+            paths = paths_in(self.conn, int(q["group"]))
+            where.append(f"project_path IN ({','.join('?' * len(paths))})" if paths else "0")
+            params += paths
         if q.get("outcome"):
             if q["outcome"] == "none":
                 where.append("outcome IS NULL")
@@ -637,6 +643,8 @@ class App:
     def projects(self) -> list[dict]:
         from .hub import declared_projects
 
+        from .groups import assign
+
         labels = project_labels(self.conn)
         shared = set(declared_projects(self.conn))
         # per project: active time in each of the last 12 weeks (oldest first), outcomes and agents
@@ -670,7 +678,42 @@ class App:
             d["weekly"], d["outcomes"], d["agents"] = weekly.get(key, [0.0] * 12), outcomes.get(key, {}), agents.get(key, {})
             d["shared"] = key in shared  # set up on this hub: its sessions and lessons go to the people given it
             rows.append(d)
+        placed = assign(self.conn, [d["project_path"] for d in rows if d["project_path"]])
+        for d in rows:  # the group it's listed under (groups.py), and whether by hand or by its folder
+            d["group"], d["group_by"] = placed.get(d["project_path"], (None, None))
         return rows
+
+    def project_groups(self) -> dict:
+        from .groups import groups
+
+        return {"groups": groups(self.conn), "home": str(Path.home())}  # home: a rule typed as ~/… shows as it'll be kept
+
+    def action_project_groups(self, verb: str, body: dict) -> tuple[dict, int]:
+        """Make, change or remove a group of projects, or move projects into one (groups.py)."""
+        from . import groups
+
+        def gid(v):
+            try:
+                return int(v) if v is not None and v != "" else None
+            except (TypeError, ValueError):
+                raise groups.GroupError("That group no longer exists.") from None
+
+        try:
+            if verb == "save":
+                members = body.get("members")
+                new = groups.save(self.conn, gid(body.get("id")), str(body.get("name") or ""), body.get("folders") or [],
+                                  [str(p) for p in members] if isinstance(members, list) else None)
+                return {"ok": True, "id": new}, 200
+            if verb == "delete":
+                groups.delete(self.conn, gid(body.get("id")))
+                return {"ok": True}, 200
+            paths = body.get("paths")
+            if not isinstance(paths, list) or not paths:
+                return {"error": tr("Pick a project to move.")}, 400
+            groups.move(self.conn, [str(p) for p in paths], gid(body.get("group")))
+            return {"ok": True}, 200
+        except groups.GroupError as exc:
+            return {"error": tr(str(exc))}, 400
 
     def project(self, path: str) -> dict | None:
         c = self.conn
@@ -700,9 +743,12 @@ class App:
         labels = project_labels(c)
         from .hub import declared_projects
 
+        from .groups import group_of
+
         return {
             "project_path": path,
             "shared": path in declared_projects(c),
+            "group": group_of(c, path),
             "label": labels.get(path, stats["project_name"]),
             "stats": dict(stats),
             "kb": dict(kb) if kb else None,
@@ -2244,6 +2290,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.matches(m.group(1), q))
                 if p == "/api/projects":
                     return self._json(app.projects())
+                if p == "/api/project-groups":
+                    return self._json(app.project_groups())
                 if p == "/api/artifacts":
                     return self._json({**app.artifacts(q), "local": self._local()})
                 m = re.fullmatch(r"/api/artifacts/(\d+)/open", p)
@@ -2432,6 +2480,9 @@ def make_handler(app: App, port: int):
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
                     return self._json(*app.action_shared_project(m.group(1), body if isinstance(body, dict) else {},
                                                                  by=self.viewer, here=here))
+                m = re.fullmatch(r"/api/project-groups/(save|delete|move)", p)
+                if m:
+                    return self._json(*app.action_project_groups(m.group(1), body if isinstance(body, dict) else {}))
                 m = re.fullmatch(r"/api/people/(add|invite|role|access|remove|revoke|shared-token)", p)
                 if m:
                     if not self._can_admin():
