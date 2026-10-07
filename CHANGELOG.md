@@ -6,6 +6,9 @@
   sidebar. Tick a few projects and Chronicle offers the folder they share as a rule, so new projects there join on
   their own; move any project in or out by hand from its card. Sessions can be filtered by a whole group. Groups only
   change how projects are listed. See [Project groups](docs/dashboard.md#project-groups).
+- **Clicking a rail icon opens a hidden sidebar:** with the sidebar hidden, a click on a section's icon now shows the
+  sidebar and keeps it shown, as the sidebar button does. Hovering still only peeks. Search, which has no sidebar,
+  and narrow windows leave it hidden.
 
 ## 0.14.2 (2026-10-07)
 

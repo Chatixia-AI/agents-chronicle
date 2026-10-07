@@ -6279,7 +6279,7 @@ function renderRail() {
   const rail = $("#rail");
   const link = (sx) => {
     const a = h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label, "aria-describedby": "rail-tip",
-      onclick: hideRailTip }, icon(sx.icon || sx.key)); // it only navigates: the sidebar button shows or hides the sidebar
+      onclick: () => { hideRailTip(); if (sx.key !== "search") showSidebar(); } }, icon(sx.icon || sx.key)); // search has no sidebar
     // a tooltip of our own: the native one comes late, and not at all in the app window
     a.addEventListener("mouseenter", () => { if (matchMedia("(hover: hover)").matches) showRailTip(a, sx); });
     a.addEventListener("focus", () => { if (a.matches(":focus-visible")) showRailTip(a, sx); });
@@ -6485,8 +6485,20 @@ function toggleSidebar() {
   peekSidebar(false);
   sidebarExpanded();
 }
+// A click on a rail icon opens a hidden sidebar for good, as the sidebar button would (wide windows: a narrow one's
+// sidebar covers the page). It was peeking already: it stays where it is, with the clicked section's lists.
+function showSidebar() {
+  const root = document.documentElement;
+  if (!root.classList.contains("no-sidebar") || matchMedia("(max-width: 860px)").matches) return;
+  root.classList.remove("no-sidebar");
+  try { localStorage.setItem("chronicle-sidebar", "1"); } catch (e) { /* private mode */ }
+  clearTimeout(peekTimer);
+  clearTimeout(peekHoverTimer);
+  root.classList.remove("peek-sidebar"); // not peekSidebar(false): that would draw the old page's lists first
+  sidebarExpanded();
+}
 // a hidden sidebar peeks out while the pointer rests on the rail or on it, and hides once the pointer leaves both:
-// it never changes whether the sidebar is shown
+// only a click on an icon (showSidebar) or the sidebar button changes whether the sidebar is shown
 let peekTimer = 0, peekHoverTimer = 0;
 function peekSidebar(on, delay = 0) {
   clearTimeout(peekTimer);
