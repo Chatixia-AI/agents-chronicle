@@ -56,7 +56,8 @@ TEAM_DAYS = ("7", "30", "90")  # the team Home's periods, first the default
 TEAM_MAX_PROJECTS = 500
 # headers a proxy adds: a request with any of them came through one, so it is not from someone at this computer
 PROXY_HEADERS = ("X-Forwarded-For", "Tailscale-User-Login", "X-Forwarded-Proto", "X-Real-IP", "Forwarded")
-HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub/done", "/api/hub/hello")
+HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub/done", "/api/hub/hello",
+            "/api/hub/withdraw")
 SIGNIN_HELP = ("Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
                "(Settings › Devices).")
 mimetypes.add_type("application/manifest+json", ".webmanifest")
@@ -1076,7 +1077,8 @@ class App:
         from .hub import last_team
 
         role = "spoke" if self.cfg.is_spoke else "hub" if read_token(self.cfg) else "single"
-        seen = ((last_folders(self.cfg) or {}).get("folders") or {}) if role == "spoke" else {}
+        recorded = (last_folders(self.cfg) or {}) if role == "spoke" else {}
+        seen = recorded.get("folders") or {}
         folders = [{"folder": f, "project": p, "name": Path(p).name or p, "sessions": (seen.get(f) or {}).get("sessions"),
                     "overridden": (seen.get(f) or {}).get("overridden") or []}
                    for f, p in sorted(self.cfg.hub_folders.items())] if role == "spoke" else []
@@ -1091,12 +1093,160 @@ class App:
             "team": last_team(self.cfg) if role == "spoke" else None,
             "store": self.team_store_info() if role != "spoke" else None,
             "folders": folders,
+            "projects": self._my_hub_projects(folders, recorded) if role == "spoke" else [],
+            "hub_name": recorded.get("hub") if role == "spoke" else None,
             "machines": machines(self.conn, self.cfg),
             "path_map": self.cfg.hub_path_map,
             "allowed_hosts": self.cfg.server_allowed_hosts,
             "allowed_users": self.cfg.server_allowed_users,
             "port": self.cfg.server_port,
         }
+
+    def _my_hub_projects(self, folders: list[dict], recorded: dict) -> list[dict]:
+        """The hub's projects this computer is in: through a folder added to one, a repository whose git remote the hub
+        files there (as of the last push), or one it left. Its name as the hub gives it."""
+        names = {p["path"]: p.get("name") for p in recorded.get("projects") or [] if isinstance(p, dict) and p.get("path")}
+        out: dict[str, dict] = {}
+
+        def row(path: str) -> dict:
+            return out.setdefault(path, {"path": path, "name": names.get(path) or Path(path).name or path,
+                                         "folders": [], "repos": [], "left": path in self.cfg.hub_left})
+
+        for f in folders:
+            row(f["project"])["folders"].append(f)
+        for path, repos in (recorded.get("remotes") or {}).items():
+            if isinstance(repos, list):
+                row(path)["repos"] += [r for r in repos if isinstance(r, dict)]
+        for path in self.cfg.hub_left:
+            row(path)
+        return sorted(out.values(), key=lambda r: (r["left"], r["name"].lower()))
+
+    # ---- Devices › Projects on the hub (a computer that sends to one): join, leave and rejoin, take a folder back
+    def hub_project_choices(self) -> dict:
+        """For Join a project: the hub's projects (asked now) and this computer's folders that have sessions."""
+        from .hub import SHARED_AGENTS, HubError, handshake
+
+        if not self.cfg.is_spoke:
+            return {"error": tr("this computer has not joined a hub")}
+        try:
+            hello = handshake(self.cfg)
+        except HubError as exc:
+            return {"error": tr("Can't reach the hub: {error}", error=str(exc))}
+        marks = ", ".join("?" for _ in SHARED_AGENTS)
+        local = [{"path": r[0], "name": r[1] or Path(r[0]).name, "sessions": r[2]} for r in self.conn.execute(
+            "SELECT project_path, MAX(project_name), COUNT(*) FROM sessions WHERE project_path LIKE '/%' "
+            f"AND source NOT IN ('history', 'remote') AND agent IN ({marks}) GROUP BY project_path "
+            "ORDER BY MAX(started_at) DESC LIMIT 300", SHARED_AGENTS)]
+        projects = [{"path": p["path"], "name": p.get("name") or Path(p["path"]).name, "sessions": p.get("sessions") or 0}
+                    for p in hello.get("projects") or [] if isinstance(p, dict) and isinstance(p.get("path"), str)]
+        return {"projects": projects, "folders": local, "hub": hello.get("hub")}
+
+    def action_hub_project(self, verb: str, body: dict) -> tuple[dict, int]:
+        """add: file a folder here under one of the hub's projects (joining it); remove: take a wrongly added folder
+        back, and what it shared; leave and rejoin: stop or start sharing to a project, keeping what it has."""
+        from . import hub
+
+        if not self.cfg.is_spoke:
+            return {"error": tr("this computer has not joined a hub")}, 400
+        out: dict = {"ok": True}
+        try:
+            if verb == "add":
+                folder = str(body.get("folder") or "").strip()
+                if not folder.startswith(("/", "~")):
+                    return {"error": tr("Give the folder's full path, such as /Users/you/code/app.")}, 400
+                folder = str(Path(folder).expanduser().resolve())
+                hello = hub.handshake(self.cfg)
+                project = next((p for p in hello.get("projects") or [] if isinstance(p, dict)
+                                and p.get("path") == body.get("project")), None)
+                if not project:
+                    return {"error": tr("The hub has no such project, or you don't see it.")}, 400
+                self.cfg, remote = hub.add_folder(self.cfg, folder, project, hello)
+                out.update(folder=folder, name=project.get("name") or Path(project["path"]).name, remote=remote)
+            elif verb == "remove":
+                self.cfg, out["taken"] = hub.remove_folder(self.cfg, str(body.get("folder") or ""))
+            else:
+                path = str(body.get("project") or "")
+                if not path.startswith("/") or len(path) > 1024:
+                    return {"error": tr("Which project?")}, 400
+                self.cfg = hub.leave_project(self.cfg, path) if verb == "leave" else hub.rejoin_project(self.cfg, path)
+        except hub.FolderError as exc:
+            return {"error": exc.shown()}, 400
+        except hub.HubError as exc:
+            return {"error": tr("Can't reach the hub: {error}", error=str(exc))}, 502
+        self._cfg_sig = self._config_sig()
+        out["pushing"] = self.action_push()  # the hub hears of it now, and the lessons that come back change with it
+        return out, 200
+
+    def action_leave_hub(self) -> dict:
+        """Settings › Devices › Leave the hub (`chronicle hub leave`)."""
+        from .hub import leave_hub
+
+        if not self.cfg.is_spoke:
+            return {"error": tr("this computer has not joined a hub")}
+        url = self.cfg.hub_url
+        self.cfg = leave_hub(self.cfg)
+        self._cfg_sig = self._config_sig()
+        return {"ok": True, "hub": url}
+
+    # ---- Team › Hub settings: what an admin may change about this hub
+    def hub_settings(self) -> dict:
+        """This hub's name and address, what it takes, and which of them a container's variables set (each start
+        writes them again, so the dashboard can't change them)."""
+        from .hub import local_machine, read_token
+
+        if self.cfg.is_spoke or not read_token(self.cfg):
+            return {"error": tr("this computer is not a hub")}
+        container = bool(os.environ.get("CHRONICLE_CONTAINER"))
+        return {"name": self.cfg.hub_name, "default_name": local_machine(self.cfg)["name"],
+                "address": self.cfg.hub_address, "accept": self.cfg.hub_accept, "store": self.cfg.hub_store,
+                "container": container, "dedicated": self.cfg.hub_dedicated,
+                "managed": {"address": container, "name": container and bool((os.environ.get("CHRONICLE_HUB_NAME") or "").strip())},
+                "home": str(self.cfg.home), "db": str(self.cfg.db_path)}
+
+    def action_hub_settings(self, body: dict, by: dict | None) -> tuple[dict, int]:
+        """Rename this hub, or change the address computers and browsers reach it at (invites and sign-in links
+        use it). A new address's host name is added to [server] allowed_hosts, as `chronicle hub enable --url` does."""
+        from . import people
+        from .config import load_config, set_config_value
+        from .hub import read_token
+
+        if self.cfg.is_spoke or not read_token(self.cfg):
+            return {"error": tr("this computer is not a hub")}, 400
+        managed = self.hub_settings()["managed"]
+        changed: dict = {}
+        if "name" in body:
+            if managed["name"]:
+                return {"error": tr("CHRONICLE_HUB_NAME in the hub's .env sets its name: change it there.")}, 400
+            name = " ".join("".join(c for c in str(body.get("name") or "") if c.isprintable() or c.isspace()).split())
+            if len(name) > 80:
+                return {"error": tr("A hub's name is up to 80 characters.")}, 400
+            if not name and os.environ.get("CHRONICLE_CONTAINER"):  # else it would be the container's random host name
+                return {"error": tr("Give the hub a name.")}, 400
+            changed["name"] = name
+        if "address" in body:
+            if managed["address"]:
+                return {"error": tr("CHRONICLE_HUB_URL in the hub's .env sets its address: change it there.")}, 400
+            address = str(body.get("address") or "").strip().rstrip("/")
+            parts = urlparse(address)
+            if address and (parts.scheme not in ("http", "https") or not parts.hostname or parts.path or parts.query
+                            or parts.fragment or parts.username or parts.password):
+                return {"error": tr("An address is like https://chronicle.example.com: http or https and a host name, "
+                                    "with a port if needed.")}, 400
+            changed["address"] = address
+        if not changed:
+            return {"error": tr("Nothing to change.")}, 400
+        if "name" in changed:
+            set_config_value(self.cfg, "hub", "name", json.dumps(changed["name"]))
+        if "address" in changed:
+            set_config_value(self.cfg, "hub", "address", json.dumps(changed["address"]))
+            host = (urlparse(changed["address"]).hostname or "").lower()
+            if host and host not in ("127.0.0.1", "localhost", "::1") and host not in self.cfg.server_allowed_hosts:
+                set_config_value(self.cfg, "server", "allowed_hosts", json.dumps([*self.cfg.server_allowed_hosts, host]))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        people.audit(self.conn, people.actor_of(by), "settings", None, **changed)
+        self.conn.commit()
+        return {"ok": True, **self.hub_settings()}, 200
 
     # ---- Devices › Team store (team_store.py): the password goes in, never out
     def team_store_info(self) -> dict:
@@ -1952,6 +2102,10 @@ def make_handler(app: App, port: int):
                     return self._json(hub.hello(app.cfg, app.conn, body, person))
                 if p == "/api/hub/lessons":
                     return self._json(hub.team_lessons(app.cfg, body, person, app.conn))
+                if p == "/api/hub/withdraw":  # the computer named in the body, which a person's token is bound to
+                    if not body.get("machine"):
+                        return self._json({"error": "bad machine id"}, 400)
+                    return self._json(hub.withdraw(app.cfg, app.conn, body, person))
                 if p == "/api/hub/done":
                     hub.check_machine(app.cfg, str(body.get("machine") or ""))
                     app.ingest.request()
@@ -2149,6 +2303,10 @@ def make_handler(app: App, port: int):
                     return self._json({**app.devices(), "here": self._from_here(), **self._me()})
                 if p == "/api/team-store":
                     return self._json(app.team_store_status())
+                if p == "/api/team/settings":
+                    if not self._can_admin():
+                        return self._json({"error": tr("only an admin of this hub can do this")}, 403)
+                    return self._json(app.hub_settings())
                 if p == "/api/projects/shared":
                     if not self._can_admin():
                         return self._json({"error": tr("only an admin of this hub can do this")}, 403)
@@ -2253,6 +2411,19 @@ def make_handler(app: App, port: int):
                     if "all_folders" in body:
                         return self._json(app.action_share_folders(body.get("all_folders")))
                     return self._json(app.action_share_mode(str(body.get("share") or "")))
+                m = re.fullmatch(r"/api/devices/projects/(choices|add|remove|leave|rejoin)", p)
+                if m or p == "/api/devices/leave-hub":  # what leaves this computer, and for which projects: only from here
+                    if not self._from_here():
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    if p == "/api/devices/leave-hub":
+                        return self._json(app.action_leave_hub())
+                    if m.group(1) == "choices":
+                        return self._json(app.hub_project_choices())
+                    return self._json(*app.action_hub_project(m.group(1), body if isinstance(body, dict) else {}))
+                if p == "/api/team/settings":
+                    if not self._can_admin():
+                        return self._json({"error": tr("only an admin of this hub can do this")}, 403)
+                    return self._json(*app.action_hub_settings(body if isinstance(body, dict) else {}, self.viewer))
                 m = re.fullmatch(r"/api/projects/shared/(add|remove)", p)
                 if m:  # what leaves this computer (its sessions go to the team store): only from here. A dedicated hub
                     # has no sessions of its own, so there its admins may make (by name) and remove projects too.

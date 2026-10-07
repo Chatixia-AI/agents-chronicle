@@ -852,7 +852,7 @@ function navKey(path) {
   if (path.startsWith("/suggestions")) return "suggestions";
   if (path.startsWith("/friction")) return "friction";
   if (path.startsWith("/artifacts")) return "artifacts";
-  if (path.startsWith("/team")) return { "/team/projects": "teamprojects", "/team/computers": "teamcomputers", "/team/store": "teamstore" }[path] || "team";
+  if (path.startsWith("/team")) return { "/team/projects": "teamprojects", "/team/computers": "teamcomputers", "/team/store": "teamstore", "/team/settings": "teamsettings" }[path] || "team";
   if (path === "/activity") return "activity";
   if (path === "/overview") return "teamhome";
   if (path === "/" || path === "") return dedicated() ? "teamhome" : "overview";
@@ -4648,61 +4648,214 @@ route(/^\/status$/, async () => {
 // =====================================================================================
 // Devices: this computer as a hub or as one that sends to a hub, and the dashboard on a phone (Tailscale)
 // =====================================================================================
-// On a computer that sends to a hub: what it sends, and the teammates' lessons a hub with a team store sends back.
-// Changing what leaves the computer works only at the computer itself (dv.here), never from a phone.
-function shareSection(dv) {
-  const pick = async (share) => {
+// On a computer that sends to a hub (Settings › Devices): the hub, this computer's projects there, and what it
+// shares. What leaves the computer changes only at the computer itself (dv.here), never from a phone.
+function hubHost(url) { try { return new URL(url).host; } catch { return url || ""; } }
+async function devicesPost(path, body) { // null when it failed, after saying why
+  try {
+    const r = await post(path, body);
+    if (r.error) { toast(r.error, 7000); return null; }
+    return r;
+  } catch (e) { if (!e.handled) toast(e.message, 7000); return null; }
+}
+const notHere = () => t("Change this on the computer itself, not from another device.");
+
+function spokeHubCard(dv) {
+  const lp = dv.last_push, knowledge = dv.share === "knowledge", host = hubHost(dv.hub_url);
+  const failed = !!lp?.errors?.length;
+  const sendNow = h("button", { class: "btn small primary", type: "button", onclick: async () => {
+    sendNow.disabled = true;
+    const r = await devicesPost("/api/devices/push");
+    if (!r) { sendNow.disabled = false; return; }
+    toast(r.started ? t("Sending to the hub…") : t("Already sending"));
+    if (r.started) watchJob("push");
+  } }, knowledge ? t("Share now") : t("Send now"));
+  const leave = h("button", { class: "btn small danger", type: "button", disabled: !dv.here, title: dv.here ? "" : notHere(), onclick: async () => {
+    if (!confirm(t("Leave the hub at {host}? This computer stops sending to it, and records and analyzes its own sessions again. The hub keeps what it was sent. Joining again takes a new invite.", { host }))) return;
+    leave.disabled = true;
+    if (await devicesPost("/api/devices/leave-hub")) { toast(t("This computer left the hub.")); render(); } else leave.disabled = false;
+  } }, t("Leave the hub…"));
+  const fact = (value, label) => h("div", { class: "fact" }, h("b", null, value), h("span", null, label));
+  const state = !lp ? h("span", { class: "badge" }, h("i", { class: "sdot" }), t("Nothing sent yet"))
+    : failed ? h("span", { class: "badge warning" }, h("i", { class: "sdot" }), t("Last send had problems"))
+      : h("span", { class: "badge good" }, h("i", { class: "sdot" }), t("Connected"));
+  return h("section", { class: "card hl-card" },
+    cardHead(t("Hub"), { iconName: "organization", tools: state }),
+    h("div", { class: "hl-name" }, h("b", null, dv.hub_name || host), dv.hub_name ? h("span", { class: "codeline" }, host) : null),
+    lp && lp.sent != null ? h("div", { class: "hero-facts" },
+      fact(ago(lp.at), knowledge ? t("last shared") : t("last sent")),
+      fact(fmtNum(lp.sent + lp.unchanged), knowledge ? t("sessions shared") : t("files sent")),
+      knowledge && lp.kept ? fact(fmtNum(lp.kept), t("kept here")) : null,
+      knowledge ? fact(fmtNum(dv.team?.lessons || 0), t("teammates' lessons")) : null)
+      : lp ? h("div", { class: "muted hl-note" }, t("Last sent {ago}: {summary}", { ago: ago(lp.at), summary: lp.summary })) : null,
+    ...(lp?.errors || []).map((e) => h("div", { class: "warn-line" }, e)),
+    knowledge ? h("p", { class: "muted hl-note" }, dv.team
+      ? t("Teammates' lessons are read-only here: your MCP tools answer with them, and the start-of-session notes list them as teammates'.")
+      : t("No teammates' lessons yet: a hub with a team store sends them back after each share.")) : null,
+    h("div", { class: "hl-actions" }, sendNow, hubDashboardLink(dv.hub_url, "btn small"), h("span", { class: "grow" }), leave));
+}
+
+// A search box over a list (the hub's projects, this computer's folders), or a typed folder when `typed` allows it
+function pickBox({ items, label, placeholder, line, typed }) {
+  let chosen = null, matches = [], active = -1;
+  const listId = `pk-${Math.random().toString(36).slice(2)}`;
+  const input = h("input", { class: "input", type: "search", placeholder, autocomplete: "off", spellcheck: "false", role: "combobox",
+    "aria-autocomplete": "list", "aria-expanded": "false", "aria-controls": listId, "aria-label": label });
+  const list = h("ul", { class: "sp-options", id: listId, role: "listbox", hidden: true });
+  const isPath = (q) => typed && (q.startsWith("/") || q.startsWith("~"));
+  const close = () => { list.hidden = true; active = -1; input.setAttribute("aria-expanded", "false"); input.removeAttribute("aria-activedescendant"); };
+  const choose = (x) => { chosen = x; input.value = x.typed ? x.path : x.name; close(); };
+  const mark = (i) => {
+    active = i;
+    [...list.children].forEach((li, j) => li.setAttribute("aria-selected", String(j === i)));
+    if (i >= 0 && list.children[i]) { input.setAttribute("aria-activedescendant", list.children[i].id); list.children[i].scrollIntoView({ block: "nearest" }); }
+  };
+  const filter = () => {
+    chosen = null;
+    const q = input.value.trim(), terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+    matches = items.filter((x) => terms.every((w) => `${x.name} ${x.path}`.toLowerCase().includes(w))).slice(0, 8);
+    if (isPath(q)) matches = [{ path: q, name: q, typed: true }, ...matches];
+    list.replaceChildren(...matches.map((x, i) => h("li", { id: `${listId}-${i}`, role: "option", "aria-selected": "false", class: "sp-option",
+      onmousedown: (e) => { e.preventDefault(); choose(x); } },
+      x.typed ? [icon("projects"), h("span", null, tx("The folder {path}", { path: h("b", null, x.path) }))]
+        : [h("b", null, x.name), h("span", { class: "muted" }, ` ${line(x)}`), h("small", { class: "muted sp-opt-path" }, shortPath(x.path))])),
+      ...(q && !matches.length ? [h("li", { class: "sp-option muted", "aria-disabled": "true" }, typed ? t("Nothing matches. Type a folder, starting with / or ~.") : t("Nothing matches."))] : []));
+    list.hidden = !matches.length && !q;
+    input.setAttribute("aria-expanded", String(!list.hidden));
+    mark(matches.length ? 0 : -1);
+  };
+  input.addEventListener("input", filter);
+  input.addEventListener("focus", filter);
+  input.addEventListener("blur", () => setTimeout(close, 100));
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+      e.preventDefault();
+      if (list.hidden) filter();
+      if (matches.length) mark((active + (e.key === "ArrowDown" ? 1 : matches.length - 1)) % matches.length);
+    } else if (e.key === "Enter" && !list.hidden && active >= 0 && matches[active]) {
+      e.preventDefault(); choose(matches[active]);
+    } else if (e.key === "Escape" && !list.hidden) { e.preventDefault(); close(); }
+  });
+  const value = () => { // what was picked, the one match, or a typed folder
+    const q = input.value.trim();
+    return chosen || (isPath(q) ? { path: q, typed: true } : matches.length === 1 ? matches[0] : null);
+  };
+  return { el: h("label", { class: "pk-field" }, h("span", { class: "pk-label" }, label), h("div", { class: "sp-combo" }, input, list)), input, value };
+}
+
+// The hub's projects this computer is in: through a folder added to one, or a repository whose git remote the hub
+// files there. Join (add a folder), leave and rejoin (what was shared stays), or remove a folder added by mistake
+// (the hub deletes what it shared from there).
+function spokeProjectsCard(dv) {
+  const knowledge = dv.share === "knowledge", projects = dv.projects || [];
+  const panel = h("div", { class: "mp-join", hidden: true });
+  const act = async (verb, body, said) => {
+    const r = await devicesPost(`/api/devices/projects/${verb}`, body);
+    if (!r) return false;
+    toast(said(r), 7000);
+    if (r.pushing) watchJob("push");
+    render();
+    return true;
+  };
+  const removeBtn = (f, p) => {
+    const b = h("button", { class: "link-btn danger", type: "button", disabled: !dv.here, title: dv.here ? t("For a folder added by mistake") : notHere(), onclick: async () => {
+      if (!confirm(knowledge
+        ? t("Remove {folder} from {name}? Its sessions stop going there, and the hub deletes what this computer shared from it, with the lessons. Only for a folder added by mistake: to keep what you shared, leave the project instead.", { folder: f.folder, name: p.name })
+        : t("Remove {folder} from {name}? The hub files its sessions by their git remote or their own folder again.", { folder: f.folder, name: p.name }))) return;
+      b.disabled = true;
+      if (!await act("remove", { folder: f.folder }, (r) => r.taken == null ? t("{folder} no longer goes to {name}.", { folder: shortPath(f.folder), name: p.name })
+        : tn(r.taken, "Removed. The hub deleted the {n} session this computer shared from there.", "Removed. The hub deleted the {n} sessions this computer shared from there.", { n: fmtNum(r.taken) }))) b.disabled = false;
+    } }, t("Remove"));
+    return b;
+  };
+  const row = (p) => {
+    const btn = knowledge ? h("button", { class: "btn small", type: "button", disabled: !dv.here, title: dv.here ? "" : notHere(), onclick: async () => {
+      if (!p.left && !confirm(t("Leave {name}? This computer stops sharing its sessions there and stops getting its teammates' lessons. What it already shared stays on the hub.", { name: p.name }))) return;
+      btn.disabled = true;
+      if (!await act(p.left ? "rejoin" : "leave", { project: p.path }, () => (p.left ? t("Rejoined {name}: its sessions are shared again.", { name: p.name })
+        : t("Left {name}. What this computer shared there stays on the hub.", { name: p.name })))) btn.disabled = false;
+    } }, p.left ? t("Rejoin") : t("Leave")) : null;
+    return h("li", { class: `sp-row mp-row${p.left ? " is-left" : ""}` },
+      h("div", { class: "sp-main" },
+        h("div", { class: "mp-head" }, h("span", { class: "sp-name" }, p.name),
+          p.left ? h("span", { class: "badge", title: t("This computer no longer shares here or gets its lessons. What it shared stays on the hub.") }, t("Left")) : null),
+        ...p.folders.map((f) => h("div", { class: "mp-src" }, icon("projects"),
+          h("span", { class: "codeline", title: f.folder }, shortPath(f.folder)),
+          h("span", { class: "muted" }, f.sessions == null ? t("not shared yet") : tn(f.sessions, "{n} session shared", "{n} sessions shared", { n: fmtNum(f.sessions) })),
+          removeBtn(f, p),
+          ...f.overridden.map((o) => h("div", { class: "muted mp-over" }, t("{repo} goes to {project} instead: the hub knows its git remote", { repo: shortPath(o.repo), project: o.project.split("/").pop() }))))),
+        ...p.repos.map((r) => h("div", { class: "mp-src" }, icon("branch"),
+          h("span", { class: "codeline", title: r.folder }, shortPath(r.folder)), h("span", { class: "muted" }, t("by its git remote {remote}", { remote: r.remote })))),
+        !p.folders.length && !p.repos.length ? h("div", { class: "muted" }, t("No folder here goes to it now.")) : null),
+      btn);
+  };
+  const openJoin = async () => {
+    panel.hidden = false;
+    panel.replaceChildren(h("div", { class: "muted" }, t("Asking the hub for its projects…")));
+    const r = await devicesPost("/api/devices/projects/choices");
+    if (!r) { panel.hidden = true; return; }
+    const proj = pickBox({ items: r.projects, label: t("Project on the hub"), placeholder: t("Search the hub's projects"),
+      line: (x) => tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }) });
+    const folder = pickBox({ items: r.folders, label: t("Folder on this computer"), placeholder: t("Search your folders, or type one like ~/code/app"),
+      line: (x) => tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }), typed: true });
+    const join = h("button", { class: "btn primary", type: "submit" }, t("Join"));
+    panel.replaceChildren(h("form", { class: "mp-form", onsubmit: async (e) => {
+      e.preventDefault();
+      const p = proj.value(), f = folder.value();
+      if (!p) { toast(t("Pick one of the hub's projects.")); proj.input.focus(); return; }
+      if (!f) { toast(t("Pick a folder, or type its full path.")); folder.input.focus(); return; }
+      join.disabled = true;
+      if (!await act("add", { project: p.path, folder: f.path }, (x) => x.remote
+        ? t("Its sessions already go to {name}: the hub knows its git remote ({remote}).", { name: x.name, remote: x.remote })
+        : t("Sessions in {folder} now go to {name}.", { folder: shortPath(x.folder), name: x.name }))) join.disabled = false;
+    } },
+      h("p", { class: "muted" }, t("Pick the project, then the folder here that holds it. Sessions in that folder and the folders below it are shared there, and its teammates' lessons come back.")),
+      h("div", { class: "mp-fields" }, proj.el, folder.el),
+      h("div", { class: "mp-actions" }, join, h("button", { class: "btn", type: "button", onclick: () => { panel.hidden = true; } }, t("Cancel")))));
+    proj.input.focus();
+  };
+  const joinBtn = h("button", { class: "btn small", type: "button", disabled: !dv.here, title: dv.here ? "" : notHere(), onclick: openJoin }, t("Join a project"));
+  return h("section", { class: "card" },
+    cardHead(t("Projects on the hub"), { iconName: "projects", tools: joinBtn }),
+    panel,
+    projects.length ? h("ul", { class: "sp-list" }, projects.map(row))
+      : h("p", { class: "muted" }, t("This computer isn't in any of the hub's projects yet. Join one to share its sessions there and get its teammates' lessons.")),
+    knowledge && projects.length ? h("p", { class: "muted mp-foot" }, t("Leaving a project keeps what this computer shared there. Remove is for a folder added by mistake: the hub deletes what it shared from it.")) : null);
+}
+
+// What this computer sends: transcripts, or only what it learned; and from which folders
+function spokeSharingCard(dv) {
+  const knowledge = dv.share === "knowledge";
+  const pickShare = async (share) => {
     if (share === dv.share) return;
     if (share === "everything" && !confirm(t("Send this computer's transcripts to the hub? The hub then records and analyzes them, and this computer stops analyzing its own sessions."))) return;
-    const r = await post("/api/devices/share", { share });
-    if (!r || r.error) { toast(r?.error || t("Could not change what this computer sends")); return; }
+    if (!await devicesPost("/api/devices/share", { share })) return;
     toast(share === "knowledge" ? t("This computer now shares only summaries and project lessons.") : t("This computer now sends its transcripts to the hub."));
     render();
   };
-  const sendNow = h("button", { class: "btn small", type: "button", onclick: async () => {
-    sendNow.disabled = true;
-    const r = await post("/api/devices/push");
-    toast(r.started ? t("Sending to the hub…") : t("Already sending"));
-    if (r.started) watchJob("push");
-  } }, dv.share === "knowledge" ? t("Share and get team lessons now") : t("Send now"));
-  const team = dv.team;
-  return [
-    h("div", { class: "subhead" }, t("What this computer sends")),
-    h("div", { class: "analyzer" },
-      h("div", { class: "seg", role: "radiogroup", "aria-label": t("What this computer sends") }, [
-        ["knowledge", t("Summaries and lessons")], ["everything", t("Transcripts")]].map(([v, label]) =>
-        h("button", { type: "button", role: "radio", class: v === dv.share ? "on" : "", "aria-checked": String(v === dv.share),
-          disabled: !dv.here && v !== dv.share, onclick: () => pick(v) }, label))),
-      h("div", { class: "muted" }, dv.share === "knowledge"
-        ? t("Analyzed here with your own login; the hub gets each session's summary and project lessons. Transcripts and lessons about you stay here.")
-        : t("The hub records and analyzes the transcripts; this computer no longer analyzes its own sessions.")),
-      dv.here ? null : h("div", { class: "muted" }, t("Change this on the computer itself, not from another device."))),
-    dv.share === "knowledge" && dv.all_folders != null ? foldersChoice(dv) : null,
-    dv.share === "knowledge" ? h("div", { class: "status-list" },
-      h("div", null, team ? tn(team.lessons || 0, "{n} lesson from teammates here", "{n} lessons from teammates here") + (team.at ? t(" · checked {ago}", { ago: ago(team.at) }) : "")
-        : t("No teammates' lessons yet: a hub that keeps a team store sends them back after each push.")),
-      h("div", { class: "muted" }, t("They are read-only here: your MCP tools answer with them and the start-of-session notes list them, marked as teammates'."))) : null,
-    h("p", null, sendNow)];
-}
-
-// Sharing knowledge: only the sessions the hub files under one of its projects ([hub] all_folders = false), or all.
-function foldersChoice(dv) {
-  const pick = async (all) => {
+  const pickFolders = async (all) => {
     if (all === dv.all_folders) return;
     if (all && !confirm(t("Share the summaries and project lessons of sessions in every folder on this computer, including projects the hub doesn't have?"))) return;
-    const r = await post("/api/devices/share", { all_folders: all });
-    if (!r || r.error) { toast(r?.error || t("Could not change what this computer sends")); return; }
+    if (!await devicesPost("/api/devices/share", { all_folders: all })) return;
     toast(all ? t("This computer now shares sessions from every folder.") : t("This computer now shares only sessions in the hub's projects."));
     render();
   };
-  return h("div", { class: "analyzer" },
-    h("div", { class: "seg", role: "radiogroup", "aria-label": t("Which sessions it shares") }, [
-      [false, t("The hub's projects")], [true, t("Every folder")]].map(([v, label]) =>
-      h("button", { type: "button", role: "radio", class: v === dv.all_folders ? "on" : "", "aria-checked": String(v === dv.all_folders),
-        disabled: !dv.here && v !== dv.all_folders, onclick: () => pick(v) }, label))),
-    h("div", { class: "muted" }, dv.all_folders
-      ? t("Sessions from every folder are shared, including projects the hub doesn't have.")
-      : t("Only sessions in the folders added below, or in a repository whose git remote the hub knows, are shared. The rest stay here.")));
+  const seg = (label, options, current, pick) => h("div", { class: "seg", role: "radiogroup", "aria-label": label }, options.map(([v, text]) =>
+    h("button", { type: "button", role: "radio", class: v === current ? "on" : "", "aria-checked": String(v === current),
+      disabled: !dv.here && v !== current, onclick: () => pick(v) }, text)));
+  return h("section", { class: "card" },
+    cardHead(t("What this computer shares"), { iconName: "sync" }),
+    h("div", { class: "set-row" },
+      h("div", null, h("b", null, t("What it sends")),
+        h("div", { class: "muted" }, knowledge ? t("Analyzed here with your own login. The hub gets each session's summary and project lessons; transcripts and lessons about you stay here.")
+          : t("The hub records and analyzes the transcripts; this computer no longer analyzes its own sessions. This dashboard shows what it had before it joined."))),
+      seg(t("What it sends"), [["knowledge", t("Summaries and lessons")], ["everything", t("Transcripts")]], dv.share, pickShare)),
+    knowledge && dv.all_folders != null ? h("div", { class: "set-row" },
+      h("div", null, h("b", null, t("Which sessions")),
+        h("div", { class: "muted" }, dv.all_folders ? t("Every folder's, including projects the hub doesn't have.")
+          : t("Only those in the hub's projects: the folders above, and repositories whose git remote the hub knows. The rest stay here."))),
+      seg(t("Which sessions"), [[false, t("The hub's projects")], [true, t("Every folder")]], dv.all_folders, pickFolders)) : null,
+    dv.here ? null : h("p", { class: "muted" }, notHere()));
 }
 
 // On a hub: keep the team's record in Postgres as well (team_store.py). The password goes to the server, never back.
@@ -4774,10 +4927,10 @@ function teamStoreCard(dv) {
 
 // On a computer that sends to a hub: the hub's dashboard opens signed in as this computer's person, through a
 // short-lived link the hub gives this computer's token. An older hub, or no token: the plain address.
-function hubDashboardLink(hubUrl) {
+function hubDashboardLink(hubUrl, cls) {
   const plain = `${hubUrl}/`;
   const open = (url) => { const a = h("a", { href: url, target: "_blank", rel: "noopener" }); document.body.append(a); a.click(); a.remove(); };
-  return h("a", { href: plain, target: "_blank", rel: "noopener", onclick: async (e) => {
+  return h("a", { href: plain, target: "_blank", rel: "noopener", class: cls || null, onclick: async (e) => {
     e.preventDefault();
     let url = plain;
     try {
@@ -4803,6 +4956,7 @@ function uaLabel(ua) { // a dashboard session is labelled with the browser's Use
     : /Windows/.test(s) ? "Windows" : /Linux/.test(s) ? "Linux" : null;
   return browser && os ? t("{browser} on {os}", { browser, os }) : browser || os || t("A browser");
 }
+function projectOf(path) { return String(path || "").split("/").filter(Boolean).pop() || path || ""; }
 function auditText(a) {
   const actor = !a.actor || a.actor === "this computer" ? t("Someone at the hub") : a.actor_name || a.actor;
   const vars = { actor, person: a.person_name || t("someone"), role: ROLE_LABEL[a.detail?.role] || a.detail?.role,
@@ -4822,6 +4976,13 @@ function auditText(a) {
     accept: () => (a.detail?.accept === "knowledge" ? t("{actor} made this hub take knowledge only", vars) : t("{actor} let this hub take transcripts again", vars)),
     "project-add": () => t("{actor} shared the project {path}", { ...vars, path: a.detail?.path || "" }),
     "project-remove": () => t("{actor} stopped sharing the project {path}", { ...vars, path: a.detail?.path || "" }),
+    leave: () => t("{computer} left the project {project}", { ...vars, project: projectOf(a.detail?.path) }),
+    rejoin: () => t("{computer} rejoined the project {project}", { ...vars, project: projectOf(a.detail?.path) }),
+    withdraw: () => tn(a.detail?.sessions || 0, "{computer} took back {n} session it shared to {project}", "{computer} took back {n} sessions it shared to {project}",
+      { ...vars, n: fmtNum(a.detail?.sessions || 0), project: projectOf(a.detail?.path) }),
+    purge: () => tn(a.detail?.sessions || 0, "{actor} purged {n} session", "{actor} purged {n} sessions", { ...vars, n: fmtNum(a.detail?.sessions || 0) }),
+    settings: () => ("address" in (a.detail || {}) ? t("{actor} set this hub's address to {address}", { ...vars, address: a.detail.address || t("none") })
+      : t("{actor} renamed this hub to {name}", { ...vars, name: a.detail?.name || t("this computer's name") })),
   }[String(a.action).replace("_", "-")]?.() || `${actor}: ${a.action}`;
 }
 // What an admin passes on to the person: shown once, since the hub keeps only the code's hash
@@ -5066,27 +5227,9 @@ route(/^\/devices$/, async () => {
   const role = {
     single: t("Records and analyzes its own sessions."),
     hub: t("The hub: records and analyzes its own sessions and the ones your other computers send it."),
-    spoke: dv.share === "knowledge"
-      ? t("Records and analyzes its own sessions, and shares each session's summary and project lessons with a hub. Transcripts stay here.")
-      : t("Sends its sessions to a hub, which records and analyzes them. This dashboard shows what this computer had before it joined."),
-  }[dv.role];
+  }[dv.role]; // a computer that sends to a hub has cards of its own (spokeHubCard)
   const thisCard = h("section", { class: "card" }, cardHead(t("This computer"), { iconName: "devices" }),
-    h("p", null, h("b", null, dv.this.name), ` · ${role}`),
-    dv.role === "spoke" ? [
-      h("div", { class: "status-list" },
-        h("div", null, tx("Hub {url}", { url: h("span", { class: "codeline" }, dv.hub_url) })),
-        h("div", { class: "muted" }, dv.last_push ? t("Last sent {ago}: {summary}", { ago: ago(dv.last_push.at), summary: dv.last_push.summary }) : t("Nothing sent yet.")),
-        ...(dv.last_push?.errors || []).map((e) => h("div", { class: "muted" }, `! ${e}`))),
-      h("p", null, hubDashboardLink(dv.hub_url), h("span", { class: "muted" }, t(" · {command} stops sending", { command: "chronicle hub leave" }))),
-      shareSection(dv),
-      dv.folders.length ? [
-        h("div", { class: "subhead" }, t("Folders added to projects on the hub")),
-        h("ul", { class: "bullets" }, dv.folders.map((f) => h("li", null,
-          h("span", { class: "codeline" }, f.folder), " → ", h("b", { title: f.project }, f.name),
-          h("span", { class: "muted" }, ` · ${f.sessions == null ? t("not sent yet") : tn(f.sessions, "{n} session", "{n} sessions")}`),
-          ...f.overridden.map((o) => h("div", { class: "muted" }, t("{repo} goes to {project} instead: the hub knows its git remote", { repo: o.repo, project: o.project.split("/").pop() })))))),
-        h("p", { class: "muted" }, t("Sessions in these folders, and the folders below them, go to that project on the hub. Add one with {command}.", { command: "chronicle hub add-folder <folder> --project <name>" }))]
-      : h("p", { class: "muted" }, t("To file a folder's sessions under a project on the hub, run {command} here.", { command: "chronicle hub add-folder <folder> --project <name>" }))] : null);
+    h("p", null, h("b", null, dv.this.name), ` · ${role}`));
   const phone = h("section", { class: "card" }, cardHead(t("On your phone"), { iconName: "devices" }),
     ts ? [
       h("p", null, tx("This dashboard is on your tailnet at {url}. Open it on your phone with the Tailscale app on, then add it to the Home Screen (iPhone: Share › Add to Home Screen) to open it like an app.",
@@ -5104,19 +5247,21 @@ route(/^\/devices$/, async () => {
         h("p", { class: "muted" }, t("It prints a {command} command to run on each other computer.", { command: "chronicle hub join …" }))) : null;
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
-    h("div", { class: "grid" }, thisCard, phone, computers));
+    h("div", { class: "grid" }, ...(dv.role === "spoke"
+      ? [spokeHubCard(dv), spokeProjectsCard(dv), spokeSharingCard(dv), phone] : [thisCard, phone, computers])));
 });
 
 // Settings › Devices on a hub: its people, computers, shared projects and team store have a section of their own
 function teamPointer() {
-  const pages = [["#/team", t("People")], ["#/team/projects", t("Shared projects")], ["#/team/computers", t("Computers")], ["#/team/store", t("Team store")]];
+  const pages = [["#/team", t("People")], ["#/team/projects", t("Shared projects")], ["#/team/computers", t("Computers")], ["#/team/store", t("Team store")],
+    ["#/team/settings", t("Hub settings")]];
   return h("section", { class: "card" }, cardHead(t("Team"), { iconName: "team" }),
     h("p", null, t("This computer is the hub. Its people, shared projects, computers and team store are under Team.")),
     canAdmin() ? h("ul", { class: "bullets" }, pages.map(([href, label]) => h("li", null, h("a", { href }, label))))
       : h("p", { class: "muted" }, t("Only an admin of this hub sees them.")));
 }
 
-// Team › Computers › Knowledge only ([hub] accept): whether this hub takes transcripts at all
+// Team › Hub settings › Knowledge only ([hub] accept): whether this hub takes transcripts at all
 function acceptRow(dv) {
   const only = dv.accept === "knowledge";
   const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(only), "aria-label": t("Knowledge only"),
@@ -5157,7 +5302,6 @@ function computersCard(dv) {
       h("td", null, m.last_session ? ago(m.last_session) : "–"),
       h("td", { title: m.last_seen ? t("Last heard from {ago}", { ago: ago(m.last_seen) }) : "" }, m.this ? "–" : m.last_push ? ago(m.last_push) : t("nothing yet")))))));
   return h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices", hint: t("{n} sending here", { n: others.length }) }),
-    acceptRow(dv),
     table,
     h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "chronicle hub enable" })),
     maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null,
@@ -5185,6 +5329,61 @@ route(/^\/team\/projects$/, () => teamPage(teamProjectsLabel(), dedicated()
   : t("Projects set up on this hub: who sees each, and which computers send to it."), () => sharedProjectsCard()));
 route(/^\/team\/computers$/, () => teamPage(t("Computers"), t("Every computer this hub hears from, and whose it is."), (dv) => computersCard(dv)));
 route(/^\/team\/store$/, () => teamPage(t("Team store"), t("The team's record in Postgres, which only this hub connects to."), (dv) => teamStoreCard(dv)));
+
+// Team › Hub settings: this hub's name and address, what it takes, what builds its knowledge bases, updates and backups.
+// A container's .env sets some of them on every start (hub_settings' "managed"): those are shown, not edited.
+function hubTextRow({ label, hint, value, placeholder, managed, managedBy, field, saved }) {
+  const input = h("input", { class: "input", type: field === "address" ? "url" : "text", value: value || "", placeholder, maxlength: field === "name" ? 80 : 300,
+    spellcheck: "false", "aria-label": label, disabled: managed });
+  const save = h("button", { class: "btn small", type: "submit", disabled: true }, t("Save"));
+  input.addEventListener("input", () => { save.disabled = input.value.trim() === (value || ""); });
+  const form = h("form", { class: "hs-edit", onsubmit: async (e) => {
+    e.preventDefault();
+    save.disabled = true;
+    const r = await devicesPost("/api/team/settings", { [field]: input.value.trim() });
+    if (!r) { save.disabled = false; return; }
+    toast(saved);
+    await loadMe(); // the band and the status bar name the hub
+    render();
+  } }, input, managed ? null : save);
+  return h("div", { class: "set-row hs-row" },
+    h("div", null, h("b", null, label), h("div", { class: "muted" }, managed ? tx("Set by {name} in the hub's .env: change it there, then run {command}.",
+      { name: h("code", null, managedBy), command: h("code", null, "docker compose up -d") }) : hint)),
+    form);
+}
+async function hubSettingsPage() {
+  if (!canAdmin()) return h("div", { class: "card empty" }, t("Only an admin of this hub can see this."));
+  const [hs, st] = await Promise.all([api("/api/team/settings"), api("/api/status")]);
+  if (hs.error) {
+    return h("div", { class: "narrow-page" }, h("div", { class: "card" },
+      h("p", null, tx("This computer isn't a hub, so it has no hub settings. {page} says how to make it one.", { page: h("a", { href: "#/devices" }, t("Devices")) }))));
+  }
+  const cmd = (text) => h("pre", { class: "mcp-code" }, text);
+  const general = h("section", { class: "card" }, cardHead(t("This hub"), { iconName: "organization" }),
+    hubTextRow({ label: t("Name"), field: "name", value: hs.name, placeholder: hs.default_name, managed: hs.managed.name, managedBy: "CHRONICLE_HUB_NAME",
+      hint: t("Shown in the band at the top of every page, in invites and on members' computers."), saved: t("The hub's name is saved.") }),
+    hubTextRow({ label: t("Address"), field: "address", value: hs.address, placeholder: "https://chronicle.example.com", managed: hs.managed.address, managedBy: "CHRONICLE_HUB_URL",
+      hint: t("Where computers and browsers reach this hub. Invites and sign-in links use it."), saved: t("The hub's address is saved. New invites use it.") }),
+    acceptRow({ accept: hs.accept }));
+  const analysis = h("section", { class: "card" }, cardHead(t("Analysis"), { iconName: "sparkles" }),
+    h("p", { class: "muted" }, hs.accept === "knowledge"
+      ? t("Computers analyze their own sessions. This hub's model writes each project's knowledge base from the lessons they share, so it needs one to have knowledge bases.")
+      : t("This hub's model analyzes the transcripts computers send, and writes each project's knowledge base.")),
+    analyzerPicker(st.analysis));
+  const backup = hs.container ? [
+    h("p", null, t("Copy the database while the hub runs, then download the copy. Run these where the hub's compose.yaml is:")),
+    cmd(`docker compose exec hub python -c "import sqlite3; sqlite3.connect('/data/chronicle.db').backup(sqlite3.connect('/data/backup.db'))"\ndocker compose cp hub:/data/backup.db ./chronicle-backup.db`),
+    hs.store === "postgres" ? [h("p", null, t("And the team store:")), cmd("docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql")] : null]
+    : [h("p", null, t("Copy the database while the hub runs:")),
+      cmd(`sqlite3 ${/^[\w@%+=:,./-]+$/.test(hs.db) ? hs.db : `'${hs.db.replace(/'/g, "'\\''")}'`} ".backup chronicle-backup.db"`),
+      hs.store === "postgres" ? h("p", { class: "muted" }, t("Back up the team store's Postgres database with your usual tools, such as pg_dump.")) : null];
+  const backups = h("section", { class: "card" }, cardHead(t("Back up"), { iconName: "download" }), backup,
+    h("p", { class: "muted" }, t("Never copy chronicle.db itself while the hub runs: the copy can be corrupted.")));
+  return h("div", { class: "narrow-page" },
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Hub settings")), h("div", { class: "sub" }, t("What this hub is called, where it's reached, and how it's kept.")))),
+    h("div", { class: "grid" }, general, analysis, updatesCard(), backups));
+}
+route(/^\/team\/settings$/, hubSettingsPage);
 
 // Settings › Devices › Shared projects (on a hub): which of its projects leave this computer, who sees each, which
 // computers send to it; set one up or stop sharing it (only at the hub itself: it decides what leaves this computer).
@@ -5222,7 +5421,8 @@ function sharedProjectsCard() {
         h("div", { class: "sp-line" }, h("span", { class: "muted" }, t("Seen by")), " ", who,
           x.everyone ? h("span", { class: "muted" }, t(" · and {n} who see every project", { n: fmtNum(x.everyone) })) : null),
         x.folders.length ? h("div", { class: "sp-line" }, h("span", { class: "muted" }, t("Sent from")), " ",
-          x.folders.map((f, i) => [i ? ", " : null, h("b", null, f.computer), " ", h("span", { class: "codeline" }, f.folder)])) : null),
+          x.folders.map((f, i) => [i ? ", " : null, h("b", null, f.computer), " ", h("span", { class: "codeline" }, f.folder),
+            f.left ? h("span", { class: "muted", title: t("It no longer shares here or gets this project's lessons. What it shared stays.") }, t(" (left)")) : null])) : null),
       stop);
   };
   const addForm = (data) => {
@@ -5818,8 +6018,8 @@ const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
 ];
 const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
-  team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team" };
-const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
+  team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team", teamsettings: "team" };
+const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), teamsettings: t("Hub settings"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 
 function sectionOf(path, params) {
@@ -6017,7 +6217,8 @@ function teamSidebar(box) {
       sbRow(t("People"), "#/team", "preference", null, ["/team"]),
       sbRow(teamProjectsLabel(), "#/team/projects", "projects", null, ["/team/projects"]),
       sbRow(t("Computers"), "#/team/computers", "devices", null, ["/team/computers"]),
-      sbRow(t("Team store"), "#/team/store", "data", null, ["/team/store"])));
+      sbRow(t("Team store"), "#/team/store", "data", null, ["/team/store"]),
+      sbRow(t("Hub settings"), "#/team/settings", "settings", null, ["/team/settings"])));
 }
 async function buildSidebar(section) {
   const mine = ++sbSeq;
@@ -6086,7 +6287,7 @@ function paletteCommands() {
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
     nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),
     ...[[t("People"), "#/team", "preference", t("team")], [teamProjectsLabel(), "#/team/projects", "projects", t("team")], [t("Computers"), "#/team/computers", "devices", t("team")],
-      [t("Team store"), "#/team/store", "data", t("team")]].map((x) => ({ ...nav(...x), hub: true, admin: true })),
+      [t("Team store"), "#/team/store", "data", t("team")], [t("Hub settings"), "#/team/settings", "settings", t("name, address, backups")]].map((x) => ({ ...nav(...x), hub: true, admin: true })),
     { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow, admin: true },
     { group: cmds, label: t("Toggle sidebar"), icon: "sidebar", hint: "⌘B", run: toggleSidebar },
     { group: cmds, label: dark ? t("Switch to light theme") : t("Switch to dark theme"), icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
@@ -6245,8 +6446,8 @@ function renderHubFrame() {
   const host = hub.address ? hub.address.replace(/^https?:\/\//, "") : null;
   const notes = [hub.dedicated ? t("The team's hub: computers send what they learn here") : t("A hub: other computers send what they learn here"),
     hub.knowledge_only ? t("Knowledge only") : null].filter(Boolean);
-  band.replaceChildren(icon("team"), h("span", { class: "hb-kind" }, t("Hub")), h("b", { class: "hb-name" }, hub.name),
-    host ? h("span", { class: "hb-host" }, host) : null, h("span", { class: "hb-note" }, notes.join(" · ")));
+  band.replaceChildren(...[icon("team"), h("span", { class: "hb-kind" }, t("Hub")), h("b", { class: "hb-name" }, hub.name),
+    host ? h("span", { class: "hb-host" }, host) : null, h("span", { class: "hb-note" }, notes.join(" · "))].filter(Boolean)); // replaceChildren prints a null
   band.setAttribute("aria-label", t("This is the hub {name}", { name: hub.name }));
   foot.replaceChildren(h("i", { class: "dot" }), [t("Hub"), hub.name, host].filter(Boolean).join(" · "));
   foot.title = notes.join(" · ");

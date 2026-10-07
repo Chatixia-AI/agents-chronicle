@@ -1775,12 +1775,14 @@ def cmd_hub(args) -> int:
                           highlight=False)
         return code
 
+    if action == "leave" and args.project or action == "rejoin":
+        return _hub_leave_project(cfg, console, args)
+
     if action == "leave":
         if not cfg.is_spoke:
             console.print("This computer has not joined a hub.")
             return 0
-        _set_config_value(cfg, "hub", "url", '""')
-        hub.token_path(cfg).unlink(missing_ok=True)
+        hub.leave_hub(cfg)
         console.print(f"Left the hub at {cfg.hub_url}. This computer records and analyzes its own sessions again; "
                       "the hub keeps what it was sent.", highlight=False)
         return 0
@@ -2248,11 +2250,6 @@ def _hub_project(cfg, console, args) -> int:
         conn.close()
 
 
-def _toml_table(d: dict[str, str]) -> str:
-    """An inline TOML table (JSON strings are valid TOML basic strings)."""
-    return "{ " + ", ".join(f"{json.dumps(k)} = {json.dumps(v)}" for k, v in d.items()) + " }" if d else "{}"
-
-
 def _pick_project(projects: list[dict], wanted: str) -> tuple[dict | None, str | None]:
     """The hub project `wanted` names (its path, its name, or its folder's name), or why there isn't exactly one."""
     from pathlib import Path
@@ -2273,12 +2270,57 @@ def _pick_project(projects: list[dict], wanted: str) -> tuple[dict | None, str |
                      else " `chronicle hub folders --list` shows the hub's projects."))
 
 
+def _hub_leave_project(cfg, console, args) -> int:
+    """`chronicle hub leave --project <name>` and `chronicle hub rejoin --project <name>`: this computer stops (or
+    starts again) sharing to one of the hub's projects and getting its teammates' lessons."""
+    from pathlib import Path
+
+    from . import hub
+
+    if not cfg.is_spoke:
+        console.print("This computer has not joined a hub.")
+        return 1
+    if not args.project or len(args.project) > 1:
+        console.print(f"Which project on the hub? One `--project <name>`: chronicle hub {args.action} --project <name>")
+        return 2
+    wanted = args.project[-1]
+    try:  # the hub's own list if it can be reached, else the one from the last push; and the projects left
+        known = hub.handshake(cfg).get("projects") or []
+    except hub.HubError:
+        known = (hub.last_folders(cfg) or {}).get("projects") or []
+    known += [{"path": x, "name": Path(x).name} for x in cfg.hub_left if x not in {k["path"] for k in known}]
+    project, problem = _pick_project(known, wanted)
+    if problem:
+        console.print(problem, highlight=False)
+        return 1
+    name = project.get("name") or Path(project["path"]).name
+    if args.action == "rejoin":
+        if project["path"] not in cfg.hub_left:
+            console.print(f"This computer hasn't left {name}.", highlight=False)
+            return 0
+        cfg = hub.rejoin_project(cfg, project["path"])
+        console.print(f"Rejoined [bold]{name}[/]: its sessions are shared again, and its teammates' lessons come back.",
+                      highlight=False)
+    else:
+        try:
+            cfg = hub.leave_project(cfg, project["path"])
+        except hub.FolderError as exc:
+            console.print(str(exc), highlight=False)
+            return 1
+        console.print(f"Left [bold]{name}[/]: this computer no longer shares its sessions there or gets its teammates' "
+                      "lessons. What it already shared stays on the hub. `chronicle hub rejoin --project "
+                      f"{wanted}` undoes this.", highlight=False)
+    if args.no_push:
+        console.print("The hub hears of it at the next push (`chronicle push`, or the background sync).")
+        return 0
+    return _push(cfg)
+
+
 def _hub_folders(cfg, console, args) -> int:
     """`chronicle hub add-folder | remove-folder | folders`: folders here whose sessions belong to a project on the hub."""
     from pathlib import Path
 
     from . import hub
-    from .config import load_config
 
     if not cfg.is_spoke:
         console.print("This computer doesn't send its sessions to a hub. Folders are added on a computer that does "
@@ -2326,10 +2368,17 @@ def _hub_folders(cfg, console, args) -> int:
         if key is None:
             console.print(f"{folder} was not added. `chronicle hub folders` lists the folders that were.", highlight=False)
             return 1
-        rest = {k: v for k, v in cfg.hub_folders.items() if k != key}
-        _set_config_value(cfg, "hub", "folders", _toml_table(rest))
-        cfg = load_config(cfg.home)
-        console.print(f"Sessions in {key} are filed by their git remote or their own folder again.", highlight=False)
+        try:
+            cfg, taken = hub.remove_folder(cfg, key)
+        except hub.HubError as exc:
+            console.print(f"Nothing changed: {exc}", highlight=False)
+            return 1
+        if taken is None:
+            console.print(f"Sessions in {key} are filed by their git remote or their own folder again.", highlight=False)
+        else:
+            console.print(f"Sessions in {key} no longer go to the hub. It took back the {taken} session"
+                          f"{'s' * (taken != 1)} this computer shared from there, with {'their' if taken != 1 else 'its'} "
+                          "lessons.", highlight=False)
     else:
         if not args.project or len(args.project) > 1:
             console.print("Which project on the hub? One `--project <name>` (`chronicle hub folders --list` shows them).")
@@ -2347,19 +2396,16 @@ def _hub_folders(cfg, console, args) -> int:
             console.print(problem, highlight=False)
             return 1
         name = project.get("name") or Path(project["path"]).name
-        info = hub.git_info(folder)
-        owner = (hello.get("remotes") or {}).get(info[1]) if info else None
-        if owner and owner != project["path"]:
-            console.print(f"{folder} is in the git repository {info[1]}, which the hub files under "
-                          f"{Path(owner).name} ({owner}). A repository belongs to one project, so its sessions can't "
-                          f"go to {name}.", highlight=False)
+        try:
+            cfg, remote = hub.add_folder(cfg, folder, project, hello)
+        except hub.FolderError as exc:
+            console.print(str(exc), highlight=False)
             return 1
-        if owner:
-            console.print(f"Sessions in {folder} already go to {name}: the hub knows its git remote ({info[1]}). "
+        if remote:
+            console.print(f"Sessions in {folder} already go to {name}: the hub knows its git remote ({remote}). "
                           "Nothing to add.", highlight=False)
             return 0
-        _set_config_value(cfg, "hub", "folders", _toml_table({**cfg.hub_folders, folder: project["path"]}))
-        cfg = load_config(cfg.home)
+        info = hub.git_info(folder)
         console.print(f"Sessions in {folder} and the folders below it now go to [bold]{name}[/] on the hub "
                       f"({project['path']}).", highlight=False)
         if info:
@@ -2703,7 +2749,7 @@ def build_parser() -> argparse.ArgumentParser:
                                    "or sends its sessions to one that does (join)")
     s.add_argument("action", nargs="?", choices=["status", "enable", "join", "leave", "disable", "folders", "add-folder",
                                                  "remove-folder", "store", "people", "invite", "role", "access",
-                                                 "remove", "shared-token", "signin", "project", "purge"],
+                                                 "remove", "shared-token", "signin", "project", "purge", "rejoin"],
                    default="status")
     s.add_argument("url", nargs="?", metavar="address|folder|name|email",
                    help="with join: the hub's address; with add-folder and remove-folder: a folder on this computer; "
@@ -2719,8 +2765,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--role", choices=["admin", "member", "readonly"], help="with invite: their role (member by default)")
     s.add_argument("--rotate", action="store_true", help="with enable: make a new token (computers must join again)")
     s.add_argument("--project", action="append",
-                   help="with add-folder: the project on the hub its sessions belong to (name or path); with invite "
-                        "and access: a project the person sees (repeat it for more)")
+                   help="with add-folder: the project on the hub its sessions belong to (name or path); with leave and "
+                        "rejoin: the project this computer leaves or rejoins; with invite and access: a project the "
+                        "person sees (repeat it for more)")
     s.add_argument("--all-projects", action="store_true",
                    help="with invite and access: the person sees every project on the hub")
     s.add_argument("--share", choices=["everything", "knowledge"],
@@ -2734,7 +2781,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--yes", action="store_true", help="with purge: don't ask before removing")
     s.add_argument("--list", action="store_true", help="with folders: list the hub's projects")
     s.add_argument("--no-push", action="store_true",
-                   help="with join, add-folder, remove-folder: don't send anything to the hub yet")
+                   help="with join, add-folder, remove-folder, leave --project, rejoin: don't send anything to the hub yet")
     s.set_defaults(fn=cmd_hub)
 
     s = sub.add_parser("push", help="send this computer's new sessions to its hub now (the background job does this)")

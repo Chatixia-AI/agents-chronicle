@@ -61,6 +61,7 @@ ANALYSES_MAX_AGE = 30 * 86400  # imported analyses whose sessions never arrive a
 REPOS_CACHE_S = 86400
 FOLDERS_KV = "hub-folders:"  # + machine id: the folders that computer added to projects here (spoke's [hub] folders)
 FOLDERS_FILE = "hub-folders.json"  # on a spoke: what the hub made of its folders at the last hello
+LEFT_KV = "hub-left:"  # + machine id: the projects here that computer left (spoke's [hub] left)
 MAX_FOLDERS = 200
 
 # The analysis a spoke's own Chronicle already wrote, carried over when it joins (see export_analyses).
@@ -91,6 +92,20 @@ class HubError(Exception):
 
 class HubUnreachable(HubError):
     pass
+
+
+class FolderError(HubError):
+    """Why a folder can't be added or a project left: a template and its values, so the dashboard can show it in the
+    viewer's language (`shown`) and the command line in English."""
+
+    def __init__(self, template: str, **values):
+        super().__init__(template.format(**values) if values else template)
+        self.template, self.values = template, values
+
+    def shown(self) -> str:
+        from .i18n import tr
+
+        return tr(self.template, **self.values)
 
 
 class HubUnauthorized(HubError):
@@ -362,6 +377,27 @@ def folders_of(conn, machine_id: str) -> dict[str, str]:
     return clean_folders(data)
 
 
+def left_of(conn, machine_id: str) -> list[str]:
+    """The projects here another computer left, as it last reported them: it no longer shares there."""
+    from .db import kv_get
+
+    if not machine_id:
+        return []
+    try:
+        data = json.loads(kv_get(conn, LEFT_KV + machine_id) or "[]")
+    except ValueError:
+        return []
+    return clean_left(data)
+
+
+def clean_left(raw) -> list[str]:
+    """A spoke's [hub] left as the hub accepts it: absolute project paths, a bounded number of them."""
+    if not isinstance(raw, list):
+        return []
+    return sorted({x.rstrip("/") or "/" for x in raw[:MAX_FOLDERS]
+                   if isinstance(x, str) and x.startswith("/") and len(x) <= 1024 and "\0" not in x})
+
+
 def hub_projects(conn, limit: int = 1000, only: list[str] | None = None) -> list[dict]:
     """The projects this hub files sessions under, busiest first, and the ones set up ahead of time: what another
     computer can add a folder to. `only`: just these project paths (a person limited to projects)."""
@@ -386,14 +422,16 @@ def shared_projects(conn) -> list[dict]:
     out = []
     for r in conn.execute("SELECT path, created_at, created_by FROM hub_projects ORDER BY path").fetchall():
         path = r["path"]
-        computers = [{"id": c["machine_id"], "name": c["name"], "sessions": c["n"], "this": c["this"]} for c in conn.execute(
+        computers = [{"id": c["machine_id"], "name": c["name"], "sessions": c["n"], "this": c["this"],
+                      "left": path in left_of(conn, c["machine_id"])} for c in conn.execute(
             "SELECT s.machine_id, m.name, m.role = 'this' AS this, COUNT(*) n FROM sessions s LEFT JOIN machines m "
             "ON m.id = s.machine_id WHERE s.project_path = ? AND s.source != 'history' GROUP BY s.machine_id "
             "ORDER BY n DESC", (path,))]
         folders = []
         for m in conn.execute("SELECT id, name FROM machines WHERE role = 'spoke' ORDER BY name"):
-            folders += [{"computer": m["name"] or m["id"][:8], "folder": f} for f, proj in folders_of(conn, m["id"]).items()
-                        if proj == path]
+            left = path in left_of(conn, m["id"])
+            folders += [{"computer": m["name"] or m["id"][:8], "folder": f, "left": left}
+                        for f, proj in folders_of(conn, m["id"]).items() if proj == path]
         limited = [p for p in everyone if p["projects"] is not None]
         out.append({"path": path, "name": project_name_for(path), "set_up_at": r["created_at"],
                     "sessions": sum(c["sessions"] for c in computers), "computers": computers, "folders": folders,
@@ -530,10 +568,12 @@ def purge_targets(conn, machine_ids: list[str], *, projects: list[str] | None = 
     return [dict(r) for r in conn.execute(sql + " ORDER BY project_path, started_at", params)]
 
 
-def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, person_id: int | None = None) -> dict:
+def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, person_id: int | None = None,
+          action: str = "purge", keep_out: bool = True, **detail) -> dict:
     """Remove sessions other computers sent from this hub for good (purge_targets picks them): their rows, lessons,
     notes and received transcripts, the team store's copy, and the knowledge bases built from them. Each is forgotten
-    (ingest.forget_session), so the computer that sent it can't send it again. Returns what was removed."""
+    (ingest.forget_session), so the computer that sent it can't send it again, unless `keep_out` is off (withdraw).
+    `action` and `detail` go in the audit. Returns what was removed."""
     from .ingest import forget_session
     from .people import LOCAL, audit
 
@@ -548,7 +588,7 @@ def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, per
     received = cfg.machines_dir
     for x in sessions:  # forget_session also removes its note in the Markdown vault
         sent_here = bool(x["transcript_path"]) and under(x["transcript_path"], str(received))
-        forget_session(conn, cfg, x["id"], delete_transcript=sent_here)
+        forget_session(conn, cfg, x["id"], delete_transcript=sent_here, remember=keep_out)
     projects = sorted({x["project_path"] for x in sessions if x["project_path"]})
     emptied = [p for p in projects if not conn.execute("SELECT 1 FROM sessions WHERE project_path = ? LIMIT 1",
                                                        (p,)).fetchone()]
@@ -559,9 +599,37 @@ def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, per
         conn.execute("DELETE FROM suggestions WHERE project_path = ? AND status IN ('new', 'stale')", (p,))
     conn.execute("DELETE FROM suggestions WHERE knowledge_id IS NOT NULL AND status IN ('new', 'stale') AND "
                  "knowledge_id NOT IN (SELECT id FROM knowledge)")
-    audit(conn, by or LOCAL, "purge", person_id, sessions=len(ids), projects=projects)
+    audit(conn, by or LOCAL, action, person_id, sessions=len(ids), projects=projects, **detail)
     conn.commit()
     return {"sessions": len(ids), "projects": projects, "emptied": emptied, "store": bool(store)}
+
+
+def withdraw(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
+    """POST /api/hub/withdraw: a computer that shares knowledge takes back what it shared from a folder it added to a
+    project here (`chronicle hub remove-folder`: the wrong folder). The sessions it sent from that folder that are
+    filed under the folder's project go, with their lessons, here and in the team store. Unlike purge they aren't
+    kept out: once their folder is added to the right project, they are shared again."""
+    from .people import actor_of
+
+    machine_id = check_machine(cfg, str(body.get("machine") or ""))
+    folder = str(body.get("folder") or "").strip()
+    folder = folder.rstrip("/") or "/"
+    project = folders_of(conn, machine_id).get(folder)
+    if not project:  # never added here (or it never said so): nothing of it was filed by that folder
+        return {"sessions": 0, "project": None}
+    rows = [dict(r) for r in conn.execute(
+        "SELECT id, project_path, project_name, title, source, transcript_path, machine_path FROM sessions "
+        "WHERE machine_id = ? AND project_path = ? AND source = 'remote'", (machine_id, project))]
+    targets = [r for r in rows if under(r["machine_path"] or r["project_path"], folder)]
+    if not targets:
+        return {"sessions": 0, "project": project}
+    name = conn.execute("SELECT name FROM machines WHERE id = ?", (machine_id,)).fetchone()
+    try:
+        done = purge(cfg, conn, targets, by=actor_of(person), person_id=person and person["id"], action="withdraw",
+                     keep_out=False, machine=machine_id, name=name[0] if name else None, path=project)
+    except RuntimeError as exc:  # the hub is syncing: the computer asks again
+        raise HubError(str(exc)) from None
+    return {"sessions": done["sessions"], "project": project}
 
 
 def folders_report(conn, machine_id: str, folders: dict[str, str], repos: dict, remotes: dict[str, str]) -> dict:
@@ -688,7 +756,7 @@ def hello_info(cfg: Config, roots: list[Root]) -> dict:
     me = local_machine(cfg)
     return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "platform": platform_label(),
             "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
-            "folders": cfg.hub_folders, "share": cfg.hub_share}
+            "folders": cfg.hub_folders, "left": cfg.hub_left, "share": cfg.hub_share}
 
 
 def _check_protocol(hello: dict) -> None:
@@ -703,12 +771,13 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
     client = client or HubClient(cfg.hub_url, token)
+    info = hello_info(cfg, spoke_roots(cfg))
     try:
-        hello = client.request("POST", "/api/hub/hello", body=hello_info(cfg, spoke_roots(cfg)))
+        hello = client.request("POST", "/api/hub/hello", body=info)
     finally:
         client.close()
     _check_protocol(hello)
-    _record_folders(cfg, hello)
+    _record_folders(cfg, hello, info["repos"])
     return hello
 
 
@@ -762,9 +831,10 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
     client = client or HubClient(cfg.hub_url, token)
     me = local_machine(cfg)
     try:
-        hello = client.request("POST", "/api/hub/hello", body=hello_info(cfg, roots))
+        info = hello_info(cfg, roots)
+        hello = client.request("POST", "/api/hub/hello", body=info)
         _check_protocol(hello)
-        _record_folders(cfg, hello)
+        _record_folders(cfg, hello, info["repos"])
         inventory = hello.get("inventory") or {}
         if hello.get("wants_analyses"):
             blob, n = export_analyses(cfg)
@@ -826,6 +896,7 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
     under them are sent: in a folder added to one of them, or in a repository whose remote the hub files there.
     `projects_only` ([hub] all_folders = false): the same for any of the hub's projects, so a folder nobody added and
     a repository the hub doesn't know stay here.
+    Sessions the hub files under a project this computer left ([hub] left) always stay here.
     `conn`/`where`: the hub's own sessions in projects set up there (share_own)."""
     from .db import connect
 
@@ -836,6 +907,7 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
         return out, 0, 0
     conn = conn or connect(cfg.db_path, readonly=True)
     found: dict[str, str | None] = {}
+    left = set(cfg.hub_left)
     try:
         cols = ", ".join(("id", "project_path", "machine_path") + SHARED_COLS + ANALYSIS_COLS)  # never a prompt-made title
         marks = ", ".join("?" for _ in SHARED_AGENTS)
@@ -849,17 +921,17 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
                 excluded += 1
                 continue
             limited = scope is not None or projects_only
-            if not limited and have.get(rec["id"]) == rec["analyzed_at"]:
+            if not limited and not left and have.get(rec["id"]) == rec["analyzed_at"]:
                 unchanged += 1  # asked git nothing: it runs once per folder, only for what goes
                 continue
             if ran and ran not in found:
                 info = git_info(ran)
                 found[ran] = info[1] if info else None
             rec["remote"] = found.get(ran) if ran else None
-            if limited:
+            if limited or left:
                 goes = destination(cfg, rec["project_path"], rec["remote"], remotes or {})
-                if goes is None or (scope is not None and goes not in scope):
-                    excluded += 1  # not one of the hub's projects, or not one this person shares: it stays here
+                if goes in left or (limited and (goes is None or (scope is not None and goes not in scope))):
+                    excluded += 1  # not one of the hub's projects, one this person doesn't share, or one it left
                     continue
             if have.get(rec["id"]) == rec["analyzed_at"]:
                 unchanged += 1
@@ -925,7 +997,7 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
         info = hello_info(cfg, spoke_roots(cfg))
         hello = client.request("POST", "/api/hub/hello", body=info)
         _check_protocol(hello)
-        _record_folders(cfg, hello)
+        _record_folders(cfg, hello, info["repos"])
         have = hello.get("knowledge")
         if not isinstance(have, dict):
             raise HubError(f"the hub runs Chronicle {hello.get('version')}, which can't take knowledge only; update it")
@@ -970,6 +1042,9 @@ def pull_team_lessons(cfg: Config, client: HubClient, repos: dict) -> int:
     from .db import connect
 
     state = last_team(cfg) or {}
+    left = sorted(cfg.hub_left)
+    if state.get("left", []) != left:  # left or rejoined a project since: ask afresh
+        state = {}
     if state.get("version") and cfg.db_path.exists():  # "unchanged" only counts if the lessons are still here
         conn = connect(cfg.db_path, readonly=True)
         try:
@@ -980,15 +1055,17 @@ def pull_team_lessons(cfg: Config, client: HubClient, repos: dict) -> int:
             state = {}
     remotes = sorted({v[1] for v in repos.values() if isinstance(v, list) and len(v) == 2 and v[1]})
     data = client.request("POST", "/api/hub/lessons", body={
-        "machine": local_machine(cfg)["id"], "remotes": remotes, "projects": sorted(set(cfg.hub_folders.values())),
-        "version": state.get("version")})
+        "machine": local_machine(cfg)["id"], "remotes": remotes,
+        "projects": sorted(set(cfg.hub_folders.values()) - set(left)), "left": left, "version": state.get("version")})
     if not data.get("team"):
         return 0
     if data.get("unchanged"):
         held = int(state.get("lessons") or 0)
     else:
+        if isinstance(data.get("lessons"), list):  # a hub older than [hub] left sends them too
+            data["lessons"] = [x for x in data["lessons"] if not isinstance(x, dict) or x.get("project") not in left]
         held = apply_team_lessons(cfg, data, repos)
-        state = {"version": data.get("version"), "lessons": held, "hub": data.get("hub")}
+        state = {"version": data.get("version"), "lessons": held, "hub": data.get("hub"), "left": left}
     try:  # "at" is when this computer last asked, whether or not the answer changed
         (cfg.home / TEAM_FILE).write_text(json.dumps({**state, "at": utcnow_iso()}))
     except OSError:
@@ -1104,8 +1181,9 @@ def apply_team_lessons(cfg: Config, data: dict, repos: dict) -> int:
 def _record_push(cfg: Config, report: PushReport) -> None:
     """The spoke's own note of its last push, for `chronicle hub status` and its dashboard."""
     try:
-        (cfg.home / "last-push.json").write_text(json.dumps({"at": utcnow_iso(), "summary": report.summary(),
-                                                              "errors": report.errors[:5]}))
+        (cfg.home / "last-push.json").write_text(json.dumps({
+            "at": utcnow_iso(), "summary": report.summary(), "errors": report.errors[:5], "kind": report.kind,
+            "sent": report.sent, "unchanged": report.unchanged, "kept": report.skipped, "team": report.team}))
     except OSError:
         pass
 
@@ -1117,15 +1195,112 @@ def last_push(cfg: Config) -> dict | None:
         return None
 
 
-def _record_folders(cfg: Config, hello: dict) -> None:
-    """The spoke's note of what the hub made of its folders, for `chronicle hub folders` (an older hub sends none)."""
+def _record_folders(cfg: Config, hello: dict, repos: dict | None = None) -> None:
+    """The spoke's note of what the hub made of its folders, for `chronicle hub folders` (an older hub sends none),
+    with the hub's projects and the ones this computer's repositories go to by their git remote, for Devices."""
     if not isinstance(hello.get("folders"), dict):
         return
+    remotes = hello.get("remotes") if isinstance(hello.get("remotes"), dict) else {}
+    by_remote: dict[str, list[dict]] = {}
+    for top, remote in sorted({tuple(v) for v in (repos or {}).values() if isinstance(v, list) and len(v) == 2}):
+        if remote and isinstance(remotes.get(remote), str):
+            by_remote.setdefault(remotes[remote], []).append({"remote": remote, "folder": top})
+    projects = [{"path": p["path"], "name": p.get("name") or Path(p["path"]).name, "sessions": p.get("sessions") or 0}
+                for p in hello.get("projects") or [] if isinstance(p, dict) and isinstance(p.get("path"), str)]
     try:
         (cfg.home / FOLDERS_FILE).write_text(json.dumps({"at": utcnow_iso(), "folders": hello["folders"],
-                                                          "moved": int(hello.get("moved") or 0)}))
+                                                          "moved": int(hello.get("moved") or 0), "hub": hello.get("hub"),
+                                                          "projects": projects, "remotes": by_remote}))
     except OSError:
         pass
+
+
+# ------------------------------------------------------------------ a computer's folders and projects on the hub
+def _save_hub(cfg: Config, *, folders: dict[str, str] | None = None, left: list[str] | None = None) -> Config:
+    from .config import load_config, set_config_value, toml_table
+
+    if folders is not None:
+        set_config_value(cfg, "hub", "folders", toml_table(folders))
+    if left is not None:
+        set_config_value(cfg, "hub", "left", json.dumps(sorted(set(left))))
+    return load_config(cfg.home)
+
+
+def add_folder(cfg: Config, folder: str, project: dict, hello: dict) -> tuple[Config, str | None]:
+    """`chronicle hub add-folder`: file the sessions in `folder` (absolute), and the folders below it, under the hub's
+    `project`; one this computer left is joined again. `hello`: the hub's answer to handshake(), for the git remotes
+    it knows. Returns the reloaded config and, when nothing changed because the folder's repository already goes
+    there by its git remote, that remote. Raises FolderError when the folder can't go there."""
+    name = project.get("name") or Path(project["path"]).name
+    if not Path(folder).is_dir():
+        raise FolderError("{folder} is not a folder.", folder=folder)
+    info = git_info(folder)
+    owner = (hello.get("remotes") or {}).get(info[1]) if info else None
+    if owner and owner != project["path"]:
+        raise FolderError("{folder} is in the git repository {remote}, which the hub files under {owner}. A repository "
+                          "belongs to one project, so its sessions can't go to {name}.",
+                          folder=folder, remote=info[1], owner=Path(owner).name, name=name)
+    left = [x for x in cfg.hub_left if x != project["path"]]
+    if owner:
+        return _save_hub(cfg, left=left) if left != cfg.hub_left else cfg, info[1]
+    return _save_hub(cfg, folders={**cfg.hub_folders, folder: project["path"]},
+                     left=left if left != cfg.hub_left else None), None
+
+
+def remove_folder(cfg: Config, folder: str, client: HubClient | None = None) -> tuple[Config, int | None]:
+    """`chronicle hub remove-folder`, for the wrong folder: its sessions no longer go to the project. A computer that
+    shares knowledge first has the hub take back what it shared from there (withdraw); one that sends transcripts
+    leaves them to the hub, which files them by their git remote or their own folder again. Returns the reloaded
+    config and how many sessions the hub took back (None: it wasn't asked)."""
+    if folder not in cfg.hub_folders:
+        raise FolderError("{folder} was not added.", folder=folder)
+    taken = None
+    if cfg.shares_knowledge:  # the hub first: if it can't be reached, nothing here changes
+        token = read_token(cfg)
+        if not token:
+            raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+        client = client or HubClient(cfg.hub_url, token)
+        try:
+            r = client.request("POST", "/api/hub/withdraw", body={"machine": local_machine(cfg)["id"], "folder": folder})
+        except HubError as exc:
+            if str(exc).startswith("hub error 404"):
+                raise FolderError("The hub runs an older Chronicle that can't take back what this computer shared. "
+                                  "Update the hub first.") from None
+            raise
+        finally:
+            client.close()
+        taken = int(r.get("sessions") or 0)
+    project = cfg.hub_folders[folder]
+    rest = {k: v for k, v in cfg.hub_folders.items() if k != folder}
+    left = cfg.hub_left
+    if project in left and project not in rest.values():  # no folder of it left here: nothing to leave any more
+        left = [x for x in left if x != project]
+    return _save_hub(cfg, folders=rest, left=left if left != cfg.hub_left else None), taken
+
+
+def leave_project(cfg: Config, project: str) -> Config:
+    """This computer leaves a project on the hub ([hub] left): it no longer shares sessions filed there or gets their
+    teammates' lessons. What it already shared stays on the hub. Only for a computer that shares knowledge: one that
+    sends transcripts sends them all."""
+    if not cfg.shares_knowledge:
+        raise FolderError("Only a computer that shares knowledge can leave a project: one that sends its transcripts "
+                          "sends them all.")
+    return cfg if project in cfg.hub_left else _save_hub(cfg, left=[*cfg.hub_left, project])
+
+
+def rejoin_project(cfg: Config, project: str) -> Config:
+    """Undo leave_project: sessions filed under `project` are shared again, and its teammates' lessons come back."""
+    return _save_hub(cfg, left=[x for x in cfg.hub_left if x != project]) if project in cfg.hub_left else cfg
+
+
+def leave_hub(cfg: Config) -> Config:
+    """`chronicle hub leave`: stop sending to the hub. This computer records and analyzes its own sessions again; the
+    hub keeps what it was sent."""
+    from .config import load_config, set_config_value
+
+    set_config_value(cfg, "hub", "url", '""')
+    token_path(cfg).unlink(missing_ok=True)
+    return load_config(cfg.home)
 
 
 def last_folders(cfg: Config) -> dict | None:
@@ -1258,6 +1433,18 @@ def hello(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
             conn.commit()
             moved = refile(cfg, conn, machine_id, set(folders) | set(sent))
             folders, refiled = sent, True
+    if "left" in body:  # an older spoke doesn't send them
+        from .people import actor_of, audit
+
+        before, now_left = left_of(conn, machine_id), clean_left(body.get("left"))
+        if now_left != before:
+            kv_set(conn, LEFT_KV + machine_id, json.dumps(now_left))
+            name = str(body.get("name") or "")[:120] or None
+            for path in sorted(set(now_left) - set(before)):
+                audit(conn, actor_of(person), "leave", person and person["id"], machine=machine_id, name=name, path=path)
+            for path in sorted(set(before) - set(now_left)):
+                audit(conn, actor_of(person), "rejoin", person and person["id"], machine=machine_id, name=name, path=path)
+            conn.commit()
     remotes = {rem: proj for rem, proj in ProjectResolver(cfg, conn).project_remotes().items()
                if scope is None or proj in scope}
     report = folders_report(conn, machine_id, folders, repos, remotes)
@@ -1270,7 +1457,7 @@ def hello(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
     else:
         shared = {r[0]: r[1] for r in conn.execute(
             "SELECT id, analyzed_at FROM sessions WHERE machine_id = ? AND source = 'remote'", (machine_id,))}
-    return {"protocol": PROTOCOL, "version": __version__, "hub": me["name"],
+    return {"protocol": PROTOCOL, "version": __version__, "hub": cfg.hub_name or me["name"],
             "inventory": inventory(cfg, machine_id), "wants_analyses": not kv_get(conn, f"hub-analyses:{machine_id}"),
             "projects": hub_projects(conn, only=scope), "remotes": remotes, "folders": report, "moved": moved,
             "knowledge": shared, "team": bool(store), "scope": scope}
@@ -1303,7 +1490,7 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
     )
     conn.commit()
     scope = people.projects_of(person)
-    return {"token": token, "person": people.public(person), "hub": local_machine(cfg)["name"],
+    return {"token": token, "person": people.public(person), "hub": cfg.hub_name or local_machine(cfg)["name"],
             "projects": hub_projects(conn, only=scope) if scope is not None else None,
             "share": "knowledge" if scope is not None or cfg.hub_accept == "knowledge" else None}
 
@@ -1491,12 +1678,13 @@ def team_lessons(cfg: Config, body: dict, person: dict | None = None, conn=None)
             log.warning("team store: this hub's own sessions not shared: %s", exc)
     remotes = [normalize_remote(x) or x for x in body.get("remotes") or [] if isinstance(x, str) and len(x) <= 300][:500]
     projects = [x for x in body.get("projects") or [] if isinstance(x, str) and x.startswith("/") and len(x) <= 1024]
+    left = clean_left(body.get("left"))  # projects the computer left: none of their lessons
     within = projects_of(person)
-    data = _in_store(lambda: store.lessons_for(machine_id, remotes, projects[:MAX_FOLDERS], within=within))
+    data = _in_store(lambda: store.lessons_for(machine_id, remotes, projects[:MAX_FOLDERS], within=within, left=left))
     version = hashlib.sha256(json.dumps(data, sort_keys=True, default=str).encode()).hexdigest()[:32]
     if body.get("version") == version:
         return {"team": True, "version": version, "unchanged": True}
-    return {"team": True, "version": version, "hub": local_machine(cfg)["name"], **data}
+    return {"team": True, "version": version, "hub": cfg.hub_name or local_machine(cfg)["name"], **data}
 
 
 def receive_analyses(cfg: Config, conn, params: dict, rfile, length: int) -> dict:

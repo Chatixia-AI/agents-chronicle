@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import fnmatch
+import json
 import os
 import shutil
 import tomllib
@@ -122,6 +123,10 @@ share = "everything"
 # (in a folder added with `chronicle hub add-folder`, or in a repository whose git remote the hub files there); the
 # rest stay here. true shares sessions from every folder. Transcripts (share = "everything") always go in full.
 all_folders = false
+# On a computer that shares knowledge with a hub: projects on the hub (their paths there) it left. It no longer shares
+# sessions filed under them or gets their teammates' lessons; what it already shared stays on the hub. Set by
+# `chronicle hub leave --project <name>`, emptied again by `chronicle hub rejoin --project <name>`.
+left = []
 # On the hub: what it takes from the computers that send to it. "everything": transcripts, or knowledge from those that
 # share knowledge. "knowledge": summaries and project lessons only, from every computer; one that sends transcripts is
 # turned away until it shares knowledge (`chronicle config set hub.share knowledge`). Any other value counts as
@@ -247,6 +252,7 @@ class Config:
     hub_folders: dict[str, str] = field(default_factory=dict)
     hub_share: str = "everything"
     hub_all_folders: bool = False
+    hub_left: list[str] = field(default_factory=list)
     hub_accept: str = "everything"
     hub_store: str = ""
     hub_shared_token: bool = True
@@ -424,6 +430,8 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
                      if str(k).strip() and str(v).strip()} if isinstance(folders, dict) else {},
         hub_share=share if share in SHARE_MODES else "everything",
         hub_all_folders=hub.get("all_folders") is True,  # only an explicit true shares every folder
+        hub_left=sorted({str(x).rstrip("/") for x in hub.get("left") or [] if str(x).startswith("/")})
+        if isinstance(hub.get("left"), list) else [],
         hub_accept="everything" if accept == "everything" else "knowledge",  # a typo never lets transcripts in
         hub_store=store if store in STORES else "",
         hub_shared_token=bool(hub.get("shared_token", True)),
@@ -456,6 +464,11 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         logging.getLogger("chronicle").warning("[hub] accept %r is not one of: \"everything\", \"knowledge\"; taking "
                                                "knowledge only", accept)
     return cfg
+
+
+def toml_table(d: dict[str, str]) -> str:
+    """An inline TOML table, for set_config_value (JSON strings are valid TOML basic strings)."""
+    return "{ " + ", ".join(f"{json.dumps(k)} = {json.dumps(v)}" for k, v in d.items()) + " }" if d else "{}"
 
 
 def set_config_value(cfg: "Config", section: str, key: str, value: str) -> None:

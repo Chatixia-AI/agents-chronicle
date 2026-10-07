@@ -42,7 +42,8 @@
 | `chronicle hub access <email\|id> --project <name>… \| --all-projects` | ハブで：その人に見えるプロジェクトを変える。次のリクエストから反映（[見えるプロジェクトを人ごとに決める](devices.md#見えるプロジェクトを人ごとに決める)） |
 | `chronicle hub purge <email\|id\|computer> --project <name>… \| --outside-access [--yes]` | ハブで：その人のコンピューター（または 1 台のコンピューター）が送ったものを、指定したプロジェクトから、またはその人に見えるプロジェクトの外から取り除く。元には戻せません（[コンピューターが送ったものを取り消す](devices.md#コンピューターが送ったものを取り消す)） |
 | `chronicle hub people` / `hub role <email\|id> <role>` / `hub remove <email\|id>` / `hub shared-token on\|off` | ハブで：全員のロール、見えるプロジェクト、コンピューターの一覧／ロールを変える／人を外す／共有トークンを許すか拒むか（[利用者とロール](devices.md#利用者とロール)） |
-| `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | ハブに参加したコンピューターで：フォルダーのセッションをハブのプロジェクトに入れる／外す／どこに入るかを表示（`--list`：ハブのプロジェクト一覧）（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
+| `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | ハブに参加したコンピューターで：フォルダーのセッションをハブのプロジェクトに入れる／間違えて追加したフォルダーを外す／どこに入るかを表示（`--list`：ハブのプロジェクト一覧）（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)）。ナレッジを共有しているときは、`remove-folder` でそのフォルダーから共有したものもハブが削除します（[やめるとき](devices.md#やめるとき)） |
+| `chronicle hub leave --project <name>` / `hub rejoin --project <name>` | ナレッジを共有するコンピューターで：ハブのプロジェクトの一つへの共有とチームメイトのナレッジの受け取りをやめる（すでに共有したものは残る）、または再開する（[やめるとき](devices.md#やめるとき)） |
 | `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |
 | `chronicle container` | ハブの Docker イメージが実行するコマンド：`CHRONICLE_*` 変数からハブを設定し、ダッシュボードを提供して 15 分ごとに同期（[Docker でハブを動かす](docker.md)） |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |

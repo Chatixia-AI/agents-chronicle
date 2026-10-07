@@ -255,6 +255,11 @@ docker compose restart hub
 ハブが保持するものはすべて `hub-data` ボリューム（コンテナー内の `/data`）にあります。チームストアのデータは
 `postgres-data` ボリュームにあります。
 
+管理者は、ハブのダッシュボードの **Team › Hub settings** でもハブの設定を確認できます：名前、アドレス、
+**Knowledge only**、各プロジェクトのナレッジベースを書くモデル、更新、下記のバックアップのコマンドです。
+名前とアドレスは、`CHRONICLE_HUB_NAME` や `CHRONICLE_HUB_URL` が決めている間はそこで変更できません（起動のたびに
+書き直されるため）。`.env` の変数を変えて `docker compose up -d` を実行してください。
+
 ## 自分の証明書を使う
 
 Caddy は Let's Encrypt から証明書を取得します。そのためには Let's Encrypt がサーバーのポート 80 か 443 に届く必要が

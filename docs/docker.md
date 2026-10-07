@@ -255,6 +255,11 @@ The container sets up `config.toml` from these variables on every start. A varia
 Everything the hub keeps is in the `hub-data` volume, at `/data` in the container. The team store's data is in the
 `postgres-data` volume.
 
+Admins also find the hub's settings in its dashboard, under **Team › Hub settings**: its name, its address,
+**Knowledge only**, the model that writes each project's knowledge base, updates, and the backup commands below.
+The name and address show there but can't be changed there while `CHRONICLE_HUB_NAME` or `CHRONICLE_HUB_URL` sets
+them, since each start writes them again: change the variable in `.env` and run `docker compose up -d`.
+
 ## Your own certificate
 
 Caddy gets a certificate from Let's Encrypt, which must reach the server on port 80 or 443. For a name only your

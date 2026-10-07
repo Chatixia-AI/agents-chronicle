@@ -61,6 +61,9 @@ Use your folder for the project and the project's name from step 2. This sends w
 analyzed there. A clone of a git repository the hub already knows is filed under its project without this step,
 but running it does no harm.
 
+Your dashboard can do the same: **Settings › Devices › Projects on the hub › Join a project**, then pick the project
+and your folder.
+
 ## 4. Check
 
 ```bash
@@ -74,13 +77,16 @@ dashboard, where you see your projects.
 ## From then on
 
 - **After each analysis,** your computer sends the project's new summaries and lessons. `chronicle push`, or
-  **Share and get team lessons now** in **Settings › Devices**, sends right away.
+  **Share now** in **Settings › Devices**, sends right away.
 - **Each time it sends,** it gets back what your teammates learned in the project. Your agents find those lessons
   through Chronicle's MCP tools, marked as teammates'. With start-of-session notes on (`chronicle install
   --inject-context`), new sessions also list them under "From teammates' sessions".
 - **Your own dashboard** keeps showing your own sessions, as before.
 
-To stop sending, run `chronicle hub leave`. What you already sent stays on the hub.
+To stop sharing to one project, choose **Leave** next to it in **Settings › Devices** (or run `chronicle hub leave
+--project <name>`). What you shared there stays on the hub. Added the wrong folder? **Remove** next to it takes the
+folder back, and the hub deletes what your computer shared from it. To stop sending altogether, choose **Leave the
+hub…** (or run `chronicle hub leave`). What you already sent stays on the hub.
 
 ## If something goes wrong
 
