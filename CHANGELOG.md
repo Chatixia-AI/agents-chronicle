@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.1 (2026-10-07)
 
 - **Leave one of the hub's projects:** a computer that shares knowledge can now leave a project and stay in the
   others. **Leave** in **Settings › Devices** (or `chronicle hub leave --project <name>`) stops it sharing its
