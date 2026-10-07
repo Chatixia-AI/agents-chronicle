@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 15
+SCHEMA_VERSION = 16
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -450,11 +450,18 @@ CREATE TABLE IF NOT EXISTS project_groups (      -- your own groups of projects 
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL,
     folders_json TEXT NOT NULL DEFAULT '[]',      -- folder rules: a project under one joins, the longest rule winning
-    created_at TEXT
+    created_at TEXT,
+    hub_project TEXT                              -- shared as this project on the hub this computer sends to (hub.py)
 );
 CREATE TABLE IF NOT EXISTS project_group_picks (  -- a project put in a group by hand, over its folder rules
     project_path TEXT PRIMARY KEY,
     group_id INTEGER                              -- NULL: kept out of every group
+);
+CREATE TABLE IF NOT EXISTS group_shares (         -- every folder a group shared with the hub: still filed there when it
+    path TEXT PRIMARY KEY,                        -- left the group, so what it sent stays in place (hub.group_routes)
+    hub_project TEXT NOT NULL,
+    group_id INTEGER,
+    shared_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS files_state (

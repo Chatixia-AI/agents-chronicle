@@ -752,11 +752,105 @@ def _same(inv: list | None, size: int, mtime: float) -> bool:
     return bool(inv) and inv[0] == size and abs(float(inv[1]) - mtime) < 1.0
 
 
-def hello_info(cfg: Config, roots: list[Root]) -> dict:
+# ------------------------------------------------------------------ groups shared as one project on the hub
+class GroupRoutes:
+    """Where this computer's groups that are shared on the hub (project_groups.hub_project) send its projects.
+
+    Each project in such a group is a folder of that hub project, as if added with add-folder, so the hub files its
+    sessions there, and whichever project joins the group later goes too (`active`). A folder a group shared before
+    stays one (`kept`, from group_shares), so what it sent stays where it is on the hub, but nothing more goes from it:
+    the project left the group, or the group stopped sharing. A project is sent through a group only if it is in that
+    group itself, so one kept out of the group, or in another, stays here even inside a shared project's folder.
+    """
+
+    def __init__(self, active: dict[str, tuple[str, int]] | None = None, kept: dict[str, str] | None = None,
+                 group_of: dict[str, int | None] | None = None):
+        self.active = active or {}  # {project path: (hub project, group id)}
+        self.kept = kept or {}  # {folder shared before: hub project}
+        self.group_of = group_of or {}  # {project path: its group id}
+
+    def __bool__(self) -> bool:
+        return bool(self.active or self.kept)
+
+    def folders(self) -> dict[str, str]:
+        """{folder: hub project} for the hub to file by: a folder inside another of the same project adds nothing."""
+        every = {**self.kept, **{f: v[0] for f, v in self.active.items()}}
+        return {f: p for f, p in every.items() if not any(g != f and under(f, g) and every[g] == p for g in every)}
+
+    def projects(self) -> set[str]:
+        return {v[0] for v in self.active.values()}
+
+    def decide(self, path: str | None, added: dict[str, str]) -> tuple[str, bool] | None:
+        """(hub project, whether it goes) when a group's folder is the most specific one `path` is in, and no folder
+        added by hand (`added`, [hub] folders) is as specific; None otherwise."""
+        keys = [k for k in (*self.active, *self.kept) if under(path, k)]
+        if not keys:
+            return None
+        key = max(keys, key=len)
+        if any(under(path, f) and len(f) >= len(key) for f in added):
+            return None
+        if key in self.active:
+            project, gid = self.active[key]
+            return project, self.group_of.get(path) == gid
+        return self.kept[key], False
+
+    def remember(self, cfg: Config) -> None:
+        """Note the folders just sent to the hub, so they stay filed there after they leave their group."""
+        if not self.active:
+            return
+        from .db import connect
+
+        conn = connect(cfg.db_path)
+        try:
+            conn.executemany(
+                "INSERT INTO group_shares(path, hub_project, group_id, shared_at) VALUES (?, ?, ?, ?) ON CONFLICT(path) "
+                "DO UPDATE SET hub_project = excluded.hub_project, group_id = excluded.group_id",
+                [(f, project, gid, utcnow_iso()) for f, (project, gid) in self.active.items()])
+            conn.commit()
+        finally:
+            conn.close()
+
+
+def group_routes(cfg: Config, conn=None) -> GroupRoutes:
+    """This computer's GroupRoutes, from its groups and what they shared before. Empty on a computer that doesn't
+    send to a hub. Folders only: a path another computer recorded (host:/…) isn't one the hub files by."""
+    if not cfg.is_spoke or (conn is None and not cfg.db_path.exists()):
+        return GroupRoutes()
+    from .db import connect
+    from .groups import assign, groups
+
+    own = conn is None
+    conn = conn or connect(cfg.db_path)
+    try:
+        linked = {g["id"]: g["hub_project"] for g in groups(conn) if g.get("hub_project")}
+        paths = [r[0] for r in conn.execute("SELECT DISTINCT project_path FROM sessions WHERE project_path IS NOT NULL")]
+        group_of = {p: gid for p, (gid, _) in assign(conn, paths).items()}
+        active = {p: (linked[gid], gid) for p, gid in group_of.items() if gid in linked and p.startswith("/")}
+        kept = {r[0]: r[1] for r in conn.execute("SELECT path, hub_project FROM group_shares") if r[0] not in active}
+    finally:
+        if own:
+            conn.close()
+    return GroupRoutes(active, kept, group_of)
+
+
+def sent_folders(cfg: Config, routes: GroupRoutes) -> dict[str, str]:
+    """The folders this computer tells the hub to file by: the ones added by hand, then its groups', up to what the
+    hub takes (MAX_FOLDERS)."""
+    out = dict(cfg.hub_folders)
+    for f, project in routes.folders().items():
+        if len(out) >= MAX_FOLDERS:
+            log.warning("more than %d folders to file on the hub: some of the groups' are left out", MAX_FOLDERS)
+            break
+        out.setdefault(f, project)
+    return out
+
+
+def hello_info(cfg: Config, roots: list[Root], routes: GroupRoutes | None = None) -> dict:
     me = local_machine(cfg)
+    routes = group_routes(cfg) if routes is None else routes
     return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "platform": platform_label(),
             "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
-            "folders": cfg.hub_folders, "left": cfg.hub_left, "share": cfg.hub_share}
+            "folders": sent_folders(cfg, routes), "left": cfg.hub_left, "share": cfg.hub_share}
 
 
 def _check_protocol(hello: dict) -> None:
@@ -771,12 +865,14 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
     client = client or HubClient(cfg.hub_url, token)
-    info = hello_info(cfg, spoke_roots(cfg))
+    routes = group_routes(cfg)
+    info = hello_info(cfg, spoke_roots(cfg), routes)
     try:
         hello = client.request("POST", "/api/hub/hello", body=info)
     finally:
         client.close()
     _check_protocol(hello)
+    routes.remember(cfg)
     _record_folders(cfg, hello, info["repos"])
     return hello
 
@@ -831,9 +927,11 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
     client = client or HubClient(cfg.hub_url, token)
     me = local_machine(cfg)
     try:
-        info = hello_info(cfg, roots)
+        routes = group_routes(cfg)
+        info = hello_info(cfg, roots, routes)
         hello = client.request("POST", "/api/hub/hello", body=info)
         _check_protocol(hello)
+        routes.remember(cfg)
         _record_folders(cfg, hello, info["repos"])
         inventory = hello.get("inventory") or {}
         if hello.get("wants_analyses"):
@@ -888,8 +986,8 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
 
 
 def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, remotes: dict | None = None,
-                    projects_only: bool = False, conn=None, where: str = "",
-                    params: tuple = ()) -> tuple[list[dict], int, int]:
+                    projects_only: bool = False, conn=None, where: str = "", params: tuple = (),
+                    routes: GroupRoutes | None = None) -> tuple[list[dict], int, int]:
     """(records the hub lacks or has an older analysis of, unchanged, excluded) for push_knowledge.
 
     `scope`: the hub projects this computer's person is limited to (hello says so); then only sessions the hub files
@@ -897,6 +995,8 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
     `projects_only` ([hub] all_folders = false): the same for any of the hub's projects, so a folder nobody added and
     a repository the hub doesn't know stay here.
     Sessions the hub files under a project this computer left ([hub] left) always stay here.
+    `routes`: the groups shared on the hub (GroupRoutes): a project in one goes to its hub project, whatever
+    `projects_only` says; one in a shared group's folder but not in that group, or that left it, stays here.
     `conn`/`where`: the hub's own sessions in projects set up there (share_own)."""
     from .db import connect
 
@@ -908,6 +1008,7 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
     conn = conn or connect(cfg.db_path, readonly=True)
     found: dict[str, str | None] = {}
     left = set(cfg.hub_left)
+    routes = routes if routes is not None else GroupRoutes()
     try:
         cols = ", ".join(("id", "project_path", "machine_path") + SHARED_COLS + ANALYSIS_COLS)  # never a prompt-made title
         marks = ", ".join("?" for _ in SHARED_AGENTS)
@@ -921,14 +1022,23 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
                 excluded += 1
                 continue
             limited = scope is not None or projects_only
-            if not limited and not left and have.get(rec["id"]) == rec["analyzed_at"]:
+            routed = bool(routes) and routes.decide(rec["project_path"], cfg.hub_folders) is not None
+            if not limited and not left and not routed and have.get(rec["id"]) == rec["analyzed_at"]:
                 unchanged += 1  # asked git nothing: it runs once per folder, only for what goes
                 continue
             if ran and ran not in found:
                 info = git_info(ran)
                 found[ran] = info[1] if info else None
             rec["remote"] = found.get(ran) if ran else None
-            if limited or left:
+            # a repository whose remote the hub files somewhere goes there, as destination() says; else a shared group
+            via = None if not routed or (rec["remote"] and (remotes or {}).get(rec["remote"])) \
+                else routes.decide(rec["project_path"], cfg.hub_folders)
+            if via is not None:
+                goes, ok = via
+                if not ok or goes in left or (scope is not None and goes not in scope):
+                    excluded += 1  # kept out of the group, out of it now, left, or a project this person doesn't share
+                    continue
+            elif limited or left:
                 goes = destination(cfg, rec["project_path"], rec["remote"], remotes or {})
                 if goes in left or (limited and (goes is None or (scope is not None and goes not in scope))):
                     excluded += 1  # not one of the hub's projects, one this person doesn't share, or one it left
@@ -957,7 +1067,7 @@ def destination(cfg: Config, path: str | None, remote: str | None, remotes: dict
     return cfg.hub_folders[folder] if folder else None
 
 
-def hub_project_of(cfg: Config, paths) -> dict[str, dict]:
+def hub_project_of(cfg: Config, paths, conn=None) -> dict[str, dict]:
     """For a computer that sends to a hub: the hub project each of these projects here is in, {path: {path, name}},
     as destination() finds it, with the repositories whose remote the hub files somewhere as of the last push, and the
     hub's name for it. None for a project in none of the hub's projects, one this computer left, or an excluded one."""
@@ -967,12 +1077,14 @@ def hub_project_of(cfg: Config, paths) -> dict[str, dict]:
     names = {p["path"]: p.get("name") for p in seen.get("projects") or [] if isinstance(p, dict) and p.get("path")}
     repos = {r["folder"]: project for project, rs in (seen.get("remotes") or {}).items() if isinstance(rs, list)
              for r in rs if isinstance(r, dict) and r.get("folder")}  # a repository's top folder: the hub project
+    routes = group_routes(cfg, conn)
     out = {}
     for path in paths:
         if not path or cfg.is_excluded(path):
             continue
         top = max((f for f in repos if under(path, f)), key=len, default=None)
-        goes = repos[top] if top else destination(cfg, path, None, {})
+        via = None if top else routes.decide(path, cfg.hub_folders)
+        goes = repos[top] if top else (via[0] if via[1] else None) if via else destination(cfg, path, None, {})
         if goes and goes not in cfg.hub_left:
             out[path] = {"path": goes, "name": names.get(goes) or Path(goes).name or goes}
     return out
@@ -1015,9 +1127,11 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
     client = client or HubClient(cfg.hub_url, token)
     me = local_machine(cfg)
     try:
-        info = hello_info(cfg, spoke_roots(cfg))
+        routes = group_routes(cfg)
+        info = hello_info(cfg, spoke_roots(cfg), routes)
         hello = client.request("POST", "/api/hub/hello", body=info)
         _check_protocol(hello)
+        routes.remember(cfg)
         _record_folders(cfg, hello, info["repos"])
         have = hello.get("knowledge")
         if not isinstance(have, dict):
@@ -1025,7 +1139,7 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
         scope = hello.get("scope") if isinstance(hello.get("scope"), list) else None  # the hub limits this person
         records, report.unchanged, report.skipped = _shared_records(cfg, have, scope=scope,
                                                                     remotes=hello.get("remotes") or {},
-                                                                    projects_only=not cfg.hub_all_folders)
+                                                                    projects_only=not cfg.hub_all_folders, routes=routes)
         for i in range(0, len(records), SHARE_BATCH):
             batch = records[i:i + SHARE_BATCH]
             if progress:
@@ -1077,7 +1191,8 @@ def pull_team_lessons(cfg: Config, client: HubClient, repos: dict) -> int:
     remotes = sorted({v[1] for v in repos.values() if isinstance(v, list) and len(v) == 2 and v[1]})
     data = client.request("POST", "/api/hub/lessons", body={
         "machine": local_machine(cfg)["id"], "remotes": remotes,
-        "projects": sorted(set(cfg.hub_folders.values()) - set(left)), "left": left, "version": state.get("version")})
+        "projects": sorted((set(cfg.hub_folders.values()) | group_routes(cfg).projects()) - set(left)), "left": left,
+        "version": state.get("version")})
     if not data.get("team"):
         return 0
     if data.get("unchanged"):
@@ -1127,6 +1242,9 @@ def apply_team_lessons(cfg: Config, data: dict, repos: dict) -> int:
             clones.setdefault(v[1], []).append(cwd)
     added = {}
     for folder, project in sorted(cfg.hub_folders.items()):
+        added.setdefault(project, folder)
+    # a group shared as a hub project: its lessons go to the group's project with the shortest folder (its top, often)
+    for folder, (project, _) in sorted(group_routes(cfg).active.items(), key=lambda kv: (len(kv[0]), kv[0])):
         added.setdefault(project, folder)
     conn = connect(cfg.db_path)
     try:
