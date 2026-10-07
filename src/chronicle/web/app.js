@@ -2876,6 +2876,9 @@ function mapMatch(terms, q) { // every term with all the words in its name or al
   const described = terms.filter((t) => !has(names(t)) && has((t.definition || "").toLowerCase()));
   return { named, described };
 }
+// a knowledge item or session under a term: the same one can sit under several terms, so it is matched by what it is
+const mapLeafKey = (n) => (n.kind === "kitem" ? `k:${n.k.id}` : n.kind === "session" ? `s:${n.session.id}` : null);
+const mapLeafText = (n) => (n.kind === "kitem" ? `${n.k.title}\n${n.k.body || ""}` : n.session.title || "").toLowerCase();
 
 const MAP_TOOL_ICONS = {
   fit: "M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5",
@@ -2930,7 +2933,7 @@ route(/^\/map$/, async (params) => {
   function nodeEl(n, isNew) {
     const hasKids = n.children.length > 0, open = mapState.open.has(n.id) && hasKids;
     const hgt = MAP_BOX[n.kind];
-    const hit = hits && (n.kind === "term" ? hits.ids.has(n.term.id) : hits.groups.includes(n));
+    const hit = hits && (n.kind === "term" ? hits.ids.has(n.term.id) : mapLeafKey(n) ? hits.leafKeys.has(mapLeafKey(n)) : hits.groups.includes(n));
     const g = s("g", { class: `mm-node ${n.kind}${n.value === null ? " ungrouped" : ""}${hit ? " hit" : ""}${selected === n.id ? " sel" : ""}${isNew ? " enter" : ""}`,
       transform: `translate(${n.x},${n.y})`, role: "treeitem", tabindex: "0", "aria-label": n.label,
       "aria-expanded": hasKids ? String(open) : null, "aria-selected": selected === n.id ? "true" : null });
@@ -3299,18 +3302,28 @@ route(/^\/map$/, async (params) => {
     const termRow = (tm) => row(tm.term, tm.n_sessions ? t("{n} sess.", { n: fmtNum(tm.n_sessions) }) : "", tm.category, () => reveal(tm), tm.definition || "");
     const groupRow = (g) => row(g.label, `${MAP_DIM_NAMES[g.kind].toLowerCase()} · ${fmtNum(g.count)}`, mapNeutral(g.kind) ? null : g.cat,
       () => { select(g); centerOn(g); }, where(g).replace(/(\. |。)$/, ""));
+    const leafRow = (n) => row(n.label, n.kind === "kitem" ? kindLabel(n.k.kind) : fmtDate(n.session.started_at), n.cat, () => goLeaf(n),
+      t("about {term}", { term: n.parent.label }));
     const section = (title, items, rowOf) => items.length ? [h("h4", null, `${title} · ${fmtNum(items.length)}`), h("ul", { class: "mm-pick" }, items.map(rowOf))] : null;
     const total = named.length + described.length;
+    const kitems = hits.leaves.filter((n) => n.kind === "kitem"), sessions = hits.leaves.filter((n) => n.kind === "session");
+    const counts = [
+      total && tn(total, "{n} term", "{n} terms", { n: fmtNum(total) }),
+      groups.length && tn(groups.length, "{n} group", "{n} groups", { n: fmtNum(groups.length) }),
+      kitems.length && tn(kitems.length, "{n} knowledge item", "{n} knowledge items", { n: fmtNum(kitems.length) }),
+      sessions.length && tn(sessions.length, "{n} session", "{n} sessions", { n: fmtNum(sessions.length) }),
+    ].filter(Boolean);
     return [
       closeBtnSearch(),
       h("span", { class: "mm-cat neutral" }, icon("search"), t("search")),
       h("h3", null, t("“{q}”", { q: query })),
-      h("p", { class: "mm-def" }, !total && !groups.length ? t("Nothing on the map matches.")
-        : groups.length ? t("{terms} and {groups} match, all opened on the map and highlighted. Click one to go to it.", { terms: tn(total, "{n} term", "{n} terms", { n: fmtNum(total) }), groups: tn(groups.length, "{n} group", "{n} groups", { n: fmtNum(groups.length) }) })
-        : t("{terms} match, all opened on the map and highlighted. Click one to go to it.", { terms: tn(total, "{n} term", "{n} terms", { n: fmtNum(total) }) })),
+      h("p", { class: "mm-def" }, !counts.length ? t("Nothing on the map matches.")
+        : t("{what} match, all opened on the map and highlighted. Click one to go to it.", { what: counts.join(t(", ")) })),
       section(t("Groups"), groups, groupRow),
       section(t("Named"), named, termRow),
       section(t("Mentioned in the definition"), described, termRow),
+      section(t("Knowledge"), kitems, leafRow),
+      section(t("Sessions"), sessions, leafRow),
       hits.hidden ? h("p", { class: "mm-tip" }, t("{n} more among file names and commands. ", { n: fmtNum(hits.hidden) }),
         h("button", { type: "button", class: "link-btn", onclick: () => refresh({ all: "1" }) }, t("Show them"))) : null,
       h("div", { class: "mm-links-row" },
@@ -3321,7 +3334,8 @@ route(/^\/map$/, async (params) => {
   const closeBtnSearch = () => h("button", { class: "icon-btn mm-close", type: "button", "aria-label": t("Clear search"),
     onclick: () => { search.value = ""; find(""); } }, icon("x"));
   const home = () => (hits ? results() : overview());
-  function find(q) { // open every match on the map: terms by name, alias or definition, and groups by name
+  function goLeaf(n) { openPath(n); select(n); centerOn(n); }
+  function find(q) { // open every match on the map: terms by name, alias or definition, groups by name, and the knowledge and sessions under terms
     q = q.trim();
     if (q === query) return;
     query = q;
@@ -3341,7 +3355,15 @@ route(/^\/map$/, async (params) => {
       })(tree);
       const ids = new Set([...named, ...described].map((tm) => tm.id));
       const other = withHidden ? { named: [], described: [] } : mapMatch(data.terms.filter((tm) => MAP_HIDDEN.has(tm.category)), q);
-      hits = { named, described, groups, ids, hidden: other.named.length + other.described.length };
+      const leafNodes = [], leaves = new Map(); // every place a matching item or session sits, and its first place
+      (function walk(n) {
+        if (n.kind === "term") {
+          for (const c of n.children) if (words.every((w) => mapLeafText(c).includes(w))) { leafNodes.push(c); if (!leaves.has(mapLeafKey(c))) leaves.set(mapLeafKey(c), c); }
+          return;
+        }
+        n.children.forEach(walk);
+      })(tree);
+      hits = { named, described, groups, ids, leaves: [...leaves.values()], leafKeys: new Set(leaves.keys()), hidden: other.named.length + other.described.length };
       mapState.open = new Set(["root"]);
       mapState.pinned.clear();
       mapState.only = new Set();
@@ -3349,15 +3371,18 @@ route(/^\/map$/, async (params) => {
         if (n.kind === "term") { if (ids.has(n.term.id)) openPath(n, true); return; }
         n.children.forEach(walk);
       })(tree);
+      for (const c of leafNodes) openPath(c, true); // its term opens to show it
       for (const g of groups) { openPath(g, true); mapState.open.add(g.id); }
       for (const g of groups) mapState.only.delete(g.id); // a matching group shows what is in it
       draw();
-      if (ids.size || groups.length) fit(0.65); // many matches: stay readable and start at the top
+      if (ids.size || groups.length || leaves.size) fit(0.65); // many matches: stay readable and start at the top
     }
     setParams(urlState({ term: "" }));
     aside.replaceChildren(...home());
     aside.scrollTop = 0;
-    if (hits && hits.ids.size === 1 && !hits.groups.length) reveal([...hits.named, ...hits.described][0]); // just one: open it
+    if (hits && !hits.groups.length && hits.ids.size + hits.leaves.length === 1) { // just one: open it
+      if (hits.ids.size) reveal([...hits.named, ...hits.described][0]); else goLeaf(hits.leaves[0]);
+    }
   }
   aside.append(...overview());
 
