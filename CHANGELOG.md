@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.0 (2026-10-07)
 
 - **The sidebar stays as you left it:** clicking a section in the rail no longer brings back a sidebar you hid. Only
   the button at the top left (or ⌘B) shows or hides it.
