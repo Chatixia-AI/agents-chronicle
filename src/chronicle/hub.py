@@ -1121,18 +1121,32 @@ def limited_error(person: dict) -> HubError:
                     "then `chronicle push`")
 
 
+def transcripts_refused(cfg: Config, person: dict | None) -> HubError | None:
+    """Why this hub won't take a computer's transcripts, or None if it will: the hub takes knowledge only
+    (`[hub] accept`), or the computer's person sees only some projects (people.py)."""
+    from .people import projects_of
+
+    if cfg.hub_accept == "knowledge":
+        return HubError("this hub takes knowledge only (summaries and project lessons, not transcripts), so this "
+                        "computer may share knowledge only: run `chronicle config set hub.share knowledge`, then "
+                        "`chronicle push`")
+    if projects_of(person) is not None:
+        return limited_error(person)
+    return None
+
+
 def hello(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
     """A computer says who it is and which folders it added to projects here; the hub answers with what it has of
     that computer's, and the projects it may add folders to. A person limited to projects (people.py) hears only of
-    theirs, and must share knowledge (no transcripts)."""
+    theirs. They, and every computer of a hub that takes knowledge only, must share knowledge (no transcripts)."""
     from .people import projects_of
 
     machine_id = check_machine(cfg, str(body.get("machine") or ""))
     if int(body.get("protocol", 0)) != PROTOCOL:
         return {"protocol": PROTOCOL, "version": __version__}
     scope = projects_of(person)
-    if scope is not None and body.get("share") != "knowledge":
-        raise limited_error(person)
+    if body.get("share") != "knowledge" and (refused := transcripts_refused(cfg, person)):
+        raise refused
     # the team store holds what computers share as knowledge; one that sends transcripts never waits on it
     store = _store(cfg) if body.get("share") == "knowledge" else None
     if store:
@@ -1208,7 +1222,7 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
     scope = people.projects_of(person)
     return {"token": token, "person": people.public(person), "hub": local_machine(cfg)["name"],
             "projects": hub_projects(conn, only=scope) if scope is not None else None,
-            "share": "knowledge" if scope is not None else None}
+            "share": "knowledge" if scope is not None or cfg.hub_accept == "knowledge" else None}
 
 
 def signin_code_for(cfg: Config, conn, person: dict | None) -> dict:

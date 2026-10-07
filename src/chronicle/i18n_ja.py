@@ -323,6 +323,7 @@ JA: dict[str, str] = {
     "sign in to this hub": "このハブにサインインしてください",
     "you're not on this hub; ask an admin to add you": "あなたはこのハブに登録されていません。管理者に追加を頼んでください",
     "only an admin of this hub can do this": "これができるのはこのハブの管理者だけです",
+    "this computer is not a hub": "このコンピューターはハブではありません",
     "Could not sign in": "サインインできませんでした",
     "Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
     "(Settings › Devices).":

@@ -141,6 +141,23 @@ On the hub these sessions are filed like any other from that computer (by git re
 for them. It still builds each project's knowledge base and glossary with its own. **Team › Computers** marks the
 computer **knowledge only**. A session the hub already has the transcript of keeps the hub's record.
 
+### A hub that takes knowledge only
+
+Each computer chooses what it sends, so one that joined without `--share knowledge` sends its transcripts. To keep
+every transcript off the hub, whoever's computer it is, make the hub take knowledge only. At the hub:
+
+```bash
+chronicle config set hub.accept knowledge
+```
+
+or, as an admin, switch on **Team › Computers › Knowledge only**. The hub then turns away any computer that sends
+transcripts, with the shared token or a person's own token, and tells it what to run: `chronicle config set hub.share
+knowledge`, then `chronicle push`. **Team › Computers** marks such a computer **sends transcripts: turned away**, and
+`chronicle hub` lists it the same way. A computer that joins with an invite is set to share knowledge on its own.
+Transcripts the hub already has stay; `chronicle forget` removes a session for good. Any value other than
+`"everything"` or `"knowledge"` counts as `"knowledge"`, so a typo never lets transcripts in. The audit log records who
+changed it.
+
 ### Teammates' lessons, and a team store in Postgres
 
 A hub that several people share can keep the team's record in Postgres, and send each computer that shares
