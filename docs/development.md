@@ -106,6 +106,19 @@ Mermaid export), `artifacts.py` (what sessions made, and where each stands), `gl
 `ee/` is Chronicle Enterprise: its own package (`chronicle_ee`) under the [Chronicle Enterprise License](../ee/LICENSE),
 left out of the MIT wheel and sdist. The core never imports it; [ee/README.md](../ee/README.md) says what belongs there.
 
+## Trying a change
+
+`./dev.sh` starts the dashboard from the checkout on a copy of your archive in `~/.chronicle-sandbox/dev-sh`, so
+your own `~/.claude-chronicle` and an installed Chronicle are never touched. Its config records, analyzes and
+shares nothing. `--app` opens the macOS app window instead, `--demo` uses the [demo data](#demo-data), `--fresh`
+re-copies the archive, and `--tree ../agents-chronicle-<topic>` runs another worktree's code. The server reads the
+web files once at startup, so restart it after editing `app.css` or `app.js`.
+
+```bash
+./dev.sh                                  # http://127.0.0.1:8797/ (or the next free port)
+./dev.sh --tree ../agents-chronicle-<topic> --app
+```
+
 ## Demo data
 
 `docs/demo/make_demo.py` builds a Chronicle home from made-up sessions: a fictional developer with five projects
