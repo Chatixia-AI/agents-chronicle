@@ -21,7 +21,12 @@ ENV = {"CHRONICLE_HUB_URL": "https://chronicle.example.com/", "CHRONICLE_ADMIN_E
 def served(env, monkeypatch):
     """container.main() up to serving: what it would serve, without binding a port or touching SIGTERM for good."""
     got = {}
-    monkeypatch.setattr("chronicle.server.serve", lambda cfg: got.setdefault("cfg", cfg))
+
+    def serve(cfg, **kw):  # the first start's config and arguments are kept
+        got.setdefault("cfg", cfg)
+        got.setdefault("kw", kw)
+
+    monkeypatch.setattr("chronicle.server.serve", serve)
     before = signal.getsignal(signal.SIGTERM)
     yield env, got
     signal.signal(signal.SIGTERM, before)
@@ -109,6 +114,7 @@ def test_serves_once_set_up_and_prints_the_invite(served, capsys):
         conn.close()
     out = capsys.readouterr()
     assert "/signin?code=" in out.out and "knowledge only" in out.out
+    assert got["kw"]["banner"] == "Chronicle hub is up: https://chronicle.example.com"
     assert "not https" not in out.err
     assert container.main(ENV) == 0
     assert "/signin?code=" not in capsys.readouterr().out  # shown once
@@ -145,3 +151,25 @@ def test_a_container_install_does_not_update_itself(monkeypatch):
     info = update.check()
     assert info["kind"] == "container" and not info["can_update"]
     assert "docker compose pull" in info["note"]
+
+
+def test_the_banner_replaces_the_local_address(env, monkeypatch, capsys):
+    """An editor connected to the hub's server (VS Code Remote-SSH) forwards any 127.0.0.1 address printed in its
+    terminal to the same port on the viewer's own computer, hiding their own dashboard there."""
+    from chronicle import server
+
+    class Httpd:
+        server_address = ("127.0.0.1", 11524)
+
+        def serve_forever(self):
+            raise KeyboardInterrupt
+
+        def server_close(self):
+            pass
+
+    monkeypatch.setattr(server, "make_server", lambda cfg, host, port: Httpd())
+    server.serve(env["cfg"], banner="Chronicle hub is up: https://hub.example.com")
+    out = capsys.readouterr().out
+    assert out.strip() == "Chronicle hub is up: https://hub.example.com" and "127.0.0.1" not in out
+    server.serve(env["cfg"])
+    assert "http://127.0.0.1:11524/" in capsys.readouterr().out  # `chronicle ui` still says where it is

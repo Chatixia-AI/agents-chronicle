@@ -187,8 +187,8 @@ def main(env: Mapping[str, str] | None = None) -> int:
         raise KeyboardInterrupt
 
     signal.signal(signal.SIGTERM, on_term)
-    try:
-        serve(cfg)
+    try:  # the hub's address, never 127.0.0.1: VS Code on the server would forward that to the viewer's own port
+        serve(cfg, banner=f"Chronicle hub is up: {cfg.hub_address}")
     finally:
         stop.set()
     return 0

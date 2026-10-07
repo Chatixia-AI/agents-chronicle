@@ -2360,7 +2360,10 @@ def _already_running(cfg: Config, port: int, open_browser: bool) -> None:
     raise SystemExit(0 if open_browser else 1)
 
 
-def serve(cfg: Config, host: str | None = None, port: int | None = None, open_browser: bool = False) -> None:
+def serve(cfg: Config, host: str | None = None, port: int | None = None, open_browser: bool = False, *,
+          banner: str | None = None) -> None:
+    """`banner`: the line printed once the dashboard listens, instead of its 127.0.0.1 address (container.py prints
+    the hub's own: an editor connected to the server forwards any 127.0.0.1 address it sees in a terminal)."""
     from . import update
 
     update.RESTARTABLE = True  # this process is only the dashboard, so an update can re-exec it
@@ -2371,7 +2374,7 @@ def serve(cfg: Config, host: str | None = None, port: int | None = None, open_br
             raise
         _already_running(cfg, port or cfg.server_port, open_browser)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(f"Chronicle dashboard: {url}  (Ctrl+C to stop)")
+    print(banner or f"Chronicle dashboard: {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     try:

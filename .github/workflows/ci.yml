@@ -76,6 +76,11 @@ jobs:
           docker logs hub
           docker inspect -f '{{.State.Health.Status}}' hub | grep -qx healthy
           docker logs hub | grep -q '/signin?code='
+          docker logs hub | grep -q 'Chronicle hub is up: https://hub.example.com'
+          if docker logs hub 2>&1 | grep -q '127.0.0.1'; then  # an editor on the server would forward it
+            echo "::error::the hub's log names 127.0.0.1"
+            exit 1
+          fi
           code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: hub.example.com' http://127.0.0.1:11524/api/people)
           if [ "$code" != 401 ]; then
             echo "::error::/api/people answered $code without a sign-in"
