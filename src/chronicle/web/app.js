@@ -5627,7 +5627,7 @@ function drawUnseen(n) {
   badge.textContent = n > 99 ? "99+" : String(n);
 }
 function suggestionsChanged() { // counts in the sidebar and the rail follow an action
-  if (shellSection === "suggestions") buildSidebar("suggestions");
+  if (sbSection === "suggestions") buildSidebar("suggestions");
   pollUnseen();
 }
 
@@ -6046,6 +6046,7 @@ const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", s
   team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team", teamsettings: "team" };
 const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), teamsettings: t("Hub settings"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
+let sbSection = null; // the section the sidebar shows: the page's, or while it peeks, the one under the pointer
 
 function sectionOf(path, params) {
   const key = navKey(path);
@@ -6247,6 +6248,7 @@ function teamSidebar(box) {
 }
 async function buildSidebar(section) {
   const mine = ++sbSeq;
+  sbSection = section;
   const box = h("div", { class: "sb-body" }); // drawn off-screen, swapped in only if still wanted
   try {
     if (section === "home" || section === "teamhome") await sessionsSidebar(box, t("Recent sessions"));
@@ -6278,18 +6280,28 @@ function toggleSidebar() {
 }
 // a hidden sidebar peeks out while the pointer rests on the rail or on it, and hides once the pointer leaves both:
 // it never changes whether the sidebar is shown
-let peekTimer = 0;
+let peekTimer = 0, peekHoverTimer = 0;
 function peekSidebar(on, delay = 0) {
   clearTimeout(peekTimer);
-  const set = () => document.documentElement.classList.toggle("peek-sidebar", on);
+  const set = () => {
+    document.documentElement.classList.toggle("peek-sidebar", on);
+    if (!on && shellSection && sbSection !== shellSection) buildSidebar(shellSection); // back to the page's own
+  };
   if (delay) peekTimer = setTimeout(set, delay); else set();
 }
 function wirePeek() {
   const canPeek = () => document.documentElement.classList.contains("no-sidebar") && matchMedia("(hover: hover) and (min-width: 861px)").matches;
   for (const el of [$("#rail"), $("#sidebar")]) {
     el.addEventListener("mouseenter", () => { if (canPeek()) peekSidebar(true, el.id === "rail" ? 180 : 0); });
-    el.addEventListener("mouseleave", () => peekSidebar(false, 220));
+    el.addEventListener("mouseleave", () => { clearTimeout(peekHoverTimer); peekSidebar(false, 220); });
   }
+  // while it peeks, the sidebar follows the icon under the pointer (search has none of its own: it keeps the last one)
+  $("#rail").addEventListener("mouseover", (e) => {
+    const key = e.target.closest("a[data-section]")?.dataset.section;
+    if (!key || !canPeek() || !SECTIONS.some((x) => x.key === key)) return;
+    clearTimeout(peekHoverTimer);
+    if (key !== sbSection) peekHoverTimer = setTimeout(() => buildSidebar(key), 120);
+  });
 }
 function sidebarExpanded() {
   const root = document.documentElement;
