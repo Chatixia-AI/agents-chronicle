@@ -855,7 +855,7 @@ function navKey(path) {
   if (path.startsWith("/team")) return { "/team/projects": "teamprojects", "/team/computers": "teamcomputers", "/team/store": "teamstore" }[path] || "team";
   if (path === "/activity") return "activity";
   if (path === "/overview") return "teamhome";
-  if (path === "/" || path === "") return "overview";
+  if (path === "/" || path === "") return dedicated() ? "teamhome" : "overview";
   return "";
 }
 
@@ -991,7 +991,7 @@ function deltaText(cur, prev, days) {
 // Overview
 // =====================================================================================
 // Home: the activity charts. A hub with people calls it Activity and has the team's own page beside it (Team overview)
-route(/^\/?$/, (params) => activityView(params, !!ME?.hub?.team));
+route(/^\/?$/, (params) => (dedicated() ? teamHome(params) : activityView(params, !!ME?.hub?.team)));
 route(/^\/activity$/, (params) => activityView(params, true)); // an older link
 route(/^\/overview$/, (params) => (ME?.hub?.team ? teamHome(params) : activityView(params)));
 async function activityView(params, own = false) {
@@ -1226,6 +1226,8 @@ async function teamHome(params) {
   if (!data.projects.length) {
     return h("div", null, head, attention, h("section", { class: "card section-gap" }, cardHead(t("No team projects yet"), { iconName: "projects" }),
       limited() ? h("p", null, t("No project on this hub is shared with you yet. Ask an admin of this hub."))
+        : dedicated() ? h("p", null, tx("A project shows up here once an admin makes it in {projects}, or a computer sends sessions to it.",
+          { projects: h("a", { href: "#/team/projects" }, t("Team › Projects")) }))
         : h("p", null, tx("A project shows up here once it is set up on the hub with {command}, or another computer sends sessions to it. Projects only this computer works on stay under {activity}.",
           { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>"), activity: h("a", { href: "#/" }, t("Activity")) }))));
   }
@@ -5174,7 +5176,9 @@ async function teamPage(title, sub, card) {
     h("div", { class: "grid" }, card(dv)));
 }
 route(/^\/team$/, () => teamPage(t("People"), t("Who may send to this hub and open its dashboard, with which role and projects."), (dv) => peopleCard(dv)));
-route(/^\/team\/projects$/, () => teamPage(t("Shared projects"), t("Projects set up on this hub: who sees each, and which computers send to it."), () => sharedProjectsCard()));
+route(/^\/team\/projects$/, () => teamPage(teamProjectsLabel(), dedicated()
+  ? t("This hub's projects: who sees each, and which computers send to it. Make one here, then each computer adds its folder to it.")
+  : t("Projects set up on this hub: who sees each, and which computers send to it."), () => sharedProjectsCard()));
 route(/^\/team\/computers$/, () => teamPage(t("Computers"), t("Every computer this hub hears from, and whose it is."), (dv) => computersCard(dv)));
 route(/^\/team\/store$/, () => teamPage(t("Team store"), t("The team's record in Postgres, which only this hub connects to."), (dv) => teamStoreCard(dv)));
 
@@ -5195,19 +5199,22 @@ function sharedProjectsCard() {
       if (!e.handled) box.replaceChildren(cardHead(t("Shared projects"), { iconName: "projects" }), h("div", { class: "warn-line" }, e.message));
     }
   };
-  const row = (x, here) => {
-    const stop = here ? h("button", { class: "btn small danger", type: "button", onclick: async () => {
-      if (!confirm(t("Stop sharing {name}? This computer's sessions there go back to their own folders and stop going to the team store. What others sent stays, and people keep it in their list until you change it.", { name: x.name }))) return;
+  const row = (x, editable, dedicatedHub) => {
+    const stop = editable ? h("button", { class: "btn small danger", type: "button", onclick: async () => {
+      if (!confirm(dedicatedHub
+        ? t("Remove {name} from this hub's projects? What computers already sent stays filed under it, and people keep it in their list until you change it.", { name: x.name })
+        : t("Stop sharing {name}? This computer's sessions there go back to their own folders and stop going to the team store. What others sent stays, and people keep it in their list until you change it.", { name: x.name }))) return;
       stop.disabled = true;
       const r = await send("/api/projects/shared/remove", { path: x.path });
-      if (r) { toast(t("{name} is no longer shared.", { name: x.name })); projectsCache = null; draw(r); } else stop.disabled = false;
-    } }, t("Stop sharing")) : null;
+      if (r) { toast(dedicatedHub ? t("{name} was removed from this hub's projects.", { name: x.name }) : t("{name} is no longer shared.", { name: x.name })); projectsCache = null; draw(r); }
+      else stop.disabled = false;
+    } }, dedicatedHub ? t("Remove") : t("Stop sharing")) : null;
     const who = x.people.length ? x.people.map((p) => p.name).join(", ") : t("no one limited to it yet");
     return h("li", { class: "sp-row" },
       h("div", { class: "sp-main" },
         h("div", null, h("a", { href: `#/project?path=${encodeURIComponent(x.path)}`, class: "sp-name" }, x.name), " ",
           h("span", { class: "muted" }, tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }))),
-        h("div", { class: "codeline sp-path", title: x.path }, x.path),
+        dedicatedHub ? null : h("div", { class: "codeline sp-path", title: x.path }, x.path), // on a dedicated hub: its own folder, which says nothing
         h("div", { class: "sp-line" }, h("span", { class: "muted" }, t("Seen by")), " ", who,
           x.everyone ? h("span", { class: "muted" }, t(" · and {n} who see every project", { n: fmtNum(x.everyone) })) : null),
         x.folders.length ? h("div", { class: "sp-line" }, h("span", { class: "muted" }, t("Sent from")), " ",
@@ -5279,16 +5286,40 @@ function sharedProjectsCard() {
     return [h("div", { class: "subhead" }, t("Share another project")), form,
       h("p", { class: "muted" }, t("The folder and everything below it becomes one project. This computer's sessions there are filed under it, and other computers can add their own folder to it before anything was sent."))];
   };
+  // a dedicated hub has no sessions of its own: a project there is a name its computers file their folders under
+  const newProjectForm = () => {
+    const name = h("input", { class: "input", name: "name", maxlength: "80", autocomplete: "off", spellcheck: "false",
+      placeholder: t("Project name, e.g. Website"), "aria-label": t("Project name") });
+    const go2 = h("button", { class: "btn primary", type: "submit" }, t("Create project"));
+    const form = h("form", { class: "sp-form", onsubmit: async (e) => {
+      e.preventDefault();
+      if (!name.value.trim()) { name.focus(); return; }
+      go2.disabled = true;
+      const r = await send("/api/projects/shared/add", { name: name.value.trim() });
+      go2.disabled = false;
+      if (!r) return;
+      toast(r.result?.existed ? t("{name} already exists.", { name: r.result.name })
+        : t("Created {name}. Give people access in People, and have each computer add its folder to it.", { name: r.result.name }), 7000);
+      projectsCache = null;
+      draw(r);
+    } }, h("div", { class: "sp-fields" }, name), go2);
+    return [h("div", { class: "subhead" }, t("New project")), form,
+      h("p", { class: "muted" }, tx("Each computer adds its own folder for the project with {command}. Once one computer has sent sessions from a git repository, other clones of it go there on their own.",
+        { command: h("span", { class: "codeline" }, "chronicle hub add-folder <folder> --project <name>") }))];
+  };
   const draw = (data) => {
-    const here = data.here !== false;
+    const here = data.here !== false, dedicatedHub = !!data.dedicated;
     box.replaceChildren(); append(box, [
-      cardHead(t("Shared projects"), { iconName: "projects", hint: data.shared.length ? tn(data.shared.length, "{n} project", "{n} projects") : null }),
-      h("p", null, data.store
+      cardHead(dedicatedHub ? t("Projects") : t("Shared projects"), { iconName: "projects", hint: data.shared.length ? tn(data.shared.length, "{n} project", "{n} projects") : null }),
+      h("p", null, dedicatedHub
+        ? t("Each computer sends a project's analyzed sessions here as summaries and project lessons, never prompts or transcripts. Only the people given the project see them.")
+        : data.store
         ? t("Only these projects leave this computer: each analyzed session's summary and project lessons go to the team store and to the people given the project. Prompts, transcripts and every other project stay here.")
         : t("Only these projects leave this computer: people given them see each analyzed session's summary and project lessons on this hub's dashboard. Prompts, transcripts and every other project stay here.")),
-      data.shared.length ? h("ul", { class: "sp-list" }, data.shared.map((x) => row(x, here)))
-        : h("p", { class: "muted" }, t("No project is shared yet.")),
-      here ? addForm(data) : h("p", { class: "muted" }, t("Projects are shared, or stop being shared, at the hub computer itself: it decides what leaves it."))]);
+      data.shared.length ? h("ul", { class: "sp-list" }, data.shared.map((x) => row(x, here || dedicatedHub, dedicatedHub)))
+        : h("p", { class: "muted" }, dedicatedHub ? t("No project yet.") : t("No project is shared yet.")),
+      dedicatedHub ? newProjectForm() : here ? addForm(data)
+        : h("p", { class: "muted" }, t("Projects are shared, or stop being shared, at the hub computer itself: it decides what leaves it."))]);
   };
   load();
   return box;
@@ -5784,7 +5815,7 @@ const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
 const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
   team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team" };
-const PAGE_LABEL = { activity: t("Activity"), team: t("People"), teamprojects: t("Shared projects"), teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
+const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 
 function sectionOf(path, params) {
@@ -5829,7 +5860,7 @@ function renderRail() {
     return a;
   };
   const settings = SECTIONS.find((x) => x.key === "settings");
-  const shown = SECTIONS.filter((x) => !x.team || ME?.hub?.team);
+  const shown = SECTIONS.filter((x) => (!x.team || ME?.hub?.team) && !(dedicated() && DEDICATED_HIDDEN.has(x.key)));
   if (limited()) { // no transcripts to search, no settings of this hub to see
     rail.replaceChildren(...shown.filter((x) => LIMITED_SECTIONS.has(x.key)).map(link));
     return;
@@ -5967,19 +5998,20 @@ async function suggestionsSidebar(box) {
       sbRow(t("What goes wrong"), "#/friction", "gotcha", null, ["/friction"])));
 }
 function settingsSidebar(box) {
+  const own = !dedicated(); // sources, MCP and devices belong to a person's own computer, which a dedicated hub isn't
   box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Settings"))),
     h("div", { class: "sb-scroll" },
       sbRow(t("Status"), "#/status", "status", null, ["/status"]),
-      sbRow(t("Sources"), "#/sources", "sources", null, ["/sources"]),
-      sbRow("MCP", "#/mcp", "mcp", null, ["/mcp"]),
-      sbRow(t("Devices"), "#/devices", "devices", null, ["/devices"]),
+      own ? sbRow(t("Sources"), "#/sources", "sources", null, ["/sources"]) : null,
+      own ? sbRow("MCP", "#/mcp", "mcp", null, ["/mcp"]) : null,
+      own ? sbRow(t("Devices"), "#/devices", "devices", null, ["/devices"]) : null,
       sbRow(t("Appearance"), "#/appearance", "appearance", null, ["/appearance"])));
 }
 function teamSidebar(box) {
   box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Team"))),
     h("div", { class: "sb-scroll" },
       sbRow(t("People"), "#/team", "preference", null, ["/team"]),
-      sbRow(t("Shared projects"), "#/team/projects", "projects", null, ["/team/projects"]),
+      sbRow(teamProjectsLabel(), "#/team/projects", "projects", null, ["/team/projects"]),
       sbRow(t("Computers"), "#/team/computers", "devices", null, ["/team/computers"]),
       sbRow(t("Team store"), "#/team/store", "data", null, ["/team/store"])));
 }
@@ -6049,7 +6081,7 @@ function paletteCommands() {
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
     nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),
-    ...[[t("People"), "#/team", "preference", t("team")], [t("Shared projects"), "#/team/projects", "projects", t("team")], [t("Computers"), "#/team/computers", "devices", t("team")],
+    ...[[t("People"), "#/team", "preference", t("team")], [teamProjectsLabel(), "#/team/projects", "projects", t("team")], [t("Computers"), "#/team/computers", "devices", t("team")],
       [t("Team store"), "#/team/store", "data", t("team")]].map((x) => ({ ...nav(...x), hub: true, admin: true })),
     { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow, admin: true },
     { group: cmds, label: t("Toggle sidebar"), icon: "sidebar", hint: "⌘B", run: toggleSidebar },
@@ -6067,6 +6099,7 @@ function paletteCommands() {
       watchJob("glossary:all");
     } },
   ].filter((x) => (!x.admin || canAdmin()) && (!x.hub || ME?.hub) && (!x.team || ME?.hub?.team)
+    && !(dedicated() && (DEDICATED_HIDDEN_HREFS.has(x.href) || x.run === syncNow))
     && (!limited() || !x.href || ["#/", "#/overview", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
 }
 async function paletteSearch(q) {
@@ -6165,6 +6198,13 @@ function canAdmin() { return !ME || (ME.viewer?.role ?? "admin") === "admin"; }
 // them, each session as its summary and project lessons (access.py); the rest of the dashboard is hidden
 function limited() { return Array.isArray(ME?.viewer?.projects) && ME.viewer.role !== "admin"; }
 const LIMITED_SECTIONS = new Set(["home", "teamhome", "sessions", "knowledge", "projects"]);
+// A dedicated hub (`[hub] dedicated`, which the Docker image sets): a server for the team with no sessions of its own.
+// Team overview is its home, and what only a person's own computer needs (Sync, artifacts, suggestions, sources, MCP,
+// devices) is left out.
+function dedicated() { return !!ME?.hub?.dedicated && !!ME?.hub?.team; }
+const DEDICATED_HIDDEN = new Set(["home", "artifacts", "suggestions"]);
+const DEDICATED_HIDDEN_HREFS = new Set(["#/", "#/artifacts", "#/suggestions", "#/friction", "#/sources", "#/mcp", "#/devices"]);
+function teamProjectsLabel() { return dedicated() ? t("Projects") : t("Shared projects"); }
 async function loadMe() {
   try { ME = await api("/api/me"); } catch (e) { ME = null; return; } // an older server, or the sign-in screen is up
   applyViewer();
@@ -6175,11 +6215,10 @@ function applyViewer() {
   document.documentElement.classList.toggle("not-admin", !canAdmin());
   document.documentElement.classList.toggle("limited", limited());
   document.documentElement.classList.toggle("on-hub", !!ME?.hub);
+  document.documentElement.classList.toggle("dedicated-hub", dedicated());
   renderRail();
-  $("#hub-pill")?.remove();
-  if (ME?.hub) $("#search-pill").before(h("a", { class: "glass hub-pill", id: "hub-pill", href: "#/", title: t("This is the hub's dashboard: {name}", { name: ME.hub.name }) },
-    icon("team"), h("span", { class: "hp-kind" }, t("Hub")), h("span", { class: "hp-name" }, ME.hub.name)));
-  $("#sync-btn").parentElement.hidden = !canAdmin();
+  renderHubFrame();
+  $("#sync-btn").parentElement.hidden = !canAdmin() || dedicated();
   const v = ME?.viewer;
   $("#viewer-pill")?.remove();
   if (!ME?.people_mode || !v || v.here) return;
@@ -6191,6 +6230,22 @@ function applyViewer() {
   $("#sync-btn").parentElement.before(h("div", { class: "glass viewer-pill", id: "viewer-pill", title: v.email ? `${v.name} · ${v.email}` : v.name },
     icon("preference"), h("span", { class: "vp-name" }, v.name),
     h("span", { class: `vp-role${v.role === "readonly" ? " ro" : ""}` }, ROLE_LABEL[v.role] || v.role), out));
+}
+// A hub says so on every page: a band across the top (its name, address and what kind of hub it is) and a line in the
+// status bar. Phones hide the status bar, so the band stays there.
+function renderHubFrame() {
+  const hub = ME?.hub, band = $("#hub-band"), foot = $("#status-hub");
+  document.documentElement.classList.toggle("hub-framed", !!hub);
+  band.hidden = foot.hidden = !hub;
+  if (!hub) return;
+  const host = hub.address ? hub.address.replace(/^https?:\/\//, "") : null;
+  const notes = [hub.dedicated ? t("The team's hub: computers send what they learn here") : t("A hub: other computers send what they learn here"),
+    hub.knowledge_only ? t("Knowledge only") : null].filter(Boolean);
+  band.replaceChildren(icon("team"), h("span", { class: "hb-kind" }, t("Hub")), h("b", { class: "hb-name" }, hub.name),
+    host ? h("span", { class: "hb-host" }, host) : null, h("span", { class: "hb-note" }, notes.join(" · ")));
+  band.setAttribute("aria-label", t("This is the hub {name}", { name: hub.name }));
+  foot.replaceChildren(h("i", { class: "dot" }), [t("Hub"), hub.name, host].filter(Boolean).join(" · "));
+  foot.title = notes.join(" · ");
 }
 // A hub with people answered 401: nothing shows until this browser signs in, with a link from the person's own
 // Chronicle or an invite code (GET /signin?code=… sets the session cookie and comes back here).
@@ -6247,7 +6302,8 @@ async function pollStatus() {
     pill.replaceChildren(h("span", { class: "dot" }), busy ? (running[0][1].message || jobLabel(running[0][0])) : paused ? t("Analysis paused until {time}", { time: fmtTime(st.paused_until) }) : t("Up to date"));
     const waiting = st.pending.queued || 0; // ready is part of queued
     $("#status-queue").textContent = waiting ? tn(waiting, "{n} session queued for analysis", "{n} sessions queued for analysis", { n: fmtNum(waiting) }) : "";
-    $("#status-sync").textContent = st.hub_url ? t("Sends its sessions to {host}", { host: st.hub_url.replace(/^https?:\/\//, "") })
+    $("#status-sync").textContent = dedicated() ? "" // nothing of its own to sync: the status bar's hub line says what it is
+      : st.hub_url ? t("Sends its sessions to {host}", { host: st.hub_url.replace(/^https?:\/\//, "") })
       : st.last_sync ? t("Synced {ago}", { ago: ago(st.last_sync) }) : t("Not synced yet");
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
     showUpdate(st.update, st.version);

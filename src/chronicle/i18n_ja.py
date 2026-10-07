@@ -347,6 +347,8 @@ JA: dict[str, str] = {
     "{project} is not a project on this hub": "{project} はこのハブのプロジェクトではありません",
     "say which projects they see, or every project": "見えるプロジェクトを選ぶか、すべてのプロジェクトを選んでください",
     "pick a project or type its folder": "プロジェクトを選ぶか、フォルダーを入力してください",
+    "A project's name is up to 80 characters, without / or \\, and doesn't start with a dot.":
+        "プロジェクト名は 80 文字以内で、/ と \\ を含まず、ドットで始まらない名前にしてください。",
     "that code isn't known on this hub": "このハブはそのコードを知りません",
     "that code was already used; ask an admin for a new one": "そのコードは使用済みです。管理者に新しいコードを頼んでください",
     "that code has expired; ask an admin for a new one": "そのコードは期限切れです。管理者に新しいコードを頼んでください",

@@ -76,6 +76,7 @@ def configure(cfg: Config, env: Mapping[str, str]) -> tuple[Config, bool]:
     if proxies := _list(env.get("CHRONICLE_TRUSTED_PROXIES")):  # a proxy elsewhere whose X-Forwarded-Proto counts
         _set(cfg, "server", "trusted_proxies", proxies)
     _set(cfg, "hub", "address", url)
+    _set(cfg, "hub", "dedicated", True)  # a server for the team: no sessions of its own, projects set up by name
     if name := (env.get("CHRONICLE_HUB_NAME") or "").strip():
         _set(cfg, "hub", "name", name)
     if store:  # the connection comes from the PG* variables (team_store.connection_params)

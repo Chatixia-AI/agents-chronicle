@@ -46,7 +46,8 @@ def _team(env):
 def test_me_names_the_hub(limited):  # noqa: F811
     url, cfg = limited["url"], limited["cfg"]
     _, me = _call(url, "/api/me")
-    assert me["hub"] == {"name": hub.local_machine(cfg)["name"], "team": True}
+    assert me["hub"] == {"name": hub.local_machine(cfg)["name"], "team": True, "address": None, "knowledge_only": False,
+                         "dedicated": False}
     set_config_value(cfg, "hub", "name", '"Resona team"')
     limited["app"].cfg = load_config(cfg.home)
     _, me = _call(url, "/api/me")

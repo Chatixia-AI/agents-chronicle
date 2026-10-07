@@ -115,14 +115,17 @@ as an admin, so a start without `CHRONICLE_ADMIN_EMAIL` stops with an error and 
 ### 4. Sign in
 
 Open the invite's **link** in your browser. You're the hub's admin: **Team** in the sidebar has its people,
-projects, computers and team store.
+projects, computers and team store. Every page says it's the hub, with a green band across the top (its name and
+address) and a line in the status bar. Since it's a dedicated hub, the dashboard leaves out what only a person's own
+computer needs, such as **Sync** and **Settings › Sources**.
 
 ## Add a project
 
-A project on a hub is a folder on the hub's computer, named after the folder. In a container, that folder doesn't
-exist until you make it. The dashboard's **Team › Shared projects** can't make it: it sets up projects only for
-someone at the hub computer itself, and nothing reaches a container's dashboard that way. So on the server, in
-`~/chronicle-hub`:
+In the dashboard, open **Team › Projects**, type the project's name under **New project**, such as `Website`, and
+choose **Create project**.
+
+An older image has no such button. There, a project is a folder on the hub's computer named after the project, which
+you make on the server, in `~/chronicle-hub`:
 
 ```bash
 docker compose exec hub mkdir -p /data/projects/Website
@@ -130,8 +133,7 @@ docker compose exec hub chronicle hub project add /data/projects/Website
 docker compose exec hub chronicle hub project list
 ```
 
-Name the folder after the project; here, `Website`. Each computer then adds its own folder for the project, as the
-next sections show. Once one computer has sent sessions from a git repository, other clones of that repository are
+Each computer then adds its own folder for the project, as the next sections show. Once one computer has sent sessions from a git repository, other clones of that repository are
 filed under the project on their own.
 
 ## Connect your own computer

@@ -300,8 +300,14 @@ A project only the hub computer works on stays off the team's Home; **Activity**
 of every session on the hub. Someone limited to projects sees their projects only.
 
 Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**, **Computers** and **Team store**.
-A **Hub** marker in the header and a green tint tell the hub's dashboard from your own. The marker shows the hub's
-name, the hub computer's name unless you set one: `chronicle config set hub.name "Resona team"` on the hub.
+Every page of a hub's dashboard says it is one, so it never passes for your own: a green band across the top with the
+hub's name, its address and what kind of hub it is, a **Hub** line in the status bar, and a green tint. The name is
+the hub computer's unless you set one: `chronicle config set hub.name "Resona team"` on the hub.
+
+A **dedicated hub** (`[hub] dedicated = true`, which [the Docker image](docker.md) sets) is a server for the team with
+no sessions of its own. Its dashboard opens on the team's Home and leaves out what only a person's own computer needs:
+**Sync**, **Activity**, **Artifacts**, **Suggestions**, and **Settings › Sources**, **MCP** and **Devices**. Under
+**Team**, **Projects** takes the place of Shared projects: an admin makes a project there by name, from any browser.
 
 **Sessions** and **All knowledge** list whose each session and lesson is, under its project, and take a person in the
 filters: everyone's, or one person's (or one computer's that no one joined). A name on the team's Home, a session row

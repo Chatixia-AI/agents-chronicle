@@ -298,8 +298,14 @@ chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --sh
 自分のプロジェクトだけが表示されます。
 
 管理者はサイドバーの **Team** からハブを管理します。**People**、**Shared projects**、**Computers**、**Team store** です。
-ヘッダーの **Hub** の表示と緑がかった色で、自分のダッシュボードと見分けられます。表示されるのはハブの名前で、設定しなければ
-ハブのコンピューターの名前です。ハブで `chronicle config set hub.name "Resona team"` と実行すると設定できます。
+ハブのダッシュボードは、自分のダッシュボードと取り違えないよう、どのページでもハブであることを示します。上端の緑の帯に
+ハブの名前、アドレス、ハブの種類が、ステータスバーに **Hub** の行が表示され、全体が緑がかった色になります。名前は、設定
+しなければハブのコンピューターの名前です。ハブで `chronicle config set hub.name "Resona team"` と実行すると設定できます。
+
+**専用のハブ**（`[hub] dedicated = true`。[Docker のイメージ](docker.md)が設定します）は、自分のセッションを持たない
+チームのためのサーバーです。そのダッシュボードはチームの Home から始まり、個人のコンピューターにだけ必要なものを省きます。
+**Sync**、**Activity**、**Artifacts**、**Suggestions**、**Settings › Sources**・**MCP**・**Devices** です。**Team** では
+Shared projects の代わりに **Projects** があり、管理者はどのブラウザーからでも名前を付けてプロジェクトを作れます。
 
 **Sessions** と **All knowledge** には、各セッションと教訓がだれのものかがプロジェクトの下に表示され、フィルターで人を選べます。
 全員のもの、または 1 人のもの（だれも参加させていないコンピューターなら、そのコンピューターのもの）です。チームの Home、
