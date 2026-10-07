@@ -456,6 +456,8 @@ sudo tailscale set --operator=$USER      # let `chronicle tailnet on` configure 
 
 The desktop app is macOS only; the command line and the dashboard work the same.
 
+A team's hub on a server can also run in Docker, with HTTPS and the team store set up: [A hub in Docker](docker.md).
+
 ## Without a hub: Syncthing
 
 If you would rather not run a hub, [Syncthing](https://syncthing.net) (or rsync) can copy another computer's

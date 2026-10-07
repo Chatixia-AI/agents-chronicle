@@ -455,6 +455,8 @@ sudo tailscale set --operator=$USER      # `chronicle tailnet on` が Tailscale 
 
 デスクトップアプリは macOS 専用です。コマンドラインとダッシュボードは同じように動きます。
 
+サーバーで動かすチームのハブは、HTTPS とチームストアを設定済みの Docker でも動かせます（[Docker でハブを動かす](docker.md)）。
+
 ## ハブを使わない方法：Syncthing
 
 ハブを動かしたくない場合は、[Syncthing](https://syncthing.net)（または rsync）でほかのコンピューターのセッションをメインの

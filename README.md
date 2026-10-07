@@ -139,7 +139,8 @@ computer. Pick one in **Status › Analysis** or with `chronicle config set anal
 sessions are archived and wait in the analysis queue.
 
 **Windows or Linux?** The desktop app is macOS only. On Linux, `chronicle install` runs the sync and the dashboard
-as systemd user units, so a Linux box can be the [hub](docs/devices.md#a-linux-hub) for your other computers.
+as systemd user units, so a Linux box can be the [hub](docs/devices.md#a-linux-hub) for your other computers. A
+team's hub also runs [in Docker](docs/docker.md).
 Windows is not supported yet.
 
 **Can I keep a project or a session out?** Add the project to `sources.exclude_projects` in the
@@ -154,7 +155,7 @@ Something not working? See [Troubleshooting](docs/troubleshooting.md).
 
 [Install](docs/install.md) · [Sources](docs/sources.md) · [Dashboard, glossary and Map](docs/dashboard.md) ·
 [Command line](docs/cli.md) · [MCP server](docs/mcp.md) · [VS Code extension](docs/vscode.md) ·
-[Phone and other computers](docs/devices.md) ·
+[Phone and other computers](docs/devices.md) · [A hub in Docker](docs/docker.md) ·
 [What gets recorded and how analysis works](docs/analysis.md) ·
 [Configuration](docs/configuration.md) · [Data and privacy](docs/privacy.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)

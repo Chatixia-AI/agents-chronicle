@@ -65,6 +65,8 @@ def install_method() -> dict:
 def _install_method() -> dict:
     if getattr(sys, "frozen", False):
         return {"kind": "app", "label": "Chronicle.app", "command": None}
+    if os.environ.get("CHRONICLE_CONTAINER"):  # docker/Dockerfile: an upgrade in place would vanish with the container
+        return {"kind": "container", "label": "container image", "command": None}
     receipt = Path(sys.prefix) / "uv-receipt.toml"
     if receipt.is_file():
         reqs = tomllib.loads(receipt.read_text()).get("tool", {}).get("requirements", [])
@@ -173,6 +175,8 @@ def check(remote: bool = False, detail: bool = False) -> dict:
         info["notes_url"] = f"https://github.com/Chatixia-AI/agents-chronicle/releases/tag/v{info['latest']}"
     if m["kind"] == "app":
         info["note"] = tr("Download the new version and drag it into Applications.")
+    if m["kind"] == "container":
+        info["note"] = tr("Pull the new image and recreate the container: docker compose pull && docker compose up -d")
     return info
 
 

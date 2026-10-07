@@ -43,6 +43,7 @@
 | `chronicle hub people` / `hub role <email\|id> <role>` / `hub remove <email\|id>` / `hub shared-token on\|off` | On the hub: everyone with their role, the projects they see and their computers; change a role; remove someone; allow or refuse the shared token ([People and roles](devices.md#people-and-roles)) |
 | `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | On a computer that joined a hub: file a folder's sessions under a project on the hub, take it back out, or show what goes where (`--list`: the hub's projects) ([Same project, different folders](devices.md#same-project-different-folders)) |
 | `chronicle push` | On a computer that joined a hub: send its new sessions now (the hook and the background sync do this) |
+| `chronicle container` | What the hub's Docker image runs: set the hub up from `CHRONICLE_*` variables, then serve the dashboard and sync every 15 minutes ([A hub in Docker](docker.md)) |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
 | `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` or `providers.ollama.model qwen3:30b` ([Configuration](configuration.md)) |
 | `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | Store a model provider's API key, or IBM Bob's (`bob`), in `provider-keys.json` (asked for when left out), or remove it |

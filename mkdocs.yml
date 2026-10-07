@@ -71,6 +71,7 @@ nav:
       - MCP server: mcp.md
       - VS Code extension: vscode.md
       - Phone and other computers: devices.md
+      - A hub in Docker: docker.md
   - Reference:
       - What gets recorded and how analysis works: analysis.md
       - Configuration: configuration.md
@@ -87,6 +88,7 @@ nav:
       - MCP サーバー: ja/mcp.md
       - VS Code 拡張機能: ja/vscode.md
       - スマートフォンとほかのコンピューター: ja/devices.md
+      - Docker でハブを動かす: ja/docker.md
       - 記録される内容と分析の仕組み: ja/analysis.md
       - 設定: ja/configuration.md
       - データとプライバシー: ja/privacy.md

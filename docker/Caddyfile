@@ -1,0 +1,5 @@
+# HTTPS for the hub (compose.yaml). Caddy gets and renews the certificate, keeps the visitor's Host, and sets
+# X-Forwarded-For and X-Forwarded-Proto, which the hub believes from 127.0.0.1 ([server] trusted_proxies).
+{$CHRONICLE_DOMAIN} {
+	reverse_proxy 127.0.0.1:11524
+}

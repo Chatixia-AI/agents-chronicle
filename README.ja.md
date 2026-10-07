@@ -138,6 +138,7 @@ Ollama。**Status › Analysis** または `chronicle config set analysis.backen
 
 **Windows や Linux は？** デスクトップアプリは macOS 専用です。Linux では `chronicle install` が同期とダッシュボードを systemd の
 ユーザーユニットとして動かすので、Linux マシンをほかのコンピューターの[ハブ](docs/ja/devices.md#linux-のハブ)にできます。
+チームのハブは [Docker](docs/ja/docker.md) でも動かせます。
 Windows にはまだ対応していません。
 
 **特定のプロジェクトやセッションを除外できる？** [設定](docs/ja/configuration.md)の `sources.exclude_projects` に
@@ -152,7 +153,7 @@ Windows にはまだ対応していません。
 
 [インストール](docs/ja/install.md) · [ソース](docs/ja/sources.md) · [ダッシュボード・用語集・マップ](docs/ja/dashboard.md) ·
 [コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [VS Code 拡張機能](docs/ja/vscode.md) ·
-[スマートフォンとほかのコンピューター](docs/ja/devices.md) ·
+[スマートフォンとほかのコンピューター](docs/ja/devices.md) · [Docker でハブを動かす](docs/ja/docker.md) ·
 [記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
 [データとプライバシー](docs/ja/privacy.md) · [トラブルシューティング](docs/ja/troubleshooting.md) · [開発](docs/ja/development.md)
 

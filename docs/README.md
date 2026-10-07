@@ -12,6 +12,7 @@
 | [MCP server](mcp.md) | The tools your agents get, connecting Claude Desktop, Cursor, Windsurf, Gemini CLI or any other MCP client |
 | [VS Code extension](vscode.md) | The sessions behind the open file and every file agents worked on, in VS Code's Explorer |
 | [Phone and other computers](devices.md) | The dashboard on your phone through Tailscale, and one archive for several computers (a hub) |
+| [A hub in Docker](docker.md) | A team's hub on a server: the image, Compose with HTTPS and the team store, the first admin, updates and backups |
 | [What gets recorded and how analysis works](analysis.md) | Session data, knowledge kinds, the analysis pipeline and its cost |
 | [Configuration](configuration.md) | Every `config.toml` setting |
 | [Data and privacy](privacy.md) | What is stored where, and what leaves your machine |

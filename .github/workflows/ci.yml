@@ -1,7 +1,7 @@
 name: CI
 
-# Every pull request and every push to main: the test suite, known vulnerabilities in the locked dependencies, and
-# the pre-commit hooks (.pre-commit-config.yaml).
+# Every pull request and every push to main: the test suite, known vulnerabilities in the locked dependencies, the
+# pre-commit hooks (.pre-commit-config.yaml), and the hub's Docker image (docker/) built from this checkout.
 # `test` is a required check on main.
 
 on:
@@ -47,3 +47,37 @@ jobs:
         run: |
           uv export --frozen --all-groups --no-emit-project --format requirements.txt -o "$RUNNER_TEMP/requirements.txt"
           uvx pip-audit --strict --disable-pip --require-hashes -r "$RUNNER_TEMP/requirements.txt"
+
+  docker:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+      - name: Build the hub's image from this checkout
+        run: |
+          uv build --wheel -o docker/wheels
+          docker build -t chronicle-hub:ci docker
+      - name: It refuses to start without an admin
+        run: |
+          if docker run --rm -e CHRONICLE_HUB_URL=https://hub.example.com chronicle-hub:ci; then
+            echo "::error::the hub started without an admin"
+            exit 1
+          fi
+      - name: With one, it becomes healthy and asks everyone to sign in
+        run: |
+          docker run -d --name hub -p 127.0.0.1:11524:11524 -e CHRONICLE_HUB_URL=https://hub.example.com \
+            -e CHRONICLE_ADMIN_EMAIL=ada@example.com chronicle-hub:ci
+          for _ in $(seq 1 45); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' hub)" = healthy ] && break
+            sleep 2
+          done
+          docker logs hub
+          docker inspect -f '{{.State.Health.Status}}' hub | grep -qx healthy
+          docker logs hub | grep -q '/signin?code='
+          code=$(curl -s -o /dev/null -w '%{http_code}' -H 'Host: hub.example.com' http://127.0.0.1:11524/api/people)
+          if [ "$code" != 401 ]; then
+            echo "::error::/api/people answered $code without a sign-in"
+            exit 1
+          fi

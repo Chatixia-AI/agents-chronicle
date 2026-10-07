@@ -1,4 +1,5 @@
-# Weekly updates for the locked Python dependencies and the pinned GitHub Actions (security updates come sooner).
+# Weekly updates for the locked Python dependencies, the pinned GitHub Actions and the hub image's base
+# (security updates come sooner).
 # A new release waits 7 days before it is proposed, so a compromised one is usually caught and pulled first.
 version: 2
 updates:
@@ -20,3 +21,9 @@ updates:
     groups:
       actions:
         patterns: ["*"]
+  - package-ecosystem: docker  # the hub image's base (docker/Dockerfile)
+    directory: /docker
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
