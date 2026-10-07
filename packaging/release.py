@@ -3,6 +3,8 @@
     python3 packaging/release.py next patch|minor|major   the version after the latest vX.Y.Z tag
     python3 packaging/release.py notes VERSION            the changelog's "## Unreleased" section, as release notes
     python3 packaging/release.py date VERSION DATE        rename "## Unreleased" to "## VERSION (DATE)" in CHANGELOG.md
+    python3 packaging/release.py entry BASE               fail when the commits since BASE change what ships but add
+                                                          nothing under "## Unreleased" (.github/workflows/changelog.yml)
 
 The version itself lives in the git tags (hatch-vcs), so a release commits nothing before it is tagged.
 """
@@ -17,6 +19,7 @@ from pathlib import Path
 CHANGELOG = Path(__file__).resolve().parents[1] / "CHANGELOG.md"
 REPO_URL = "https://github.com/Chatixia-AI/agents-chronicle"
 BUMPS = ("major", "minor", "patch")
+SHIPPED = ("src/", "ee/src/", "docker/", "vscode-extension/")  # what users get: a change here needs a changelog entry
 
 
 def latest(tags: list[str]) -> tuple[int, int, int]:
@@ -66,11 +69,27 @@ def not_ready(text: str, tags: list[str]) -> str | None:
     return None
 
 
+def missing_entry(base: str, head: str, changed: list[str]) -> str | None:
+    """Why a pull request needs a changelog entry it doesn't have, or None: it changes what ships (SHIPPED) and leaves
+    the Unreleased section as it was (base and head are CHANGELOG.md before and after)."""
+    shipped = [f for f in changed if f.startswith(SHIPPED)]
+    if not shipped or (unreleased(head) and unreleased(head) != unreleased(base)):
+        return None
+    more = f" and {len(shipped) - 3} more" if len(shipped) > 3 else ""
+    return (f"this pull request changes {', '.join(shipped[:3])}{more} but adds nothing under '## Unreleased' in "
+            "CHANGELOG.md: add a line there saying what users will notice (start the section if it's missing), or "
+            "label the pull request no-changelog if they won't notice anything")
+
+
+def git(*args: str) -> str:
+    return subprocess.run(["git", *args], capture_output=True, text=True, check=True).stdout
+
+
 def main(argv: list[str]) -> int:
     cmd, *args = argv or ["help"]
     text = CHANGELOG.read_text()
     if cmd == "next" and len(args) == 1:
-        tags = subprocess.run(["git", "tag", "--list", "v*"], capture_output=True, text=True, check=True).stdout.splitlines()
+        tags = git("tag", "--list", "v*").splitlines()
         if why := not_ready(text, tags):
             print(f"::error::{why}", file=sys.stderr)
             return 1
@@ -79,6 +98,13 @@ def main(argv: list[str]) -> int:
         print(notes(text, args[0]))
     elif cmd == "date" and len(args) == 2:
         CHANGELOG.write_text(date(text, *args))
+    elif cmd == "entry" and len(args) == 1:
+        base = git("merge-base", args[0], "HEAD").strip()
+        changed = git("diff", "--name-only", base, "HEAD").splitlines()
+        before = subprocess.run(["git", "show", f"{base}:CHANGELOG.md"], capture_output=True, text=True).stdout
+        if why := missing_entry(before, text, changed):
+            print(f"::error file=CHANGELOG.md::{why}", file=sys.stderr)
+            return 1
     else:
         print(__doc__, file=sys.stderr)
         return 2

@@ -27,3 +27,4 @@ updates:
       interval: weekly
     cooldown:
       default-days: 7
+    labels: [dependencies, no-changelog]  # a new base image is nothing users notice: no changelog line needed
