@@ -4844,14 +4844,43 @@ function peopleCard(dv) {
     const every = h("input", { type: "radio", name: `pp-scope-${Math.random().toString(36).slice(2)}`, checked: selected == null });
     const only = h("input", { type: "radio", name: every.name, checked: selected != null });
     const boxes = hubProjects.map((x) => h("label", { class: "pp-proj", title: x.path },
-      h("input", { type: "checkbox", value: x.path, checked: (selected || []).includes(x.path), onchange: () => { only.checked = true; } }),
+      h("input", { type: "checkbox", value: x.path, checked: (selected || []).includes(x.path), onchange: () => { only.checked = true; refresh(); } }),
       h("span", null, x.name), h("small", { class: "muted" }, x.sessions ? tn(x.sessions, "{n} session", "{n} sessions", { n: fmtNum(x.sessions) }) : t("set up, no sessions yet"))));
+    const ticked = () => boxes.map((b) => b.querySelector("input")).filter((i) => i.checked);
+    // a long list gets a search box: it hides the projects that don't match by name or folder, and keeps what is ticked
+    const search = hubProjects.length > 6 ? h("input", { class: "input pp-search", type: "search", autocomplete: "off", spellcheck: "false",
+      placeholder: t("Search projects by name or folder"), "aria-label": t("Search projects by name or folder") }) : null;
+    const count = h("span", { class: "muted", "aria-live": "polite" });
+    const none = h("div", { class: "muted", hidden: true });
+    const refresh = () => {
+      const q = (search?.value || "").trim(), terms = q.toLowerCase().split(/\s+/).filter(Boolean);
+      let shown = 0;
+      boxes.forEach((b, i) => {
+        b.hidden = !terms.every((w) => `${hubProjects[i].name} ${hubProjects[i].path}`.toLowerCase().includes(w));
+        if (!b.hidden) shown += 1;
+      });
+      none.hidden = shown > 0;
+      none.textContent = t("No project matches “{q}”.", { q });
+      const n = ticked().length;
+      count.textContent = n ? t("{n} chosen", { n: fmtNum(n) }) : "";
+    };
+    search?.addEventListener("input", refresh);
+    search?.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") { // never submits the invite; with one project left, ticks it
+        e.preventDefault();
+        const left = boxes.filter((b) => !b.hidden);
+        if (left.length === 1) { const box = left[0].querySelector("input"); box.checked = !box.checked; only.checked = true; refresh(); }
+      } else if (e.key === "Escape" && search.value) { e.preventDefault(); search.value = ""; refresh(); }
+    });
     const el = h("fieldset", { class: "pp-scope" }, h("legend", null, t("Projects they see")),
       h("label", { class: "pp-proj" }, every, h("span", null, t("Every project on this hub"))),
       h("label", { class: "pp-proj" }, only, h("span", null, t("Only these projects: their summaries and project lessons, never transcripts"))),
-      h("div", { class: "pp-projs" }, boxes.length ? boxes : h("span", { class: "muted" }, tx("No projects yet: set one up on the hub with {command}.",
+      search ? h("div", { class: "pp-tools" }, search, count) : null,
+      h("div", { class: "pp-projs" }, boxes.length ? [...boxes, none] : h("span", { class: "muted" }, tx("No projects yet: set one up on the hub with {command}.",
         { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>") }))));
-    return { el, value: () => (every.checked ? "all" : boxes.map((b) => b.querySelector("input")).filter((i) => i.checked).map((i) => i.value)) };
+    refresh();
+    // refresh: after the form around it was reset, show every project again
+    return { el, refresh, value: () => (every.checked ? "all" : ticked().map((i) => i.value)) };
   };
 
   const tokenRow = (p, x, kind) => {
@@ -4940,6 +4969,7 @@ function peopleCard(dv) {
       submit.disabled = false;
       if (!r) return;
       form.reset();
+      picker.refresh();
       showInvite(r);
       load();
     } },

@@ -6,6 +6,10 @@
   the most saturation a screen can show, within the lightness range that keeps them readable and distinct, checked
   with the palette validator in both themes. Bars, lines and the tiles' sparklines draw in that bright blue rather
   than grey or the link colour, with stronger fills, and the heatmaps run from pale sky to deep blue.
+- **Search for projects when inviting someone:** on a hub with more than six projects, **Team › People** has a search
+  box above the projects a person sees, both when inviting someone and under **Change**. It filters by name or
+  folder, and ticked projects stay ticked while hidden, with a count of how many are chosen. Enter ticks the only
+  match left and never sends the invite; Escape clears the search.
 
 ## 0.13.0 (2026-10-07)
 

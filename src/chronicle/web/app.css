@@ -1841,6 +1841,8 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .pp-proj > span { overflow-wrap: anywhere; }
 .pp-proj small { flex: none; }
 .pp-projs { display: grid; gap: 0; padding: 2px 0 0 22px; max-height: 220px; overflow: auto; }
+.pp-tools { display: flex; align-items: center; gap: 10px; padding: 6px 0 4px 22px; font-size: 12.5px; }
+.pp-tools .pp-search { flex: 1 1 auto; max-width: 340px; min-width: 0; }
 .pp-scope-cell { min-width: 140px; }
 .pp-scope-cell .link-btn { margin-left: 6px; }
 .pp-edit > td { padding-top: 0; }
