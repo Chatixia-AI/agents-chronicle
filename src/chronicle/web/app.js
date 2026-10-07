@@ -4392,10 +4392,10 @@ function analyzerPicker(a) {
       onclick: () => { if (c.name === a.backend) { apiPane = null; render(); } else use(c.name); } }, c.label)),
     apis.length ? h("button", { type: "button", role: "radio", class: apiOn ? "on" : "", "aria-checked": String(apiOn), disabled: !canAdmin() && !apiOn,
       onclick: () => { if (!apiOn) { apiPane = "anthropic"; render(); } } }, t("API provider")) : null];
-  let note;
-  if (apiOn) note = null;
-  else if (current?.path) note = t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: current.label });
-  else note = t("{agent} was not found: sessions wait in the queue until it is installed and signed in.", { agent: current?.label || t("The analysis agent") });
+  let note = null;
+  if (!apiOn) note = current?.path
+    ? t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: current.label })
+    : t("{agent} was not found: sessions wait in the queue until it is installed and signed in.", { agent: current?.label || t("The analysis agent") });
   return h("div", { class: "analyzer" },
     h("div", { class: "seg", role: "radiogroup", "aria-label": t("Analyzed by") }, tabs),
     note ? h("div", { class: "muted" }, note) : null,
@@ -4406,39 +4406,57 @@ function providerPane(apis, current, use) {
   const p = apis.find((c) => c.name === name) || apis[0];
   const s = p.settings || {}, d = p.defaults || {}, key = p.key || {};
   const admin = canAdmin();
+  const inUse = current?.name === p.name;
   const pick = h("select", { "aria-label": t("Provider"), disabled: !admin, onchange: (e) => { apiPane = e.target.value; render(); } },
     apis.map((c) => h("option", { value: c.name, selected: c.name === p.name }, c.label + (c.name === current?.name ? ` · ${t("in use")}` : c.available ? " ✓" : ""))));
+  const state = inUse ? h("span", { class: "badge accent" }, h("span", { class: "sdot" }), t("In use"))
+    : p.available ? h("span", { class: "badge good" }, h("span", { class: "sdot" }), t("Ready"))
+    : h("span", { class: "badge warning" }, h("span", { class: "sdot" }), t("Not set up"));
+  let host = "";
+  try { host = new URL(p.path).host; } catch (e) { host = p.path || ""; }
+  const where = h("div", { class: "pv-where muted" }, icon(p.local ? "home" : "cloud"), " ", p.local ? t("Runs on this computer: transcripts never leave it.")
+    : t("Sends a redacted digest of each session to {host}.", { host: host || p.label }));
   const listId = `models-${p.name}`;
   const models = h("datalist", { id: listId }, (providerModels[p.name] || []).map((m) => h("option", { value: m })));
-  const field = (k, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: k, value: s[k] ?? "", autocomplete: "off",
-    spellcheck: "false", disabled: !admin, ...attrs }));
-  const fields = [];
-  if (p.name === "bedrock") fields.push(field("region", t("AWS region"), { placeholder: "us-east-1" }), field("profile", t("AWS profile"), { placeholder: "default" }));
-  if (p.name === "azure") fields.push(field("resource", t("Resource name"), { placeholder: "my-openai" }));
-  fields.push(field("base_url", t("Endpoint"), { placeholder: d.base_url || d.hint || "", type: "url" }),
-    field("model", t("Model"), { placeholder: d.model || (p.name === "azure" ? t("deployment name") : ""), list: listId }),
+  const field = (k, label, attrs = {}, wide = false) => h("label", { class: wide ? "wide" : null }, label, h("input", { class: "input", name: k, value: s[k] ?? "",
+    autocomplete: "off", spellcheck: "false", disabled: !admin, ...attrs }));
+  const endpoint = (wide) => field("base_url", t("Endpoint"), { placeholder: d.base_url || d.hint || "", type: "url" }, wide);
+  const needsEndpoint = !d.base_url && p.name !== "bedrock" && p.name !== "azure"; // openai-compatible: no address of its own
+  const main = [];
+  if (needsEndpoint) main.push(endpoint(true));
+  if (p.name === "azure") main.push(field("resource", t("Resource name"), { placeholder: "my-openai" }, true));
+  main.push(field("model", t("Model"), { placeholder: d.model || (p.name === "azure" ? t("deployment name") : ""), list: listId }),
     field("small_model", t("Small model (screening)"), { placeholder: d.small_model || t("same as Model"), list: listId }));
-  if (p.dialect === "ollama") fields.push(field("num_ctx", t("Context window (tokens)"), { inputmode: "numeric", placeholder: String(d.num_ctx || "") }));
-  fields.push(field("chunk_chars", t("Characters per call"), { inputmode: "numeric", placeholder: String(d.chunk_chars || "") }));
+  if (p.name === "bedrock") main.push(field("region", t("AWS region"), { placeholder: "us-east-1" }), field("profile", t("AWS profile"), { placeholder: "default" }));
   const keyHint = key.source === "stored" ? t("stored; type to replace it")
     : key.source ? t("from {variable}", { variable: key.source })
     : key.alt === "aws" ? t("optional: without one, your AWS sign-in is used")
     : key.alt === "entra" ? t("optional: without one, your az login is used")
     : key.needed ? t("required") : t("optional");
   const keyInput = h("input", { class: "input", name: "key", type: "password", autocomplete: "new-password", placeholder: keyHint, disabled: !admin });
-  if (p.dialect !== "ollama") fields.push(h("label", null, key.env ? t("API key ({variable})", { variable: key.env }) : t("API key"), keyInput));
-  const form = h("form", { class: "ts-form", onsubmit: (e) => e.preventDefault() }, fields, models);
+  const forget = key.source === "stored" && admin ? h("button", { class: "btn small", type: "button", onclick: async () => {
+    if (await save({ key: "" })) { apiPane = p.name; toast(t("API key removed.")); render(); }
+  } }, t("Remove key")) : null;
+  if (p.dialect !== "ollama") main.push(h("label", { class: "wide" }, key.env ? t("API key ({variable})", { variable: key.env }) : t("API key"),
+    h("div", { class: "pv-key" }, keyInput, forget)));
+  const adv = [];
+  if (!needsEndpoint) adv.push(endpoint(false));
+  if (p.dialect === "ollama") adv.push(field("num_ctx", t("Context window (tokens)"), { inputmode: "numeric", placeholder: String(d.num_ctx || "") }));
+  adv.push(field("chunk_chars", t("Characters per call"), { inputmode: "numeric", placeholder: String(d.chunk_chars || "") }));
+  const advOpen = adv.some((x) => x.querySelector("input").value);
+  const form = h("form", { class: "pv-form", onsubmit: (e) => e.preventDefault() }, main,
+    h("details", { class: "pv-adv wide", open: advOpen }, h("summary", null, t("Advanced")), h("div", { class: "pv-form" }, adv)), models);
   const values = () => Object.fromEntries([...form.querySelectorAll("input[name]:not([name=key])")].map((x) => [x.name,
     ["num_ctx", "chunk_chars"].includes(x.name) ? Number(x.value) || 0 : x.value.trim()]));
-  const result = h("div", { class: "ts-result" }, p.available ? null : h("div", { class: "warn-line" }, p.reason));
-  const say = (text, bad) => result.replaceChildren(h("div", { class: bad ? "warn-line" : "muted" }, text));
-  const save = async (extra = {}) => {
+  const result = h("div", { class: "pv-result" }, p.available ? null : h("div", { class: "warn-line" }, p.reason));
+  const say = (text, bad) => result.replaceChildren(h("div", { class: bad ? "warn-line" : "ok-line" }, text));
+  async function save(extra = {}) {
     const body = { provider: p.name, settings: values(), ...extra };
     if (keyInput.value.trim()) body.key = keyInput.value.trim();
     const r = await post("/api/analysis/provider", body).catch((e) => ({ error: e.message }));
     if (r.error) { say(r.error, true); return null; }
     return r;
-  };
+  }
   const busy = (b, on) => { b.disabled = on; };
   const saveBtn = h("button", { class: "btn", type: "button", disabled: !admin, onclick: async () => {
     busy(saveBtn, true);
@@ -4456,7 +4474,6 @@ function providerPane(apis, current, use) {
     }
     busy(testBtn, false);
   } }, t("Test connection"));
-  const inUse = current?.name === p.name;
   const useBtn = h("button", { class: "btn primary", type: "button", disabled: !admin || inUse, onclick: async () => {
     busy(useBtn, true);
     const r = await save();
@@ -4465,9 +4482,6 @@ function providerPane(apis, current, use) {
     else if (r) await use(p.name);
     busy(useBtn, false);
   } }, inUse ? t("In use") : t("Use for analysis"));
-  const forget = key.source === "stored" && admin ? h("button", { class: "btn", type: "button", onclick: async () => {
-    if (await save({ key: "" })) { apiPane = p.name; toast(t("API key removed.")); render(); }
-  } }, t("Remove key")) : null;
   if (admin && !(p.name in providerModels)) {
     providerModels[p.name] = [];
     post("/api/analysis/provider/models", { provider: p.name }).then((r) => {
@@ -4475,16 +4489,13 @@ function providerPane(apis, current, use) {
       models.replaceChildren(...providerModels[p.name].map((m) => h("option", { value: m })));
     }).catch(() => {});
   }
-  let where = "";
-  try { where = new URL(p.path).host; } catch (e) { where = p.path || ""; }
   return h("div", { class: "provider-pane" },
-    h("div", { class: "provider-pick" }, pick),
-    h("div", { class: "muted" }, p.local ? t("Runs on this computer: transcripts never leave it.")
-      : t("A redacted digest of each session is sent to {host} with your key; the provider's own terms apply.", { host: where || p.label })),
+    h("div", { class: "pv-head" }, pick, state),
+    where,
     form,
-    h("div", { class: "ts-actions" }, testBtn, saveBtn, forget, useBtn),
     result,
-    h("div", { class: "muted" }, tx("Settings are saved in config.toml under {section}; API keys in provider-keys.json, readable by your user only.",
+    h("div", { class: "pv-actions" }, testBtn, saveBtn, h("span", { class: "grow" }), useBtn),
+    h("div", { class: "pv-foot muted" }, tx("Saved in config.toml under {section}. The key goes in provider-keys.json, which only you can read.",
       { section: h("span", { class: "codeline" }, `[providers.${p.name}]`) })));
 }
 // What Chronicle writes its knowledge in (analysis.language); an older server sends no languages, so no control
@@ -4524,23 +4535,30 @@ route(/^\/status$/, async () => {
         h("div", null, h("span", { class: "codeline" }, st.archive_dir), t(" raw transcripts (kept forever, gzip)")),
         h("div", { style: { marginTop: "6px" } }, h("span", { class: "codeline" }, st.notes_dir), t(" Markdown vault")),
         h("div", { class: "muted", style: { marginTop: "6px" } }, t("Database {size}B", { size: fmtCompact(st.db_size) }))),
-      h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, t("Analysis"))),
-        analyzerPicker(st.analysis),
-        knowledgeLangPicker(st.analysis),
-        h("div", { class: "status-list" },
-          h("div", null, tx("Model {model} · auto {auto} · backfill {backfill} · {n} per run", { model: h("code", null, st.config.model),
-            auto: st.config.auto ? t("on") : t("off"), backfill: st.config.backfill ? t("on") : t("off"), n: st.config.max_per_run })),
-          h("div", null, t("{ready} ready now · {queued} queued in all · {held} held · spent {cost} (API-equivalent)",
-            { ready: fmtNum(st.pending.ready), queued: fmtNum(st.pending.queued), held: fmtNum(st.pending.held || 0), cost: fmtCost(st.analysis_cost) })),
-          Object.keys(st.pending.reasons || {}).length ? h("div", null, t("Waiting because: "), Object.entries(st.pending.reasons).map(([k, v]) =>
-            h("span", { class: "tag", title: QUEUE_REASON_HINT[k] || "" }, `${st.pending.labels?.[k] || QUEUE_REASON_LABEL[k] || k}${t(": ")}${fmtNum(v)}`))) : null,
+      updatesCard(),
+      h("section", { class: "card analysis-card" }, h("div", { class: "card-head" }, h("h2", null, t("Analysis"))),
+      h("div", { class: "analysis-grid" },
+        h("div", { class: "analysis-main" }, h("div", { class: "subhead" }, t("Analyzed by")), analyzerPicker(st.analysis)),
+        h("div", { class: "analysis-side" },
+          h("div", { class: "subhead" }, t("Queue")),
+          h("div", { class: "hero-facts queue-facts" },
+            h("div", { class: "fact" }, h("b", null, fmtNum(st.pending.ready)), h("span", null, t("ready now"))),
+            h("div", { class: "fact" }, h("b", null, fmtNum(st.pending.queued)), h("span", null, t("queued"))),
+            h("div", { class: "fact" }, h("b", null, fmtNum(st.pending.held || 0)), h("span", null, t("held"))),
+            h("div", { class: "fact", title: t("API-equivalent: what the tokens would cost at list prices") }, h("b", null, fmtCost(st.analysis_cost)), h("span", null, t("spent")))),
           // the server words why the queue is stopped as a clause: a sentence in English, 「。」 in Japanese
           st.pending.block ? h("div", { class: "warn-line" }, icon("pause"), " ", LANG === "en"
             ? `${st.pending.block[0].toUpperCase()}${st.pending.block.slice(1)}.` : `${st.pending.block}。`) : null,
-          st.paused_until ? h("div", null, t("Paused until {when} (usage limit)", { when: fmtDT(st.paused_until) })) : null,
-          h("div", null, Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}${t(": ")}${v}`)))),
-        st.errors.length ? [h("div", { class: "subhead" }, t("Recent failures")), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null),
-      updatesCard()));
+          st.paused_until ? h("div", { class: "warn-line" }, t("Paused until {when} (usage limit)", { when: fmtDT(st.paused_until) })) : null,
+          Object.keys(st.pending.reasons || {}).length ? h("div", { class: "tags" }, h("span", { class: "muted" }, t("Waiting because: ")),
+            Object.entries(st.pending.reasons).map(([k, v]) =>
+              h("span", { class: "tag", title: QUEUE_REASON_HINT[k] || "" }, `${st.pending.labels?.[k] || QUEUE_REASON_LABEL[k] || k}${t(": ")}${fmtNum(v)}`))) : null,
+          h("div", { class: "tags" }, h("span", { class: "muted" }, t("Sessions: ")),
+            Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}${t(": ")}${fmtNum(v)}`))),
+          h("div", { class: "muted analysis-meta" }, tx("Model {model} · auto {auto} · backfill {backfill} · {n} per run", { model: h("code", null, st.config.model),
+            auto: st.config.auto ? t("on") : t("off"), backfill: st.config.backfill ? t("on") : t("off"), n: st.config.max_per_run })),
+          knowledgeLangPicker(st.analysis))),
+      st.errors.length ? [h("div", { class: "subhead" }, t("Recent failures")), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null)));
 });
 
 // =====================================================================================
