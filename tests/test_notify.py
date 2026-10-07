@@ -69,10 +69,10 @@ def test_nothing_when_up_to_date_or_not_from_pypi(pypi, env, monkeypatch):
     from chronicle import __version__
 
     pypi["latest"] = __version__
-    assert notify.release_check(env["cfg"], pypi["conn"]) is None and pypi["requests"] == 1
+    assert notify.release_check(env["cfg"], pypi["conn"]) is None and pypi["requests"] == update.PYPI_TRIES  # an up-to-date answer is asked again (CDN)
     monkeypatch.setattr(update, "compares_online", lambda: False)  # a checkout: `git pull`, nothing to announce
     update._remote.clear()
-    assert notify.release_check(env["cfg"], pypi["conn"]) is None and pypi["requests"] == 1
+    assert notify.release_check(env["cfg"], pypi["conn"]) is None and pypi["requests"] == update.PYPI_TRIES
 
 
 def test_sync_runs_the_check(pypi, env, monkeypatch):

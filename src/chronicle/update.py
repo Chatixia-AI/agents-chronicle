@@ -183,14 +183,30 @@ def check(remote: bool = False, detail: bool = False) -> dict:
 PYPI_ERROR = "Could not reach PyPI ({error})"
 
 
+PYPI_TRIES = 3
+
+
 def fetch_latest() -> None:
-    """Ask PyPI for the latest release (the network call)."""
-    try:
-        req = Request(PYPI_JSON, headers={"User-Agent": f"chronicle/{__version__}", "Accept": "application/json"})
-        with urlopen(req, timeout=8) as r:
-            _remote.update(latest=json.load(r)["info"]["version"], checked_at=time.time(), error=None)
-    except Exception as exc:  # offline, proxy, PyPI down: shown on the page
-        _remote.update(checked_at=time.time(), error=PYPI_ERROR.format(error=exc.__class__.__name__))
+    """Ask PyPI for the latest release (the network call).
+
+    PyPI's JSON sits behind a CDN that caches it for 15 minutes, and a release's purge reaches its cache servers one
+    by one; each request can land on a different one. So until one answer is newer than this copy, ask again (up to
+    PYPI_TRIES) and keep the newest: right after a release, a single answer is often the old version."""
+    latest = None
+    for _ in range(PYPI_TRIES):
+        try:
+            req = Request(PYPI_JSON, headers={"User-Agent": f"chronicle/{__version__}", "Accept": "application/json"})
+            with urlopen(req, timeout=8) as r:
+                version = json.load(r)["info"]["version"]
+        except Exception as exc:  # offline, proxy, PyPI down: shown on the page, unless an earlier try answered
+            if latest is None:
+                _remote.update(checked_at=time.time(), error=PYPI_ERROR.format(error=exc.__class__.__name__))
+                return
+            break
+        latest = max(latest or version, version, key=_vkey)
+        if _vkey(latest) > _vkey(__version__):
+            break
+    _remote.update(latest=latest, checked_at=time.time(), error=None)
 
 
 def compares_online() -> bool:

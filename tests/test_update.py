@@ -62,6 +62,43 @@ def test_pypi_unreachable_is_reported(method, monkeypatch):
     assert not info["available"] and "Could not reach PyPI" in info["error"]
 
 
+def test_stale_cdn_answer_is_asked_again(method, monkeypatch):
+    """Right after a release, some of PyPI's cache servers still serve the old JSON: one click finds the release."""
+    method(kind="uv", command=["uv", "tool", "upgrade", "agents-chronicle"])
+    answers = [__version__, "99.0.0", "0.0.1"]
+    calls = []
+
+    def cdn(req, timeout):
+        calls.append(req.full_url)
+        return io.BytesIO(json.dumps({"info": {"version": answers[len(calls) - 1]}}).encode())
+
+    monkeypatch.setattr(update, "urlopen", cdn)
+    info = update.check(remote=True)
+    assert info["available"] and info["latest"] == "99.0.0" and not info["error"]
+    assert len(calls) == 2  # stops once an answer is newer than this copy
+
+    calls.clear()
+    answers[:] = [__version__] * 3
+    info = update.check(remote=True)
+    assert not info["available"] and info["latest"] == __version__ and len(calls) == update.PYPI_TRIES
+
+
+def test_failed_retry_keeps_the_answer(method, monkeypatch):
+    method(kind="uv", command=["uv", "tool", "upgrade", "agents-chronicle"])
+    calls = []
+
+    def flaky(req, timeout):
+        calls.append(req.full_url)
+        if len(calls) > 1:
+            raise OSError("dropped")
+        return io.BytesIO(json.dumps({"info": {"version": __version__}}).encode())
+
+    monkeypatch.setattr(update, "urlopen", flaky)
+    info = update.check(remote=True)
+    assert info["latest"] == __version__ and not info["error"] and info["checked_at"]
+    assert len(calls) == 2
+
+
 def test_checkout_install_compares_file_times(method, tmp_path):
     (tmp_path / "pyproject.toml").write_text(f'[project]\nname = "agents-chronicle"\nversion = "{__version__}"\n')
     (tmp_path / "src" / "chronicle").mkdir(parents=True)

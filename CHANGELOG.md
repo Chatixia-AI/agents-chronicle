@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **Check for updates finds a new release on the first click:** PyPI's cache servers can keep serving the previous
+  version for a few minutes after a release, so one check sometimes said you were up to date. Chronicle now asks up
+  to three times and keeps the newest answer.
+
 ## 0.14.3 (2026-10-07)
 
 - **See which projects are on the hub:** on a computer that sends to a hub, a project that is in one of the hub's
