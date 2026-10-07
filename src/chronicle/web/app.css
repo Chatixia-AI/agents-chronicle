@@ -108,7 +108,7 @@
     --user-bubble: #12365f;
     --code-bg: #0a2140;
     --shadow: none;
-    --series-1: #7cc7ff; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+    --series-1: #4396e2; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
     --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
     --gold: #ffb45e;
     --paper-grid: rgba(93, 134, 182, 0.13);
@@ -152,7 +152,7 @@
   --user-bubble: #12365f;
   --code-bg: #0a2140;
   --shadow: none;
-  --series-1: #7cc7ff; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
+  --series-1: #4396e2; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
   --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
   --gold: #ffb45e;
   --paper-grid: rgba(93, 134, 182, 0.13);
@@ -1699,8 +1699,9 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .sg-examples.one-line li { -webkit-line-clamp: 1; }
 .sg-card > .link-btn { justify-self: start; padding-left: 0; }
 
-/* Japanese UI (i18n.js sets <html lang>): fonts with Japanese glyphs first, and line breaks that keep phrases whole */
-:root:lang(ja) { --sans: system-ui, -apple-system, "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, "Segoe UI", sans-serif; }
+/* Japanese UI (i18n.js sets <html lang>): Plex for Latin text as on the site, Japanese glyphs from the system's
+   Japanese fonts, and line breaks that keep phrases whole */
+:root:lang(ja) { --sans: "IBM Plex Sans", "Hiragino Sans", "Hiragino Kaku Gothic ProN", "Yu Gothic UI", Meiryo, system-ui, sans-serif; }
 :lang(ja) body { line-break: strict; word-break: auto-phrase; }
 :lang(ja) .subhead { letter-spacing: 0.02em; }
 /* the language switch beside the theme toggle: a short outlined label (日本語 / EN) */
