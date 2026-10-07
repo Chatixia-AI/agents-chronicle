@@ -5,8 +5,8 @@
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>Chronicle</title>
   <link rel="manifest" href="manifest.webmanifest">
-  <meta name="theme-color" content="#f9f9f7" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#0d0d0d" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#e5ecf5" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#05121f" media="(prefers-color-scheme: dark)">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Chronicle">
@@ -26,7 +26,6 @@
       root.lang = lang;
       try {
         var t = localStorage.getItem("chronicle-theme"); if (t) root.dataset.theme = t;
-        if (localStorage.getItem("chronicle-solid") === "1") root.classList.add("solid");
         if (localStorage.getItem("chronicle-sidebar") === "0") root.classList.add("no-sidebar");
       } catch (e) {}
     })();

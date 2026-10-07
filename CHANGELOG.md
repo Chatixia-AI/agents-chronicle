@@ -21,6 +21,13 @@
 
 ## 0.12.0 (2026-10-06)
 
+- **The dashboard in the Chronicle blueprint style:** the app now looks like
+  [chronicle.chatixia.net](https://chronicle.chatixia.net/). The dark theme is navy blueprint paper with a faint grid,
+  the light theme the same drawing as a whiteprint; type is IBM Plex Sans and Plex Mono, with small mono capitals for
+  labels. Gold marks what to press (Sync, Approve) and the current section, teal what is done, blue the links and the
+  data. Panels are flat with thin rules instead of glass, in the browser and in the macOS app, so *Reduce transparency*
+  is gone from **Settings › Appearance**. The fonts ship with Chronicle (Latin subsets, SIL Open Font License), so the
+  dashboard never calls a font service; Japanese text uses the system's Hiragino.
 - **Analyze with a model provider's API:** besides Claude Code and Codex, sessions can be analyzed through the
   Anthropic API, Claude in Amazon Bedrock (a Bedrock API key, or your AWS sign-in with SigV4), the OpenAI API, Azure
   OpenAI (an API key, or Microsoft Entra ID through `az login`), OpenRouter, any OpenAI-compatible server (LM Studio,
