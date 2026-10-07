@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- **The Map's search finds knowledge and sessions too:** besides terms and groups, it now matches the knowledge items
+  (title and text) and session titles drawn under each term, opens them on the map, highlights them and lists them in
+  the side panel. Before, text you could see on a knowledge node found nothing.
+
 ## 0.14.1 (2026-10-07)
 
 - **You can see which agent analyzes your sessions:** in Status › Analysis, a green dot marks the agent (or API
