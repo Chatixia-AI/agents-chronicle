@@ -232,7 +232,7 @@ def test_an_admin_renames_the_hub_and_sets_its_address(team):  # noqa: F811
         assert _call(url, "/api/team/settings", {"address": bad}, _as(s["Ada"]))[0] == 400, bad
     code, hs = _call(url, "/api/team/settings", {"address": "https://Hub.Example.com:8443/"}, _as(s["Ada"]))
     assert code == 200 and hs["address"] == "https://Hub.Example.com:8443"
-    assert "hub.example.com" in load_config(cfg.home).server_allowed_hosts  # its host name is let in, as enable does
+    assert load_config(cfg.home).server_allowed_hosts[-1] == "hub.example.com"  # its host name is let in, as enable does
     audit = _call(url, "/api/people", headers=_as(s["Ada"]))[1]["audit"]
     assert [(a["action"], a["actor_name"]) for a in audit[:2]] == [("settings", "Ada"), ("settings", "Ada")]
     assert _call(url, "/api/team/settings", {}, _as(s["Ada"]))[0] == 400  # nothing to change
