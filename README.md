@@ -12,6 +12,7 @@ knowledge on your own machine.</p>
   <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS app and CLI">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
   <a href="https://pepy.tech/projects/agents-chronicle"><img src="https://static.pepy.tech/badge/agents-chronicle" alt="Total downloads"></a>
+  <a href="https://github.com/Chatixia-AI/agents-chronicle/pkgs/container/chronicle-hub"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FChatixia-AI%2Fagents-chronicle%2Fchronicle-hub.json&query=%24.downloads&logo=docker&label=hub%20image%20pulls" alt="Hub Docker image pulls"></a>
 </p>
 <p align="center">
   <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
