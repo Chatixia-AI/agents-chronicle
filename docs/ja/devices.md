@@ -339,6 +339,7 @@ chronicle hub add-folder ~/work/Resona --project Resona
   `chronicle hub access <email|id> --project <name>`（または `--all-projects`）を使います。その人の次のリクエストから
   反映され、その人のコンピューターがすでに送ったものは残ります。`chronicle hub people` で各自に見えるものを確認できます。
   ハブのダッシュボードでは、管理者が **Team › People** で、招待するときにプロジェクトを選び、あとから変えられます。
+  プロジェクトが 7 つ以上あるハブでは、検索ボックスで名前やフォルダーから探せます。
 - **参加。** 一部のプロジェクトに限られた人として参加したコンピューターは、`--share knowledge` の有無にかかわらずナレッジ
   だけを共有し（[ナレッジだけを共有する](#ナレッジだけを共有する)）、`chronicle hub join` が共有するプロジェクトを表示します。
   続く `add-folder` で、`~/work/Resona` のセッションが Resona に入ります。ハブがすでに Resona に入れている git リモートの
