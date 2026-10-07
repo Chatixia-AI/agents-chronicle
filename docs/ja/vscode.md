@@ -30,8 +30,8 @@ Chronicle 拡張機能は、VS Code のエクスプローラーに 2 つのセ�
 
 ```bash
 cd vscode-extension
-npx @vscode/vsce package          # chronicle-sessions-0.1.0.vsix を作成
-code --install-extension chronicle-sessions-0.1.0.vsix
+npx @vscode/vsce package          # chronicle-sessions-0.2.0.vsix を作成
+code --install-extension chronicle-sessions-0.2.0.vsix
 ```
 
 一覧が読み込む `/api/file` と `/api/files` エンドポイントは、0.6.1 より新しい Chronicle で追加されます。

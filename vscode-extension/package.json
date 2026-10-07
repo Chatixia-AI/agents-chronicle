@@ -2,7 +2,7 @@
   "name": "chronicle-sessions",
   "displayName": "Chronicle",
   "description": "The coding-agent sessions behind your files: for the open file, and for every file agents worked on, from your local Chronicle.",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "publisher": "chatixia",
   "license": "MIT",
   "repository": {

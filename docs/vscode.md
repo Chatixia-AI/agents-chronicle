@@ -30,8 +30,8 @@ The extension isn't on the Marketplace yet. Build it from the repository and ins
 
 ```bash
 cd vscode-extension
-npx @vscode/vsce package          # writes chronicle-sessions-0.1.0.vsix
-code --install-extension chronicle-sessions-0.1.0.vsix
+npx @vscode/vsce package          # writes chronicle-sessions-0.2.0.vsix
+code --install-extension chronicle-sessions-0.2.0.vsix
 ```
 
 It needs a Chronicle newer than 0.6.1, which adds the `/api/file` and `/api/files` endpoints the lists read. With an older one,
