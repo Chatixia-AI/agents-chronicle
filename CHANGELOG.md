@@ -15,6 +15,9 @@
 - **A tidier Status › Analysis:** the card spans the page, with what analyzes on the left and the queue (ready,
   queued, held, spent), why it waits and the knowledge language on the right. A provider's settings sit in two
   columns with a Ready / Not set up badge, endpoint and tuning under **Advanced**, and the buttons on one row.
+- **Analysis through your own model provider stays MIT:** [ee/README.md](ee/README.md) no longer lists a company's
+  own model endpoint as an enterprise feature. Since 0.12.0 every provider (Bedrock, Azure OpenAI and the rest) is in
+  the MIT core, and it stays there.
 
 ## 0.12.0 (2026-10-06)
 
