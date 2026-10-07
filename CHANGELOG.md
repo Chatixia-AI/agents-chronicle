@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- **You can see which agent analyzes your sessions:** in Status › Analysis, a green dot marks the agent (or API
+  provider) in use, and an agent that isn't installed on this computer says **Not installed** on its tab instead of
+  just fading out.
 - **Leave one of the hub's projects:** a computer that shares knowledge can now leave a project and stay in the
   others. **Leave** in **Settings › Devices** (or `chronicle hub leave --project <name>`) stops it sharing its
   sessions there and getting the project's teammates' lessons. What it already shared stays on the hub for the team.
