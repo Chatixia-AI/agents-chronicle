@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.12.1 (2026-10-07)
 
 - **IBM Bob analyzes sessions too:** pick **IBM Bob** in **Status › Analysis** (or `analysis.backend = "bob"`) and add a
   Bob API key (`chronicle config set-key bob`, or `BOB_API_KEY`). Chronicle runs Bob Shell headless (`bob run`) with
