@@ -183,4 +183,4 @@ def test_dashboard_switches_the_backend(env, monkeypatch):
     assert [c["name"] for c in status["analysis"]["choices"]][:2] == ["claude", "codex"]
     assert app.action_backend("codex")["backend"] == "codex"
     assert load_config(env["cfg"].home).analysis.backend == "codex" and app.status_small()["analysis"]["label"] == "Codex"
-    assert "error" in app.action_backend("bob")
+    assert "error" in app.action_backend("gemini")

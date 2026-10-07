@@ -38,8 +38,8 @@ exclude_projects = []
 [analysis]
 # Analyze sessions automatically once they go idle.
 auto = true
-# What does the analysis. A coding agent, through your own login: "claude" (Claude Code, `claude -p`) or "codex"
-# (OpenAI Codex, `codex exec`). Or a model provider's API, set up under [providers.<name>] below: "anthropic",
+# What does the analysis. A coding agent: "claude" (Claude Code, `claude -p`) or "codex" (OpenAI Codex, `codex exec`)
+# through your own login, or "bob" (IBM Bob Shell, `bob run`, with a Bob API key). Or a model provider's API, set up under [providers.<name>] below: "anthropic",
 # "bedrock", "openai", "azure", "openrouter", "ollama" (models on this computer), or "openai-compatible".
 backend = "claude"
 # Claude model (backend "claude").
@@ -66,6 +66,8 @@ claude_bin = ""
 codex_model = ""
 # Path to the codex executable (auto-detected when empty).
 codex_bin = ""
+# Path to IBM Bob Shell's bob executable (auto-detected when empty). Its API key: `chronicle config set-key bob`.
+bob_bin = ""
 # Model that screens imported chats (`chronicle screen`): it reads only each chat's opening.
 screen_model = "haiku"
 # Language Chronicle writes in: summaries, knowledge, knowledge bases, the playbook, glossary definitions, weekly reviews,
@@ -193,6 +195,7 @@ class AnalysisConfig:
     claude_bin: str = ""
     codex_model: str = ""
     codex_bin: str = ""
+    bob_bin: str = ""
     screen_model: str = "haiku"  # `chronicle screen`: sorts imported chats, reading only their openings
     language: str = "en"  # what Chronicle writes in (LANGUAGES); codes the parser reads stay English
 
@@ -317,6 +320,27 @@ class Config:
             if p.exists():
                 return str(p)
         return None
+
+    def bob_bin(self) -> str | None:
+        """IBM Bob Shell (npm package bobshell), which installs as `bob`."""
+        if self.analysis.bob_bin:
+            return str(Path(self.analysis.bob_bin).expanduser())
+        found = shutil.which("bob")
+        if found:
+            return found
+        for candidate in ("/opt/homebrew/bin/bob", "/usr/local/bin/bob", "~/.local/bin/bob", "~/.npm-global/bin/bob"):
+            p = Path(candidate).expanduser()
+            if p.exists():
+                return str(p)
+        return None
+
+    def is_internal_path(self, path: str | None) -> bool:
+        """`path` is in Chronicle's own working folder, where agents run its analyses: not a project of yours."""
+        if not path:
+            return False
+        work = self.home / "workdir"
+        return any(str(path).rstrip("/") == str(w) or str(path).startswith(f"{w}/")
+                   for w in {str(work), os.path.realpath(work)})
 
 
 def _section(data: dict, name: str) -> dict:

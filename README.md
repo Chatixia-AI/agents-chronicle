@@ -132,8 +132,8 @@ anything. [How analysis works](docs/analysis.md#how-analysis-works) has the deta
 **Will it slow down my agent?** No. The session-end hook hands off to a detached process and returns in
 milliseconds; analysis runs later in the background.
 
-**Do I need Claude Code?** No. Analysis runs through Claude Code or Codex, or a model provider's API with your own
-key: Anthropic, Amazon Bedrock, OpenAI, Azure OpenAI, OpenRouter, any OpenAI-compatible server, or Ollama on your own
+**Do I need Claude Code?** No. Analysis runs through Claude Code, Codex or IBM Bob, or a model provider's API with your
+own key: Anthropic, Amazon Bedrock, OpenAI, Azure OpenAI, OpenRouter, any OpenAI-compatible server, or Ollama on your own
 computer. Pick one in **Status › Analysis** or with `chronicle config set analysis.backend <name>`
 ([Model providers](docs/analysis.md#model-providers)). Recording and browsing work either way; with none set up,
 sessions are archived and wait in the analysis queue.

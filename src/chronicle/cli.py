@@ -1024,25 +1024,27 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
 def _config_key(cfg, provider: str | None, value: str | None, *, forget: bool) -> int:
     """`chronicle config set-key PROVIDER [KEY]`: store a provider's API key (asked for, unechoed, when not given), or
     `forget-key PROVIDER` to remove it."""
-    from .providers import PROVIDERS, keys_path, set_key
+    from .llm import BACKENDS
+    from .providers import KEY_ENVS, keys_path, set_key
 
-    if provider not in PROVIDERS:
+    if provider not in KEY_ENVS:
         print(f"usage: chronicle config {'forget-key' if forget else 'set-key'} PROVIDER; PROVIDER is one of: "
-              f"{', '.join(PROVIDERS)}", file=sys.stderr)
+              f"{', '.join(KEY_ENVS)}", file=sys.stderr)
         return 2
+    label = BACKENDS[provider]
     if forget:
         set_key(cfg, provider, None)
-        print(f"forgot the {PROVIDERS[provider].label} API key")
+        print(f"forgot the {label} API key")
         return 0
     if value is None:
         import getpass
 
-        value = getpass.getpass(f"{PROVIDERS[provider].label} API key: ")
+        value = getpass.getpass(f"{label} API key: ")
     if not value.strip():
         print("no key given; nothing changed", file=sys.stderr)
         return 2
     set_key(cfg, provider, value)
-    print(f"stored the {PROVIDERS[provider].label} API key in {keys_path(cfg)} (readable by you only)")
+    print(f"stored the {label} API key in {keys_path(cfg)} (readable by you only)")
     return 0
 
 
@@ -2566,7 +2568,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("config", help="show or edit config.toml")
     s.add_argument("action", nargs="?", choices=["show", "path", "edit", "set", "set-key", "forget-key"], default="show")
     s.add_argument("key", nargs="?", help="with set: SECTION.KEY, e.g. analysis.backend or providers.ollama.model; "
-                                          "with set-key / forget-key: the provider, e.g. openai")
+                                          "with set-key / forget-key: the provider, e.g. openai, or bob for IBM Bob")
     s.add_argument("value", nargs="?", help="with set: the value (TOML, or a bare word); with set-key: the API key "
                                             "(asked for when left out, so it stays out of your shell history)")
     s.set_defaults(fn=cmd_config)

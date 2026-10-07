@@ -42,6 +42,13 @@ from .views import project_labels, reason_text as analysis_reason, resolve_sessi
 
 log = logging.getLogger("chronicle.server")
 MAX_SELECTION = 1000  # sessions one "analyze selected" may cover
+# What the dashboard may change for each coding agent: setting -> (config section, key). Effort is shared.
+AGENT_SETTINGS = {
+    "claude": {"model": ("analysis", "model"), "synthesis_model": ("synthesis", "model"),
+               "screen_model": ("analysis", "screen_model"), "effort": ("analysis", "effort")},
+    "codex": {"model": ("analysis", "codex_model"), "effort": ("analysis", "effort")},
+}
+EFFORTS = ("low", "medium", "high", "xhigh", "max")
 WEB_DIR = Path(__file__).parent / "web"
 LOOPBACK = ("127.0.0.1", "localhost", "[::1]")
 SESSION_COOKIE = "chronicle_session"  # a person's dashboard session on a hub (people.py)
@@ -1343,15 +1350,44 @@ class App:
         self._cfg_sig = self._config_sig()
         return self.analysis_backends()
 
-    def action_provider(self, body: dict) -> dict:
-        """Save a model provider's settings ([providers.<name>]) and, when given, its API key ("" forgets it)."""
-        from .config import load_config
-        from .providers import PROVIDERS, save_settings, set_key
+    def action_agent(self, body: dict) -> dict:
+        """Change a coding agent's model and effort (AGENT_SETTINGS). An empty Codex model means Codex's default."""
+        from .config import load_config, set_config_value
 
-        name = str(body.get("provider") or "")
-        if name not in PROVIDERS:
+        name = str(body.get("agent") or "")
+        allowed = AGENT_SETTINGS.get(name)
+        if not allowed:
             return {"error": tr("unknown analysis backend {backend!r}", backend=name)}
         values = body.get("settings") if isinstance(body.get("settings"), dict) else {}
+        refused = []
+        for k, v in values.items():
+            v = str(v if v is not None else "").strip()
+            ok = k in allowed and len(v) <= 120 and not any(c.isspace() for c in v)
+            if k == "effort":
+                ok = ok and v in EFFORTS
+            elif not (name == "codex" and k == "model"):
+                ok = ok and bool(v)  # Claude needs a model for each job
+            if not ok:
+                refused.append(k)
+                continue
+            set_config_value(self.cfg, *allowed[k], json.dumps(v))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        out = self.analysis_backends()
+        if refused:
+            out["error"] = tr("not saved: {keys}", keys=", ".join(refused))
+        return out
+
+    def action_provider(self, body: dict) -> dict:
+        """Save a model provider's settings ([providers.<name>]) and, when given, its API key ("" forgets it). For
+        IBM Bob, only the key."""
+        from .config import load_config
+        from .providers import KEY_ENVS, PROVIDERS, save_settings, set_key
+
+        name = str(body.get("provider") or "")
+        if name not in KEY_ENVS:
+            return {"error": tr("unknown analysis backend {backend!r}", backend=name)}
+        values = body.get("settings") if isinstance(body.get("settings"), dict) and name in PROVIDERS else {}
         refused = save_settings(self.cfg, name, values)
         if "key" in body and body["key"] is not None:
             set_key(self.cfg, name, str(body["key"]))
@@ -1363,11 +1399,10 @@ class App:
         return out
 
     def action_provider_test(self, name: str) -> dict:
-        """One small call to the provider, with its main model: does the endpoint, the key and the model work?"""
+        """One small call to a provider or agent, with its main model: do the endpoint, the key and the model work?"""
         from .llm import LLMError
-        from .providers import PROVIDERS
 
-        if name not in PROVIDERS:
+        if name not in BACKENDS:
             return {"error": tr("unknown analysis backend {backend!r}", backend=name)}
         runner = self._runner_for(name)
         if not runner.available():
@@ -2191,6 +2226,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.update_info(remote=True))
                 if p == "/api/analysis/backend":
                     return self._json(app.action_backend(str(body.get("backend") or "")))
+                if p == "/api/analysis/agent":
+                    return self._json(app.action_agent(body if isinstance(body, dict) else {}))
                 if p in ("/api/analysis/provider", "/api/analysis/provider/test", "/api/analysis/provider/models"):
                     if not self._can_admin():  # an API key, and where transcripts are sent
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)

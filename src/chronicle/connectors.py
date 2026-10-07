@@ -421,10 +421,10 @@ def _bob_mcp_registered(home: Path) -> bool:
 
 
 def bob_status(cfg: Config, conn: sqlite3.Connection) -> dict:
-    from .bob_parser import bob_db, load_tasks
+    from .bob_parser import bob_db, load_tasks, task_folder
 
     home = cfg.bob_dirs[0] if cfg.bob_dirs else bob_home()
-    tasks = load_tasks(home)
+    tasks = [t for t in load_tasks(home) if not cfg.is_internal_path(task_folder(t))]  # not Chronicle's own analyses
     with_prompt = sum(1 for t in tasks if t["messages"])
     connected = bool(cfg.bob_dirs)
     app = next((a for a in ("/Applications/IBM Bob.app", "/Applications/IBM Bob - Insiders.app") if Path(a).exists()), None)

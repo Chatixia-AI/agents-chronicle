@@ -51,10 +51,21 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
      hooks, `AGENTS.md` and skill instructions off, and Chronicle's instructions in place of Codex's own. Codex
      cannot switch off every tool by flag, so Chronicle also reads its event stream: a reply that follows any tool
      call is thrown away and the analysis counts as failed.
+   - **IBM Bob** (`backend = "bob"`): Bob Shell's `bob run --format stream-json --max-turns 1 --disable-mcp
+     --disable-subagents`, with every tool group disabled, in a throwaway workspace whose custom mode holds
+     Chronicle's instructions and no tools; as with Codex, a reply that follows any tool call is thrown away. Headless
+     runs need a Bob API key (the app's sign-in isn't used): `chronicle config set-key bob`, the IBM Bob tab in
+     **Status › Analysis**, or `BOB_API_KEY`. Bob picks its own model. It keeps each analysis in its own task list;
+     Chronicle doesn't import those as sessions.
 
    - **A model provider's API** (`backend = "anthropic"`, `"bedrock"`, `"openai"`, `"azure"`, `"openrouter"`,
      `"ollama"` or `"openai-compatible"`): one plain HTTP request per call, with no tools in it, so the model can
      only answer. See [Model providers](#model-providers).
+
+   Each agent's tab in **Status › Analysis** sets its model: for Claude Code, one for sessions (`analysis.model`), one
+   for knowledge bases (`synthesis.model`) and one for screening imported chats (`analysis.screen_model`), each an
+   alias (`sonnet`, `opus`, `haiku`, `fable`) or a full model id such as `claude-opus-5-5`; for Codex,
+   `analysis.codex_model` (empty: Codex's default). Both share `analysis.effort`.
 
    `CHRONICLE_INTERNAL=1` makes Chronicle's own hooks inert for these runs. Switch in **Status › Analysis**, with
    `chronicle config set analysis.backend codex`, or for one run with `chronicle analyze --backend codex`.
@@ -151,7 +162,8 @@ chronicle config set analysis.backend openai
 
 Cost: with a provider, the cost is what the API reports (OpenRouter) or an estimate from the token counts at
 Anthropic's or OpenAI's list prices (Anthropic, Bedrock, OpenAI); Azure, Ollama and other servers show tokens only. Otherwise,
-analysis runs through your own Claude Code or Codex login. With Claude, the reported cost is the API
+analysis runs through your own Claude Code or Codex login, or your Bob API key (Bob reports what each analysis cost).
+With Claude, the reported cost is the API
 list-price equivalent: sessions averaged about $0.38 each with Sonnet (digests average ~150k characters), and
 `max_budget_usd` caps each call. Codex reports tokens but no price, so Codex analyses show no cost. On a Claude or
 ChatGPT subscription the usage is drawn from the plan's allowance rather than billed. `chronicle analyze --pending

@@ -813,7 +813,6 @@ window.CHRONICLE_JA = {
   "{agent} is not installed": "{agent} はインストールされていません",
   "Analyzed by {agent} through your own login; only a redacted digest of each session is sent.": "あなた自身のログインを通じて {agent} で分析します。送るのは各セッションの伏せ字済みのダイジェストだけです。",
   "{agent} was not found: sessions wait in the queue until it is installed and signed in.": "{agent} が見つかりません。インストールしてサインインするまで、セッションはキューで待機します。",
-  "The analysis agent": "分析用のエージェント",
   "Could not change the knowledge language": "ナレッジの言語を変更できませんでした",
   "Knowledge is now written in {language}.": "これからナレッジは{language}で書かれます。",
   "Knowledge language": "ナレッジの言語",
@@ -1550,4 +1549,10 @@ window.CHRONICLE_JA = {
   "Sessions: ": "セッション：",
   "spent": "使用額",
   "API-equivalent: what the tokens would cost at list prices": "API 換算：トークンを定価で払った場合の金額",
+  "Effort": "推論の深さ",
+  "Model (sessions)": "モデル（セッション）",
+  "Knowledge bases": "ナレッジベース",
+  "Codex's default": "Codex の既定",
+  "Runs Bob Shell headless (bob run) with no tools and Bob's own model; only a redacted digest of each session is sent.": "Bob Shell をヘッドレス（bob run）で、ツールなし・Bob 自身のモデルで実行します。送るのは各セッションの秘匿化したダイジェストだけです。",
+  "Bob keeps each analysis in its own task list; Chronicle doesn't record them as sessions.": "Bob は各分析を自身のタスク一覧に残します。Chronicle はそれをセッションとして記録しません。",
 };

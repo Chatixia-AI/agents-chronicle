@@ -45,7 +45,7 @@
 | `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |
 | `chronicle config set <section.key> <value>` | 設定を 1 つ変更。例：`chronicle config set analysis.backend codex` や `providers.ollama.model qwen3:30b`（[設定](configuration.md)） |
-| `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | モデルプロバイダーの API キーを `provider-keys.json` に保存（省略すると尋ねます）、または削除 |
+| `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | モデルプロバイダーまたは IBM Bob（`bob`）の API キーを `provider-keys.json` に保存（省略すると尋ねます）、または削除 |
 
 ## その他の使い方
 

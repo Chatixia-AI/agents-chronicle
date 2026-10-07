@@ -29,7 +29,7 @@ from .codex_parser import (CODEX_PARSER_VERSION, load_imports, load_titles, pare
                            read_meta, rollout_files, rollout_id)
 from .antigravity_parser import (ANTIGRAVITY_PARSER_VERSION, LOGS, conversation_dirs, load_db_meta, load_title,
                                  parse_antigravity_conversation, transcript_files)
-from .bob_parser import BOB_PARSER_VERSION, bob_db, load_tasks, parse_bob_task, task_signature
+from .bob_parser import BOB_PARSER_VERSION, bob_db, load_tasks, parse_bob_task, task_folder, task_signature
 from .copilot_parser import (COPILOT_PARSER_VERSION, agent_session_dirs, chat_files, load_usage, parse_copilot_agent,
                              parse_vscode_chat, workspace_folder)
 from .parser import PARSER_VERSION, ParsedSession, parse_history, parse_session, session_dir_for
@@ -837,6 +837,8 @@ def _sync_bob(cfg: Config, conn, archiver: Archiver, root: Path, report: SyncRep
     snap = cfg.archive_dir / "bob" / "bob.db"
     snapshot_sqlite(conn, db, snap)
     for task in load_tasks(root):
+        if cfg.is_internal_path(task_folder(task)):
+            continue  # Chronicle's own analysis, run through Bob (analysis.backend = "bob")
         sid = task["id"]
         sig = hashlib.sha1(f"{task_signature(task)}|v{BOB_PARSER_VERSION}".encode()).hexdigest()
         if sid in skip or _unchanged(conn, sid, sig, force):
