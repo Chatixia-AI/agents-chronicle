@@ -120,6 +120,27 @@ def test_forget_session(synced):
     assert synced["main"].exists()
 
 
+def test_forget_keeps_files_other_sessions_share(env, tmp_path):
+    """A Bob task's transcript is Bob's whole database, and its archive the snapshot every Bob task shares (as with a
+    chat export): forgetting one task removes neither while another session uses it."""
+    from chronicle.ingest import forget_session
+
+    from copilot_fixture import BOB_TASK, BOB_TOOLS, write_bob_home
+
+    cfg = env["cfg"]
+    cfg.bob_dirs = [write_bob_home(tmp_path / "bob")]
+    conn = connect(cfg.db_path)
+    sync(cfg, conn)
+    row = conn.execute("SELECT transcript_path, archive_path FROM sessions WHERE id=?", (BOB_TASK,)).fetchone()
+    db, snap = Path(row[0]), Path(row[1])
+    assert db.name == "bob.db" and snap.name == "bob.db" and db != snap
+    forget_session(conn, cfg, BOB_TASK, delete_transcript=True)
+    assert db.exists() and snap.exists()  # the other task still needs both
+    forget_session(conn, cfg, BOB_TOOLS)
+    assert not snap.exists() and db.exists()  # the last one: its archive goes; Bob's own database stays
+    conn.close()
+
+
 def test_excluded_projects_are_not_archived(env):
     cfg = env["cfg"]
     cfg.exclude_projects = ["/Users/test/Projects/*"]
