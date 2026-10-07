@@ -3,8 +3,9 @@ name: Release
 # Releasing is one button: Actions → Release → Run workflow on main, and pick patch, minor or major. The version
 # lives in the git tags (hatch-vcs), so nothing is committed first. The run works out the next version from the
 # latest vX.Y.Z tag, runs the tests, creates the tag and the GitHub release (the changelog's "## Unreleased"
-# section is its notes), publishes agents-chronicle to PyPI (trusted publishing, no token), attaches
-# Chronicle-X.Y.Z-arm64.dmg, and opens a pull request that dates the changelog section.
+# section is its notes), publishes agents-chronicle to PyPI (trusted publishing, no token), publishes the hub's image
+# ghcr.io/chatixia-ai/chronicle-hub (docker/, built from that PyPI release), attaches Chronicle-X.Y.Z-arm64.dmg, and
+# opens a pull request that dates the changelog section.
 # "dry run" (the default) runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
 # Publishing a release tagged vX.Y.Z on GitHub by hand runs the same tests, PyPI and DMG jobs.
 #
@@ -132,6 +133,49 @@ jobs:
             exit 1
           fi
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+
+  image:
+    needs: [plan, pypi]
+    if: ${{ !cancelled() && needs.pypi.result == 'success' }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read   # checkout
+      packages: write  # push to ghcr.io
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+      IMAGE: ghcr.io/chatixia-ai/chronicle-hub
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: v${{ needs.plan.outputs.version }}
+          persist-credentials: false
+      - name: Wait until PyPI serves the release
+        run: |
+          for _ in $(seq 1 30); do
+            if python3 -m pip download --quiet --no-deps --no-cache-dir --dest "$RUNNER_TEMP/probe" \
+                "agents-chronicle==$VERSION"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::PyPI does not serve agents-chronicle $VERSION after 5 minutes"
+          exit 1
+      - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
+      - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
+      - uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f  # v4.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ github.token }}
+      - uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.4.0
+        with:
+          context: docker
+          platforms: linux/amd64,linux/arm64
+          build-args: CHRONICLE_VERSION=${{ needs.plan.outputs.version }}
+          tags: |
+            ${{ env.IMAGE }}:${{ needs.plan.outputs.version }}
+            ${{ env.IMAGE }}:latest
+          push: true
 
   macos-app:
     needs: [plan, test, release]

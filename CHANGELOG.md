@@ -9,6 +9,12 @@
   data. Panels are flat with thin rules instead of glass, in the browser and in the macOS app, so *Reduce transparency*
   is gone from **Settings › Appearance**. The fonts ship with Chronicle (Latin subsets, SIL Open Font License), so the
   dashboard never calls a font service; Japanese text uses the system's Hiragino.
+- **A hub in Docker:** `docker/compose.yaml` runs a team's hub on any server with Docker: the hub, Caddy for HTTPS,
+  and Postgres for the team store. The image (`ghcr.io/chatixia-ai/chronicle-hub`, published with each release)
+  sets the hub up from `CHRONICLE_*` variables. It takes knowledge only, so it needs no model. Computers join with
+  invites, and the first admin's invite is printed in the container's log. It won't serve a hub without people,
+  since anyone who reaches such a hub counts as its admin. Requests through the dashboard never count as made at the
+  hub, so everyone signs in. See [A hub in Docker](docs/docker.md).
 
 ## 0.12.1 (2026-10-07)
 

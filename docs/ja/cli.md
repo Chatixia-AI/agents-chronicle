@@ -43,6 +43,7 @@
 | `chronicle hub people` / `hub role <email\|id> <role>` / `hub remove <email\|id>` / `hub shared-token on\|off` | ハブで：全員のロール、見えるプロジェクト、コンピューターの一覧／ロールを変える／人を外す／共有トークンを許すか拒むか（[利用者とロール](devices.md#利用者とロール)） |
 | `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | ハブに参加したコンピューターで：フォルダーのセッションをハブのプロジェクトに入れる／外す／どこに入るかを表示（`--list`：ハブのプロジェクト一覧）（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
 | `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |
+| `chronicle container` | ハブの Docker イメージが実行するコマンド：`CHRONICLE_*` 変数からハブを設定し、ダッシュボードを提供して 15 分ごとに同期（[Docker でハブを動かす](docker.md)） |
 | `chronicle config [edit]` | `~/.claude-chronicle/config.toml` を表示または編集 |
 | `chronicle config set <section.key> <value>` | 設定を 1 つ変更。例：`chronicle config set analysis.backend codex` や `providers.ollama.model qwen3:30b`（[設定](configuration.md)） |
 | `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | モデルプロバイダーまたは IBM Bob（`bob`）の API キーを `provider-keys.json` に保存（省略すると尋ねます）、または削除 |

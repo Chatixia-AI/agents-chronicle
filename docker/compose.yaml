@@ -1,0 +1,70 @@
+# A Chronicle hub for a team, with HTTPS and the team store (docs/docker.md):
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d
+#   docker compose logs hub # the first admin's invite
+#
+# Caddy gets a certificate for CHRONICLE_DOMAIN (its DNS must point here, and ports 80 and 443 be open) and forwards
+# to the hub. The hub shares Caddy's network, so its dashboard listens on 127.0.0.1 and nothing but Caddy reaches it.
+# Postgres keeps the team store: what computers share, lessons merged across them, sent back to teammates.
+name: chronicle
+
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    environment:
+      CHRONICLE_DOMAIN: ${CHRONICLE_DOMAIN:?set CHRONICLE_DOMAIN in .env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  hub:
+    image: ghcr.io/chatixia-ai/chronicle-hub:${CHRONICLE_VERSION:-latest}
+    restart: unless-stopped
+    init: true
+    network_mode: service:caddy
+    depends_on:
+      caddy:
+        condition: service_started
+      postgres:
+        condition: service_healthy
+    environment:
+      CHRONICLE_HUB_URL: https://${CHRONICLE_DOMAIN}
+      CHRONICLE_HOST: 127.0.0.1
+      CHRONICLE_ADMIN_EMAIL: ${CHRONICLE_ADMIN_EMAIL:?set CHRONICLE_ADMIN_EMAIL in .env}
+      CHRONICLE_ADMIN_NAME: ${CHRONICLE_ADMIN_NAME:-}
+      CHRONICLE_HUB_NAME: ${CHRONICLE_HUB_NAME:-}
+      CHRONICLE_TEAM_STORE: postgres
+      PGHOST: postgres
+      PGDATABASE: chronicle
+      PGUSER: chronicle
+      PGPASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      PGSSLMODE: disable  # Postgres is reached only inside this compose network
+    volumes:
+      - hub-data:/data
+
+  postgres:
+    image: postgres:17
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: chronicle
+      POSTGRES_USER: chronicle
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "chronicle", "-d", "chronicle"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
+volumes:
+  caddy-data:
+  caddy-config:
+  hub-data:
+  postgres-data:

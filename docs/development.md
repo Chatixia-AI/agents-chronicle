@@ -48,13 +48,18 @@ source checkout shows on the Status page.
 To release, add what changed under `## Unreleased` in `CHANGELOG.md` as you go, then run **Actions → Release → Run
 workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/release.yml` works out the next version
 from the latest tag, runs the tests, creates the tag and the GitHub release (the Unreleased section is its notes),
-publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`) and attaches the DMG to the release
+publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`), publishes the hub's image
+`ghcr.io/chatixia-ai/chronicle-hub` (tagged with the version and `latest`, for amd64 and arm64, built from that
+PyPI release) and attaches the DMG to the release
 (signed and notarized when the `MACOS_*` / `APPLE_*` secrets are set; see the workflow header). Last, it opens a
 pull request that renames `## Unreleased` to `## <version> (<date>)`. Merge it before the next release: until then
 the released lines are still under Unreleased, and the next run stops at its first step saying so. If GitHub
 Actions may not create pull requests in this repository, the run fails at its last step, after publishing, with a
 link to open that pull request by hand.
 `dry run`, the default, runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
+To try the hub's image before a release: `uv build --wheel -o docker/wheels && docker build -t chronicle-hub
+docker` builds it from this checkout instead of PyPI ([A hub in Docker](docker.md)); CI's `docker` job does the
+same and checks that it starts.
 Publishing a release tagged `v<version>` on GitHub by hand still works too.
 
 ### One-time setup before the first release

@@ -1614,6 +1614,12 @@ def _push(cfg, *, quiet: bool = False) -> int:
     return 0 if not report.errors else 1
 
 
+def cmd_container(args) -> int:
+    from .container import main
+
+    return main()
+
+
 def cmd_push(args) -> int:
     from .util import setup_logging
 
@@ -2616,6 +2622,10 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("push", help="send this computer's new sessions to its hub now (the background job does this)")
     s.add_argument("--quiet", action="store_true")
     s.set_defaults(fn=cmd_push)
+
+    s = sub.add_parser("container", help="run a hub in a container (docker/): set it up from CHRONICLE_* variables, "
+                                         "then serve the dashboard and sync every 15 minutes")
+    s.set_defaults(fn=cmd_container)
 
     s = sub.add_parser("hook", help=argparse.SUPPRESS)
     s.add_argument("event", choices=["session-end", "session-start", "stop", "pre-compact"])

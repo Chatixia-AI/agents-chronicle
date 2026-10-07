@@ -1,0 +1,3 @@
+# Only wheels/ is copied into the image; keep the rest, .env with its password above all, out of the build context.
+*
+!wheels/

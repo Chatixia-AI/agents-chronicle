@@ -201,6 +201,8 @@ JA: dict[str, str] = {
     "Matches the checkout.": "チェックアウトと一致しています。",
     "Installed from {source}; updating reinstalls from there.": "{source} からインストールされています。更新するとそこから再インストールします。",
     "Download the new version and drag it into Applications.": "新しいバージョンをダウンロードし、アプリケーションフォルダーにドラッグしてください。",
+    "Pull the new image and recreate the container: docker compose pull && docker compose up -d":
+        "新しいイメージを取得してコンテナーを作り直してください: docker compose pull && docker compose up -d",
     "Could not reach PyPI ({error})": "PyPI に接続できませんでした（{error}）",
 
     # ---- sources (connectors) and what connecting one did

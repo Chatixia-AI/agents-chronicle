@@ -48,13 +48,18 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
 リリースするには、変更点を作業のたびに `CHANGELOG.md` の `## Unreleased` に書いておき、`main` で **Actions → Release →
 Run workflow** を実行して `patch`、`minor`、`major` のどれかを選びます。`.github/workflows/release.yml` が最新のタグから
 次のバージョンを決め、テストを実行し、タグと GitHub リリースを作成し（Unreleased の節がリリースノートになります）、
-`agents-chronicle` を PyPI に公開し（Trusted Publishing、環境 `pypi`）、DMG をリリースに添付します（`MACOS_*` /
+`agents-chronicle` を PyPI に公開し（Trusted Publishing、環境 `pypi`）、ハブのイメージ
+`ghcr.io/chatixia-ai/chronicle-hub` を公開し（バージョンと `latest` のタグ、amd64 と arm64、その PyPI のリリースから
+ビルド）、DMG をリリースに添付します（`MACOS_*` /
 `APPLE_*` シークレットが設定されていれば署名・公証済み。詳細はワークフローの先頭を参照）。最後に、`## Unreleased` を
 `## <version> (<date>)` に変えるプルリクエストを開きます。次のリリースの前にマージしてください。マージするまでは
 リリース済みの内容が Unreleased に残っているため、次の実行は最初のステップでその旨を伝えて止まります。このリポジトリで
 GitHub Actions がプルリクエストを作れない設定の場合は、公開を終えたあとの最後のステップが失敗し、そのプルリクエストを
 手で開くためのリンクを示します。
 既定の `dry run` はテストを実行して DMG をワークフローの成果物として保存するだけで、何も公開しません。
+リリース前にハブのイメージを試すには、`uv build --wheel -o docker/wheels && docker build -t chronicle-hub docker`
+で PyPI の代わりにこのチェックアウトからビルドします（[Docker でハブを動かす](docker.md)）。CI の `docker` ジョブも
+同じようにビルドし、起動することを確かめます。
 GitHub で `v<version>` タグのリリースを手動で公開する方法も引き続き使えます。
 
 ### 最初のリリースの前に一度だけ必要な設定
