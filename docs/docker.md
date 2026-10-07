@@ -136,6 +136,15 @@ docker compose exec hub chronicle hub project list
 Each computer then adds its own folder for the project, as the next sections show. Once one computer has sent sessions from a git repository, other clones of that repository are
 filed under the project on their own.
 
+Members limited to some projects don't see the new one until you give it to them: their **Join a project** answers
+"Nothing matches." Change their projects in **Team › People**, or on the server. The list is replaced, so name every
+project they keep: for someone who sees `Mobile`,
+
+```bash
+docker compose exec hub chronicle hub people
+docker compose exec hub chronicle hub access <email or id> --project Mobile --project Website
+```
+
 ## Connect your own computer
 
 Your computer joins the hub the way a teammate's does: with an invite of its own and the `chronicle hub join`
@@ -201,7 +210,7 @@ On the server, in `~/chronicle-hub`:
 | See the computers that send, and when each last did | `docker compose exec hub chronicle hub status` |
 | List the projects | `docker compose exec hub chronicle hub project list` |
 | Make a new code for someone already on the hub | `docker compose exec hub chronicle hub invite <their email or id>` |
-| Change which projects someone sees | `docker compose exec hub chronicle hub access <email or id> --project <name>` |
+| Change which projects someone sees | `docker compose exec hub chronicle hub access <email or id> --project <name>…` (every project they keep: the list is replaced) |
 | Remove someone | `docker compose exec hub chronicle hub remove <email or id>` |
 | Read the hub's log | `docker compose logs hub` |
 

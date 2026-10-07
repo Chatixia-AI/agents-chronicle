@@ -64,6 +64,10 @@ but running it does no harm.
 Your dashboard can do the same: **Settings › Devices › Projects on the hub › Join a project**, then pick the project
 and your folder.
 
+If the hub says it has no such project, or **Join a project** answers "Nothing matches.", you don't see that
+project yet: a project created after you joined isn't yours until the hub's admin gives it to you. Ask them, then
+try again.
+
 ## 4. Check
 
 ```bash
