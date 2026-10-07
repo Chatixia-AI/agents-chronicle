@@ -82,6 +82,13 @@ Commands run in the container act as an admin, like commands on any hub computer
 ([People and roles](devices.md#people-and-roles)). Requests through the dashboard never do: the container sets
 `[server] behind_proxy`, so everyone who opens the dashboard signs in, admins included.
 
+The hub in the container never runs a session in your repositories, so it doesn't know their git remotes. After
+joining, each member adds their folder for each project, or their computer shares nothing:
+`chronicle hub add-folder ~/work/demo-app --project demo-app`. Sessions in other folders stay on their computer
+([Sharing knowledge only](devices.md#sharing-knowledge-only)). To take back what a computer sent:
+`docker compose exec hub chronicle hub purge bob@example.com --project demo-app`
+([Taking back what a computer sent](devices.md#taking-back-what-a-computer-sent)).
+
 ## What the hub takes
 
 On its first start, the container sets two settings that an admin can change later:

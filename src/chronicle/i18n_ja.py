@@ -308,6 +308,7 @@ JA: dict[str, str] = {
     "change this on the computer itself, not from another device": "ほかのデバイスからではなく、そのコンピューター自身で変更してください",
     "this computer sends to a hub: the team store is set up on the hub": "このコンピューターはハブに送っています。チームストアはハブで設定します",
     "this computer has not joined a hub": "このコンピューターはハブに参加していません",
+    "all_folders must be true or false": "all_folders は true か false で指定します",
     "unknown share mode {share!r}": "不明な共有方法 {share!r}",
     "the database server's address is missing": "データベースサーバーのアドレスがありません",
     "the database name is missing": "データベース名がありません",

@@ -488,6 +488,64 @@ def refile(cfg: Config, conn, machine_id: str, folders) -> int:
     return moved
 
 
+def computers_of(conn, person_id: int) -> list[str]:
+    """The computers that joined with one of this person's invites."""
+    return [r[0] for r in conn.execute("SELECT DISTINCT machine_id FROM people_tokens WHERE person_id = ? AND "
+                                       "kind = 'computer' AND machine_id IS NOT NULL", (person_id,))]
+
+
+def purge_targets(conn, machine_ids: list[str], *, projects: list[str] | None = None,
+                  keep: list[str] | None = None) -> list[dict]:
+    """What `chronicle hub purge` would remove: sessions those computers sent, filed under `projects`, or (`keep`)
+    under any project but those, sessions filed under no project included."""
+    if not machine_ids or (projects is None) == (keep is None):
+        return []
+    marks = ", ".join("?" for _ in machine_ids)
+    sql = f"SELECT id, project_path, project_name, title, source, transcript_path FROM sessions WHERE machine_id IN ({marks})"
+    params: list = list(machine_ids)
+    if projects is not None:
+        sql += f" AND project_path IN ({', '.join('?' for _ in projects) or 'NULL'})"
+        params += projects
+    elif keep:
+        sql += f" AND (project_path IS NULL OR project_path NOT IN ({', '.join('?' for _ in keep)}))"
+        params += keep
+    return [dict(r) for r in conn.execute(sql + " ORDER BY project_path, started_at", params)]
+
+
+def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, person_id: int | None = None) -> dict:
+    """Remove sessions other computers sent from this hub for good (purge_targets picks them): their rows, lessons,
+    notes and received transcripts, the team store's copy, and the knowledge bases built from them. Each is forgotten
+    (ingest.forget_session), so the computer that sent it can't send it again. Returns what was removed."""
+    from .ingest import forget_session
+    from .people import LOCAL, audit
+
+    me = local_machine(cfg)["id"]
+    ids = [x["id"] for x in sessions]
+    if conn.execute(f"SELECT 1 FROM sessions WHERE machine_id = ? AND id IN ({', '.join('?' for _ in ids) or 'NULL'})",
+                    (me, *ids)).fetchone():
+        raise HubError("purge removes what other computers sent, not this hub's own sessions (`chronicle forget`)")
+    store = _store(cfg)
+    if store and ids:  # the team's record first: if it fails, nothing here changes and purge can run again
+        _in_store(store.forget_sessions, ids)
+    received = cfg.machines_dir
+    for x in sessions:  # forget_session also removes its note in the Markdown vault
+        sent_here = bool(x["transcript_path"]) and under(x["transcript_path"], str(received))
+        forget_session(conn, cfg, x["id"], delete_transcript=sent_here)
+    projects = sorted({x["project_path"] for x in sessions if x["project_path"]})
+    emptied = [p for p in projects if not conn.execute("SELECT 1 FROM sessions WHERE project_path = ? LIMIT 1",
+                                                       (p,)).fetchone()]
+    for p in projects:  # built from the lessons just removed: the next sync builds it again from what is left
+        conn.execute("DELETE FROM project_kb WHERE project_path = ?", (p,))
+    for p in emptied:
+        conn.execute("DELETE FROM glossary_usage WHERE project_path = ?", (p,))
+        conn.execute("DELETE FROM suggestions WHERE project_path = ? AND status IN ('new', 'stale')", (p,))
+    conn.execute("DELETE FROM suggestions WHERE knowledge_id IS NOT NULL AND status IN ('new', 'stale') AND "
+                 "knowledge_id NOT IN (SELECT id FROM knowledge)")
+    audit(conn, by or LOCAL, "purge", person_id, sessions=len(ids), projects=projects)
+    conn.commit()
+    return {"sessions": len(ids), "projects": projects, "emptied": emptied, "store": bool(store)}
+
+
 def folders_report(conn, machine_id: str, folders: dict[str, str], repos: dict, remotes: dict[str, str]) -> dict:
     """Per folder: its project, this computer's sessions filed there, and the repositories inside it that their git
     remote files under another project (a remote the hub knows wins over a folder around it)."""
@@ -581,8 +639,8 @@ class PushReport:
         what = "session" if self.kind == "knowledge" else "file"
         verb = "shared" if self.kind == "knowledge" else "sent"
         parts = [f"{self.sent} {what}{'s' * (self.sent != 1)} {verb} ({self.bytes / 1e6:.1f} MB)", f"{self.unchanged} unchanged"]
-        if self.skipped:
-            parts.append(f"{self.skipped} excluded")
+        if self.skipped:  # sharing knowledge: sessions outside the hub's projects, or in excluded ones, stay here
+            parts.append(f"{self.skipped} kept here" if self.kind == "knowledge" else f"{self.skipped} excluded")
         if self.analyses:
             parts.append(f"{self.analyses} earlier analyses handed over")
         if self.team is not None:
@@ -742,11 +800,14 @@ def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> Push
 
 
 def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, remotes: dict | None = None,
-                    conn=None, where: str = "", params: tuple = ()) -> tuple[list[dict], int, int]:
+                    projects_only: bool = False, conn=None, where: str = "",
+                    params: tuple = ()) -> tuple[list[dict], int, int]:
     """(records the hub lacks or has an older analysis of, unchanged, excluded) for push_knowledge.
 
     `scope`: the hub projects this computer's person is limited to (hello says so); then only sessions the hub files
     under them are sent: in a folder added to one of them, or in a repository whose remote the hub files there.
+    `projects_only` ([hub] all_folders = false): the same for any of the hub's projects, so a folder nobody added and
+    a repository the hub doesn't know stay here.
     `conn`/`where`: the hub's own sessions in projects set up there (share_own)."""
     from .db import connect
 
@@ -769,16 +830,19 @@ def _shared_records(cfg: Config, have: dict, *, scope: list[str] | None = None, 
             if cfg.is_excluded(rec["project_path"]):
                 excluded += 1
                 continue
-            if scope is None and have.get(rec["id"]) == rec["analyzed_at"]:
+            limited = scope is not None or projects_only
+            if not limited and have.get(rec["id"]) == rec["analyzed_at"]:
                 unchanged += 1  # asked git nothing: it runs once per folder, only for what goes
                 continue
             if ran and ran not in found:
                 info = git_info(ran)
                 found[ran] = info[1] if info else None
             rec["remote"] = found.get(ran) if ran else None
-            if scope is not None and destination(cfg, rec["project_path"], rec["remote"], remotes or {}) not in scope:
-                excluded += 1  # not one of the projects this person shares: it stays here
-                continue
+            if limited:
+                goes = destination(cfg, rec["project_path"], rec["remote"], remotes or {})
+                if goes is None or (scope is not None and goes not in scope):
+                    excluded += 1  # not one of the hub's projects, or not one this person shares: it stays here
+                    continue
             if have.get(rec["id"]) == rec["analyzed_at"]:
                 unchanged += 1
                 continue
@@ -849,7 +913,8 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
             raise HubError(f"the hub runs Chronicle {hello.get('version')}, which can't take knowledge only; update it")
         scope = hello.get("scope") if isinstance(hello.get("scope"), list) else None  # the hub limits this person
         records, report.unchanged, report.skipped = _shared_records(cfg, have, scope=scope,
-                                                                    remotes=hello.get("remotes") or {})
+                                                                    remotes=hello.get("remotes") or {},
+                                                                    projects_only=not cfg.hub_all_folders)
         for i in range(0, len(records), SHARE_BATCH):
             batch = records[i:i + SHARE_BATCH]
             if progress:
@@ -1326,7 +1391,10 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
         raise HubError("bad sessions")
     from .people import projects_of
 
+    from .ingest import forgotten_ids
+
     scope = projects_of(person)
+    forgotten = forgotten_ids(conn)  # forgotten or purged here: never taken again
     r = ProjectResolver(cfg, conn)
     now = utcnow_iso()
     stored = kept = refused = 0
@@ -1334,6 +1402,9 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
     for rec in data["sessions"][:SHARE_BATCH * 2]:
         sid = str(rec.get("id") or "") if isinstance(rec, dict) else ""
         if not SESSION_ID_RE.match(sid) or rec.get("agent") not in SHARED_AGENTS:
+            continue
+        if sid in forgotten:
+            refused += 1
             continue
         have = conn.execute("SELECT source FROM sessions WHERE id = ?", (sid,)).fetchone()
         if have and have["source"] != "remote":

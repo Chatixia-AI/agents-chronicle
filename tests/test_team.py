@@ -65,6 +65,14 @@ class FakeStore:
                 del self.lessons[lid]
         return {"sessions": len(sessions)}
 
+    def forget_sessions(self, session_ids):
+        gone = [sid for sid in session_ids if self.sessions.pop(sid, None) is not None]
+        before = {lid for lid, sid, _ in self.sources if sid in gone}
+        self.sources = [x for x in self.sources if x[1] not in gone]
+        for lid in before - {x[0] for x in self.sources}:
+            del self.lessons[lid]
+        return len(gone)
+
     def lessons_for(self, machine_id, remotes, projects, limit=2000, within=None):
         def at(s):
             return team_store.place(s.get("remote"), s["project"])
@@ -112,7 +120,7 @@ def teamenv(synced, monkeypatch):
     set_config_value(cfg, "hub", "store", '"postgres"')  # the dashboard reads its config again on every request
     token = hub.new_token(cfg)
     app, httpd, url = _serve(load_config(cfg.home))
-    spoke, _, _ = _make_spoke(synced["tmp"], url, token, extra='share = "knowledge"\n')
+    spoke, _, _ = _make_spoke(synced["tmp"], url, token, extra='share = "knowledge"\nall_folders = true\n')
     fake.computer_seen(TEAMMATE, "Teammate PC", "Linux", "0.7.0")
     synced.update(fake=fake, spoke=spoke, url=url)
     yield synced
@@ -315,6 +323,14 @@ def test_postgres_store(tmp_path):
         st = store.status()
         assert st["steps"] == [name for name, _ in team_store.STEPS]
         assert st["counts"]["computers"] == 3 and st["counts"]["sessions"] == 4 and st["counts"]["audit"] >= 9
+
+        # a hub purges sessions: they go, and the lessons only they stated go with them
+        assert store.forget_sessions(["b2", "nope"]) == 1
+        assert titles(carol, projects=["/hub/other"]) == {}
+        assert store.forget_sessions(["b1"]) == 1
+        left = titles(carol, ["github.com/org/app"])
+        assert "Bob's fact" not in left and left["Stripe needs the raw body."]["computers"] == ["Dave PC"]
+        assert store.shared(bob) == {} and store.status()["counts"]["sessions"] == 2
     finally:
         with store._session() as c:
             c.execute(f"DROP SCHEMA {store.schema} CASCADE")

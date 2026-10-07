@@ -83,6 +83,13 @@ docker compose exec hub chronicle hub people
 （[利用者とロール](devices.md#利用者とロール)）。ダッシュボード経由のリクエストはそうなりません。コンテナーは
 `[server] behind_proxy` を設定するので、管理者も含めて、ダッシュボードを開く人は全員サインインします。
 
+コンテナーのハブはあなたのリポジトリでセッションを実行しないので、その git リモートを知りません。参加したら、メンバーは
+プロジェクトごとに自分のフォルダーを追加します。追加しないと、そのコンピューターは何も共有しません：
+`chronicle hub add-folder ~/work/demo-app --project demo-app`。ほかのフォルダーのセッションはそのコンピューターに残ります
+（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)）。コンピューターが送ったものを取り消すには：
+`docker compose exec hub chronicle hub purge bob@example.com --project demo-app`
+（[コンピューターが送ったものを取り消す](devices.md#コンピューターが送ったものを取り消す)）。
+
 ## ハブが受け取るもの
 
 コンテナーは最初の起動時に次の 2 つを設定します。どちらも管理者があとで変更できます。

@@ -132,6 +132,14 @@ its dashboard and MCP tools up to date. After each analysis it sends the hub onl
 - its analysis: title, summary, outcome, highlights and what went wrong;
 - the lessons it produced about the project.
 
+It does that only for sessions the hub files under one of its projects: those in a folder added with
+`chronicle hub add-folder`, and those in a repository whose git remote the hub already files under a project
+([Same project, different folders](#same-project-different-folders)). Sessions in any other folder stay on the
+computer, and its push counts them as "kept here". A hub that has never run a session in a repository itself doesn't
+know its remote, as with a hub in Docker or on a server, so add your folder for each project there. To share
+sessions from every folder, join with `--all-folders`, run `chronicle config set hub.all_folders true`, or choose
+**Every folder** under **Settings › Devices › What this computer sends**.
+
 Prompts, shell commands, file paths, transcripts and lessons about you (global ones and preferences) never leave
 the computer. Sessions from GitHub Copilot, IBM Bob and Google Antigravity are shared too; imported chats are not.
 
@@ -392,6 +400,24 @@ To cut off one computer or one browser and keep the person, a lost laptop say, u
 same list. That computer can join again with a new code. `chronicle hub role ana@example.com readonly` changes a
 role, and `chronicle hub access ana@example.com --project demo-app` the projects someone sees. These commands take an
 email or the id that `chronicle hub people` shows.
+
+### Taking back what a computer sent
+
+Removing someone, or limiting the projects they see, keeps what their computers already sent. To remove it from the
+hub, run on the hub:
+
+```bash
+chronicle hub purge ana@example.com --outside-access      # what Ana's computers sent outside the projects she sees
+chronicle hub purge ana@example.com --project demo-app    # what they sent to demo-app
+chronicle hub purge "Ana's laptop" --project demo-app     # one computer: its name, or its id from `chronicle hub status`
+```
+
+It lists the sessions by project and asks before removing anything (`--yes` doesn't ask). They go for good: their
+summaries, lessons and notes, any transcripts that computer sent, their copy in the team store with the lessons only
+they stated, and the knowledge bases built from them, which the next sync builds again from what is left. The
+computer keeps its own copy, and the hub refuses those sessions if it sends them again. Weekly reviews already written
+don't change, and a teammate's computer that already fetched lessons from them keeps its copy until it next fetches.
+The audit log records each purge. The hub's own sessions can't be purged; `chronicle forget <id>` removes one.
 
 ### The audit log
 
