@@ -183,8 +183,11 @@ docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --p
 ```
 
 Send them the `chronicle hub join …` line, not the link, with [Joining your team's hub](join-a-hub.md), which
-walks them through the rest. To also give them the dashboard, make a second code with
-`docker compose exec hub chronicle hub invite yuma@example.com` and send them its **link**.
+walks them through the rest. The code works once, so don't send both. Once their computer has joined, they open the
+dashboard from their own Chronicle: **Settings › Devices › Open the hub's dashboard**, or `chronicle hub signin`. For
+a phone, or someone who only views the dashboard, make a new code with
+`docker compose exec hub chronicle hub invite yuma@example.com` (or **New invite** on their row in **Team › People**)
+and send its **link**.
 
 **Team › People** in the dashboard invites people too, choosing their role and the projects they see.
 

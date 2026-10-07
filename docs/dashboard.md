@@ -15,7 +15,7 @@ themes, switch theme); **⌘B** hides the sidebar. The status bar shows backgrou
 last sync and, once one is found, an available update ([Updating](install.md#updating)).
 **Settings › Appearance** picks the theme and the language. The fonts ship with Chronicle, so the dashboard never
 calls out to a font service. **Settings › Devices** shows whether this computer is a hub or sends to
-one, and how to open the dashboard on your phone. On a phone the rail becomes a tab bar at the bottom, the page takes
+one (then also the hub's projects it is in, to join, leave or rejoin), and how to open the dashboard on your phone. On a phone the rail becomes a tab bar at the bottom, the page takes
 the whole width, and the dashboard can be added to the Home Screen like an app
 ([Phone and other computers](devices.md)).
 
