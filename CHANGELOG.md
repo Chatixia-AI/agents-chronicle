@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.1 (2026-10-07)
 
 - **A hub that takes knowledge only:** `chronicle config set hub.accept knowledge` on the hub, or **Team › Computers ›
   Knowledge only** for an admin, keeps every transcript off the hub. It turns away any computer that sends
