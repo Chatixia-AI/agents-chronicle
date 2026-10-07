@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **The dashboard in the Chronicle blueprint style:** the app now looks like
+  [chronicle.chatixia.net](https://chronicle.chatixia.net/). The dark theme is navy blueprint paper with a faint grid,
+  the light theme the same drawing as a whiteprint; type is IBM Plex Sans and Plex Mono, with small mono capitals for
+  labels. Gold marks what to press (Sync, Approve) and the current section, teal what is done, blue the links and the
+  data. Panels are flat with thin rules instead of glass, in the browser and in the macOS app, so *Reduce transparency*
+  is gone from **Settings › Appearance**. The fonts ship with Chronicle (Latin subsets, SIL Open Font License), so the
+  dashboard never calls a font service; Japanese text uses the system's Hiragino.
+
 ## 0.12.1 (2026-10-07)
 
 - **IBM Bob analyzes sessions too:** pick **IBM Bob** in **Status › Analysis** (or `analysis.backend = "bob"`) and add a

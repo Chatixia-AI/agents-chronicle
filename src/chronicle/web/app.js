@@ -5662,7 +5662,7 @@ route(/^\/friction$/, async (params) => {
 });
 
 // =====================================================================================
-// Appearance: theme and transparency, remembered in this browser
+// Appearance: theme and language, remembered in this browser
 // =====================================================================================
 route(/^\/appearance$/, async () => {
   const root = document.documentElement;
@@ -5673,13 +5673,6 @@ route(/^\/appearance$/, async () => {
     themeChanged();
     render();
   };
-  const solid = root.classList.contains("solid");
-  const sw = h("button", { class: "switch", type: "button", role: "switch", "aria-checked": String(solid), "aria-label": t("Reduce transparency"), onclick: () => {
-    const on = !root.classList.contains("solid");
-    root.classList.toggle("solid", on);
-    try { localStorage.setItem("chronicle-solid", on ? "1" : "0"); } catch (e) { /* private mode */ }
-    sw.setAttribute("aria-checked", String(on));
-  } });
   const row = (label, hint, control) => h("div", { class: "set-row" }, h("div", null, h("b", null, label), hint ? h("div", { class: "muted" }, hint) : null), control);
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Appearance")), h("div", { class: "sub" }, t("Saved in this browser (and in the app window).")))),
@@ -5689,9 +5682,6 @@ route(/^\/appearance$/, async () => {
       // the language names stay in their own language, so each is findable whichever one is showing
       row(t("Language"), t("System follows your browser's language. The page reloads to switch."),
         segControl([["system", t("System")], ["en", "English"], ["ja", "日本語"]], langPref(), (v) => { if (v !== langPref()) setLang(v); })),
-      row(t("Reduce transparency"), root.classList.contains("os-solid")
-        ? t("Reduce Transparency is on in macOS accessibility settings, so glass is already off.")
-        : t("Makes the sidebar, toolbar and search solid instead of translucent."), sw),
       row(t("Sidebar"), t("⌘B shows or hides it. Clicking a section in the rail also brings it back."),
         h("button", { class: "btn", type: "button", onclick: toggleSidebar }, t("Toggle sidebar")))));
 });

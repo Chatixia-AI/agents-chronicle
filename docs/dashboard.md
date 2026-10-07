@@ -4,7 +4,8 @@
 
 ![The session page: transcript with one-line tool calls, the knowledge it produced, and the outline of prompts](images/session.png)
 
-**Dashboard:** a simplified VS Code layout in Apple's Liquid Glass style. An icon rail on the left switches between
+**Dashboard:** a simplified VS Code layout, drawn in the same blueprint style as [chronicle.chatixia.net](https://chronicle.chatixia.net/):
+navy blueprint paper in the dark theme, a whiteprint in the light one, IBM Plex type. An icon rail on the left switches between
 **Home**, **Sessions**, **Knowledge**, **Projects**, **Suggestions** and **Settings** (point at an icon, or tab to it, for its name and what
 it holds), and the sidebar beside it lists that section:
 recent sessions grouped by the day they were last active, with agent filters, knowledge kinds with counts plus Glossary, Map, Global playbook
@@ -12,9 +13,8 @@ and Weekly reviews, projects, suggestions by status plus What goes wrong, or Sta
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
 themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
 last sync and, once one is found, an available update ([Updating](install.md#updating)).
-Glass is kept to the navigation layer (rail, sidebar, toolbar, palette, the Map's floating controls);
-pages sit on a solid surface. **Settings › Appearance** picks the theme and turns on *Reduce transparency*; the app
-also follows the macOS setting of that name. **Settings › Devices** shows whether this computer is a hub or sends to
+**Settings › Appearance** picks the theme and the language. The fonts ship with Chronicle, so the dashboard never
+calls out to a font service. **Settings › Devices** shows whether this computer is a hub or sends to
 one, and how to open the dashboard on your phone. On a phone the rail becomes a tab bar at the bottom, the page takes
 the whole width, and the dashboard can be added to the Home Screen like an app
 ([Phone and other computers](devices.md)).
