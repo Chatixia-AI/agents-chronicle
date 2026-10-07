@@ -5760,7 +5760,7 @@ route(/^\/appearance$/, async () => {
       // the language names stay in their own language, so each is findable whichever one is showing
       row(t("Language"), t("System follows your browser's language. The page reloads to switch."),
         segControl([["system", t("System")], ["en", "English"], ["ja", "日本語"]], langPref(), (v) => { if (v !== langPref()) setLang(v); })),
-      row(t("Sidebar"), t("⌘B shows or hides it. Clicking a section in the rail also brings it back."),
+      row(t("Sidebar"), t("The button at the top left, or ⌘B, shows or hides it. Clicking a section in the rail leaves it as it is."),
         h("button", { class: "btn", type: "button", onclick: toggleSidebar }, t("Toggle sidebar")))));
 });
 
@@ -5820,7 +5820,7 @@ function renderRail() {
   const rail = $("#rail");
   const link = (sx) => {
     const a = h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label, "aria-describedby": "rail-tip",
-      onclick: () => { hideRailTip(); if (document.documentElement.classList.contains("no-sidebar")) toggleSidebar(); } }, icon(sx.icon || sx.key));
+      onclick: hideRailTip }, icon(sx.icon || sx.key)); // it only navigates: the sidebar button shows or hides the sidebar
     // a tooltip of our own: the native one comes late, and not at all in the app window
     a.addEventListener("mouseenter", () => { if (matchMedia("(hover: hover)").matches) showRailTip(a, sx); });
     a.addEventListener("focus", () => { if (a.matches(":focus-visible")) showRailTip(a, sx); });

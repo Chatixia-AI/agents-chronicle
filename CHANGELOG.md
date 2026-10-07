@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- **The sidebar stays as you left it:** clicking a section in the rail no longer brings back a sidebar you hid. Only
+  the button at the top left (or ⌘B) shows or hides it.
 - **A hub that takes knowledge only:** `chronicle config set hub.accept knowledge` on the hub, or **Team › Computers ›
   Knowledge only** for an admin, keeps every transcript off the hub. It turns away any computer that sends
   transcripts, whatever token it uses, and tells it to run `chronicle config set hub.share knowledge`. Computers that
