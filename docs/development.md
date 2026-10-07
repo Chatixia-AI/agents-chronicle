@@ -45,7 +45,9 @@ The version is not written anywhere: it comes from the git tags (hatch-vcs). A t
 (`v0.7.0` → `0.7.0`), and commits after it as the next patch's dev release (`0.7.1.dev3+g1a2b3c4`), which is what a
 source checkout shows on the Status page.
 
-To release, add what changed under `## Unreleased` in `CHANGELOG.md` as you go, then run **Actions → Release → Run
+To release, add what changed under `## Unreleased` in `CHANGELOG.md` as you go (the **Changelog** check,
+`.github/workflows/changelog.yml`, fails a pull request that changes what ships without a line there, unless it has
+the `no-changelog` label), then run **Actions → Release → Run
 workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/release.yml` works out the next version
 from the latest tag, runs the tests, creates the tag and the GitHub release (the Unreleased section is its notes),
 publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`), publishes the hub's image

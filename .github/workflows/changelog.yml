@@ -1,0 +1,27 @@
+name: Changelog
+
+# A pull request that changes what ships (src/, ee/src/, docker/, vscode-extension/) adds a line under
+# "## Unreleased" in CHANGELOG.md: the Release workflow publishes that section as the release notes and refuses to run
+# when it is empty. The no-changelog label skips the check for a change users won't notice.
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: changelog-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  entry:
+    if: ${{ !contains(github.event.pull_request.labels.*.name, 'no-changelog') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 2  # the merge commit and its first parent, the base branch it merges into
+      - run: python3 packaging/release.py entry HEAD^1

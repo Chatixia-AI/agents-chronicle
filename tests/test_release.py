@@ -54,3 +54,17 @@ def test_not_ready_until_the_last_changelog_pull_request_is_merged():
     assert "nothing under '## Unreleased'" in release.not_ready(dated, ["v0.7.0"])
     assert release.not_ready(dated.replace("## 0.7.0", "## Unreleased\n\n- Next.\n\n## 0.7.0"), ["v0.7.0"]) is None
     assert release.not_ready(CHANGELOG, []) is None  # the first release
+
+
+def test_a_change_to_what_ships_needs_a_new_unreleased_line():
+    dated = release.date(CHANGELOG, "0.7.0", "2026-10-05")  # just released: no Unreleased section
+    added = dated.replace("## 0.7.0", "## Unreleased\n\n- **Newer:** a dot.\n\n## 0.7.0")
+    code = ["src/chronicle/web/app.js", "tests/test_web.py"]
+    assert release.missing_entry(dated, added, code) is None
+    assert release.missing_entry(CHANGELOG, CHANGELOG.replace("- **New:**", "- **Newer:** a dot.\n- **New:**"), code) is None
+    why = release.missing_entry(dated, dated, code)
+    assert "src/chronicle/web/app.js" in why and "tests/" not in why and "no-changelog" in why
+    assert release.missing_entry(CHANGELOG, CHANGELOG, ["docker/Dockerfile"])  # lines already there don't count
+    assert release.missing_entry(dated, dated, ["README.md", "docs/hub.md", ".github/workflows/ci.yml", "uv.lock"]) is None
+    many = [f"src/chronicle/m{i}.py" for i in range(5)]
+    assert "and 2 more" in release.missing_entry(dated, dated, many)

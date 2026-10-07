@@ -16,6 +16,10 @@ When you open a pull request, say what changed and how you checked it, and inclu
 (taken from the demo data, not your own sessions). Please keep all data local: Chronicle must not send anything
 anywhere except the analysis calls through the user's own `claude`.
 
+A change users will notice gets a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) (start the section if
+the last release dated it). The **Changelog** check fails a pull request that changes `src/`, `ee/src/`, `docker/`
+or `vscode-extension/` without one; label it `no-changelog` if nothing changes for users.
+
 Code outside `ee/` is MIT, and so are your contributions to it. `ee/` is under the
 [Chronicle Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
 core must never import from `ee/` ([ee/README.md](ee/README.md)).
