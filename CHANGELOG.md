@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.13.0 (2026-10-07)
 
 - **The dashboard in the Chronicle blueprint style:** the app now looks like
   [chronicle.chatixia.net](https://chronicle.chatixia.net/). The dark theme is navy blueprint paper with a faint grid,
