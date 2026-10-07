@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.1 (2026-10-07)
 
 - **You can see which agent analyzes your sessions:** in Status › Analysis, a green dot marks the agent (or API
   provider) in use, and an agent that isn't installed on this computer says **Not installed** on its tab instead of
