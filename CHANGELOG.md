@@ -1,9 +1,15 @@
 # Changelog
 
-## 0.13.1 (2026-10-07)
+## Unreleased
 
 - **The sidebar stays as you left it:** clicking a section in the rail no longer brings back a sidebar you hid. Only
   the button at the top left (or ⌘B) shows or hides it.
+- **The join command works with every hub token:** about one token in 64 starts with `-`, and the
+  `chronicle hub join … --token …` command that `chronicle hub enable` prints then failed with "expected one
+  argument". It now prints `--token=…`.
+
+## 0.13.1 (2026-10-07)
+
 - **A hub that takes knowledge only:** `chronicle config set hub.accept knowledge` on the hub, or **Team › Computers ›
   Knowledge only** for an admin, keeps every transcript off the hub. It turns away any computer that sends
   transcripts, whatever token it uses, and tells it to run `chronicle config set hub.share knowledge`. Computers that

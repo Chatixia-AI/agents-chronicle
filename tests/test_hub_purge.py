@@ -46,10 +46,10 @@ def test_join_keeps_to_the_hubs_projects_unless_asked(teamenv, monkeypatch, caps
     spoke = teamenv["spoke"]
     monkeypatch.setenv("CHRONICLE_HOME", str(spoke.home))
     token = hub.read_token(spoke)
-    assert main(["hub", "join", teamenv["url"], "--token", token, "--share", "knowledge", "--no-push"]) == 0
+    assert main(["hub", "join", teamenv["url"], f"--token={token}", "--share", "knowledge", "--no-push"]) == 0
     assert "Only sessions in the hub's projects are shared" in capsys.readouterr().out
     assert load_config(spoke.home).hub_all_folders is False
-    assert main(["hub", "join", teamenv["url"], "--token", token, "--share", "knowledge", "--all-folders",
+    assert main(["hub", "join", teamenv["url"], f"--token={token}", "--share", "knowledge", "--all-folders",
                  "--no-push"]) == 0
     assert "from every folder" in capsys.readouterr().out
     assert load_config(spoke.home).hub_all_folders is True
