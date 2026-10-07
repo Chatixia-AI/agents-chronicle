@@ -102,6 +102,19 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 `llm.py`（分析）、`synthesize.py`（ナレッジベース）、`diagram.py`（アーキテクチャ図）、`artifacts.py`（セッションが作ったものと、その今の状態）、`glossary.py`、`reviews.py`、`worker.py`（キュー）、`server.py` ＋ `web/`
 （ダッシュボード）、`mcp_server.py`、`export_md.py`、`hooks.py` / `install.py`、`desktop.py`（macOS アプリ）、`cli.py`。`packaging/macos/` がアプリをビルドします。
 
+## 変更を試す
+
+`./dev.sh` は、チェックアウトのコードでダッシュボードを起動します。データは `~/.chronicle-sandbox/dev-sh` にコピーした
+アーカイブを使うため、自分の `~/.claude-chronicle` やインストール済みの Chronicle には触れません。設定は、記録・分析・共有を
+一切しないものです。`--app` で macOS アプリのウィンドウを開き、`--demo` で[デモデータ](#デモデータ)を使い、`--fresh` で
+アーカイブをコピーし直し、`--tree ../agents-chronicle-<topic>` でほかのワークツリーのコードを動かします。サーバーは起動時に
+一度だけ web のファイルを読むため、`app.css` や `app.js` を編集したら再起動してください。
+
+```bash
+./dev.sh                                  # http://127.0.0.1:8797/（使用中なら次の空きポート）
+./dev.sh --tree ../agents-chronicle-<topic> --app
+```
+
 ## デモデータ
 
 `docs/demo/make_demo.py` は、架空のセッションから Chronicle のホームを作ります：5 つのプロジェクトと約 6 週間分の作業を持つ
