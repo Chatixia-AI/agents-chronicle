@@ -62,6 +62,9 @@ chronicle hub add-folder ~/code/website --project Website
 これで、そこで分析済みのものが送られます。ハブがすでに知っている git リポジトリのクローンは、この手順がなくても
 そのプロジェクトに入りますが、実行しても問題ありません。
 
+ダッシュボードでも同じことができます：**Settings › Devices › Projects on the hub › Join a project** で、
+プロジェクトとあなたのフォルダーを選びます。
+
 ## 4. 確認する
 
 ```bash
@@ -75,13 +78,16 @@ chronicle hub status
 ## その後
 
 - **分析のたびに、** あなたのコンピューターはプロジェクトの新しい要約とナレッジを送ります。今すぐ送るには
-  `chronicle push`、または **Settings › Devices** の **Share and get team lessons now** を使います。
+  `chronicle push`、または **Settings › Devices** の **Share now** を使います。
 - **送るたびに、** チームメイトがそのプロジェクトで学んだことが返ってきます。エージェントは Chronicle の MCP
   ツールを通じて、チームメイトのものと分かる形でそのナレッジを使えます。セッション開始時のメモを有効にしている場合
   （`chronicle install --inject-context`）、新しいセッションの "From teammates' sessions" にも並びます。
 - **あなたのダッシュボード**には、これまでどおりあなた自身のセッションが表示されます。
 
-送るのをやめるには `chronicle hub leave` を実行します。すでに送ったものはハブに残ります。
+一つのプロジェクトへの共有をやめるには、**Settings › Devices** でその横の **Leave** を選びます（または
+`chronicle hub leave --project <name>`）。そこで共有したものはハブに残ります。間違ったフォルダーを追加したときは、
+その横の **Remove** でフォルダーを外すと、あなたのコンピューターがそこから共有したものをハブが削除します。送るのを
+すべてやめるには **Leave the hub…** を選びます（または `chronicle hub leave`）。すでに送ったものはハブに残ります。
 
 ## うまくいかないとき
 

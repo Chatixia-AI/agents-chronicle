@@ -73,12 +73,12 @@ class FakeStore:
             del self.lessons[lid]
         return len(gone)
 
-    def lessons_for(self, machine_id, remotes, projects, limit=2000, within=None):
+    def lessons_for(self, machine_id, remotes, projects, limit=2000, within=None, left=None):
         def at(s):
             return team_store.place(s.get("remote"), s["project"])
 
-        def counts(s):  # within: only what sessions filed under those hub projects stated
-            return within is None or s["project"] in within
+        def counts(s):  # within: only what sessions filed under those hub projects stated; left: nothing there
+            return (within is None or s["project"] in within) and s["project"] not in (left or [])
 
         scope = sorted({at(s) for s in self.sessions.values() if at(s) and counts(s) and (
             s["computer"] == machine_id or s.get("remote") in remotes or s["project"] in projects)})
@@ -316,6 +316,13 @@ def test_postgres_store(tmp_path):
         assert set(within) == {"Stripe needs the raw body.", "冪等性キーは Postgres に保存する", "Bob's fact"}
         assert within["Stripe needs the raw body."]["computers"] == ["Alice PC", "Bob PC"]  # not Dave's other project
         assert store.lessons_for(carol, ["github.com/org/app"], [], within=[])["lessons"] == []
+
+        # a computer that left a hub project: nothing filed under it counts, whatever else it asks for. Dave's clone of
+        # the repository is another project, so what his session there stated still comes, from him alone
+        gone = {x["title"]: x for x in store.lessons_for(alice, ["github.com/org/app"], ["/hub/other"], left=["/hub/app"])["lessons"]}
+        assert set(gone) == {"Elsewhere", "Stripe needs the raw body."}
+        assert gone["Stripe needs the raw body."]["computers"] == ["Dave PC"]
+        assert store.lessons_for(bob, [], ["/hub/other"], left=["/hub/app", "/hub/other"])["lessons"] == []
 
         store.put_sessions(alice, [sess("a1", "/hub/app", "github.com/org/app", [])])  # analyzed again: no lessons
         left = titles(carol, ["github.com/org/app"])

@@ -355,4 +355,27 @@ JA: dict[str, str] = {
     "that person is no longer on this hub": "その人はもうこのハブにいません",
     "this computer has not joined a hub (`chronicle hub join`)": "このコンピューターはハブに参加していません（`chronicle hub join`）",
     "the hub sent no sign-in code": "ハブからサインインのコードが届きませんでした",
+    "Can't reach the hub: {error}": "ハブにつながりません: {error}",
+    "Give the folder's full path, such as /Users/you/code/app.": "/Users/you/code/app のように、フォルダーのフルパスを入力してください。",
+    "The hub has no such project, or you don't see it.": "ハブにそのプロジェクトがないか、あなたには見えません。",
+    "Which project?": "どのプロジェクトですか？",
+    "CHRONICLE_HUB_NAME in the hub's .env sets its name: change it there.":
+        "ハブの名前はハブの .env の CHRONICLE_HUB_NAME で決まります。そちらで変更してください。",
+    "A hub's name is up to 80 characters.": "ハブの名前は 80 文字以内にしてください。",
+    "Give the hub a name.": "ハブに名前を付けてください。",
+    "CHRONICLE_HUB_URL in the hub's .env sets its address: change it there.":
+        "ハブのアドレスはハブの .env の CHRONICLE_HUB_URL で決まります。そちらで変更してください。",
+    "An address is like https://chronicle.example.com: http or https and a host name, with a port if needed.":
+        "アドレスは https://chronicle.example.com のように、http か https とホスト名で指定します（必要ならポートも）。",
+    "Nothing to change.": "変更するものがありません。",
+    "{folder} is not a folder.": "{folder} はフォルダーではありません。",
+    "{folder} is in the git repository {remote}, which the hub files under {owner}. A repository belongs to one project, "
+    "so its sessions can't go to {name}.":
+        "{folder} は git リポジトリ {remote} の中にあり、ハブはこれを {owner} に振り分けています。リポジトリは 1 つのプロジェクト"
+        "に属するため、そのセッションを {name} に送ることはできません。",
+    "{folder} was not added.": "{folder} は追加されていません。",
+    "The hub runs an older Chronicle that can't take back what this computer shared. Update the hub first.":
+        "ハブの Chronicle が古いため、このコンピューターが共有したものを取り消せません。先にハブを更新してください。",
+    "Only a computer that shares knowledge can leave a project: one that sends its transcripts sends them all.":
+        "プロジェクトから抜けられるのは、ナレッジだけを共有するコンピューターです。トランスクリプトを送るコンピューターはすべてを送ります。",
 }

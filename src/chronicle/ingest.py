@@ -975,13 +975,16 @@ def forgotten_ids(conn: sqlite3.Connection) -> set[str]:
     return {r[0].split(":", 1)[1] for r in conn.execute("SELECT key FROM kv WHERE key LIKE 'forget:%'")}
 
 
-def forget_session(conn: sqlite3.Connection, cfg: Config, sid: str, *, delete_transcript: bool = False) -> list[str]:
-    """Remove every trace of a session from the vault (and optionally the original transcript); never re-ingest it."""
+def forget_session(conn: sqlite3.Connection, cfg: Config, sid: str, *, delete_transcript: bool = False,
+                   remember: bool = True) -> list[str]:
+    """Remove every trace of a session from the vault (and optionally the original transcript); never re-ingest it,
+    unless `remember` is off (a hub giving back what a computer took back: it may share it again later)."""
     with file_lock(cfg.locks_dir / "ingest.lock", timeout=900) as got:
         if not got:
             raise RuntimeError("a sync is still running; try again in a minute")
-        kv_set(conn, f"forget:{sid}", utcnow_iso())  # first, so a racing ingest also skips it
-        conn.commit()
+        if remember:
+            kv_set(conn, f"forget:{sid}", utcnow_iso())  # first, so a racing ingest also skips it
+            conn.commit()
         return _forget(conn, sid, delete_transcript)
 
 

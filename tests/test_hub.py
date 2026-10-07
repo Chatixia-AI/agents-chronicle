@@ -243,10 +243,10 @@ def test_hub_add_folder_files_and_moves_sessions(hubenv, monkeypatch, capsys):
     assert spoke.hub_folders == {str(folder.resolve()): CWD}
 
     # the session ran in SPOKE_CWD, which exists only on the simulated other computer: add it in its config directly
-    from chronicle.cli import _toml_table
+    from chronicle.config import toml_table
     from chronicle.config import set_config_value
 
-    set_config_value(spoke, "hub", "folders", _toml_table({**spoke.hub_folders, SPOKE_CWD: CWD}))
+    set_config_value(spoke, "hub", "folders", toml_table({**spoke.hub_folders, SPOKE_CWD: CWD}))
     spoke = load_config(spoke.home)
     report = hub.push(spoke)
     assert not report.errors

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased
+
+- **Leave one of the hub's projects:** a computer that shares knowledge can now leave a project and stay in the
+  others. **Leave** in **Settings › Devices** (or `chronicle hub leave --project <name>`) stops it sharing its
+  sessions there and getting the project's teammates' lessons. What it already shared stays on the hub for the team.
+  **Rejoin** (`chronicle hub rejoin --project <name>`) undoes it, and the hub's **Team › Projects** marks a computer
+  that left. [Leaving](docs/devices.md#leaving)
+- **Remove a folder added by mistake:** **Remove** next to a folder, or `chronicle hub remove-folder <folder>`, now has
+  the hub delete what the computer shared from that folder, with its lessons, here and in the team store. Before,
+  those sessions stayed on the hub, filed under a project named after the computer's own folder. Added later to the
+  right project, they are shared again.
+- **Settings › Devices on a computer that joined a hub, redesigned:** a **Hub** card with its name, whether the last
+  send worked, how many sessions it shared and how many teammates' lessons it holds, **Share now**, **Open the hub's
+  dashboard** and **Leave the hub…**. A **Projects on the hub** card lists the projects the computer is in, by folder
+  or by git remote, and **Join a project** adds one from the dashboard: pick one of the hub's projects and a folder,
+  with search. The sharing choices have a card of their own.
+- **Team › Hub settings:** one page for a hub's admins with the hub's name and address, **Knowledge only** (moved here
+  from Team › Computers), the model that writes each project's knowledge base, updates, and the commands to back it
+  up. In the Docker image, the name and address that `.env` sets are shown but not editable, since each start writes
+  them again. A hub now gives computers its `[hub] name`, not its computer's name.
+- **Fixed:** the band at the top of a hub's dashboard showed "null" when the hub had no address set.
+
 ## 0.14.0 (2026-10-07)
 
 - **The sidebar stays as you left it:** clicking a section in the rail no longer brings back a sidebar you hid. Only

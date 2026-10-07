@@ -90,8 +90,9 @@ matching project of its own:
    already on the hub: they move with their knowledge, and both projects' knowledge bases are rebuilt. The more
    specific match wins, so a repository inside the folder whose git remote the hub knows still follows its remote. A
    folder inside a repository the hub files under another project is refused, because a repository belongs to one
-   project. `chronicle hub folders` shows what goes where, and `chronicle hub remove-folder <folder>` takes one back
-   out. The hub's **Team › Computers** lists the folders each computer added.
+   project. `chronicle hub folders` shows what goes where. **Settings › Devices › Projects on the hub** does the same
+   from the dashboard: **Join a project** picks one of the hub's projects and a folder here. To take back a folder
+   added by mistake, see [Leaving](#leaving). The hub's **Team › Computers** lists the folders each computer added.
 3. **By `[hub] path_map`**, for projects without a remote, in the hub's [configuration](configuration.md#hub):
 
    ```toml
@@ -196,8 +197,8 @@ unless the connection works, the password is never shown again, and only an admi
   kept read-only in its own database, under its own folder for that repository, where its MCP tools answer with them
   (marked as teammates') and the start-of-session notes list them under **From teammates' sessions**. Lessons it
   stated itself are not sent back. One it dismisses stays dismissed; one the team no longer has disappears.
-  `chronicle hub status` and its **Settings › Devices** show how many it holds; **Share and get team lessons now**
-  there pushes at once.
+  `chronicle hub status` and its **Settings › Devices** show how many it holds; **Share now** there
+  pushes at once.
 - **Only the hub connects to the database.** Computers never get its address or password, so it can sit on a
   network only the hub reaches. Its tables live in the schema `team`, with an audit log of every push and pull
   (counts only), and each upgrade step runs once, recorded by name.
@@ -208,8 +209,22 @@ Not yet: of the sessions the hub analyzes itself, only its own sessions in a pro
 
 ### Leaving
 
-`chronicle hub leave` on a computer makes it record and analyze its own sessions again; the hub keeps what it was
-sent. `chronicle hub disable` on the hub stops it accepting sessions.
+A computer that shares knowledge can leave one of the hub's projects and stay in the others. In **Settings ›
+Devices › Projects on the hub**, each project has these buttons:
+
+- **Leave**: this computer stops sharing its sessions there and stops getting the project's teammates' lessons.
+  What it already shared stays on the hub, in the project, for the team. **Rejoin** undoes it. On the command line:
+  `chronicle hub leave --project <name>` and `chronicle hub rejoin --project <name>`. They are kept as `[hub] left`
+  in the computer's [configuration](configuration.md#hub). The hub's **Team › Projects** marks a computer that left.
+- **Remove** next to a folder: for a folder added to the wrong project. Its sessions stop going there, and the hub
+  deletes what this computer shared from that folder, with its lessons, from its database and its team store.
+  Unlike `chronicle hub purge`, the hub takes them again if the folder is later added to the right project. On the
+  command line: `chronicle hub remove-folder <folder>`. A computer that sends transcripts keeps them on the hub: the
+  hub files them by their git remote or their own folder again.
+
+`chronicle hub leave`, or **Leave the hub…** in **Settings › Devices**, makes the computer record and analyze its own
+sessions again; the hub keeps what it was sent. Joining again takes a new invite. `chronicle hub disable` on the hub
+stops it accepting sessions.
 
 ## People and roles
 
