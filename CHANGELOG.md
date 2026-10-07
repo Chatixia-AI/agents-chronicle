@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.2 (2026-10-07)
 
 - **The Map's search finds knowledge and sessions too:** besides terms and groups, it now matches the knowledge items
   (title and text) and session titles drawn under each term, opens them on the map, highlights them and lists them in
