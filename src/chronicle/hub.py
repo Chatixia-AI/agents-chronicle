@@ -957,6 +957,27 @@ def destination(cfg: Config, path: str | None, remote: str | None, remotes: dict
     return cfg.hub_folders[folder] if folder else None
 
 
+def hub_project_of(cfg: Config, paths) -> dict[str, dict]:
+    """For a computer that sends to a hub: the hub project each of these projects here is in, {path: {path, name}},
+    as destination() finds it, with the repositories whose remote the hub files somewhere as of the last push, and the
+    hub's name for it. None for a project in none of the hub's projects, one this computer left, or an excluded one."""
+    if not cfg.is_spoke:
+        return {}
+    seen = last_folders(cfg) or {}
+    names = {p["path"]: p.get("name") for p in seen.get("projects") or [] if isinstance(p, dict) and p.get("path")}
+    repos = {r["folder"]: project for project, rs in (seen.get("remotes") or {}).items() if isinstance(rs, list)
+             for r in rs if isinstance(r, dict) and r.get("folder")}  # a repository's top folder: the hub project
+    out = {}
+    for path in paths:
+        if not path or cfg.is_excluded(path):
+            continue
+        top = max((f for f in repos if under(path, f)), key=len, default=None)
+        goes = repos[top] if top else destination(cfg, path, None, {})
+        if goes and goes not in cfg.hub_left:
+            out[path] = {"path": goes, "name": names.get(goes) or Path(goes).name or goes}
+    return out
+
+
 def share_own(cfg: Config, conn, store) -> int:
     """On a hub with a team store: send the store this computer's own analyzed sessions in projects set up here
     (add_project), the same details and project lessons a member's computer shares, so teammates get the hub

@@ -1687,4 +1687,10 @@ window.CHRONICLE_JA = {
   "Edit": "編集",
   "No projects in this group yet.": "このグループにはまだプロジェクトがありません。",
   "{projects} in {groups}": "{projects}（{groups}）",
+  // Projects on the hub
+  "Set up on the hub: no sessions yet": "ハブで設定済み：まだセッションがありません",
+  "In {name} on the hub: what it shares goes there, and teammates' lessons come back here": "ハブの {name} に所属：共有するものはそこへ送られ、チームメイトの教訓がここに戻ります",
+  "On the hub": "ハブ",
+  "On the hub as {name}": "ハブでは {name}",
+  "Shared from this hub": "このハブから共有中",
 };

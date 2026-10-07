@@ -73,7 +73,8 @@ def assign(conn: sqlite3.Connection, paths) -> dict[str, tuple[int | None, str |
 
 
 def _all_paths(conn: sqlite3.Connection) -> list[str]:
-    return [r[0] for r in conn.execute("SELECT DISTINCT project_path FROM sessions WHERE project_path IS NOT NULL")]
+    return [r[0] for r in conn.execute("SELECT DISTINCT project_path FROM sessions WHERE project_path IS NOT NULL "
+                                       "UNION SELECT path FROM hub_projects")]  # a hub's projects with no sessions yet too
 
 
 def paths_in(conn: sqlite3.Connection, group_id: int) -> list[str]:
