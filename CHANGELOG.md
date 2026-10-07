@@ -17,6 +17,9 @@
   box above the projects a person sees, both when inviting someone and under **Change**. It filters by name or
   folder, and ticked projects stay ticked while hidden, with a count of how many are chosen. Enter ticks the only
   match left and never sends the invite; Escape clears the search.
+- **The hub's container names its own address:** its log said `Chronicle dashboard: http://127.0.0.1:11524/`, and
+  VS Code connected to the server over Remote-SSH forwarded that port to your own computer, where it hid your own
+  dashboard at `127.0.0.1:11524`. It now says `Chronicle hub is up: https://<the hub's address>`.
 
 ## 0.13.0 (2026-10-07)
 
