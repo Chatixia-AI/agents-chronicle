@@ -859,11 +859,197 @@ function navKey(path) {
   return "";
 }
 
-let projectsCache = null;
-async function projectOptions(selected) {
-  projectsCache ||= await api("/api/projects");
+// ------------------------------------------------------------------ projects and your groups of them (groups.py)
+let projectsCache = null, groupsCache = [], homeDir = "", projectsLoading = null;
+// Each project carries the group it's listed under (p.group); groupsCache: A to Z. Callers use the list returned:
+// another page may drop the cache (projectsCache = null) while they draw, and one request serves all who ask at once.
+async function loadProjects(fresh = false) {
+  if (fresh) projectsCache = null;
+  if (projectsCache) return projectsCache;
+  projectsLoading ||= Promise.all([api("/api/projects"), limited() ? null : api("/api/project-groups").catch(() => null)])
+    .then(([list, g]) => {
+      groupsCache = g?.groups || [];
+      homeDir = g?.home || "";
+      return (projectsCache = list);
+    }).finally(() => { projectsLoading = null; });
+  return projectsLoading;
+}
+function refreshProjects() { projectsCache = null; shellSection = null; render(); } // the sidebar lists them too
+function byGroup(list) { // [[group, projects]]: each group A to Z, then the projects in none (group null)
+  const sets = new Map(groupsCache.map((g) => [g.id, []]));
+  const rest = [];
+  for (const p of list) (sets.get(p.group) || rest).push(p);
+  return [...groupsCache.map((g) => [g, sets.get(g.id)]), [null, rest]];
+}
+function canGroup() { return !limited() && canAdmin(); }
+async function projectOptions(selected, { groups = false } = {}) { // groups: a choice for a whole group, valued group:<id>
+  const projects = await loadProjects();
+  const opt = (p) => h("option", { value: p.project_path, selected: p.project_path === selected }, p.label);
+  if (!groupsCache.length) return [h("option", { value: "" }, t("All projects")), ...projects.map(opt)];
   return [h("option", { value: "" }, t("All projects")),
-    ...projectsCache.map((p) => h("option", { value: p.project_path, selected: p.project_path === selected }, p.label))];
+    ...byGroup(projects).filter(([, ps]) => ps.length).map(([g, ps]) => h("optgroup", { label: g ? g.name : t("Other projects") },
+      g && groups ? h("option", { value: `group:${g.id}`, selected: selected === `group:${g.id}` }, t("All of {group}", { group: g.name })) : null,
+      ps.map(opt)))];
+}
+// a folded group stays folded in this browser, on the Projects page and in the sidebar alike
+let foldedGroups = null;
+function groupFolded(key) {
+  if (!foldedGroups) {
+    try { foldedGroups = new Set(JSON.parse(localStorage.getItem("chronicle.groups.folded") || "[]")); } catch { foldedGroups = new Set(); }
+  }
+  return foldedGroups.has(key);
+}
+function foldGroup(key, folded) {
+  groupFolded(key);
+  folded ? foldedGroups.add(key) : foldedGroups.delete(key);
+  try { localStorage.setItem("chronicle.groups.folded", JSON.stringify([...foldedGroups])); } catch { /* remembered for this tab only */ }
+}
+function under(path, folder) { return path === folder || path.startsWith(folder + "/") || path.startsWith(folder + "\\"); }
+// The folder rule a group is offered from the projects picked for it: the folder they share, one per computer
+// (aktio-vm:/root/… is another computer's); none for a chat, or one as wide as a home folder
+function suggestFolders(paths) {
+  const byHost = new Map();
+  for (const p of paths) {
+    const m = /^([^/\\:]+:)(\/.*)$/.exec(p);
+    const [host, rest] = m ? [m[1], m[2]] : ["", p];
+    if (!rest.startsWith("/")) continue;
+    if (!byHost.has(host)) byHost.set(host, []);
+    byHost.get(host).push(rest.split("/").filter(Boolean));
+  }
+  const out = [];
+  for (const [host, lists] of byHost) {
+    let common = lists.length === 1 ? lists[0].slice(0, -1) : lists[0];
+    for (const l of lists.slice(1)) { let i = 0; while (i < common.length && i < l.length && common[i] === l[i]) i++; common = common.slice(0, i); }
+    if (common.length < (["Users", "home"].includes(common[0]) ? 4 : 2)) continue; // ~/Projects at the widest
+    out.push(host + "/" + common.join("/"));
+  }
+  return out;
+}
+async function moveToGroup(paths, group) {
+  const r = await post("/api/project-groups/move", { paths, group });
+  if (r.error) return toast(r.error, 6000);
+  refreshProjects();
+}
+function groupMenu(p) {
+  const item = (label, hint, on, run) => h("button", { type: "button", role: "menuitem", disabled: on, onclick: () => { menu.open = false; run(); } },
+    h("b", null, label), hint ? h("span", null, hint) : null);
+  const menu = h("details", { class: "menu pg-menu" },
+    h("summary", { class: "btn small", title: t("Move to a group"), "aria-label": t("Move {name} to a group", { name: p.label }) }, icon("projects")),
+    h("div", { class: "menu-list", role: "menu" },
+      groupsCache.map((g) => item(g.name, p.group === g.id ? (p.group_by === "folder" ? t("In it by its folder") : t("In it now")) : null,
+        p.group === g.id, () => moveToGroup([p.project_path], g.id))),
+      p.group != null ? item(t("No group"), null, false, () => moveToGroup([p.project_path], null)) : null,
+      item(t("New group…"), t("Starting with {name}", { name: p.label }), false, () => groupDialog(null, [p.project_path]))));
+  return menu;
+}
+function closeGroupDialog() { $("#group-dialog")?.remove(); }
+// Make or change a group: its name, its folder rules, and the projects in it. Ticks show the group as it will be;
+// a rule takes in whole folders (the longest rule of any group wins), and a tick or untick here wins over the rules.
+// A new group is offered the folder its first picks share, and that folder's name, until either is changed by hand.
+async function groupDialog(g, preset = []) {
+  const projects = await loadProjects();
+  closeGroupDialog();
+  const others = groupsCache.filter((x) => !g || x.id !== g.id);
+  let rules = g ? [...g.folders] : [], rulesByHand = !!g, nameByHand = !!g, sure = false;
+  const ticks = new Map(preset.map((p) => [p, true])); // ticked or unticked here, over the rules
+  const inGroup = (p) => {
+    if (ticks.has(p.project_path)) return ticks.get(p.project_path);
+    if (p.group_by === "hand") return !!g && p.group === g.id;
+    let best = null, len = -1;
+    for (const f of rules) if (under(p.project_path, f) && f.length > len) [best, len] = ["here", f.length];
+    for (const x of others) for (const f of x.folders) if (under(p.project_path, f) && f.length > len) [best, len] = [x.id, f.length];
+    return best === "here";
+  };
+  const byRule = (p) => !ticks.has(p.project_path) && p.group_by !== "hand" && rules.some((f) => under(p.project_path, f));
+  const order = [...projects].sort((a, b) => Number(inGroup(b)) - Number(inGroup(a))); // the group's own first, once
+  const nameIn = h("input", { class: "input", id: "group-name", value: g?.name || "", maxlength: 60, placeholder: t("e.g. Aktio"),
+    oninput: () => { nameByHand = true; } });
+  const folderIn = h("input", { class: "input", placeholder: t("Add a folder, e.g. ~/Projects/Work/Aktio"), "aria-label": t("Add a folder"),
+    onkeydown: (e) => { if (e.key === "Enter") { e.preventDefault(); addRule(); } } });
+  const rulesBox = h("div", { class: "gd-rules" }), countEl = h("span", { class: "muted" }), list = h("div", { class: "gd-list" });
+  const err = h("div", { class: "gd-err", role: "alert" });
+  let q = "";
+  const addRule = () => {
+    let f = folderIn.value.trim().replace(/[/\\]+$/, "");
+    if (!f) return;
+    if ((f === "~" || f.startsWith("~/")) && homeDir) f = homeDir.replace(/\/$/, "") + f.slice(1);
+    if (!rules.includes(f)) rules.push(f);
+    rulesByHand = true;
+    folderIn.value = "";
+    draw();
+  };
+  const suggest = () => { // a new group, its rules not touched: the folder its picks share
+    if (rulesByHand) return;
+    rules = suggestFolders([...ticks].filter(([, on]) => on).map(([p]) => p));
+    if (!nameByHand) nameIn.value = rules.length ? rules[0].split(/[/\\]/).pop() : (preset.length === 1 ? (projects.find((p) => p.project_path === preset[0])?.label || "") : "");
+  };
+  const draw = () => {
+    rulesBox.replaceChildren(...rules.map((f) => h("div", { class: "gd-rule" }, icon("projects"), h("span", { class: "mono", title: f }, shortPath(f)),
+      h("button", { type: "button", class: "icon-btn", "aria-label": t("Remove the rule {folder}", { folder: shortPath(f) }),
+        onclick: () => { rules = rules.filter((x) => x !== f); rulesByHand = true; draw(); } }, icon("x")))),
+      ...[rules.length ? null : h("div", { class: "muted gd-none" }, t("No folder rule: only the projects ticked below.")),
+        !rulesByHand && rules.length ? h("div", { class: "muted gd-none" }, t("Suggested from the projects you picked.")) : null]
+        .filter(Boolean)); // replaceChildren would print a null
+    const shown = order.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q));
+    list.replaceChildren(...shown.map((p) => {
+      const on = inGroup(p);
+      const elsewhere = !on && p.group != null && (!g || p.group !== g.id) ? groupsCache.find((x) => x.id === p.group) : null;
+      return h("label", { class: `gd-item${on ? " on" : ""}` },
+        h("input", { type: "checkbox", checked: on, onchange: (e) => { ticks.set(p.project_path, e.target.checked); suggest(); draw(); } }),
+        h("span", { class: "gd-name" }, h("b", null, p.label), h("span", { class: "muted", title: p.project_path }, shortPath(p.project_path))),
+        on && byRule(p) ? h("span", { class: "tag" }, t("by folder")) : elsewhere ? h("span", { class: "tag" }, t("in {group}", { group: elsewhere.name })) : null);
+    }), ...(shown.length ? [] : [h("div", { class: "muted gd-none" }, t("No projects match"))]));
+    countEl.textContent = tn(projects.filter(inGroup).length, "{n} project in this group", "{n} projects in this group");
+  };
+  const save = async () => {
+    if (folderIn.value.trim()) addRule(); // typed but not added: what was meant
+    const members = projects.filter(inGroup).map((p) => p.project_path);
+    const r = await post("/api/project-groups/save", { id: g?.id, name: nameIn.value, folders: rules, members });
+    if (r.error) { err.textContent = r.error; return; }
+    closeGroupDialog();
+    toast(g ? t("Saved {name}.", { name: nameIn.value.trim() }) : t("Made the group {name}.", { name: nameIn.value.trim() }));
+    refreshProjects();
+  };
+  const del = h("button", { type: "button", class: "btn danger", onclick: async () => {
+    if (!sure) { sure = true; del.textContent = t("Delete {name}? Its projects stay", { name: g.name }); return; }
+    const r = await post("/api/project-groups/delete", { id: g.id });
+    if (r.error) { err.textContent = r.error; return; }
+    closeGroupDialog();
+    toast(t("Deleted the group {name}. Its projects are still here.", { name: g.name }));
+    refreshProjects();
+  } }, t("Delete group"));
+  const back = h("div", { id: "group-dialog", class: "gd-back", onclick: (e) => { if (e.target === back) closeGroupDialog(); },
+    onkeydown: (e) => { if (e.key === "Escape") closeGroupDialog(); } },
+    h("form", { class: "gd card", role: "dialog", "aria-modal": "true", "aria-labelledby": "gd-title", onsubmit: (e) => { e.preventDefault(); save(); } },
+      h("div", { class: "gd-head" }, h("h2", { id: "gd-title" }, g ? t("Edit group") : t("New group")),
+        h("button", { type: "button", class: "icon-btn", "aria-label": t("Close"), onclick: closeGroupDialog }, icon("x"))),
+      h("label", { class: "gd-label", for: "group-name" }, t("Name")), nameIn,
+      h("div", { class: "gd-label" }, t("Folder rules"), h("span", { class: "muted" }, t("New projects under these folders join the group on their own."))),
+      rulesBox,
+      h("div", { class: "gd-add" }, folderIn, h("button", { type: "button", class: "btn small", onclick: addRule }, t("Add"))),
+      h("div", { class: "gd-label" }, t("Projects"), countEl),
+      h("input", { class: "input", type: "search", placeholder: t("Filter projects"), "aria-label": t("Filter projects"),
+        oninput: (e) => { q = e.target.value.toLowerCase(); draw(); } }),
+      list, err,
+      h("div", { class: "gd-foot" }, g ? del : h("span"),
+        h("div", { class: "gd-actions" }, h("button", { type: "button", class: "btn", onclick: closeGroupDialog }, t("Cancel")),
+          h("button", { type: "submit", class: "btn primary" }, g ? t("Save") : t("Make group"))))));
+  suggest();
+  draw();
+  document.body.append(back);
+  nameIn.focus();
+}
+// One group on the Projects page: its name and totals over its projects, folded away or open
+function groupSection(g, list, body) {
+  const key = g ? String(g.id) : "none";
+  const sum = (k) => list.reduce((a, p) => a + (p[k] || 0), 0);
+  return h("details", { class: "pgroup", open: !groupFolded(key), ontoggle: (e) => foldGroup(key, !e.target.open) },
+    h("summary", null, icon("right", "pg-caret"), h("h2", null, g ? g.name : t("Other projects")),
+      h("span", { class: "pg-meta" }, tn(list.length, "{n} project", "{n} projects"), " · ", tn(sum("sessions"), "{n} session", "{n} sessions", { n: fmtNum(sum("sessions")) }),
+        " · ", t("{dur} active", { dur: fmtDur(sum("active_s")) })),
+      g && g.folders.length ? h("span", { class: "pg-rules mono", title: g.folders.join("\n") }, g.folders.map((f) => shortPath(f)).join(" · ")) : null,
+      g && canGroup() ? h("button", { type: "button", class: "btn small", onclick: (e) => { e.preventDefault(); groupDialog(g); } }, t("Edit")) : null),
+    list.length ? body(list) : h("div", { class: "card empty" }, t("No projects in this group yet.")));
 }
 function segControl(options, value, onChange) {
   return h("div", { class: "seg", role: "group" }, options.map(([v, label]) =>
@@ -1280,7 +1466,7 @@ async function teamHome(params) {
 route(/^\/sessions$/, async (params) => {
   const state = { q: params.q || "", project: params.project || "", outcome: params.outcome || "", status: params.status || "",
     days: params.days || "", sort: params.sort || "started_at", order: params.order || "desc", day: params.day || "",
-    agent: params.agent || "", screen: params.screen || "", who: params.who || "" };
+    agent: params.agent || "", screen: params.screen || "", who: params.who || "", group: params.group || "" };
   const mode = viewMode("sessions", matchMedia("(max-width: 600px)").matches ? "cards" : "list"); // a phone has no room for the table
   let offset = 0, scale = null, total = 0;
   // ---- selection (list view): pick sessions, then analyze them in one go
@@ -1394,7 +1580,11 @@ route(/^\/sessions$/, async (params) => {
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Sessions")), countEl), viewToggle("sessions", mode)),
     h("div", { class: "filters" }, search,
-      h("select", { onchange: (e) => { state.project = e.target.value; refresh(); } }, await projectOptions(state.project)),
+      h("select", { "aria-label": t("Project"), onchange: (e) => { // a project, or every project in a group
+        const v = e.target.value;
+        [state.project, state.group] = v.startsWith("group:") ? ["", v.slice(6)] : [v, ""];
+        refresh();
+      } }, await projectOptions(state.group ? `group:${state.group}` : state.project, { groups: true })),
       sel("outcome", [["", t("Any outcome")], ...Object.entries(OUTCOME).map(([k, [, l]]) => [k, l]), ["none", t("Not analyzed")]]),
       sel("status", [["", t("Any status")], ["done", t("Analyzed")], ["pending", t("Queued")], ["stale", t("Needs re-analysis")], ["error", t("Failed")], ["skipped", t("Skipped")]]),
       sel("agent", [["", t("All agents")], ...Object.entries(AGENTS)]),
@@ -2023,11 +2213,11 @@ async function knowledgeListView(params) {
 // Projects
 // =====================================================================================
 route(/^\/projects$/, async () => {
-  const projects = await api("/api/projects");
-  projectsCache = projects;
+  const projects = await loadProjects(true);
   const mode = viewMode("projects", "cards");
+  const edit = canGroup();
   const href = (p) => `#/project?path=${encodeURIComponent(p.project_path || "")}`;
-  const listView = () => h("section", { class: "card flush" }, localTable(projects, [
+  const listView = (projects) => h("section", { class: "card flush" }, localTable(projects, [
     { key: "label", label: t("Project"), value: (p) => p.label },
     { key: "sessions", label: t("Sessions"), num: true, desc: true, value: (p) => p.sessions },
     { key: "active", label: t("Active"), num: true, desc: true, value: (p) => p.active_s },
@@ -2035,7 +2225,8 @@ route(/^\/projects$/, async () => {
     { key: "cost", label: t("Est. cost"), num: true, desc: true, value: (p) => p.cost },
     { key: "last", label: t("Last session"), desc: true, value: (p) => p.last },
     { key: "kb", label: t("Knowledge base"), desc: true, value: (p) => p.kb_updated },
-  ], (p) => h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a")) go(href(p)); } },
+    ...(edit ? [{ key: "group", label: "" }] : []),
+  ], (p) => h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a, details")) go(href(p)); } },
     h("td", { class: "title-cell" }, h("div", { class: "t" }, h("a", { href: href(p), class: "plain" }, p.label)),
       h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"), p.shared ? [" ", sharedBadge()] : null)),
     h("td", { class: "num" }, fmtNum(p.sessions)),
@@ -2043,11 +2234,18 @@ route(/^\/projects$/, async () => {
     h("td", { class: "num" }, fmtNum(p.knowledge)),
     h("td", { class: "num" }, fmtCost(p.cost)),
     h("td", { class: "nowrap" }, fmtDate(p.last)),
-    h("td", { class: "nowrap muted" }, p.kb_updated ? t("updated {ago}", { ago: ago(p.kb_updated) }) : t("none yet"))), { empty: t("No projects yet"), cls: "projects-table" }));
+    h("td", { class: "nowrap muted" }, p.kb_updated ? t("updated {ago}", { ago: ago(p.kb_updated) }) : t("none yet")),
+    edit ? h("td", { class: "pg-cell" }, groupMenu(p)) : null), { empty: t("No projects yet"), cls: "projects-table" }));
+  const cards = (list) => h("div", { class: "proj-cards" }, list.map((p) => (edit ? h("div", { class: "pc-wrap" }, projectCard(p, href(p)), groupMenu(p)) : projectCard(p, href(p)))));
+  const body = mode === "list" ? listView : cards;
+  const n = tn(projects.length, "{n} project", "{n} projects");
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Projects")), h("div", { class: "sub" }, tn(projects.length, "{n} project", "{n} projects"))),
-      h("div", { class: "head-actions" }, viewToggle("projects", mode), h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
-    mode === "list" ? listView() : h("div", { class: "proj-cards" }, projects.map((p) => projectCard(p, href(p)))));
+    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Projects")),
+      h("div", { class: "sub" }, groupsCache.length ? t("{projects} in {groups}", { projects: n, groups: tn(groupsCache.length, "{n} group", "{n} groups") }) : n)),
+      h("div", { class: "head-actions" }, viewToggle("projects", mode),
+        edit ? h("button", { type: "button", class: "btn", onclick: () => groupDialog(null) }, t("New group")) : null,
+        h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
+    groupsCache.length ? byGroup(projects).filter(([g, ps]) => g || ps.length).map(([g, ps]) => groupSection(g, ps, body)) : body(projects));
 });
 
 function weeklyBars(values) { // active time per week, oldest first; hover for the week
@@ -2278,7 +2476,7 @@ route(/^\/project$/, async (params) => {
   const p = await api("/api/project", { path });
   ART_LOCAL = p.local;
   const isGlobal = path === "__global__";
-  setCrumbs(isGlobal ? [[t("Knowledge"), "#/knowledge"], [t("Global playbook")]] : [[t("Projects"), "#/projects"], [p.label || shortPath(path)]], token);
+  setCrumbs(isGlobal ? [[t("Knowledge"), "#/knowledge"], [t("Global playbook")]] : [[t("Projects"), "#/projects"], ...(p.group ? [[p.group.name, "#/projects"]] : []), [p.label || shortPath(path)]], token);
   const synth = h("button", { class: "btn primary admin-only", type: "button", onclick: async () => {
     synth.disabled = true; synth.textContent = t("Synthesizing…");
     const r = await post("/api/synthesize", { path });
@@ -6200,20 +6398,29 @@ async function knowledgeSidebar(box) {
       sbRow(t("Weekly reviews"), "#/reviews", "reviews", null, ["/reviews"])));
 }
 async function projectsSidebar(box) {
-  projectsCache ||= await api("/api/projects");
+  const projects = await loadProjects();
   const list = h("div", { class: "sb-scroll" });
+  const row = (p) => sbRow(p.label, `#/project?path=${encodeURIComponent(p.project_path || "")}`, "projects", p.sessions, ["/project", "path", p.project_path || ""]);
   const draw = () => {
     const q = sbState.projectQ.toLowerCase();
-    const shown = projectsCache.filter((p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q));
-    list.replaceChildren(sbRow(t("All projects"), "#/projects", "overview", projectsCache.length, ["/projects"]),
-      sbRow(t("Systems map"), "#/systems", "systems", null, ["/systems"]),
-      h("div", { class: "sb-group" }, t("Most recent first")),
-      ...shown.map((p) => sbRow(p.label, `#/project?path=${encodeURIComponent(p.project_path || "")}`, "projects", p.sessions, ["/project", "path", p.project_path || ""])),
-      ...(shown.length ? [] : [h("div", { class: "sb-empty" }, t("No projects match"))])); // replaceChildren would print a null
+    const match = (p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q);
+    const top = [sbRow(t("All projects"), "#/projects", "overview", projects.length, ["/projects"]),
+      sbRow(t("Systems map"), "#/systems", "systems", null, ["/systems"])];
+    const parts = groupsCache.length ? byGroup(projects).map(([g, ps]) => { // a group's name matches all of it
+      const shown = q && g && g.name.toLowerCase().includes(q) ? ps : ps.filter(match);
+      if (!shown.length && (q || !g)) return null;
+      const key = g ? String(g.id) : "none", open = !!q || !groupFolded(key);
+      return h("div", { class: "sb-fold" },
+        h("button", { type: "button", class: "sb-group sb-fold-head", "aria-expanded": String(open), onclick: () => { foldGroup(key, open); draw(); } },
+          icon("right", "sb-caret"), h("span", null, g ? g.name : t("Other projects")), h("em", null, fmtNum(ps.length))),
+        open ? shown.map(row) : null);
+    }).filter(Boolean) : projects.some(match) ? [h("div", { class: "sb-group" }, t("Most recent first")), ...projects.filter(match).map(row)] : [];
+    list.replaceChildren(...top, ...parts,
+      ...(parts.length ? [] : [h("div", { class: "sb-empty" }, t("No projects match"))])); // replaceChildren would print a null
     const { path, params } = parseHash();
     markSidebar(path, params);
   };
-  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Projects")), h("span", null, fmtNum(projectsCache.length))),
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Projects")), h("span", null, fmtNum(projects.length))),
     h("label", { class: "sb-filter" }, icon("search"), h("input", { type: "search", placeholder: t("Filter projects"), value: sbState.projectQ, "aria-label": t("Filter projects"),
       oninput: (e) => { sbState.projectQ = e.target.value; draw(); } })), list);
   draw();
@@ -6366,7 +6573,7 @@ async function paletteSearch(q) {
   const [sessions, knowledge] = await Promise.all([
     api("/api/sessions", { q, limit: 6 }).catch(() => ({ items: [] })),
     api("/api/knowledge", { q, limit: 6 }).catch(() => ({ items: [] })),
-    projectsCache ? null : api("/api/projects").then((p) => { projectsCache = p; }).catch(() => {}),
+    loadProjects().catch(() => {}),
   ]);
   for (const x of sessions.items) out.push({ group: t("Sessions"), label: x.title || t("(untitled session)"), icon: "sessions",
     hint: [x.project_name, fmtDate(x.started_at)].filter(Boolean).join(" · "), run: () => go(`#/session/${x.id}`) });

@@ -35,7 +35,7 @@ Ctrl replaces ⌘ outside macOS. In the macOS app, drag the window by its toolba
 Pages: Home (active-time headline with active days and longest run; stat tiles with sparklines and a per-day rate
 until a full prior period exists to compare against; daily chart with a 7-day average; outcome breakdown; activity
 calendar with streaks; busiest hour; projects, tools with failed calls, models and agents), a sortable, filterable
-session list, project cards with 12 weeks of activity, the [Systems map](#systems-map), session pages (headline figures, the summary and the knowledge
+session list, project cards with 12 weeks of activity (in [your own groups](#project-groups)), the [Systems map](#systems-map), session pages (headline figures, the summary and the knowledge
 it produced up top, then **Details**, where a session opens: goal, highlights, open threads, the knowledge items,
 context-window chart with compactions, tools, files, subagents, and the [artifacts](#artifacts) the session made; or
 **Transcript**, where a search result opens: the conversation with one-line tool calls that expand to their input and
@@ -54,6 +54,30 @@ mentions highlighted in transcript order; **Show all** lists every one, and clic
 there with the terms still marked. Glossary
 terms are underlined wherever they appear (transcripts, knowledge, summaries): hover for the definition, click for
 the entry. Every chart has a table view; light and dark themes.
+
+## Project groups
+
+Put related projects under one heading, such as **Aktio** for every Aktio repository, on the Projects page and in
+its sidebar. Groups are one level deep, and only change how projects are listed: each project keeps its own
+sessions, knowledge base and hub sharing.
+
+- **Make one:** **New group** on the Projects page, or **New group…** in a project's group menu (the folder button on
+  its card, or at the end of its row in the list). Tick the projects that belong. Chronicle offers a folder rule for
+  the folder they share (one per computer, so `~/Projects/Work/AI-BPO/Aktio` and `aktio-vm:/root/Aktio` both), and
+  names the group after it. Remove the rule or add your own before you save.
+- **Folder rules:** a project anywhere under a rule's folder joins the group, including ones you start later. When
+  two groups' rules both cover a project, the longer (more specific) folder wins.
+- **By hand:** a project's group menu moves it to another group, or to **No group**. A move by hand wins over the
+  folder rules; moving it back where its folder puts it lets the rules decide again. Chats (claude.ai, ChatGPT) have no
+  folder, so they join by hand.
+- **Edit** on a group's heading renames it, changes its rules and projects, or deletes it. Deleting a group keeps its
+  projects; they go back to what the other groups' rules say.
+- Each group folds away, on the page and in the sidebar, and stays folded in that browser. On **Sessions**, the project
+  filter lists projects under their groups, with **All of *group*** to see every session in a group. A project's page
+  shows its group in the breadcrumb.
+
+Groups are kept in this computer's archive and never go to a hub. On a hub with people, admins see and change the
+hub's groups; someone limited to some projects sees none.
 
 ## Suggestions and What goes wrong
 

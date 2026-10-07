@@ -378,4 +378,12 @@ JA: dict[str, str] = {
         "ハブの Chronicle が古いため、このコンピューターが共有したものを取り消せません。先にハブを更新してください。",
     "Only a computer that shares knowledge can leave a project: one that sends its transcripts sends them all.":
         "プロジェクトから抜けられるのは、ナレッジだけを共有するコンピューターです。トランスクリプトを送るコンピューターはすべてを送ります。",
+    # ---- your own groups of projects (groups.py)
+    "That group no longer exists.": "そのグループはもうありません。",
+    "Give the group a name.": "グループに名前を付けてください。",
+    "Keep the name to 60 characters or fewer.": "名前は 60 文字以内にしてください。",
+    "There is already a group with that name.": "同じ名前のグループがすでにあります。",
+    "Folder rules must be a list of folders.": "フォルダーのルールはフォルダーのリストで指定してください。",
+    "A folder rule can't be empty or the whole disk.": "フォルダーのルールを空やディスク全体にすることはできません。",
+    "Pick a project to move.": "移動するプロジェクトを選んでください。",
 }

@@ -5,7 +5,7 @@ from __future__ import annotations
 import sqlite3
 from pathlib import Path
 
-SCHEMA_VERSION = 14
+SCHEMA_VERSION = 15
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS kv (
@@ -445,6 +445,17 @@ CREATE TABLE IF NOT EXISTS artifacts (          -- what a session made (artifact
 CREATE INDEX IF NOT EXISTS idx_artifacts_session ON artifacts(session_id);
 CREATE INDEX IF NOT EXISTS idx_artifacts_key ON artifacts(key, ts);
 CREATE INDEX IF NOT EXISTS idx_artifacts_kind ON artifacts(kind, ts);
+
+CREATE TABLE IF NOT EXISTS project_groups (      -- your own groups of projects (groups.py): how the dashboard lists them
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    folders_json TEXT NOT NULL DEFAULT '[]',      -- folder rules: a project under one joins, the longest rule winning
+    created_at TEXT
+);
+CREATE TABLE IF NOT EXISTS project_group_picks (  -- a project put in a group by hand, over its folder rules
+    project_path TEXT PRIMARY KEY,
+    group_id INTEGER                              -- NULL: kept out of every group
+);
 
 CREATE TABLE IF NOT EXISTS files_state (
     path TEXT PRIMARY KEY,

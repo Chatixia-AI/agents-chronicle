@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **Group your projects:** put related projects under one heading, such as **Aktio**, on the Projects page and in its
+  sidebar. Tick a few projects and Chronicle offers the folder they share as a rule, so new projects there join on
+  their own; move any project in or out by hand from its card. Sessions can be filtered by a whole group. Groups only
+  change how projects are listed. See [Project groups](docs/dashboard.md#project-groups).
+
 ## 0.14.2 (2026-10-07)
 
 - **The Map's search finds knowledge and sessions too:** besides terms and groups, it now matches the knowledge items
