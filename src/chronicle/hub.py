@@ -414,6 +414,24 @@ def project_folder(folder: str) -> str:
     return path.rstrip("/") or "/"
 
 
+PROJECT_NAME_RULE = "A project's name is up to 80 characters, without / or \\, and doesn't start with a dot."
+
+
+def named_project_folder(cfg: Config, name: str) -> str:
+    """The folder of a project a dedicated hub's admin makes by name (`[hub] dedicated`): <chronicle home>/projects/
+    <name>, created here. Only a plain name: never a path, so it can't reach a folder outside that one."""
+    name = " ".join(str(name or "").split())
+    if (not name or len(name) > 80 or name.startswith(".") or any(c in name for c in "/\\")
+            or any(ord(c) < 32 for c in name)):
+        raise HubError(PROJECT_NAME_RULE)
+    base = (cfg.home / "projects").resolve()
+    folder = (base / name).resolve()
+    if folder.parent != base:
+        raise HubError(PROJECT_NAME_RULE)
+    folder.mkdir(parents=True, exist_ok=True)
+    return str(folder)
+
+
 def add_project(cfg: Config, conn, folder: str, *, by: str | None = None) -> dict:
     """Set up a project on this hub ahead of time: `folder`, on this computer, and everything below it. This
     computer's sessions there are filed under it at once (their knowledge moves along), and other computers can add

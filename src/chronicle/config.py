@@ -140,6 +140,9 @@ shared_token = true
 address = ""
 # On the hub: the name its dashboard shows, e.g. "Resona team". Empty: this computer's name.
 name = ""
+# On the hub: it runs on a server for the team and records no sessions of its own (the Docker image sets this). Its
+# dashboard then leaves out what only a person's own computer needs, and its admins set up projects there by name.
+dedicated = false
 
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
@@ -249,6 +252,7 @@ class Config:
     hub_shared_token: bool = True
     hub_address: str = ""
     hub_name: str = ""
+    hub_dedicated: bool = False
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -425,6 +429,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         hub_shared_token=bool(hub.get("shared_token", True)),
         hub_address=str(hub.get("address") or "").strip().rstrip("/"),
         hub_name=str(hub.get("name") or "").strip()[:80],
+        hub_dedicated=hub.get("dedicated") is True,
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),

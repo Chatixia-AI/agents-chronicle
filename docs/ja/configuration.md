@@ -105,6 +105,7 @@
 | `store` | `""` | ハブで：`"postgres"` にすると、チームの記録を Postgres にも残し（接続は Chronicle のフォルダーの `team-store.env`）、ナレッジを共有するコンピューターにチームメイトのナレッジを返します（[チームメイトのナレッジと、Postgres のチームストア](devices.md#チームメイトのナレッジとpostgres-のチームストア)） |
 | `shared_token` | `true` | 利用者のいるハブで：コンピューターが専用のトークンの代わりにハブの共有トークンで送ることを許す。共有トークンで送るコンピューターは特定の誰でもなく、プロジェクトの制限はかかりません。全員が招待で参加し終えたらオフにします（`chronicle hub shared-token off`）（[共有トークン](devices.md#共有トークン)） |
 | `address` | `""` | ハブで：ほかのコンピューターやブラウザーからつなぐときのハブのアドレス。例：`"https://chronicle.example.internal"`。ハブが渡す参加コマンドとサインインリンクに使います。`chronicle hub enable --url` が設定します（[利用者とロール](devices.md#利用者とロール)） |
+| `dedicated` | `false` | ハブで：自分のセッションを持たない、チームのためのサーバーであること。[Docker のイメージ](docker.md)が設定します。ダッシュボードはチームの Home から始まり、個人のコンピューターにだけ必要なものを省き、管理者は **Team › Projects** で名前を付けてプロジェクトを作れます（[ハブのダッシュボード](devices.md#ハブのダッシュボード)） |
 | `name` | `""` | ハブで：ダッシュボードに表示する名前。例：`"Resona team"`。空ならハブのコンピューターの名前です（[ハブのダッシュボード](devices.md#ハブのダッシュボード)） |
 
 ハブで用意したプロジェクト（`chronicle hub project add`）と、各自に見えるプロジェクト（`chronicle hub invite`、

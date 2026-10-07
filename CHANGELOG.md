@@ -7,6 +7,14 @@
 - **The join command works with every hub token:** about one token in 64 starts with `-`, and the
   `chronicle hub join … --token …` command that `chronicle hub enable` prints then failed with "expected one
   argument". It now prints `--token=…`.
+- **A hub says it's a hub on every page:** a green band across the top of its dashboard gives the hub's name, its
+  address and what kind of hub it is, and the status bar has a **Hub** line. They replace the small Hub marker in the
+  toolbar. On a phone, which has no status bar, the band stays.
+- **A dashboard for a dedicated hub:** a hub that is a server for the team (`[hub] dedicated = true`, which the Docker
+  image now sets) opens on the team's Home and leaves out what only a person's own computer needs: Sync, Activity,
+  Artifacts, Suggestions, and Settings › Sources, MCP and Devices. Under **Team**, **Projects** replaces Shared
+  projects: an admin makes a project by name from any browser (**New project**), or removes one, with no command line
+  on the server. A name never reaches outside the hub's own `projects` folder.
 
 ## 0.13.1 (2026-10-07)
 

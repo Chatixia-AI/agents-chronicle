@@ -1866,6 +1866,7 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .sp-list { list-style: none; margin: 4px 0 12px; padding: 0; display: grid; gap: 0; }
 .sp-row { display: flex; gap: 12px; align-items: flex-start; justify-content: space-between; padding: 10px 0; border-top: 1px solid var(--border); min-width: 0; }
 .sp-row:first-child { border-top: 0; }
+.sp-row > .btn { flex: none; white-space: nowrap; }
 .sp-main { display: grid; gap: 3px; min-width: 0; font-size: 13px; }
 .sp-name { font-weight: 600; }
 .sp-path { font-size: 12px; overflow-wrap: anywhere; }
@@ -1885,21 +1886,38 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .sp-option[aria-selected="true"], .sp-option:hover { background: var(--hover); }
 .sp-option[aria-disabled="true"] { cursor: default; background: none; display: block; }
 
-/* A hub's dashboard: a teal tint on the chrome and a Hub marker in the toolbar, so it never passes for your own */
+/* A hub's dashboard: a teal tint on the chrome, a band across the top and a line in the status bar, so it never passes
+   for your own (renderHubFrame) */
 :root { --hub: #1baf7a; --hub-ink: #0b7a52; --hub-wash: rgba(27, 175, 122, 0.12); }
 @media (prefers-color-scheme: dark) {
   :root:where(:not([data-theme="light"])) { --hub: #199e70; --hub-ink: #4fd3a0; --hub-wash: rgba(25, 158, 112, 0.18); }
 }
 :root[data-theme="dark"] { --hub: #199e70; --hub-ink: #4fd3a0; --hub-wash: rgba(25, 158, 112, 0.18); }
 :root.on-hub body { background-image: linear-gradient(color-mix(in srgb, var(--hub) 9%, transparent), color-mix(in srgb, var(--hub) 9%, transparent)); }
-.hub-pill { gap: 7px; padding: 0 12px 0 10px; font-size: 12.5px; min-width: 0; max-width: 280px; flex: 0 1 auto; }
-.hub-pill:hover { text-decoration: none; color: var(--ink); }
-.hub-pill .icon { width: 14px; height: 14px; flex: none; color: var(--hub-ink); }
-.hub-pill .hp-kind { flex: none; font-size: 11px; font-weight: 650; color: var(--hub-ink); background: var(--hub-wash); padding: 1px 7px; border-radius: 999px; }
-.hub-pill .hp-name { font-weight: 550; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-@media (max-width: 860px) { .hub-pill .hp-name, .hub-pill > .icon { display: none; } .hub-pill { padding: 0 8px; flex: none; } }
-@media (max-width: 600px) { .hub-pill { display: none; } } /* no room: the tint and the page title still say it */
-@media (min-width: 601px) { .on-hub .crumbs { min-width: 150px; } } /* the pill's name gives way first */
+.hub-band { position: absolute; left: 0; right: 0; top: 0; z-index: 4; height: 28px; display: flex; align-items: center; gap: 8px;
+  padding: 0 14px; font-size: 12px; color: var(--hub-ink); white-space: nowrap; overflow: hidden;
+  background: color-mix(in srgb, var(--hub) 13%, var(--page)); border-bottom: 1px solid color-mix(in srgb, var(--hub) 45%, transparent); }
+.hub-band[hidden] { display: none; }
+.hub-band .icon { width: 14px; height: 14px; flex: none; }
+.hub-band .hb-kind { flex: none; font: 600 10.5px var(--mono); letter-spacing: 0.08em; text-transform: uppercase; padding: 1px 7px;
+  border-radius: 999px; background: var(--hub-wash); box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--hub) 50%, transparent); }
+.hub-band .hb-name { flex: 0 0 auto; max-width: 32ch; color: var(--ink); font-weight: 650; overflow: hidden; text-overflow: ellipsis; }
+.hub-band .hb-host { flex: none; font: 11.5px var(--mono); color: var(--muted); }
+.hub-band .hb-note { flex: 0 1 auto; margin-left: auto; padding-left: 12px; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.hub-framed .toolbar { top: 36px; }
+.hub-framed main#app { padding-top: 90px; scroll-padding-top: 92px; }
+.hub-framed .loadbar { top: 28px; }
+.hub-framed .glass.loadnote { top: 80px; }
+.statusbar #status-hub { display: inline-flex; align-items: center; gap: 6px; color: var(--hub-ink); font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.statusbar #status-hub[hidden] { display: none; }
+.statusbar #status-hub .dot { background: var(--hub); flex: none; }
+@media (max-width: 860px) { .hub-band .hb-host { display: none; } }
+@media (max-width: 600px) { /* no status bar on a phone: the band says it alone */
+  .hub-band { top: env(safe-area-inset-top); padding: 0 max(12px, env(safe-area-inset-left)); }
+  .hub-band .hb-note { display: none; }
+  .hub-framed .toolbar { top: calc(36px + env(safe-area-inset-top)); }
+  .hub-framed main#app { padding-top: calc(88px + env(safe-area-inset-top)); }
+}
 
 /* Team Home */
 .kpis.team-kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); }

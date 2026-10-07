@@ -327,14 +327,17 @@ class App:
 
     # ---- a hub's team Home: what the team did lately, by project and by person
     def hub_info(self) -> dict | None:
-        """This computer as a hub: the name its dashboard shows, and whether it has people (then Home is the team's).
-        None on a computer that isn't a hub."""
+        """This computer as a hub: the name its dashboard shows, whether it has people (then Home is the team's), its
+        address, whether it takes knowledge only, and whether it is a dedicated hub (`[hub] dedicated`: a server for
+        the team, whose dashboard leaves out a person's own computer). None on a computer that isn't a hub."""
         from .hub import local_machine, read_token
         from .people import has_people
 
         if self.cfg.is_spoke or not read_token(self.cfg):
             return None
-        return {"name": self.cfg.hub_name or local_machine(self.cfg)["name"], "team": has_people(self.conn)}
+        return {"name": self.cfg.hub_name or local_machine(self.cfg)["name"], "team": has_people(self.conn),
+                "address": self.cfg.hub_address or None, "knowledge_only": self.cfg.hub_accept == "knowledge",
+                "dedicated": self.cfg.hub_dedicated}
 
     def _here(self) -> dict:
         """This computer, recorded in the machines table, which whose-session joins go through."""
@@ -1253,22 +1256,29 @@ class App:
         candidates = [p for p in hub_projects(self.conn, limit=300)
                       if not any(under(p["path"], d) or under(d, p["path"]) for d in set_up)][:200]
         return {"shared": shared, "candidates": candidates, "hub": bool(read_token(self.cfg)) and not self.cfg.is_spoke,
-                "store": self.cfg.hub_store == "postgres"}
+                "store": self.cfg.hub_store == "postgres", "dedicated": self.cfg.hub_dedicated}
 
-    def action_shared_project(self, verb: str, body: dict) -> tuple[dict, int]:
+    def action_shared_project(self, verb: str, body: dict, *, by: dict | None = None, here: bool = True) -> tuple[dict, int]:
         """Set up a project on this hub (its sessions and lessons then go to the team store and to the people given
-        it), or stop: hub.add_project / remove_project, recorded in the people audit log."""
+        it), or stop: hub.add_project / remove_project, recorded in the people audit log. At the hub computer itself
+        (`here`), any folder of it. Elsewhere, only on a dedicated hub and only for an admin (`by`; the handler checks):
+        a new project by its name, never a folder (hub.named_project_folder), or removing one that is set up."""
         from . import people
-        from .hub import HubError, add_project, remove_project
+        from .hub import PROJECT_NAME_RULE, HubError, add_project, named_project_folder, remove_project
 
-        folder = str(body.get("folder") or body.get("path") or "").strip()
-        if not folder.startswith(("/", "~")):
-            return {"error": tr("pick a project or type its folder")}, 400
         try:
-            got = add_project(self.cfg, self.conn, folder) if verb == "add" else remove_project(self.cfg, self.conn, folder)
+            if verb == "add" and (not here or (self.cfg.hub_dedicated and "name" in body)):
+                folder = named_project_folder(self.cfg, str(body.get("name") or ""))
+            else:
+                folder = str(body.get("folder") or body.get("path") or "").strip()
+                if not folder.startswith(("/", "~")):
+                    return {"error": tr("pick a project or type its folder")}, 400
+            got = (add_project(self.cfg, self.conn, folder, by=people.actor_of(by)) if verb == "add"
+                   else remove_project(self.cfg, self.conn, folder))
         except HubError as exc:
-            return {"error": str(exc)}, 400
-        people.audit(self.conn, people.LOCAL, "project-add" if verb == "add" else "project-remove", None, path=got["path"])
+            return {"error": tr(str(exc)) if str(exc) == PROJECT_NAME_RULE else str(exc)}, 400
+        people.audit(self.conn, people.actor_of(by), "project-add" if verb == "add" else "project-remove", None,
+                     path=got["path"])
         self.conn.commit()
         return {"ok": True, "result": got, **self.shared_projects()}, 200
 
@@ -2244,10 +2254,13 @@ def make_handler(app: App, port: int):
                         return self._json(app.action_share_folders(body.get("all_folders")))
                     return self._json(app.action_share_mode(str(body.get("share") or "")))
                 m = re.fullmatch(r"/api/projects/shared/(add|remove)", p)
-                if m:  # what leaves this computer (its sessions go to the team store): only from here
-                    if not self._from_here():
+                if m:  # what leaves this computer (its sessions go to the team store): only from here. A dedicated hub
+                    # has no sessions of its own, so there its admins may make (by name) and remove projects too.
+                    here = self._from_here()
+                    if not here and not (app.cfg.hub_dedicated and self._can_admin()):
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
-                    return self._json(*app.action_shared_project(m.group(1), body if isinstance(body, dict) else {}))
+                    return self._json(*app.action_shared_project(m.group(1), body if isinstance(body, dict) else {},
+                                                                 by=self.viewer, here=here))
                 m = re.fullmatch(r"/api/people/(add|invite|role|access|remove|revoke|shared-token)", p)
                 if m:
                     if not self._can_admin():

@@ -41,6 +41,7 @@ def test_first_start_makes_a_knowledge_only_hub_reached_through_its_address(env)
     assert cfg.hub_address == "https://chronicle.example.com"
     assert cfg.hub_shared_token is False
     assert cfg.hub_name == "Chronicle hub"  # not the container's random host name
+    assert cfg.hub_dedicated is True  # a server for the team: its dashboard leaves out a person's own computer
     text = cfg.config_path.read_text()
     assert 'accept = "knowledge"' in text
     assert "claude_dirs" in text  # the rest of config.toml is kept
