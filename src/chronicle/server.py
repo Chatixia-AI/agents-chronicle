@@ -1083,6 +1083,7 @@ class App:
             "hub_url": self.cfg.hub_url or None,
             "last_push": last_push(self.cfg) if role == "spoke" else None,
             "share": self.cfg.hub_share if role == "spoke" else None,
+            "all_folders": self.cfg.hub_all_folders if role == "spoke" else None,
             "accept": self.cfg.hub_accept if role == "hub" else None,
             "team": last_team(self.cfg) if role == "spoke" else None,
             "store": self.team_store_info() if role != "spoke" else None,
@@ -1283,6 +1284,19 @@ class App:
         self.cfg = load_config(self.cfg.home)
         self._cfg_sig = self._config_sig()
         return {"ok": True, "share": self.cfg.hub_share}
+
+    def action_share_folders(self, all_folders) -> dict:
+        """[hub] all_folders on a computer that shares knowledge: every folder's sessions, or only the hub's projects'."""
+        from .config import load_config, set_config_value
+
+        if not self.cfg.is_spoke:
+            return {"error": tr("this computer has not joined a hub")}
+        if not isinstance(all_folders, bool):
+            return {"error": tr("all_folders must be true or false")}
+        set_config_value(self.cfg, "hub", "all_folders", "true" if all_folders else "false")
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        return {"ok": True, "all_folders": self.cfg.hub_all_folders}
 
     def action_accept(self, accept: str, by: dict | None) -> tuple[dict, int]:
         """[hub] accept on the hub: transcripts too, or knowledge only from every computer. `by` (None: at the hub
@@ -2226,6 +2240,8 @@ def make_handler(app: App, port: int):
                             return self._json({"url": dashboard_signin(app.cfg)})
                         except HubError as exc:
                             return self._json({"error": tr(str(exc))}, 400)
+                    if "all_folders" in body:
+                        return self._json(app.action_share_folders(body.get("all_folders")))
                     return self._json(app.action_share_mode(str(body.get("share") or "")))
                 m = re.fullmatch(r"/api/projects/shared/(add|remove)", p)
                 if m:  # what leaves this computer (its sessions go to the team store): only from here

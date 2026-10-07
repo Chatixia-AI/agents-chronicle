@@ -1565,4 +1565,12 @@ window.CHRONICLE_JA = {
   "Codex's default": "Codex の既定",
   "Runs Bob Shell headless (bob run) with no tools and Bob's own model; only a redacted digest of each session is sent.": "Bob Shell をヘッドレス（bob run）で、ツールなし・Bob 自身のモデルで実行します。送るのは各セッションの秘匿化したダイジェストだけです。",
   "Bob keeps each analysis in its own task list; Chronicle doesn't record them as sessions.": "Bob は各分析を自身のタスク一覧に残します。Chronicle はそれをセッションとして記録しません。",
+  "Share the summaries and project lessons of sessions in every folder on this computer, including projects the hub doesn't have?": "このコンピューターのすべてのフォルダーのセッションについて、要約とプロジェクトのナレッジを共有しますか？ハブにないプロジェクトも含まれます。",
+  "This computer now shares sessions from every folder.": "このコンピューターはすべてのフォルダーのセッションを共有します。",
+  "This computer now shares only sessions in the hub's projects.": "このコンピューターはハブのプロジェクトのセッションだけを共有します。",
+  "Which sessions it shares": "共有するセッション",
+  "The hub's projects": "ハブのプロジェクト",
+  "Every folder": "すべてのフォルダー",
+  "Sessions from every folder are shared, including projects the hub doesn't have.": "すべてのフォルダーのセッションを共有します。ハブにないプロジェクトも含まれます。",
+  "Only sessions in the folders added below, or in a repository whose git remote the hub knows, are shared. The rest stay here.": "下に追加したフォルダー、またはハブが git リモートを知っているリポジトリのセッションだけを共有します。それ以外はここに残ります。",
 };

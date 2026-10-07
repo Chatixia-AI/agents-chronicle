@@ -203,6 +203,13 @@ On the server, in `~/chronicle-hub`:
 For a new code, use the person's email or the id that `hub people` shows. Typing their name again adds a second
 person.
 
+The hub in the container never runs a session in your repositories, so it doesn't know their git remotes. After
+joining, each member adds their folder for each project, or their computer shares nothing:
+`chronicle hub add-folder ~/work/demo-app --project demo-app`. Sessions in other folders stay on their computer
+([Sharing knowledge only](devices.md#sharing-knowledge-only)). To take back what a computer sent:
+`docker compose exec hub chronicle hub purge bob@example.com --project demo-app`
+([Taking back what a computer sent](devices.md#taking-back-what-a-computer-sent)).
+
 ## What the hub takes
 
 On its first start, the container sets two settings that an admin can change later:

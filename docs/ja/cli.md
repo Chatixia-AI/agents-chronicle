@@ -35,11 +35,12 @@
 | `chronicle status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
 | `chronicle tailnet on\|off\|status [--anyone]` | Tailscale Serve でダッシュボードをスマートフォンやほかのデバイスから開けるようにする。通すのはあなたの Tailscale ログインだけ（`--anyone` で tailnet の全員）（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `chronicle hub enable [--rotate]` | このコンピューターをほかのコンピューターのハブにする。ほかのコンピューターで実行する `chronicle hub join` のコマンドを表示 |
-| `chronicle hub join <address> --token <token> \| --code <code> [--share knowledge]` / `hub leave` | このコンピューターのセッションをここで記録せずにハブへ送る、またはやめる（[ほかのコンピューター](devices.md#ほかのコンピューター)）。`--code`：管理者から受け取った招待コード（[コンピューターを参加させる](devices.md#コンピューターを参加させる)）。`--share knowledge`：こちらで記録・分析を続け、要約とプロジェクトのナレッジだけを送る（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)）。一部のプロジェクトに限られた人は常にこうなります |
+| `chronicle hub join <address> --token <token> \| --code <code> [--share knowledge] [--all-folders]` / `hub leave` | このコンピューターのセッションをここで記録せずにハブへ送る、またはやめる（[ほかのコンピューター](devices.md#ほかのコンピューター)）。`--code`：管理者から受け取った招待コード（[コンピューターを参加させる](devices.md#コンピューターを参加させる)）。`--share knowledge`：こちらで記録・分析を続け、要約とプロジェクトのナレッジだけを送る（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)）。一部のプロジェクトに限られた人は常にこうなります。ナレッジを共有するときは、`--all-folders` を付けない限りハブのプロジェクトのセッションだけを共有します |
 | `chronicle hub status` / `hub disable` | このハブに送ってくるコンピューターの一覧／受け付けをやめる |
 | `chronicle hub project add <folder>` / `hub project remove <folder>` / `hub project list` | ハブで：誰かが送る前にプロジェクトを用意する（ハブのコンピューター上のそのフォルダーとその下のすべて。名前はフォルダー名）／取り消す／ハブのプロジェクトを一覧し、ここで用意したものに印を付ける（[見えるプロジェクトを人ごとに決める](devices.md#見えるプロジェクトを人ごとに決める)） |
 | `chronicle hub invite <name> [--email <email>] [--role admin\|member\|readonly] --project <name>… \| --all-projects` | ハブで：人を追加し、1 回だけ使える招待コードを作る（[招待する](devices.md#招待する)）。`--project`（複数なら繰り返す）か `--all-projects`：メンバーと閲覧のみの人に見えるプロジェクト。新しく追加する人にはどちらかが必要で、管理者にはすべてのプロジェクトが見えます。すでにいる人に対して実行すると新しいコードを作ります |
 | `chronicle hub access <email\|id> --project <name>… \| --all-projects` | ハブで：その人に見えるプロジェクトを変える。次のリクエストから反映（[見えるプロジェクトを人ごとに決める](devices.md#見えるプロジェクトを人ごとに決める)） |
+| `chronicle hub purge <email\|id\|computer> --project <name>… \| --outside-access [--yes]` | ハブで：その人のコンピューター（または 1 台のコンピューター）が送ったものを、指定したプロジェクトから、またはその人に見えるプロジェクトの外から取り除く。元には戻せません（[コンピューターが送ったものを取り消す](devices.md#コンピューターが送ったものを取り消す)） |
 | `chronicle hub people` / `hub role <email\|id> <role>` / `hub remove <email\|id>` / `hub shared-token on\|off` | ハブで：全員のロール、見えるプロジェクト、コンピューターの一覧／ロールを変える／人を外す／共有トークンを許すか拒むか（[利用者とロール](devices.md#利用者とロール)） |
 | `chronicle hub add-folder <folder> --project <name>` / `hub remove-folder <folder>` / `hub folders [--list]` | ハブに参加したコンピューターで：フォルダーのセッションをハブのプロジェクトに入れる／外す／どこに入るかを表示（`--list`：ハブのプロジェクト一覧）（[同じプロジェクト、別のフォルダー](devices.md#同じプロジェクト別のフォルダー)） |
 | `chronicle push` | ハブに参加したコンピューターで：新しいセッションを今すぐ送る（フックとバックグラウンド同期も送ります） |

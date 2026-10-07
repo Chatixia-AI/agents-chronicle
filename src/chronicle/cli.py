@@ -1737,6 +1737,7 @@ def cmd_hub(args) -> int:
         _set_config_value(cfg, "hub", "url", json.dumps(url))
         if args.share:
             _set_config_value(cfg, "hub", "share", json.dumps(args.share))
+        _set_config_value(cfg, "hub", "all_folders", "true" if args.all_folders else "false")
         from .config import load_config
 
         cfg = load_config(cfg.home)
@@ -1744,6 +1745,12 @@ def cmd_hub(args) -> int:
             console.print(f"Joined the hub at {url}, sharing knowledge only. This computer keeps recording and "
                           "analyzing its own sessions; the hub gets each analyzed session's summary and project "
                           "lessons. Transcripts and lessons about you stay here.", highlight=False)
+            if cfg.hub_all_folders:
+                console.print("It shares sessions from every folder on this computer (--all-folders).", highlight=False)
+            elif not args.code or got.get("projects") is None:  # a limited person heard which projects above
+                console.print("Only sessions in the hub's projects are shared: add your folder for each one with "
+                              "`chronicle hub add-folder <folder> --project <name>` (`chronicle hub folders --list` "
+                              "lists them). Sessions in other folders stay here.", highlight=False)
         else:
             console.print(f"Joined the hub at {url}. This computer now sends its Claude Code and Codex sessions there; "
                           "the hub records and analyzes them.", highlight=False)
@@ -1792,6 +1799,9 @@ def cmd_hub(args) -> int:
     if action == "store":
         return _hub_store(cfg, console)
 
+    if action == "purge":
+        return _hub_purge(cfg, console, args)
+
     if action in ("people", "invite", "role", "access", "remove", "shared-token"):
         return _hub_people(cfg, console, args)
 
@@ -1815,7 +1825,9 @@ def cmd_hub(args) -> int:
     if cfg.is_spoke:
         last = hub.last_push(cfg)
         console.print(f"Sends its sessions to the hub at [bold]{cfg.hub_url}[/]"
-                      + (" · knowledge only (transcripts stay here)" if cfg.shares_knowledge else ""), highlight=False)
+                      + (" · knowledge only (transcripts stay here)" if cfg.shares_knowledge else "")
+                      + ((" · from every folder" if cfg.hub_all_folders else " · from the hub's projects only")
+                         if cfg.shares_knowledge else ""), highlight=False)
         console.print(f"  last push: {last['at'] + ' · ' + last['summary'] if last else 'never'}", highlight=False)
         team = hub.last_team(cfg)
         if team:
@@ -1918,6 +1930,92 @@ def _find_person(conn, key: str | None) -> dict | None:
         p = people.get(conn, int(key))
         return p if p and not p["removed_at"] else None
     return people.by_email(conn, key) if key else None
+
+
+def _hub_purge(cfg, console, args) -> int:
+    """`chronicle hub purge <email|id|computer> --project <name>… | --outside-access`: remove for good what a person's
+    computers (or one computer) sent to this hub, in some projects or outside the ones they see."""
+    from . import hub, people
+    from .ingest import project_name_for
+
+    if cfg.is_spoke:
+        console.print(f"Purge runs on the hub; this computer sends to the hub at {cfg.hub_url}.", highlight=False)
+        return 1
+    if not args.url or bool(args.project) == bool(args.outside_access) or args.all_projects:
+        console.print("Usage: chronicle hub purge <email|id|computer> --project <name> … | --outside-access [--yes]")
+        return 2
+    conn = _conn(cfg)
+    try:
+        person = _find_person(conn, args.url)
+        if person:
+            machines, who = hub.computers_of(conn, person["id"]), f"{person['name']}'s computers"
+        else:
+            key = args.url.strip().lower()
+            machines = [r[0] for r in conn.execute(
+                "SELECT id FROM machines WHERE id != ? AND (lower(name) = ? OR (length(?) >= 8 AND id LIKE ? || '%'))",
+                (hub.local_machine(cfg)["id"], key, key, key))]
+            who = f"the computer {args.url}"
+            if len(machines) > 1:
+                console.print(f"{len(machines)} computers are called {args.url}; pass the one you mean by its id "
+                              "(`chronicle hub status`).", highlight=False)
+                return 1
+        if not machines:
+            console.print(f"No one on this hub has the email or id {args.url}, and no computer that sent to it is called "
+                          "that. `chronicle hub people` and `chronicle hub status` list them.", highlight=False)
+            return 1
+        if args.outside_access:
+            if not person:
+                console.print("--outside-access needs a person (their email or id), not a computer.")
+                return 2
+            keep = people.projects_of(person)
+            if keep is None:
+                console.print(f"{person['name']} sees every project, so nothing is outside what they see. Limit them "
+                              f"first: `chronicle hub access {args.url} --project <name>`.", highlight=False)
+                return 1
+            targets = hub.purge_targets(conn, machines, keep=keep)
+            where = f"outside {_projects_words(conn, keep)}"
+        else:
+            projects, problem = _projects_arg(conn, args)
+            if problem:
+                console.print(problem, highlight=False)
+                return 1
+            targets = hub.purge_targets(conn, machines, projects=projects)
+            where = f"in {_projects_words(conn, projects)}"
+        if not targets:
+            console.print(f"Nothing from {who} {where} on this hub.", highlight=False)
+            return 0
+        counts: dict[str, int] = {}
+        for x in targets:
+            label = x["project_name"] or (project_name_for(x["project_path"]) if x["project_path"] else "no project")
+            counts[label] = counts.get(label, 0) + 1
+        console.print(f"{len(targets)} session{'s' * (len(targets) != 1)} from {who} {where}:", highlight=False)
+        for label, n in sorted(counts.items()):
+            console.print(f"  {label}: {n}", highlight=False)
+        if not args.yes:
+            try:
+                answer = input("Remove them from this hub for good, with their lessons and the knowledge bases built "
+                               "from them? [y/N] ")
+            except EOFError:
+                answer = ""
+            if answer.strip().lower() not in ("y", "yes"):
+                console.print("Nothing removed.")
+                return 1
+        try:
+            got = hub.purge(cfg, conn, targets, person_id=person["id"] if person else None)
+        except hub.HubError as exc:
+            console.print(f"Can't purge: {exc}", highlight=False)
+            return 1
+        console.print(f"Removed {got['sessions']} session{'s' * (got['sessions'] != 1)}"
+                      + (" here and in the team store" if got["store"] else "") + ". The computer can't send them "
+                      "again.", highlight=False)
+        if got["projects"]:
+            console.print("Knowledge bases built from them are gone; the next sync builds them again from what is "
+                          "left: " + ", ".join(project_name_for(p) for p in got["projects"]), highlight=False)
+        console.print("[dim]Weekly reviews already written are not changed. Teammates' computers that already "
+                      "fetched lessons from these sessions keep their copy until they next fetch.[/]", highlight=False)
+        return 0
+    finally:
+        conn.close()
 
 
 def _hub_people(cfg, console, args) -> int:
@@ -2198,6 +2296,10 @@ def _hub_folders(cfg, console, args) -> int:
             for p in hello.get("projects") or []:
                 console.print(f"  {p['name']:<32} {p['sessions']:>5}  {p['path']}", highlight=False)
             return 0
+        if cfg.shares_knowledge:
+            console.print("Shares sessions from every folder (`[hub] all_folders`)." if cfg.hub_all_folders else
+                          "Shares only sessions in these folders and in repositories whose git remote the hub knows; "
+                          "the rest stay here.", highlight=False)
         if not cfg.hub_folders:
             console.print("No folders added. Sessions go to the hub's project with the same git remote, or keep their "
                           "own folder. To file a folder's sessions under a project on the hub:\n\n"
@@ -2601,7 +2703,8 @@ def build_parser() -> argparse.ArgumentParser:
                                    "or sends its sessions to one that does (join)")
     s.add_argument("action", nargs="?", choices=["status", "enable", "join", "leave", "disable", "folders", "add-folder",
                                                  "remove-folder", "store", "people", "invite", "role", "access",
-                                                 "remove", "shared-token", "signin", "project"], default="status")
+                                                 "remove", "shared-token", "signin", "project", "purge"],
+                   default="status")
     s.add_argument("url", nargs="?", metavar="address|folder|name|email",
                    help="with join: the hub's address; with add-folder and remove-folder: a folder on this computer; "
                         "with invite: the person's name; with role, access and remove: their email or id; with "
@@ -2623,6 +2726,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--share", choices=["everything", "knowledge"],
                    help="with join: send transcripts for the hub to analyze (everything, the default), or analyze here "
                         "and send only summaries and project lessons (knowledge)")
+    s.add_argument("--all-folders", action="store_true",
+                   help="with join: share knowledge from every folder on this computer, not only the folders added to "
+                        "the hub's projects and repositories it knows")
+    s.add_argument("--outside-access", action="store_true",
+                   help="with purge: remove what the person's computers sent outside the projects they see now")
+    s.add_argument("--yes", action="store_true", help="with purge: don't ask before removing")
     s.add_argument("--list", action="store_true", help="with folders: list the hub's projects")
     s.add_argument("--no-push", action="store_true",
                    help="with join, add-folder, remove-folder: don't send anything to the hub yet")

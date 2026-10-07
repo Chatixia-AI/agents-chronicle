@@ -118,6 +118,10 @@ folders = {}
 # them. "knowledge": this computer keeps recording and analyzing with its own Claude Code (or Codex) login and sends
 # only each session's details, summary and project lessons; transcripts and personal lessons stay here.
 share = "everything"
+# On a computer that shares knowledge with a hub: false shares only sessions the hub files under one of its projects
+# (in a folder added with `chronicle hub add-folder`, or in a repository whose git remote the hub files there); the
+# rest stay here. true shares sessions from every folder. Transcripts (share = "everything") always go in full.
+all_folders = false
 # On the hub: what it takes from the computers that send to it. "everything": transcripts, or knowledge from those that
 # share knowledge. "knowledge": summaries and project lessons only, from every computer; one that sends transcripts is
 # turned away until it shares knowledge (`chronicle config set hub.share knowledge`). Any other value counts as
@@ -239,6 +243,7 @@ class Config:
     hub_path_map: dict[str, str] = field(default_factory=dict)
     hub_folders: dict[str, str] = field(default_factory=dict)
     hub_share: str = "everything"
+    hub_all_folders: bool = False
     hub_accept: str = "everything"
     hub_store: str = ""
     hub_shared_token: bool = True
@@ -414,6 +419,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         hub_folders={str(Path(str(k)).expanduser()).rstrip("/") or "/": str(v).rstrip("/") for k, v in folders.items()
                      if str(k).strip() and str(v).strip()} if isinstance(folders, dict) else {},
         hub_share=share if share in SHARE_MODES else "everything",
+        hub_all_folders=hub.get("all_folders") is True,  # only an explicit true shares every folder
         hub_accept="everything" if accept == "everything" else "knowledge",  # a typo never lets transcripts in
         hub_store=store if store in STORES else "",
         hub_shared_token=bool(hub.get("shared_token", True)),

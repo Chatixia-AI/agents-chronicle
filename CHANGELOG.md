@@ -9,6 +9,16 @@
   **Team › Computers** and `chronicle hub` mark a computer that is turned away. A typo in the setting counts as
   knowledge only, and the audit log records who changed it.
   [A hub that takes knowledge only](docs/devices.md#a-hub-that-takes-knowledge-only)
+- **Sharing knowledge keeps to the hub's projects:** a computer that shares knowledge with a hub now shares only the
+  sessions the hub files under one of its projects (a folder added with `chronicle hub add-folder`, or a repository
+  whose git remote the hub knows). Sessions in other folders stay on the computer, and its push counts them as "kept
+  here". Before, someone given every project shared every folder they had analyzed. To share every folder, join with
+  `--all-folders`, run `chronicle config set hub.all_folders true`, or choose **Every folder** in **Settings ›
+  Devices**.
+- **`chronicle hub purge`:** removes for good what a person's computers, or one computer, sent to a hub: in some
+  projects (`--project`), or outside the projects the person sees (`--outside-access`). It takes their sessions,
+  lessons, notes and received transcripts, their copy in the team store, and the knowledge bases built from them, and
+  the hub refuses those sessions if they are sent again.
 - **More vivid charts:** the eight series colours (charts, the Map, the Systems map, agent dots) keep their hues at
   the most saturation a screen can show, within the lightness range that keeps them readable and distinct, checked
   with the palette validator in both themes. Bars, lines and the tiles' sparklines draw in that bright blue rather

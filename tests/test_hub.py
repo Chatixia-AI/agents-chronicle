@@ -339,6 +339,10 @@ def test_knowledge_only_sharing(hubenv):
                        lessons=[("p-gotcha", "project", "gotcha"), ("p-pref", "project", "preference"),
                                 ("g-gotcha", "global", "gotcha")])
 
+    report = hub.push(spoke)  # its folder is no project of the hub's, and nobody added it: it stays here
+    assert report.sent == 0 and report.skipped == 1 and "1 kept here" in report.summary()
+    assert conn.execute("SELECT COUNT(*) FROM sessions WHERE source = 'remote'").fetchone()[0] == 0
+    spoke.hub_all_folders = True  # `chronicle hub join --all-folders`
     report = hub.push(spoke)
     assert report.kind == "knowledge" and report.sent == 1 and not report.errors
     assert "1 session shared" in report.summary()

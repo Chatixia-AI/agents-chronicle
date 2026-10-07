@@ -4671,11 +4671,32 @@ function shareSection(dv) {
         ? t("Analyzed here with your own login; the hub gets each session's summary and project lessons. Transcripts and lessons about you stay here.")
         : t("The hub records and analyzes the transcripts; this computer no longer analyzes its own sessions.")),
       dv.here ? null : h("div", { class: "muted" }, t("Change this on the computer itself, not from another device."))),
+    dv.share === "knowledge" && dv.all_folders != null ? foldersChoice(dv) : null,
     dv.share === "knowledge" ? h("div", { class: "status-list" },
       h("div", null, team ? tn(team.lessons || 0, "{n} lesson from teammates here", "{n} lessons from teammates here") + (team.at ? t(" · checked {ago}", { ago: ago(team.at) }) : "")
         : t("No teammates' lessons yet: a hub that keeps a team store sends them back after each push.")),
       h("div", { class: "muted" }, t("They are read-only here: your MCP tools answer with them and the start-of-session notes list them, marked as teammates'."))) : null,
     h("p", null, sendNow)];
+}
+
+// Sharing knowledge: only the sessions the hub files under one of its projects ([hub] all_folders = false), or all.
+function foldersChoice(dv) {
+  const pick = async (all) => {
+    if (all === dv.all_folders) return;
+    if (all && !confirm(t("Share the summaries and project lessons of sessions in every folder on this computer, including projects the hub doesn't have?"))) return;
+    const r = await post("/api/devices/share", { all_folders: all });
+    if (!r || r.error) { toast(r?.error || t("Could not change what this computer sends")); return; }
+    toast(all ? t("This computer now shares sessions from every folder.") : t("This computer now shares only sessions in the hub's projects."));
+    render();
+  };
+  return h("div", { class: "analyzer" },
+    h("div", { class: "seg", role: "radiogroup", "aria-label": t("Which sessions it shares") }, [
+      [false, t("The hub's projects")], [true, t("Every folder")]].map(([v, label]) =>
+      h("button", { type: "button", role: "radio", class: v === dv.all_folders ? "on" : "", "aria-checked": String(v === dv.all_folders),
+        disabled: !dv.here && v !== dv.all_folders, onclick: () => pick(v) }, label))),
+    h("div", { class: "muted" }, dv.all_folders
+      ? t("Sessions from every folder are shared, including projects the hub doesn't have.")
+      : t("Only sessions in the folders added below, or in a repository whose git remote the hub knows, are shared. The rest stay here.")));
 }
 
 // On a hub: keep the team's record in Postgres as well (team_store.py). The password goes to the server, never back.
