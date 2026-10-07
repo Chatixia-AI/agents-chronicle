@@ -39,18 +39,22 @@
   --warning-ink: #8a5a00;
   --serious-ink: #a8481f;
   --seq-0: #e8eff8;
-  --seq-1: #cfe0f3;
-  --seq-2: #a6c6e8;
-  --seq-3: #74a3d6;
-  --seq-4: #4581bf;
-  --seq-5: #1d5c96;
-  --seq-6: #0e3a66;
+  --seq-1: #c6e1ff;
+  --seq-2: #89c3fe;
+  --seq-3: #379ffe;
+  --seq-4: #0480db;
+  --seq-5: #0262ab;
+  --seq-6: #01467d;
   --user-bubble: #e8f0fa;
   --code-bg: #edf2f8;
   --shadow: 0 1px 0 rgba(11, 31, 56, 0.04);
-  /* categorical slots (dataviz reference palette, validated): fixed order, colour follows the entity */
-  --series-1: #1d5c96; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100;
-  --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948;
+  /* categorical slots: the dataviz reference palette's hues at the most saturation sRGB holds, inside each mode's
+     lightness band (validated: scripts/validate_palette.js); fixed order, colour follows the entity */
+  --series-1: #0577cc; --series-2: #f85b06; --series-3: #03b079; --series-4: #e39a00;
+  --series-5: #ff63a4; --series-6: #019c00; --series-7: #5813e7; --series-8: #fb012b;
+  /* one-colour charts (bars, lines, sparklines): the first series' blue, not the link colour */
+  --chart: #0577cc;
+  --chart-strong: #035da1;
   --radius: 6px;
   /* blueprint marks: gold for highlights and registration ticks; the buttons keep the bright gold with navy text */
   --gold: #8a4f06;
@@ -99,17 +103,19 @@
     --warning-ink: #ffc56b;
     --serious-ink: #ff9e6e;
     --seq-0: #0f2d52;
-    --seq-1: #164274;
-    --seq-2: #1d5c96;
-    --seq-3: #2f7fc0;
-    --seq-4: #4fa3e3;
-    --seq-5: #7cc7ff;
-    --seq-6: #c2e6ff;
+    --seq-1: #003e70;
+    --seq-2: #035798;
+    --seq-3: #0074c8;
+    --seq-4: #0192f9;
+    --seq-5: #70b6fe;
+    --seq-6: #badbfe;
     --user-bubble: #12365f;
     --code-bg: #0a2140;
     --shadow: none;
-    --series-1: #4396e2; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
-    --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+    --series-1: #0695f9; --series-2: #e24f02; --series-3: #009f6f; --series-4: #c58202;
+    --series-5: #f2077e; --series-6: #07aa05; --series-7: #8d7afe; --series-8: #ff3f4d;
+    --chart: #0695f9;
+    --chart-strong: #70b6fe;
     --gold: #ffb45e;
     --paper-grid: rgba(93, 134, 182, 0.13);
     --paper-grid-fine: rgba(93, 134, 182, 0.065);
@@ -143,17 +149,19 @@
   --warning-ink: #ffc56b;
   --serious-ink: #ff9e6e;
   --seq-0: #0f2d52;
-  --seq-1: #164274;
-  --seq-2: #1d5c96;
-  --seq-3: #2f7fc0;
-  --seq-4: #4fa3e3;
-  --seq-5: #7cc7ff;
-  --seq-6: #c2e6ff;
+  --seq-1: #003e70;
+  --seq-2: #035798;
+  --seq-3: #0074c8;
+  --seq-4: #0192f9;
+  --seq-5: #70b6fe;
+  --seq-6: #badbfe;
   --user-bubble: #12365f;
   --code-bg: #0a2140;
   --shadow: none;
-  --series-1: #4396e2; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500;
-  --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767;
+  --series-1: #0695f9; --series-2: #e24f02; --series-3: #009f6f; --series-4: #c58202;
+  --series-5: #f2077e; --series-6: #07aa05; --series-7: #8d7afe; --series-8: #ff3f4d;
+  --chart: #0695f9;
+  --chart-strong: #70b6fe;
   --gold: #ffb45e;
   --paper-grid: rgba(93, 134, 182, 0.13);
   --paper-grid-fine: rgba(93, 134, 182, 0.065);
@@ -484,9 +492,9 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 .tile .delta { font-size: 12px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .tile .spark { margin-top: auto; padding-top: 4px; }
 .spark svg { display: block; overflow: visible; }
-.spark-line { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
-.spark-area { fill: var(--accent); opacity: 0.07; }
-.spark-dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.spark-line { fill: none; stroke: var(--chart); stroke-width: 1.5; stroke-linejoin: round; stroke-linecap: round; }
+.spark-area { fill: var(--chart); opacity: 0.16; }
+.spark-dot { fill: var(--chart); stroke: var(--surface); stroke-width: 2; }
 .kpis { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; }
 .kpis .hero { grid-column: span 2; grid-row: span 2; }
 @media (max-width: 1180px) { .kpis { grid-template-columns: repeat(4, minmax(0, 1fr)); } .kpis .hero { grid-column: 1 / -1; grid-row: auto; } }
@@ -510,13 +518,13 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 .axis .tick-num { font-variant-numeric: tabular-nums; }
 .gridline { stroke: var(--grid); stroke-width: 1; shape-rendering: crispEdges; }
 .baseline { stroke: var(--baseline); stroke-width: 1; shape-rendering: crispEdges; }
-.bar { fill: var(--accent); }
-.bar:hover, .bar.hover { fill: var(--accent-ink); }
+.bar { fill: var(--chart); }
+.bar:hover, .bar.hover { fill: var(--chart-strong); }
 .hit { fill: transparent; cursor: default; }
-.line { fill: none; stroke: var(--accent); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
-.area { fill: var(--accent); opacity: 0.10; }
+.line { fill: none; stroke: var(--chart); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+.area { fill: var(--chart); opacity: 0.18; }
 .crosshair { stroke: var(--baseline); stroke-width: 1; }
-.dot { fill: var(--accent); stroke: var(--surface); stroke-width: 2; }
+.dot { fill: var(--chart); stroke: var(--surface); stroke-width: 2; }
 .marker-line { stroke: var(--muted); stroke-width: 1; }
 .marker-label { fill: var(--ink-2); font-size: 10.5px; }
 .cell { stroke: var(--surface); stroke-width: 2; }
@@ -532,11 +540,11 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 .hbar { display: grid; grid-template-columns: minmax(90px, 38%) 1fr auto; align-items: center; gap: 10px; font-size: 13px; }
 .hbar .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--ink); }
 .hbar .track { height: 10px; display: flex; gap: 2px; }
-.hbar .fill { height: 100%; background: var(--accent); border-radius: 0 4px 4px 0; min-width: 2px; }
+.hbar .fill { height: 100%; background: var(--chart); border-radius: 0 4px 4px 0; min-width: 2px; }
 .hbar .fill.has-part { border-radius: 0; }
 .hbar .fill.part { background: var(--critical); border-radius: 0 4px 4px 0; }
 .hbar .val { color: var(--ink-2); font-variant-numeric: tabular-nums; font-size: 12.5px; white-space: nowrap; }
-.hbar:hover .fill:not(.part) { background: var(--accent-ink); }
+.hbar:hover .fill:not(.part) { background: var(--chart-strong); }
 .hbar a.name { color: var(--ink); }
 
 #tooltip {
@@ -548,7 +556,7 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 #tooltip .tt-value { font-weight: 600; font-size: 14px; }
 #tooltip .tt-label { color: var(--ink-2); }
 #tooltip .tt-row { display: flex; align-items: center; gap: 6px; }
-#tooltip .tt-key { width: 12px; height: 2px; background: var(--accent); display: inline-block; }
+#tooltip .tt-key { width: 12px; height: 2px; background: var(--chart); display: inline-block; }
 
 #toast {
   position: fixed; bottom: 44px; left: 50%; transform: translateX(-50%); z-index: 60;
@@ -695,9 +703,9 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .proj-card .pstats b { color: var(--ink); font-weight: 600; }
 .proj-card .pfoot { display: flex; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 12px; font-size: 12px; color: var(--ink-2); }
 .wbars { display: flex; align-items: flex-end; gap: 3px; height: 42px; margin: 14px 0 12px; }
-.wbars i { flex: 1; max-width: 24px; background: var(--accent); border-radius: 3px 3px 0 0; }
+.wbars i { flex: 1; max-width: 24px; background: var(--chart); border-radius: 3px 3px 0 0; }
 .wbars i.zero { height: 2px; background: var(--grid); border-radius: 1px; }
-.wbars i.hover { background: var(--accent-ink); }
+.wbars i.hover { background: var(--chart-strong); }
 .mini-outcomes { display: grid; gap: 7px; margin-top: 12px; }
 .mo-text { display: flex; gap: 4px 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-2); }
 .mo-text span { display: inline-flex; gap: 4px; align-items: center; }
@@ -919,7 +927,7 @@ table.list-table :is(.title-cell, .def-cell, .term-cell) { overflow-wrap: anywhe
 /* legends, averages, notes */
 .mini-legend { display: inline-flex; gap: 12px; align-items: center; font-size: 12px; color: var(--ink-2); }
 .mini-legend span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; }
-.mini-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--accent); }
+.mini-legend .sw { display: inline-block; width: 10px; height: 10px; border-radius: 3px; background: var(--chart); }
 .mini-legend .sw.critical { background: var(--critical); }
 .mini-legend .sw.line { width: 14px; height: 2px; border-radius: 1px; background: var(--ink-2); }
 .chart > .mini-legend { display: flex; justify-content: flex-end; margin: -4px 0 6px; }
@@ -978,7 +986,7 @@ a.meta-item { color: var(--accent-ink); }
 
 /* numbers with a magnitude bar (track = a lighter step of the accent) */
 .cellbar { width: 56px; height: 3px; margin: 6px 0 0 auto; border-radius: 2px; background: var(--accent-wash-2); overflow: hidden; }
-.cellbar i { display: block; height: 100%; background: var(--accent); border-radius: 2px; }
+.cellbar i { display: block; height: 100%; background: var(--chart); border-radius: 2px; }
 .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .meta-item.session-link { max-width: min(100%, 300px); }
 .peak-label, .marker-label { paint-order: stroke; stroke: var(--surface); stroke-width: 3px; stroke-linejoin: round; }
@@ -1500,7 +1508,7 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .db-col { display: grid; gap: 4px; justify-items: center; }
 .db-track { width: 100%; height: var(--h, 90px); display: flex; align-items: flex-end; justify-content: center; }
 .db-track i { display: block; width: min(100%, 34px); background: var(--seq-3); border-radius: 4px 4px 1px 1px; }
-.db-track i.peak { background: var(--accent); }
+.db-track i.peak { background: var(--chart); }
 .db-track i.zero { height: 2px; background: var(--grid); border-radius: 1px; }
 .db-col.hover .db-track i { filter: brightness(0.9); }
 .db-col span { font-size: 11px; color: var(--muted); }

@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- **More vivid charts:** the eight series colours (charts, the Map, the Systems map, agent dots) keep their hues at
+  the most saturation a screen can show, within the lightness range that keeps them readable and distinct, checked
+  with the palette validator in both themes. Bars, lines and the tiles' sparklines draw in that bright blue rather
+  than grey or the link colour, with stronger fills, and the heatmaps run from pale sky to deep blue.
+
 ## 0.13.0 (2026-10-07)
 
 - **The dashboard in the Chronicle blueprint style:** the app now looks like
