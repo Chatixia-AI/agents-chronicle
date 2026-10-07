@@ -8,7 +8,8 @@ it in production needs a subscription. Everything outside `ee/` stays [MIT](../L
 
 The line follows who asks for the feature.
 
-- **MIT, in `src/chronicle/`:** anything one developer or a small team wants. Recording, analysis, the dashboard,
+- **MIT, in `src/chronicle/`:** anything one developer or a small team wants. Recording, analysis through a coding
+  agent or any model provider's API (Anthropic, Bedrock, OpenAI, Azure OpenAI, OpenRouter, Ollama), the dashboard,
   the MCP server, and the hub, with its computers, people and roles, invites, shared projects, team store and
   team Home. Everything released before `ee/` existed stays MIT too.
 - **Enterprise, in `ee/`:** what the company's IT, security or engineering leadership needs before rolling Chronicle
@@ -16,7 +17,6 @@ The line follows who asks for the feature.
   - single sign-on (OIDC, SAML) and user provisioning (SCIM) for the hub
   - policies: retention, redaction rules, folders that are never recorded
   - audit log export to a SIEM
-  - analysis through the company's own model endpoint (Bedrock, Vertex, Azure OpenAI, an API key)
   - a value report for admins: lessons reused, repeat errors caught, adoption
   - several teams under one organization, with org-wide admins
 
