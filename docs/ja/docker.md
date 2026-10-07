@@ -183,8 +183,11 @@ docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --p
 ```
 
 リンクではなく `chronicle hub join …` の行を、[チームのハブに参加する](join-a-hub.md)と一緒に送ってください。
-残りの手順はそのページが案内します。ダッシュボードも使えるようにするには、
-`docker compose exec hub chronicle hub invite yuma@example.com` で 2 つ目のコードを作り、その**リンク**を送ります。
+残りの手順はそのページが案内します。コードは一度しか使えないので、両方は送らないでください。コンピューターが参加したあとは、
+本人の Chronicle からダッシュボードを開けます：**Settings › Devices › Open the hub's dashboard**、または
+`chronicle hub signin`。スマートフォン用や、ダッシュボードを見るだけの人には、
+`docker compose exec hub chronicle hub invite yuma@example.com`（または **Team › People** のその人の行の **New invite**）で
+新しいコードを作り、その**リンク**を送ります。
 
 ダッシュボードの **Team › People** でも、ロールと見えるプロジェクトを選んで招待できます。
 

@@ -159,7 +159,7 @@ every transcript off the hub, whoever's computer it is, make the hub take knowle
 chronicle config set hub.accept knowledge
 ```
 
-or, as an admin, switch on **Team › Computers › Knowledge only**. The hub then turns away any computer that sends
+or, as an admin, switch on **Knowledge only** in **Team › Hub settings**. The hub then turns away any computer that sends
 transcripts, with the shared token or a person's own token, and tells it what to run: `chronicle config set hub.share
 knowledge`, then `chronicle push`. **Team › Computers** marks such a computer **sends transcripts: turned away**, and
 `chronicle hub` lists it the same way. A computer that joins with an invite is set to share knowledge on its own.
@@ -192,8 +192,10 @@ unless the connection works, the password is never shown again, and only an admi
   wherever each person cloned it; one learned in a folder without a remote belongs to that folder's project on the
   hub. The same lesson from two people (same kind and title) becomes one item that remembers whose sessions stated
   it.
-- **Teammates' lessons come back.** After each push, a computer that shares knowledge gets its teammates' lessons
-  for the repositories it has clones of, the projects it shared sessions in, and those it added folders to. They are
+- **Teammates' lessons come back.** Each time it shares, a computer that shares knowledge gets its teammates' lessons
+  for the repositories it has clones of, the projects it shared sessions in, and those it added folders to. It shares
+  after each analysis (when a session ends, and every 15 minutes with the background agent from `chronicle install`),
+  and at once with `chronicle push` or **Share now** in **Settings › Devices**. They are
   kept read-only in its own database, under its own folder for that repository, where its MCP tools answer with them
   (marked as teammates') and the start-of-session notes list them under **From teammates' sessions**. Lessons it
   stated itself are not sent back. One it dismisses stays dismissed; one the team no longer has disappears.
@@ -309,12 +311,16 @@ A browser stays signed in until 30 days after it was last used. **Sign out** in 
 
 Once the hub has people, its **Home** is the team's. It shows the team projects (the ones set up on the hub, and the
 ones other computers send to) with the sessions and new lessons of the last 7, 30 or 90 days in each, who worked on
-them, and the newest lessons and sessions, each with the person whose computer it came from. Admins also see what
+them, and the newest lessons and sessions, each with the person whose computer it came from. A session counts by the
+day it ran, a lesson by the day it was written, so a computer that shares older sessions it analyzed this week adds
+lessons to the week without adding sessions to it. A project's own page counts all its sessions. Admins also see what
 needs attention: people who haven't joined yet or have no way in, and computers the hub hasn't heard from for a week.
 A project only the hub computer works on stays off the team's Home; **Activity** (top right of Home) keeps the charts
 of every session on the hub. Someone limited to projects sees their projects only.
 
-Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**, **Computers** and **Team store**.
+Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**, **Computers**, **Team store** and
+**Hub settings** (the hub's name and address, **Knowledge only**, the model that writes knowledge bases, updates and
+backups).
 Every page of a hub's dashboard says it is one, so it never passes for your own: a green band across the top with the
 hub's name, its address and what kind of hub it is, a **Hub** line in the status bar, and a green tint. The name is
 the hub computer's unless you set one: `chronicle config set hub.name "Resona team"` on the hub.
