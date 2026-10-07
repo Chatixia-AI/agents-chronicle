@@ -579,7 +579,7 @@ def test_tailnet_on_and_hub_enable(env, monkeypatch, capsys):
     assert main(["hub", "enable"]) == 0
     out = capsys.readouterr().out
     token = hub.read_token(cfg)
-    assert token and f"chronicle hub join https://pc.tail1234.ts.net --token {token}" in out.replace("\n", "")
+    assert token and f"chronicle hub join https://pc.tail1234.ts.net --token={token}" in out.replace("\n", "")
     assert oct(hub.token_path(cfg).stat().st_mode & 0o777) == "0o600"
 
     assert main(["tailnet", "off"]) == 0

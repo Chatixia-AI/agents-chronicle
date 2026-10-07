@@ -1778,7 +1778,7 @@ def resolver(cfg: Config, conn, *, fresh: bool = False) -> ProjectResolver:
 
 
 def join_command(url: str, token: str) -> str:
-    return f"chronicle hub join {url} --token {quote(token, safe='-_')}"
+    return f"chronicle hub join {url} --token={quote(token, safe='-_')}"  # "=": a token may start with "-"
 
 
 def invite_command(address: str, code: str) -> str:

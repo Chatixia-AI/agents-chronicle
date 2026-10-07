@@ -186,6 +186,11 @@ def test_join_with_a_token_still_works(env, monkeypatch, capsys):
     spoke = load_config(home)
     assert spoke.hub_url == "https://hub.example.ts.net" and hub.read_token(spoke) == "shared"
 
+    # a token can start with "-" (token_urlsafe): the printed command still parses
+    command = hub.join_command("https://hub.example.ts.net", "-Ab_9")
+    assert command.endswith("--token=-Ab_9")
+    assert main([*command.split()[1:], "--no-push"]) == 0 and hub.read_token(load_config(home)) == "-Ab_9"
+
 
 def test_redeem_at_a_hub_without_invites(env, monkeypatch):
     def old_hub(self, method, path, **kw):
