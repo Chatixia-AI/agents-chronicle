@@ -2,8 +2,11 @@
 
 [← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-チームの[ハブ](devices.md#ほかのコンピューター)は、Docker が動く任意のサーバーで動かせます。`docker/compose.yaml` は
-次の 3 つのコンテナーを起動します。
+このガイドでは、Docker が動くサーバーにチームの[ハブ](devices.md#ほかのコンピューター)を用意します。空のサーバーから、
+チームメイトがプロジェクトで学んだことを共有できるようになるまでです。ハブを運用する人向けです。チームメイトは
+代わりに[チームのハブに参加する](join-a-hub.md)を読んでください。
+
+`docker/compose.yaml` は次の 3 つのコンテナーを起動します。
 
 - **ハブ**：イメージ `ghcr.io/chatixia-ai/chronicle-hub`
 - **Caddy**：ハブの前に立ち、HTTPS の証明書を取得・更新します
@@ -14,40 +17,83 @@
 プロバイダーで記録・分析し、各セッションの要約とプロジェクトのナレッジだけをハブに送ります。トランスクリプト、
 プロンプト、ファイルパスはコンピューターに残ります。ハブは何も分析しないので、モデルも API キーも要りません。
 
-## 始める前に
+## 必要なもの
 
-- Docker と Docker Compose が動くサーバー
-- `chronicle.example.com` のようなハブの名前（DNS がそのサーバーを指していること）
-- ハブを使うコンピューターから届くポート 80 と 443。Caddy が Let's Encrypt から証明書を取得するのにも使います。
-  社内ネットワークからしか届かない名前の場合は[自分の証明書を使う](#自分の証明書を使う)を参照してください
+- **Docker が動く Linux サーバー**（SSH で接続できるもの）。CPU 2 つとメモリー 4 GB で十分です。
+- **ポート 80 と 443**：ハブを使うコンピューターから届くように開けておきます。Caddy が Let's Encrypt から証明書を
+  取得するのにも使います。
+- **ハブの名前**：`chronicle.example.com` のように、DNS がサーバーを指す名前です。まだない場合は、サーバーの IP
+  アドレスをハイフンでつなぎ `.sslip.io` を付けた名前で試せます。`172-207-25-249.sslip.io` は `172.207.25.249` を
+  指す無料の名前です。社内ネットワークからしか届かない名前の場合は[自分の証明書を使う](#自分の証明書を使う)を
+  参照してください。
 
-## 起動する
-
-空のフォルダーに 3 つのファイルをダウンロードします。
+サーバーに Docker を入れるには：
 
 ```bash
-mkdir chronicle-hub && cd chronicle-hub
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER && newgrp docker
+```
+
+### Azure の場合
+
+- **仮想マシンを使います**：Ubuntu、サイズは B2s 程度。Azure Container Apps や App Service は使えません。ファイルを
+  ネットワーク共有の Azure Files に置くため、ハブの SQLite データベース（WAL モード）が安定して動かないからです。
+- **自分の鍵を使います。** **管理者アカウント**で **既存の公開キーを使用** を選び、ハブ用に作った鍵の公開鍵を
+  貼り付けます。
+
+    ```bash
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_chronicle_hub -C chronicle-hub
+    pbcopy < ~/.ssh/id_ed25519_chronicle_hub.pub
+    ```
+
+    代わりに **新しいキーの組の生成** を選ぶと、VM の作成の最後に **秘密キーのダウンロード** ダイアログが
+    出ます。エラーではありません。そこで鍵をダウンロードしたときに初めて VM が作られます。
+- **ポートを開けます**：VM の **ネットワーク** › **受信ポートの規則を追加** で、80 と 443 をそれぞれ追加します。
+- **名前を付けます**：VM のパブリック IP アドレス › **構成** › **DNS 名ラベル** で
+  `<ラベル>.<リージョン>.cloudapp.azure.com` になります。上の sslip.io の名前でもかまいません。
+
+接続は `ssh -i ~/.ssh/id_ed25519_chronicle_hub azureuser@<VM の IP アドレス>` です。
+
+## ハブを用意する
+
+手順 1〜3 はサーバーで実行します。
+
+### 1. ファイルをダウンロードする
+
+```bash
+mkdir ~/chronicle-hub && cd ~/chronicle-hub
 base=https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker
 curl -fsSL "$base/compose.yaml" -o compose.yaml
 curl -fsSL "$base/Caddyfile" -o Caddyfile
 curl -fsSL "$base/.env.example" -o .env
 ```
 
-`.env` を埋めます。
+### 2. 設定を埋める
+
+チームストアのデータベース用のパスワードを作ってコピーし、`.env` を開きます。
+
+```bash
+openssl rand -hex 24
+nano .env
+```
+
+次の 4 行を設定します。nano では Ctrl+O のあと Enter で保存、Ctrl+X で終了します。
 
 ```bash
 CHRONICLE_DOMAIN=chronicle.example.com   # ハブの名前
-CHRONICLE_ADMIN_EMAIL=you@example.com    # 最初の管理者
+CHRONICLE_ADMIN_EMAIL=you@example.com    # 最初の管理者（あなた）
 CHRONICLE_ADMIN_NAME=You
-POSTGRES_PASSWORD=...                    # 長くランダムに: openssl rand -hex 24
+POSTGRES_PASSWORD=...                    # コピーしたパスワード
 ```
 
-起動して、最初の管理者の招待を確認します。
+### 3. 起動する
 
 ```bash
 docker compose up -d
 docker compose logs hub
 ```
+
+ログに、ハブの最初の管理者としてのあなたの招待が出ます。
 
 ```text
 Added You (you@example.com) as this hub's admin. The invite works once, for 7 days:
@@ -56,32 +102,106 @@ Added You (you@example.com) as this hub's admin. The invite works once, for 7 da
   Or on their computer, to join it:           chronicle hub join https://chronicle.example.com --code ABCD-EFGH-JKLM --share knowledge
 ```
 
-招待は一度だけ表示されます。見逃したときや期限が切れたときは、新しく作ります。
+これが表示されるのは**ハブの最初の起動のときだけ**です。再起動しても利用者はそのままで、招待は表示されません。
+見逃したときや期限が切れたときは、新しく作ります。
 
 ```bash
 docker compose exec hub chronicle hub invite you@example.com
 ```
 
-リンクを開くと、管理者としてダッシュボードを使えます。1 つの招待で開けるブラウザーまたは参加できるコンピューターは
-1 つだけです。自分のコンピューターが学んだことも送るには、上のコマンドで 2 つ目の招待を作り、その参加コマンドを
-自分のコンピューターで実行します。
-
 ハブに管理者ができるまで、コンテナーは何も提供しません。利用者のいないハブは、届いた人を誰でも管理者として通して
 しまうため、`CHRONICLE_ADMIN_EMAIL` なしで起動するとエラーで止まり、何も提供しません。
 
-## チームを招待する
+### 4. サインインする
 
-ダッシュボードでは **Team › People** で人を追加し、招待を作ります。サーバーからは次のようにします。
+招待の**リンク**をブラウザーで開きます。これでハブの管理者です。サイドバーの **Team** に、利用者、プロジェクト、
+コンピューター、チームストアがあります。
+
+## プロジェクトを追加する
+
+ハブのプロジェクトは、ハブのコンピューター上のフォルダーで、名前はフォルダー名になります。コンテナーでは、そのフォルダーは
+作るまで存在しません。ダッシュボードの **Team › Shared projects** では作れません。プロジェクトを用意できるのは
+ハブのコンピューターにいる人だけで、コンテナーのダッシュボードにはそういう形で届くことがないためです。そこでサーバーの
+`~/chronicle-hub` で：
 
 ```bash
-docker compose exec hub chronicle hub invite "Bob" --email bob@example.com --all-projects
-docker compose exec hub chronicle hub invite "Vic" --email vic@example.com --role readonly --project web-app
-docker compose exec hub chronicle hub people
+docker compose exec hub mkdir -p /data/projects/Website
+docker compose exec hub chronicle hub project add /data/projects/Website
+docker compose exec hub chronicle hub project list
 ```
 
-コンテナー内で実行したコマンドは、ほかのハブのコンピューターでのコマンドと同じく管理者として動きます
-（[利用者とロール](devices.md#利用者とロール)）。ダッシュボード経由のリクエストはそうなりません。コンテナーは
-`[server] behind_proxy` を設定するので、管理者も含めて、ダッシュボードを開く人は全員サインインします。
+フォルダーにはプロジェクトの名前を付けます（ここでは `Website`）。あとは各コンピューターがそれぞれのフォルダーを
+プロジェクトに加えます（次の節）。あるコンピューターが git リポジトリのセッションを送ると、同じリポジトリのほかの
+クローンは自動でそのプロジェクトに入ります。
+
+## 自分のコンピューターをつなぐ
+
+自分のコンピューターも、チームメイトと同じように参加します。専用の招待と、その招待が表示する `chronicle hub join`
+コマンドを使います。まず、何を共有するかを決めます。
+
+- **そのプロジェクトだけ。** そのプロジェクトだけが見える人としてコンピューターを招待します。ブラウザーは管理者の
+  サインインのままです。
+
+    ```bash
+    docker compose exec hub chronicle hub invite "Your Mac" --project Website
+    ```
+
+- **分析したすべて。** `docker compose exec hub chronicle hub invite you@example.com` で自分の新しいコードを作り、
+  それで参加します。分析したコーディングエージェントのセッションすべての要約とプロジェクトのナレッジが送られ、
+  すべてのプロジェクトがハブに現れます。
+
+どちらの場合も、ChatGPT や claude.ai から取り込んだチャットはコンピューターから出ません。
+
+招待はそれぞれ 2 つのものを表示し、そのコードは**どちらか一方に一度だけ**使えます。
+
+- **`chronicle hub join …` コマンド**はコンピューターをつなぎます。ターミナルで実行します。
+- **`https://…/signin?code=…` リンク**はダッシュボードを開きます。ブラウザーで開きます。
+
+リンクを開くとコードは使い切られ、コンピューターには新しいコードが必要になります。
+
+自分のコンピューターで：
+
+```bash
+chronicle hub disable    # このコンピューター自体がハブの場合だけ
+chronicle hub leave      # ほかのハブに参加している場合だけ
+chronicle hub join https://chronicle.example.com --code XXXX-XXXX-XXXX --share knowledge --no-push
+chronicle hub add-folder ~/Projects/Website --project Website
+```
+
+`add-folder` はすぐに送ります。`3 sessions shared … 300 excluded` のような結果は、そのプロジェクトの分析済みの
+セッション 3 件がハブに送られ、ほかの 300 件はコンピューターに残ったことを意味します。ダッシュボードの **Projects** を
+再読み込みすると表示されます。
+
+## チームを招待する
+
+サーバーで、1 人ずつ招待します。
+
+```bash
+docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --project Website
+```
+
+リンクではなく `chronicle hub join …` の行を、[チームのハブに参加する](join-a-hub.md)と一緒に送ってください。
+残りの手順はそのページが案内します。ダッシュボードも使えるようにするには、
+`docker compose exec hub chronicle hub invite yuma@example.com` で 2 つ目のコードを作り、その**リンク**を送ります。
+
+ダッシュボードの **Team › People** でも、ロールと見えるプロジェクトを選んで招待できます。
+
+## よく使うコマンド
+
+サーバーの `~/chronicle-hub` で：
+
+| すること | コマンド |
+|---|---|
+| 利用者と、それぞれに見えるものを一覧する | `docker compose exec hub chronicle hub people` |
+| 送ってくるコンピューターと、最後に送った時刻を見る | `docker compose exec hub chronicle hub status` |
+| プロジェクトを一覧する | `docker compose exec hub chronicle hub project list` |
+| すでにいる人の新しいコードを作る | `docker compose exec hub chronicle hub invite <メールアドレスか ID>` |
+| 見えるプロジェクトを変える | `docker compose exec hub chronicle hub access <メールアドレスか ID> --project <名前>` |
+| 利用者を外す | `docker compose exec hub chronicle hub remove <メールアドレスか ID>` |
+| ハブのログを読む | `docker compose logs hub` |
+
+新しいコードを作るときは、メールアドレスか、`hub people` が表示する ID を使ってください。名前をもう一度入力すると、
+2 人目の利用者が加わります。
 
 ## ハブが受け取るもの
 
@@ -180,3 +300,29 @@ docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql
 ```
 
 ハブの動作中に `chronicle.db` そのものをコピーしないでください。コピーが壊れることがあります。
+
+## トラブルシューティング
+
+**ログに招待が出ない。** 最初の管理者の招待は、ハブの最初の起動のときだけ表示されます。
+`docker compose exec hub chronicle hub invite you@example.com` で新しく作ってください。
+
+**起動の直後にページがエラーになる。** Caddy はハブより先に起動し、ハブが起動するまでの数秒間はエラーを返します。
+ページを再読み込みしてください。
+
+**コンピューター用のコードをブラウザーで開いてしまった、または期限が切れた。** その人のメールアドレスか ID で新しい
+コードを作ります（例：`docker compose exec hub chronicle hub invite 3`）。
+
+**`chronicle hub join` が、このコンピューターはハブだと言う。** 先にそのコンピューターで `chronicle hub disable` を
+実行します。保持しているものはそのまま残りますが、ほかのコンピューターはそこへ送れなくなります。
+
+**自分のダッシュボード `http://127.0.0.1:11524/` が応答しなくなった。** VS Code の Remote-SSH でサーバーにつなぎ、
+ハブのログを読んだあとに起こります。0.13.0 のイメージは `Chronicle dashboard: http://127.0.0.1:11524/` と表示し、
+VS Code がそのポートを自分のコンピューターへ転送して、自分のダッシュボードの前に立ってしまいます。サーバーにつないだ
+VS Code のウィンドウ（隅に **SSH: …** と表示されるもの）で **Ports** を開き、11524 を右クリックして **Stop
+Forwarding Port** を選びます。VS Code の設定に `"remote.portsAttributes": { "11524": { "onAutoForward": "ignore" } }` を
+加えると、再発しません。以降のイメージは代わりに `Chronicle hub is up: <ハブのアドレス>` と表示します。
+
+**HTTPS がつながらない。** 名前がサーバーの IP アドレスを指しているか、ポート 80 と 443 が開いているか、
+`docker compose logs caddy` の内容を確認してください。社内ネットワークからしか届かないサーバーには Let's Encrypt が
+届きません。[自分の証明書](#自分の証明書を使う)を使ってください。sslip.io の名前をブロックする社内ネットワークも
+あります。その場合は自分の名前を使ってください。

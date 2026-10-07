@@ -2,8 +2,11 @@
 
 [← Chronicle](../README.md) · [Docs index](README.md)
 
-A team can run its [hub](devices.md#your-other-computers) on any server with Docker. `docker/compose.yaml` starts three
-containers:
+This guide sets up a team's [hub](devices.md#your-other-computers) on a server with Docker: from an empty server to
+teammates sharing what they learn in a project. It's for whoever runs the hub. Teammates follow
+[Joining your team's hub](join-a-hub.md) instead.
+
+`docker/compose.yaml` runs three containers:
 
 - **the hub**, from the image `ghcr.io/chatixia-ai/chronicle-hub`;
 - **Caddy** in front of it, which gets and renews the HTTPS certificate;
@@ -14,40 +17,83 @@ The hub takes **knowledge only**. Each computer records and analyzes its own ses
 Codex or model provider, then sends the hub each session's summary and project lessons. Transcripts, prompts and
 file paths stay on the computers. The hub analyzes nothing, so it needs no model and no API key.
 
-## Before you start
+## What you need
 
-- A server with Docker and Docker Compose.
-- A name for the hub, such as `chronicle.example.com`, whose DNS points at the server.
-- Ports 80 and 443 open to the computers that will use the hub. Caddy also needs them to get a certificate from
-  Let's Encrypt; for a name only your company network can reach, see [Your own certificate](#your-own-certificate).
+- **A Linux server with Docker**, which you reach over SSH. Two CPUs and 4 GB of memory are plenty.
+- **Ports 80 and 443 open** to the computers that will use the hub. Caddy also needs them to get a certificate from
+  Let's Encrypt.
+- **A name for the hub** whose DNS points at the server, such as `chronicle.example.com`. To try the hub before you
+  have one, write the server's IP address with dashes and add `.sslip.io`: `172-207-25-249.sslip.io` is a free name
+  that points at `172.207.25.249`. For a name only your company network reaches, see
+  [Your own certificate](#your-own-certificate).
 
-## Start it
-
-Download the three files into an empty folder:
+To install Docker on the server:
 
 ```bash
-mkdir chronicle-hub && cd chronicle-hub
+curl -fsSL https://get.docker.com | sudo sh
+sudo usermod -aG docker $USER && newgrp docker
+```
+
+### On Azure
+
+- **Use a virtual machine:** Ubuntu, size B2s or similar. Azure Container Apps and App Service won't do: they keep
+  files on Azure Files, a network share, and the hub's SQLite database (in WAL mode) doesn't work reliably there.
+- **Give it a key of your own.** Under **Administrator account**, choose **Use existing public key** and paste the
+  public half of a key made for the hub:
+
+    ```bash
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_chronicle_hub -C chronicle-hub
+    pbcopy < ~/.ssh/id_ed25519_chronicle_hub.pub
+    ```
+
+    With **Generate new key pair** instead, creating the VM ends in a **Download private key** dialog. It isn't an
+    error: the VM is only created once you download the key there.
+- **Open the ports:** the VM's **Networking** › **Add inbound port rule**, once for port 80 and once for 443.
+- **Name it:** the VM's public IP address › **Configuration** › **DNS name label** gives it
+  `<label>.<region>.cloudapp.azure.com`. The sslip.io name above works too.
+
+Then connect with `ssh -i ~/.ssh/id_ed25519_chronicle_hub azureuser@<the VM's IP address>`.
+
+## Set up the hub
+
+Steps 1 to 3 run on the server.
+
+### 1. Download the files
+
+```bash
+mkdir ~/chronicle-hub && cd ~/chronicle-hub
 base=https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker
 curl -fsSL "$base/compose.yaml" -o compose.yaml
 curl -fsSL "$base/Caddyfile" -o Caddyfile
 curl -fsSL "$base/.env.example" -o .env
 ```
 
-Fill in `.env`:
+### 2. Fill in the settings
+
+Make a password for the team store's database, copy it, and open `.env`:
+
+```bash
+openssl rand -hex 24
+nano .env
+```
+
+Set these four lines. In nano, Ctrl+O then Enter saves, and Ctrl+X quits.
 
 ```bash
 CHRONICLE_DOMAIN=chronicle.example.com   # the hub's name
-CHRONICLE_ADMIN_EMAIL=you@example.com    # its first admin
+CHRONICLE_ADMIN_EMAIL=you@example.com    # its first admin: you
 CHRONICLE_ADMIN_NAME=You
-POSTGRES_PASSWORD=...                    # long and random: openssl rand -hex 24
+POSTGRES_PASSWORD=...                    # the password you copied
 ```
 
-Then start it and read the first admin's invite:
+### 3. Start it
 
 ```bash
 docker compose up -d
 docker compose logs hub
 ```
+
+The log shows your invite as the hub's first admin:
 
 ```text
 Added You (you@example.com) as this hub's admin. The invite works once, for 7 days:
@@ -56,31 +102,106 @@ Added You (you@example.com) as this hub's admin. The invite works once, for 7 da
   Or on their computer, to join it:           chronicle hub join https://chronicle.example.com --code ABCD-EFGH-JKLM --share knowledge
 ```
 
-The invite is printed only once. If you miss it, or it expires, make another:
+It's printed **only on the hub's first start**. A restart keeps everyone and prints no invite. If you miss it, or
+it expires, make another:
 
 ```bash
 docker compose exec hub chronicle hub invite you@example.com
 ```
 
-Open the link to use the dashboard as the admin. An invite opens one browser or joins one computer, so to also send
-what your own computer learns, make a second invite with the command above and run its join command on your computer.
-
 The container won't serve anything until the hub has an admin. A hub with no people lets in anyone who reaches it
 as an admin, so a start without `CHRONICLE_ADMIN_EMAIL` stops with an error and serves nothing.
 
-## Invite your team
+### 4. Sign in
 
-In the dashboard, **Team › People** adds people and makes their invites. From the server:
+Open the invite's **link** in your browser. You're the hub's admin: **Team** in the sidebar has its people,
+projects, computers and team store.
+
+## Add a project
+
+A project on a hub is a folder on the hub's computer, named after the folder. In a container, that folder doesn't
+exist until you make it. The dashboard's **Team › Shared projects** can't make it: it sets up projects only for
+someone at the hub computer itself, and nothing reaches a container's dashboard that way. So on the server, in
+`~/chronicle-hub`:
 
 ```bash
-docker compose exec hub chronicle hub invite "Bob" --email bob@example.com --all-projects
-docker compose exec hub chronicle hub invite "Vic" --email vic@example.com --role readonly --project web-app
-docker compose exec hub chronicle hub people
+docker compose exec hub mkdir -p /data/projects/Website
+docker compose exec hub chronicle hub project add /data/projects/Website
+docker compose exec hub chronicle hub project list
 ```
 
-Commands run in the container act as an admin, like commands on any hub computer
-([People and roles](devices.md#people-and-roles)). Requests through the dashboard never do: the container sets
-`[server] behind_proxy`, so everyone who opens the dashboard signs in, admins included.
+Name the folder after the project; here, `Website`. Each computer then adds its own folder for the project, as the
+next sections show. Once one computer has sent sessions from a git repository, other clones of that repository are
+filed under the project on their own.
+
+## Connect your own computer
+
+Your computer joins the hub the way a teammate's does: with an invite of its own and the `chronicle hub join`
+command that the invite prints. First choose what it shares:
+
+- **Only the project.** Invite your computer as a person who sees only the project. Your browser keeps your admin
+  sign-in.
+
+    ```bash
+    docker compose exec hub chronicle hub invite "Your Mac" --project Website
+    ```
+
+- **Everything it has analyzed.** Make a new code for yourself with
+  `docker compose exec hub chronicle hub invite you@example.com`, and join with that. Your computer then sends the
+  summary and project lessons of every analyzed coding-agent session, so all your projects appear on the hub.
+
+Either way, chats imported from ChatGPT or claude.ai never leave the computer.
+
+Every invite prints two things, and its code works **once, for one of them**:
+
+- **the `chronicle hub join …` command** connects a computer: run it in a terminal;
+- **the `https://…/signin?code=…` link** opens the dashboard: open it in a browser.
+
+Opening the link uses up the code, and the computer then needs a new one.
+
+On your computer:
+
+```bash
+chronicle hub disable    # only if this computer is a hub itself
+chronicle hub leave      # only if it joined another hub
+chronicle hub join https://chronicle.example.com --code XXXX-XXXX-XXXX --share knowledge --no-push
+chronicle hub add-folder ~/Projects/Website --project Website
+```
+
+`add-folder` sends right away. A result like `3 sessions shared … 300 excluded` means the project's 3 analyzed
+sessions went to the hub and the other 300 stayed on your computer. Refresh **Projects** in the dashboard to see
+them.
+
+## Invite your team
+
+On the server, one invite per person:
+
+```bash
+docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --project Website
+```
+
+Send them the `chronicle hub join …` line, not the link, with [Joining your team's hub](join-a-hub.md), which
+walks them through the rest. To also give them the dashboard, make a second code with
+`docker compose exec hub chronicle hub invite yuma@example.com` and send them its **link**.
+
+**Team › People** in the dashboard invites people too, choosing their role and the projects they see.
+
+## Everyday commands
+
+On the server, in `~/chronicle-hub`:
+
+| To | Run |
+|---|---|
+| List people and what each sees | `docker compose exec hub chronicle hub people` |
+| See the computers that send, and when each last did | `docker compose exec hub chronicle hub status` |
+| List the projects | `docker compose exec hub chronicle hub project list` |
+| Make a new code for someone already on the hub | `docker compose exec hub chronicle hub invite <their email or id>` |
+| Change which projects someone sees | `docker compose exec hub chronicle hub access <email or id> --project <name>` |
+| Remove someone | `docker compose exec hub chronicle hub remove <email or id>` |
+| Read the hub's log | `docker compose logs hub` |
+
+For a new code, use the person's email or the id that `hub people` shows. Typing their name again adds a second
+person.
 
 ## What the hub takes
 
@@ -178,3 +299,29 @@ docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql
 ```
 
 Never copy `chronicle.db` itself while the hub is running: the copy can be corrupted.
+
+## Troubleshooting
+
+**The log shows no invite.** The first admin's invite is printed only on the hub's first start. Make a new one with
+`docker compose exec hub chronicle hub invite you@example.com`.
+
+**The page shows an error right after a start.** Caddy starts before the hub and answers with an error for the few
+seconds the hub takes to start. Reload the page.
+
+**A computer's code was opened in a browser, or it expired.** Make a new code with the person's email or id, such as
+`docker compose exec hub chronicle hub invite 3`.
+
+**`chronicle hub join` says the computer is a hub itself.** Run `chronicle hub disable` on it first. It keeps
+everything it holds, but other computers can no longer send to it.
+
+**Your own dashboard at `http://127.0.0.1:11524/` stopped answering** after you read the hub's log in VS Code
+connected to the server over Remote-SSH. The 0.13.0 image prints `Chronicle dashboard: http://127.0.0.1:11524/`,
+and VS Code forwards that port to your computer, in front of your own dashboard. In the VS Code window connected to
+the server (its corner says **SSH: …**), open **Ports**, right-click 11524 and choose **Stop Forwarding Port**.
+Adding `"remote.portsAttributes": { "11524": { "onAutoForward": "ignore" } }` to VS Code's settings keeps it from
+happening again. Later images print `Chronicle hub is up: <the hub's address>` instead.
+
+**HTTPS doesn't work.** Check that the name points at the server's IP address, that ports 80 and 443 are open, and
+what `docker compose logs caddy` says. Let's Encrypt can't reach a server that only your company network reaches:
+use [your own certificate](#your-own-certificate). Some company networks block sslip.io names; use a name of your
+own there.

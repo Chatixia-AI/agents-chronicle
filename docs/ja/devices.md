@@ -257,7 +257,8 @@ chronicle hub invite "Ana Lima" --email ana@example.com --role member --all-proj
 
 ### コンピューターを参加させる
 
-その人のコンピューターに [Chronicle をインストール](install.md)し、次を実行します。
+その人のコンピューターに [Chronicle をインストール](install.md)し、次を実行します。その人に送る手順書として
+[チームのハブに参加する](join-a-hub.md)があります。
 
 ```bash
 chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge

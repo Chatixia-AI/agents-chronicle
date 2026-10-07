@@ -20,6 +20,10 @@
 - **The hub's container names its own address:** its log said `Chronicle dashboard: http://127.0.0.1:11524/`, and
   VS Code connected to the server over Remote-SSH forwarded that port to your own computer, where it hid your own
   dashboard at `127.0.0.1:11524`. It now says `Chronicle hub is up: https://<the hub's address>`.
+- **Step-by-step guides for a team's hub:** [A hub in Docker](docs/docker.md) now walks whoever runs the hub from an
+  empty server to a shared project: Azure (a VM, your own SSH key, the ports, a name), the first admin, adding a
+  project from the command line, connecting your own computer, inviting the team, everyday commands and
+  troubleshooting. [Joining your team's hub](docs/join-a-hub.md) is the page to send teammates.
 
 ## 0.13.0 (2026-10-07)
 
