@@ -4370,36 +4370,116 @@ function changesList(c) { // what a checkout reinstall brings in: commits since 
       h("ul", { class: "upd-files" }, shown.map((f) => h("li", null, h("span", { class: "codeline" }, f))),
         files.length > shown.length ? h("li", { class: "muted" }, t("and {n} more", { n: files.length - shown.length })) : null)) : null);
 }
-// What analyzes sessions: a coding agent installed here (through the user's own login), or a model provider's API
-// (providers.py). An older server sends no "kind": every choice is an agent.
-let apiPane = null; // the provider whose settings are open, while the API tab is chosen without being in use
+// What analyzes sessions: a coding agent installed here (Claude Code and Codex through the user's own login, IBM Bob
+// with a Bob API key), or a model provider's API (providers.py). An older server sends no "kind": every choice is an agent.
+let paneTab = null; // the tab open while it isn't what analyzes now: an agent's name, or "api"
+let apiPane = null; // the provider whose settings are open on the API tab
 const providerModels = {}; // provider -> model ids its endpoint offers, fetched once per page load
+const CLAUDE_MODELS = ["sonnet", "opus", "haiku", "fable", "claude-sonnet-5-5", "claude-opus-5-5", "claude-haiku-4-5", "claude-fable-5-1"];
+const EFFORTS = ["low", "medium", "high", "xhigh", "max"];
 function analyzerPicker(a) {
   const choices = a?.choices || [];
   const current = choices.find((c) => c.name === a.backend);
   const agents = choices.filter((c) => c.kind !== "api"), apis = choices.filter((c) => c.kind === "api");
-  const apiOn = current?.kind === "api" || apiPane !== null;
+  const home = current?.kind === "api" ? "api" : current?.name; // the tab of what analyzes now
+  const tab = paneTab || home;
+  const open = (name) => { paneTab = name === home ? null : name; render(); };
   const use = async (name) => {
     const r = await post("/api/analysis/backend", { backend: name });
     if (r.error) { toast(r.error); return; }
+    paneTab = null;
     apiPane = null;
     toast(t("Sessions are now analyzed with {agent}.", { agent: choices.find((c) => c.name === name)?.label }));
     render();
   };
   const tabs = [...agents.map((c) =>
-    h("button", { type: "button", role: "radio", class: !apiOn && c.name === a.backend ? "on" : "", "aria-checked": String(!apiOn && c.name === a.backend),
+    h("button", { type: "button", role: "radio", class: tab === c.name ? "on" : "", "aria-checked": String(tab === c.name),
       disabled: (!c.path || !canAdmin()) && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : t("{agent} is not installed", { agent: c.label }),
-      onclick: () => { if (c.name === a.backend) { apiPane = null; render(); } else use(c.name); } }, c.label)),
-    apis.length ? h("button", { type: "button", role: "radio", class: apiOn ? "on" : "", "aria-checked": String(apiOn), disabled: !canAdmin() && !apiOn,
-      onclick: () => { if (!apiOn) { apiPane = "anthropic"; render(); } } }, t("API provider")) : null];
-  let note = null;
-  if (!apiOn) note = current?.path
-    ? t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: current.label })
-    : t("{agent} was not found: sessions wait in the queue until it is installed and signed in.", { agent: current?.label || t("The analysis agent") });
+      onclick: () => open(c.name) }, c.label)),
+    apis.length ? h("button", { type: "button", role: "radio", class: tab === "api" ? "on" : "", "aria-checked": String(tab === "api"),
+      disabled: !canAdmin() && tab !== "api", onclick: () => { if (tab !== "api") { apiPane = apiPane || "anthropic"; open("api"); } } }, t("API provider")) : null];
+  const agent = agents.find((c) => c.name === tab);
   return h("div", { class: "analyzer" },
     h("div", { class: "seg", role: "radiogroup", "aria-label": t("Analyzed by") }, tabs),
-    note ? h("div", { class: "muted" }, note) : null,
-    apiOn ? providerPane(apis, current, use) : null);
+    tab === "api" ? providerPane(apis, current, use) : agent ? agentPane(agent, current, use) : null);
+}
+const engineBadge = (inUse, ready) => inUse ? stateBadge("accent", t("In use")) : ready ? stateBadge("good", t("Ready"))
+  : stateBadge("warning", t("Not set up"));
+// A coding agent's settings: Claude Code's models (sessions, knowledge bases, screening) and effort, Codex's model and
+// effort, IBM Bob's API key (Bob picks its own model)
+function agentPane(c, current, use) {
+  const s = c.settings || {}, admin = canAdmin(), inUse = current?.name === c.name, key = c.key;
+  const field = (k, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: k, value: s[k] ?? "", autocomplete: "off",
+    spellcheck: "false", disabled: !admin, ...attrs }));
+  const effort = () => h("label", null, t("Effort"), h("select", { name: "effort", disabled: !admin },
+    EFFORTS.map((e) => h("option", { value: e, selected: e === (s.effort || "medium") }, e))));
+  const fields = [];
+  if (c.name === "claude") {
+    fields.push(h("datalist", { id: "agent-models-claude" }, CLAUDE_MODELS.map((m) => h("option", { value: m }))),
+      field("model", t("Model (sessions)"), { list: "agent-models-claude", placeholder: "sonnet" }),
+      field("synthesis_model", t("Knowledge bases"), { list: "agent-models-claude", placeholder: "sonnet" }),
+      field("screen_model", t("Screening imported chats"), { list: "agent-models-claude", placeholder: "haiku" }),
+      effort());
+  } else if (c.name === "codex") {
+    fields.push(field("model", t("Model"), { placeholder: t("Codex's default") }), effort());
+  }
+  const keyInput = key ? h("input", { class: "input", name: "key", type: "password", autocomplete: "new-password", disabled: !admin,
+    placeholder: key.source === "stored" ? t("stored; type to replace it") : key.source ? t("from {variable}", { variable: key.source }) : t("required") }) : null;
+  if (key) fields.push(h("label", { class: "wide" }, t("API key ({variable})", { variable: key.env }), h("div", { class: "pv-key" }, keyInput,
+    key.source === "stored" && admin ? h("button", { class: "btn small", type: "button", onclick: async () => {
+      if (await save({ key: "" })) { paneTab = c.name === current?.name ? null : c.name; toast(t("API key removed.")); render(); }
+    } }, t("Remove key")) : null)));
+  const form = fields.length ? h("form", { class: "pv-form", onsubmit: (e) => e.preventDefault() }, fields) : null;
+  const values = () => Object.fromEntries([...(form?.querySelectorAll("input[name]:not([name=key]), select[name]") || [])].map((x) => [x.name, x.value.trim()]));
+  const result = h("div", { class: "pv-result" }, c.available ? null : h("div", { class: "warn-line" }, c.reason));
+  const say = (text, bad) => result.replaceChildren(h("div", { class: bad ? "warn-line" : "ok-line" }, text));
+  async function save(extra = {}) {
+    let r = { choices: null };
+    if (key) {
+      const body = { provider: c.name, ...extra };
+      if (keyInput.value.trim()) body.key = keyInput.value.trim();
+      if ("key" in body) r = await post("/api/analysis/provider", body).catch((e) => ({ error: e.message }));
+    } else if (form) {
+      r = await post("/api/analysis/agent", { agent: c.name, settings: values() }).catch((e) => ({ error: e.message }));
+    }
+    if (r.error) { say(r.error, true); return null; }
+    return r;
+  }
+  const busy = (b, on) => { b.disabled = on; };
+  const saveBtn = form ? h("button", { class: "btn", type: "button", disabled: !admin, onclick: async () => {
+    busy(saveBtn, true);
+    if (await save()) { paneTab = c.name === current?.name ? null : c.name; toast(t("{provider} settings saved.", { provider: c.label })); render(); }
+    busy(saveBtn, false);
+  } }, t("Save")) : null;
+  const testBtn = h("button", { class: "btn", type: "button", disabled: !admin || !c.path, onclick: async () => {
+    busy(testBtn, true);
+    say(t("Saving and asking {provider}…", { provider: c.label }));
+    if (await save()) {
+      const r = await post("/api/analysis/provider/test", { provider: c.name }).catch((e) => ({ error: e.message }));
+      if (r.error || !r.ok) say(r.error || t("The model answered, but not as asked."), true);
+      else say(t("Works: {model} answered in {seconds}s.", { model: r.model, seconds: (r.ms / 1000).toFixed(1) }));
+      if (keyInput) keyInput.value = "";
+    }
+    busy(testBtn, false);
+  } }, t("Test connection"));
+  const useBtn = h("button", { class: "btn primary", type: "button", disabled: !admin || inUse || !c.path, onclick: async () => {
+    busy(useBtn, true);
+    const r = await save();
+    const now = r?.choices?.find((x) => x.name === c.name) || c;
+    if (r && !now.available) say(now.reason, true);
+    else if (r) await use(c.name);
+    busy(useBtn, false);
+  } }, inUse ? t("In use") : t("Use for analysis"));
+  const note = !c.path ? t("{agent} was not found: sessions wait in the queue until it is installed and signed in.", { agent: c.label })
+    : c.name === "bob" ? t("Runs Bob Shell headless (bob run) with no tools and Bob's own model; only a redacted digest of each session is sent.")
+    : t("Analyzed by {agent} through your own login; only a redacted digest of each session is sent.", { agent: c.label });
+  return h("div", { class: "provider-pane" },
+    h("div", { class: "pv-head" }, h("span", { class: "pv-agent" }, c.label), engineBadge(inUse, c.available)),
+    h("div", { class: "pv-where muted" }, note),
+    form,
+    result,
+    h("div", { class: "pv-actions" }, testBtn, saveBtn, h("span", { class: "grow" }), useBtn),
+    c.name === "bob" ? h("div", { class: "pv-foot muted" }, t("Bob keeps each analysis in its own task list; Chronicle doesn't record them as sessions.")) : null);
 }
 function providerPane(apis, current, use) {
   const name = apiPane || (current?.kind === "api" ? current.name : apis[0].name);
@@ -4409,9 +4489,7 @@ function providerPane(apis, current, use) {
   const inUse = current?.name === p.name;
   const pick = h("select", { "aria-label": t("Provider"), disabled: !admin, onchange: (e) => { apiPane = e.target.value; render(); } },
     apis.map((c) => h("option", { value: c.name, selected: c.name === p.name }, c.label + (c.name === current?.name ? ` · ${t("in use")}` : c.available ? " ✓" : ""))));
-  const state = inUse ? h("span", { class: "badge accent" }, h("span", { class: "sdot" }), t("In use"))
-    : p.available ? h("span", { class: "badge good" }, h("span", { class: "sdot" }), t("Ready"))
-    : h("span", { class: "badge warning" }, h("span", { class: "sdot" }), t("Not set up"));
+  const state = engineBadge(inUse, p.available);
   let host = "";
   try { host = new URL(p.path).host; } catch (e) { host = p.path || ""; }
   const where = h("div", { class: "pv-where muted" }, icon(p.local ? "home" : "cloud"), " ", p.local ? t("Runs on this computer: transcripts never leave it.")

@@ -54,6 +54,11 @@ def load_tasks(home: Path) -> list[dict]:
     return tasks
 
 
+def task_folder(task: dict) -> str | None:
+    """The folder a task ran in: its directory, else its project (a file: URI)."""
+    return uri_path(task.get("directory") or task.get("project_id") or "") or None
+
+
 def task_signature(task: dict) -> str:
     last = task["messages"][-1] if task["messages"] else {}
     return f"{task.get('updated_at')}:{len(task['messages'])}:{last.get('id')}:{task.get('status')}"
@@ -224,7 +229,7 @@ def parse_bob_task(task: dict) -> ParsedSession | None:
     if not any(m["role"] == "user" for m in msgs):
         return None
     ps = ParsedSession(id=task["id"])
-    ps.project_path = uri_path(task.get("directory") or task.get("project_id") or "") or None  # project_id is a file: URI
+    ps.project_path = task_folder(task)
     ps.git_branch = task.get("git_branch") or None
     ps.cc_version = task.get("version") or None
     ps.entrypoint = f"bob:{task.get('task_type') or 'normal'}"

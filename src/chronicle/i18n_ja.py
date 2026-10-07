@@ -154,6 +154,7 @@ JA: dict[str, str] = {
     "{label} (`{cli}`) was not found": "{label}（`{cli}`）が見つかりません",
     "{label}: set its endpoint (providers.{name}.base_url)": "{label}：エンドポイントを設定してください（providers.{name}.base_url）",
     "{label}: choose a model (providers.{name}.model)": "{label}：モデルを選んでください（providers.{name}.model）",
+    "{label}: add a Bob API key (BOB_API_KEY); headless runs don't use the app's sign-in": "{label}：Bob の API キー（BOB_API_KEY）を追加してください。ヘッドレス実行ではアプリのサインインは使われません",
     "{label}: add an API key": "{label}：API キーを追加してください",
 
     # ---- weekly reviews

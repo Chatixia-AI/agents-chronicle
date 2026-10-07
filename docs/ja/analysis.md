@@ -46,10 +46,21 @@ Codex、Copilot、Bob、Antigravity のセッションも、ログにデータ�
      ツール機能（シェル、コード実行、サブエージェント、アプリ、プラグイン、Web 検索、画像）をすべて切り、フック、`AGENTS.md`、
      スキルの指示も切り、Codex 自身の指示の代わりに Chronicle の指示を使います。Codex はすべてのツールをフラグで切れるわけでは
      ないため、Chronicle はイベントストリームも読みます：ツール呼び出しのあとに来た応答は捨てられ、その分析は失敗として扱われます。
+   - **IBM Bob**（`backend = "bob"`）：Bob Shell の `bob run --format stream-json --max-turns 1 --disable-mcp
+     --disable-subagents`。ツールグループをすべて無効にし、Chronicle の指示だけを持つツールなしのカスタムモードを置いた使い捨ての
+     ワークスペースで実行します。Codex と同じく、ツール呼び出しのあとに来た応答は捨てます。ヘッドレス実行には Bob の API キーが
+     必要です（アプリのサインインは使われません）：`chronicle config set-key bob`、**Status › Analysis** の IBM Bob タブ、
+     または `BOB_API_KEY`。モデルは Bob が選びます。Bob は各分析を自身のタスク一覧に残しますが、Chronicle はそれをセッションとして
+     取り込みません。
 
    - **モデルプロバイダーの API**（`backend = "anthropic"`、`"bedrock"`、`"openai"`、`"azure"`、`"openrouter"`、
      `"ollama"`、`"openai-compatible"`）：呼び出しごとに素の HTTP リクエストを 1 回送ります。ツールは含まないので、モデルは
      答えることしかできません。[モデルプロバイダー](#モデルプロバイダー)を参照してください。
+
+   **Status › Analysis** の各エージェントのタブでモデルを設定できます。Claude Code では、セッション用（`analysis.model`）、
+   ナレッジベース用（`synthesis.model`）、取り込んだチャットの選別用（`analysis.screen_model`）を、エイリアス（`sonnet`、
+   `opus`、`haiku`、`fable`）か `claude-opus-5-5` のような完全なモデル ID で指定します。Codex では `analysis.codex_model`
+   （空なら Codex の既定）。どちらも `analysis.effort` を共有します。
 
    これらの実行中は `CHRONICLE_INTERNAL=1` によって Chronicle 自身のフックが無効になります。**Status › Analysis**、
    `chronicle config set analysis.backend codex`、または 1 回の実行だけなら `chronicle analyze --backend codex` で
@@ -139,7 +150,7 @@ chronicle config set analysis.backend openai
 
 プロバイダーを使う場合の費用は、API が報告する額（OpenRouter）か、トークン数から Anthropic や OpenAI の定価で見積もった額
 （Anthropic、Bedrock、OpenAI）です。Azure、Ollama、その他のサーバーはトークン数だけを表示します。それ以外では、
-分析はあなた自身の Claude Code または Codex のログインを通じて行われます。Claude の場合、表示される費用は API 定価に換算した
+分析はあなた自身の Claude Code または Codex のログイン、または Bob の API キー（Bob は分析ごとの費用を報告します）を通じて行われます。Claude の場合、表示される費用は API 定価に換算した
 金額です。Sonnet ではセッションあたり平均約 $0.38 でした（要約の平均は約 15 万文字）。`max_budget_usd` で 1 回の呼び出しの上限を
 設定できます。Codex はトークン数を報告しますが価格は報告しないため、Codex による分析には費用が表示されません。Claude や ChatGPT の
 サブスクリプションでは、請求ではなくプランの使用枠から消費されます。`chronicle analyze --pending --dry-run` で、使う前に未分析分の

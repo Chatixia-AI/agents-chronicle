@@ -45,7 +45,7 @@
 | `chronicle push` | On a computer that joined a hub: send its new sessions now (the hook and the background sync do this) |
 | `chronicle config [edit]` | Show or edit `~/.claude-chronicle/config.toml` |
 | `chronicle config set <section.key> <value>` | Change one setting, e.g. `chronicle config set analysis.backend codex` or `providers.ollama.model qwen3:30b` ([Configuration](configuration.md)) |
-| `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | Store a model provider's API key (asked for when left out) in `provider-keys.json`, or remove it |
+| `chronicle config set-key <provider> [KEY]` / `forget-key <provider>` | Store a model provider's API key, or IBM Bob's (`bob`), in `provider-keys.json` (asked for when left out), or remove it |
 
 ## Other ways in
 

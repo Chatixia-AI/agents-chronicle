@@ -4,7 +4,7 @@
 
 **What leaves your machine:** one thing. When a session is analyzed, a condensed digest of it (secrets redacted
 first) goes to whatever you chose for analysis: Anthropic with Claude Code (`claude -p`, the default) or OpenAI with
-Codex (`codex exec`), through your own login, or the [model provider](analysis.md#model-providers) you set up, with
+Codex (`codex exec`), through your own login, IBM with Bob Shell (`bob run`) and your Bob API key, or the [model provider](analysis.md#model-providers) you set up, with
 your own key (with Ollama on your computer, nothing leaves it). Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. One other
 connection is the update check: it asks pypi.org for the latest version number and sends nothing about you. It
 runs when you click **Check for updates** on the Status page, and once a day only if you turn on **Check for

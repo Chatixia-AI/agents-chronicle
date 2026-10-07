@@ -69,6 +69,8 @@ PROVIDERS: dict[str, Provider] = {
     "openai-compatible": Provider("OpenAI-compatible", "openai", "", "", needs_key=False, json_mode=False,
                                   hint="http://localhost:1234/v1"),
 }
+# every backend whose API key Chronicle can store: the providers, and IBM Bob, whose headless runs need one
+KEY_ENVS = {**{name: p.key_env for name, p in PROVIDERS.items()}, "bob": "BOB_API_KEY"}
 # [providers.<name>] keys the dashboard and `chronicle config set` may write; anything else in the section is ignored
 SETTINGS = {"base_url": str, "model": str, "small_model": str, "region": str, "profile": str, "resource": str,
             "num_ctx": int, "chunk_chars": int, "max_output_tokens": int, "json_mode": bool, "key_env": str}
@@ -113,7 +115,7 @@ def key_source(cfg: Config, provider: str) -> tuple[str | None, str]:
     stored = _read_keys(cfg).get(provider)
     if isinstance(stored, str) and stored.strip():
         return stored.strip(), "stored"
-    env = settings(cfg, provider).get("key_env") or PROVIDERS[provider].key_env
+    env = settings(cfg, provider).get("key_env") or KEY_ENVS.get(provider, "")
     if env and os.environ.get(env, "").strip():
         return os.environ[env].strip(), f"${env}"
     return None, ""

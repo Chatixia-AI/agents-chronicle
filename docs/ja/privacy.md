@@ -4,7 +4,7 @@
 
 **マシンの外に送られるもの：** 1 つだけです。セッションを分析するとき、そのセッションをまとめた要約（機密情報は先に伏せ字にします）が、
 分析用に選んだものに送られます：あなた自身のログインで Claude Code（`claude -p`、既定）なら Anthropic に、Codex（`codex exec`）
-なら OpenAI に、または設定した[モデルプロバイダー](analysis.md#モデルプロバイダー)にあなた自身のキーで送られます（あなたの
+なら OpenAI に、Bob Shell（`bob run`）ならあなたの Bob API キーで IBM に、または設定した[モデルプロバイダー](analysis.md#モデルプロバイダー)にあなた自身のキーで送られます（あなたの
 コンピューターの Ollama なら、何も外に出ません）。
 Chronicle の作者やその他のサービスには何も送られず、テレメトリもありません。ほかの接続の 1 つは
 アップデート確認です。pypi.org に最新のバージョン番号を問い合わせるだけで、あなたに関する情報は送りません。Status ページで **Check for updates** を押したときに実行され、同じ場所の **Check for updates daily** か **Notify me about new versions** をオンにした場合だけ 1 日 1 回実行されます（どちらも既定はオフ。後者は `chronicle install` が尋ねます）。Codex Cloud を接続した場合は、

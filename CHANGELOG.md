@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- **IBM Bob analyzes sessions too:** pick **IBM Bob** in **Status › Analysis** (or `analysis.backend = "bob"`) and add a
+  Bob API key (`chronicle config set-key bob`, or `BOB_API_KEY`). Chronicle runs Bob Shell headless (`bob run`) with
+  every tool group, MCP and subagents off, its instructions in a throwaway custom mode with no tools, and discards
+  a reply that follows any tool call. Bob keeps these runs in its own task list; Chronicle doesn't import them.
+- **Choose the agent's model:** Claude Code's tab sets the models for sessions, knowledge bases and screening (an
+  alias or a full id such as `claude-opus-5-5`) and the effort; Codex's sets its model and effort.
 - **A tidier Status › Analysis:** the card spans the page, with what analyzes on the left and the queue (ready,
   queued, held, spent), why it waits and the knowledge language on the right. A provider's settings sit in two
   columns with a Ready / Not set up badge, endpoint and tuning under **Advanced**, and the buttons on one row.

@@ -1943,3 +1943,5 @@ table.team-projects td { vertical-align: middle; }
 .pv-actions .grow { flex: 1; }
 .pv-foot { font-size: 12px; }
 @media (max-width: 560px) { .pv-form { grid-template-columns: minmax(0, 1fr); } }
+.pv-agent { font-weight: 600; color: var(--ink); }
+.pv-form select { width: 100%; }
