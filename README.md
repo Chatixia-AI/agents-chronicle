@@ -156,6 +156,7 @@ Something not working? See [Troubleshooting](docs/troubleshooting.md).
 [Install](docs/install.md) · [Sources](docs/sources.md) · [Dashboard, glossary and Map](docs/dashboard.md) ·
 [Command line](docs/cli.md) · [MCP server](docs/mcp.md) · [VS Code extension](docs/vscode.md) ·
 [Phone and other computers](docs/devices.md) · [A hub in Docker](docs/docker.md) ·
+[Joining your team's hub](docs/join-a-hub.md) ·
 [What gets recorded and how analysis works](docs/analysis.md) ·
 [Configuration](docs/configuration.md) · [Data and privacy](docs/privacy.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)

@@ -259,7 +259,8 @@ The command and the link use the hub's address, `[hub] address`, which `chronicl
 
 ### Joining a computer
 
-On the person's computer, after [installing Chronicle](install.md):
+On the person's computer, after [installing Chronicle](install.md). [Joining your team's hub](join-a-hub.md) is a
+step-by-step guide to send them:
 
 ```bash
 chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge
