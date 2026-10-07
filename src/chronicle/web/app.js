@@ -2216,7 +2216,7 @@ route(/^\/projects$/, async () => {
   const projects = await loadProjects(true);
   const mode = viewMode("projects", "cards");
   const edit = canGroup();
-  const href = (p) => `#/project?path=${encodeURIComponent(p.project_path || "")}`;
+  const href = projectHref;
   const listView = (projects) => h("section", { class: "card flush" }, localTable(projects, [
     { key: "label", label: t("Project"), value: (p) => p.label },
     { key: "sessions", label: t("Sessions"), num: true, desc: true, value: (p) => p.sessions },
@@ -2226,9 +2226,9 @@ route(/^\/projects$/, async () => {
     { key: "last", label: t("Last session"), desc: true, value: (p) => p.last },
     { key: "kb", label: t("Knowledge base"), desc: true, value: (p) => p.kb_updated },
     ...(edit ? [{ key: "group", label: "" }] : []),
-  ], (p) => h("tr", { class: "row-link", onclick: (e) => { if (!e.target.closest("a, details")) go(href(p)); } },
+  ], (p) => h("tr", { class: href(p) ? "row-link" : "", onclick: (e) => { if (!e.target.closest("a, details") && href(p)) go(href(p)); } },
     h("td", { class: "title-cell" }, h("div", { class: "t" }, h("a", { href: href(p), class: "plain" }, p.label)),
-      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"), p.shared ? [" ", sharedBadge()] : null)),
+      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"), p.shared ? [" ", sharedBadge()] : null, p.hub ? [" ", hubBadge(p)] : null)),
     h("td", { class: "num" }, fmtNum(p.sessions)),
     h("td", { class: "num" }, fmtDur(p.active_s)),
     h("td", { class: "num" }, fmtNum(p.knowledge)),
@@ -2273,7 +2273,7 @@ function projectCard(p, href) {
   return h("a", { class: "card proj-card", href },
     h("div", { class: "pc-head" },
       h("div", { style: { minWidth: 0 } },
-        h("div", { class: "pname" }, p.label, p.shared ? sharedBadge() : null, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, tn(n, "{n} {agent} session", "{n} {agent} sessions", { agent: agentName(a) })))),
+        h("div", { class: "pname" }, p.label, p.shared ? sharedBadge() : null, p.hub ? hubBadge(p) : null, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, tn(n, "{n} {agent} session", "{n} {agent} sessions", { agent: agentName(a) })))),
         h("div", { class: "ppath", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : ` · ${t("not on disk")}`)),
       p.kb_updated ? h("span", { class: "badge", title: t("Knowledge base updated {when}", { when: fmtDT(p.kb_updated) }) }, icon("knowledge"), "KB")
         : h("span", { class: "badge muted-badge", title: t("No knowledge base yet") }, t("no KB"))),
@@ -2284,7 +2284,7 @@ function projectCard(p, href) {
       h("span", { title: t("Knowledge items") }, icon("sparkles"), h("b", null, fmtNum(p.knowledge))),
       h("span", { title: t("Estimated API cost") }, icon("cost"), h("b", null, fmtCost(p.cost)))),
     miniOutcomes(p.outcomes || {}),
-    h("div", { class: "pfoot" }, t("Last session {ago}", { ago: ago(p.last) }), h("span", { class: "muted" }, t("12 weeks"))));
+    h("div", { class: "pfoot" }, p.last ? t("Last session {ago}", { ago: ago(p.last) }) : t("Set up on the hub: no sessions yet"), h("span", { class: "muted" }, t("12 weeks"))));
 }
 
 // A knowledge base or the global playbook: TL;DR up top, then each section as a card of short titled bullets that
@@ -2500,7 +2500,7 @@ route(/^\/project$/, async (params) => {
     h("tbody", null, p.sessions.map((x) => sessionRow(x))))));
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/projects" }, t("Projects")), " / "),
-      h("h1", null, p.label, p.shared ? [" ", sharedBadge()] : null), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)),
+      h("h1", null, p.label, p.shared ? [" ", sharedBadge()] : null, p.hub ? [" ", hubBadge(p)] : null), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)),
       h("div", { class: "head-actions" }, h("a", { class: "btn", href: `#/systems?system=${encodeURIComponent(path)}` }, icon("systems"), t("System map")), synth)),
     tiles,
     h("div", { class: "section-gap" }, kbCard),
@@ -5611,6 +5611,15 @@ route(/^\/team\/settings$/, hubSettingsPage);
 // Settings › Devices › Shared projects (on a hub): which of its projects leave this computer, who sees each, which
 // computers send to it; set one up or stop sharing it (only at the hub itself: it decides what leaves this computer).
 const sharedBadge = () => h("span", { class: "badge accent", title: t("Shared from this hub: its summaries and project lessons go to the people given it") }, icon("devices"), t("Shared"));
+// on a computer that sends to a hub: the hub project this one is in (p.hub), under the hub's name when it differs
+const hubTitle = (p) => t("In {name} on the hub: what it shares goes there, and teammates' lessons come back here", { name: p.hub.name });
+const hubBadge = (p) => h("span", { class: "badge accent", title: hubTitle(p) }, icon("cloud"),
+  p.hub.name === p.label ? t("On the hub") : t("On the hub as {name}", { name: p.hub.name }));
+// a project's page; one set up on a hub with nothing filed yet has none: Team › Projects, for whoever may see it
+function projectHref(p) {
+  if (p.sessions) return `#/project?path=${encodeURIComponent(p.project_path || "")}`;
+  return canAdmin() && !limited() ? "#/team/projects" : null;
+}
 function sharedProjectsCard() {
   const box = h("section", { class: "card shared-card" }, cardHead(t("Shared projects"), { iconName: "projects" }), h("div", { class: "muted" }, t("Loading…")));
   const send = async (path, body) => {
@@ -6400,7 +6409,12 @@ async function knowledgeSidebar(box) {
 async function projectsSidebar(box) {
   const projects = await loadProjects();
   const list = h("div", { class: "sb-scroll" });
-  const row = (p) => sbRow(p.label, `#/project?path=${encodeURIComponent(p.project_path || "")}`, "projects", p.sessions, ["/project", "path", p.project_path || ""]);
+  const row = (p) => {
+    const a = sbRow(p.label, projectHref(p) || "#/projects", p.hub || p.shared ? "cloud" : "projects", p.sessions, ["/project", "path", p.project_path || ""]);
+    if (p.hub) a.title = `${p.label} · ${hubTitle(p)}`;
+    else if (p.shared) a.title = `${p.label} · ${p.sessions ? t("Shared from this hub") : t("Set up on the hub: no sessions yet")}`;
+    return a;
+  };
   const draw = () => {
     const q = sbState.projectQ.toLowerCase();
     const match = (p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q);

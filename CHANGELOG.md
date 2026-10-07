@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **See which projects are on the hub:** on a computer that sends to a hub, a project that is in one of the hub's
+  projects has a cloud icon in the Projects sidebar and an **On the hub** badge, with the hub's name for it when it
+  differs. On the hub, a project set up ahead of time is listed on the Projects page and in the sidebar right away,
+  marked "no sessions yet", instead of only under Team › Projects.
 - **Group your projects:** put related projects under one heading, such as **Aktio**, on the Projects page and in its
   sidebar. Tick a few projects and Chronicle offers the folder they share as a rule, so new projects there join on
   their own; move any project in or out by hand from its card. Sessions can be filtered by a whole group. Groups only

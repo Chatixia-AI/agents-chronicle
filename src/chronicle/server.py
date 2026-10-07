@@ -640,10 +640,12 @@ class App:
         hits.sort(key=lambda e: (e["agent_id"] != "", e["agent_id"], e["seq"]))
         return [{k: e[k] for k in ("seq", "agent_id", "kind", "tool_name", "ts", "snippet")} for e in hits]
 
-    def projects(self) -> list[dict]:
-        from .hub import declared_projects
-
+    def projects(self, scope: list[str] | None = None) -> list[dict]:
+        """Every project with sessions here, most recent first; on a hub, then the ones set up there that have none yet
+        (only those in `scope`, for a person limited to some projects)."""
         from .groups import assign
+        from .hub import declared_projects, hub_project_of
+        from .ingest import project_name_for
 
         labels = project_labels(self.conn)
         shared = set(declared_projects(self.conn))
@@ -678,6 +680,16 @@ class App:
             d["weekly"], d["outcomes"], d["agents"] = weekly.get(key, [0.0] * 12), outcomes.get(key, {}), agents.get(key, {})
             d["shared"] = key in shared  # set up on this hub: its sessions and lessons go to the people given it
             rows.append(d)
+        have = {d["project_path"] for d in rows}
+        for path in sorted(shared - have, key=lambda p: project_name_for(p).lower()):  # set up, nothing filed yet
+            if scope is None or path in scope:
+                rows.append({"project_path": path, "project_name": project_name_for(path), "label": project_name_for(path),
+                             "sessions": 0, "prompts": 0, "active_s": 0, "cost": 0, "tokens": 0, "first": None, "last": None,
+                             "analyzed": 0, "knowledge": 0, "kb_updated": None, "exists": Path(path).exists(),
+                             "weekly": [0.0] * 12, "outcomes": {}, "agents": {}, "shared": True})
+        on_hub = hub_project_of(self.cfg, [d["project_path"] for d in rows])  # a computer that sends to a hub
+        for d in rows:  # the hub project it's in, by the hub's name for it
+            d["hub"] = on_hub.get(d["project_path"])
         placed = assign(self.conn, [d["project_path"] for d in rows if d["project_path"]])
         for d in rows:  # the group it's listed under (groups.py), and whether by hand or by its folder
             d["group"], d["group_by"] = placed.get(d["project_path"], (None, None))
@@ -744,10 +756,12 @@ class App:
         from .hub import declared_projects
 
         from .groups import group_of
+        from .hub import hub_project_of
 
         return {
             "project_path": path,
             "shared": path in declared_projects(c),
+            "hub": hub_project_of(self.cfg, [path]).get(path),
             "group": group_of(c, path),
             "label": labels.get(path, stats["project_name"]),
             "stats": dict(stats),
@@ -2289,7 +2303,7 @@ def make_handler(app: App, port: int):
                 if m:
                     return self._json(app.matches(m.group(1), q))
                 if p == "/api/projects":
-                    return self._json(app.projects())
+                    return self._json(app.projects(scope=people.projects_of(self.viewer)))
                 if p == "/api/project-groups":
                     return self._json(app.project_groups())
                 if p == "/api/artifacts":

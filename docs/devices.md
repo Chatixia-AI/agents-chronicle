@@ -93,6 +93,8 @@ matching project of its own:
    project. `chronicle hub folders` shows what goes where. **Settings › Devices › Projects on the hub** does the same
    from the dashboard: **Join a project** picks one of the hub's projects and a folder here. To take back a folder
    added by mistake, see [Leaving](#leaving). The hub's **Team › Computers** lists the folders each computer added.
+   On this computer's **Projects** page and sidebar, a project that is in one of the hub's projects has a cloud icon
+   and an **On the hub** badge, with the hub's name for it when that differs (as of the last push).
 3. **By `[hub] path_map`**, for projects without a remote, in the hub's [configuration](configuration.md#hub):
 
    ```toml
@@ -346,7 +348,9 @@ A member or read-only person sees every project on the hub, or only some. Someon
 those on the hub's dashboard, and their computers share knowledge only, for those projects only. Admins always see
 every project. People added before projects could be chosen see every project, as they did.
 
-A project can be set up on the hub before anyone sends to it. Say the hub owner keeps Resona in
+A project can be set up on the hub before anyone sends to it. The hub's **Projects** page and sidebar list it from
+then on, with a cloud icon and "no sessions yet", and open **Team › Projects** for it until sessions arrive. Say the
+hub owner keeps Resona in
 `~/Projects/Work/Resona`, and Aki and Ben should see Resona and nothing else. On the hub:
 
 ```bash
