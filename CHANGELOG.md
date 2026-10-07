@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.3 (2026-10-07)
 
 - **See which projects are on the hub:** on a computer that sends to a hub, a project that is in one of the hub's
   projects has a cloud icon in the Projects sidebar and an **On the hub** badge, with the hub's name for it when it
