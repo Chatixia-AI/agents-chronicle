@@ -4394,12 +4394,16 @@ function analyzerPicker(a) {
     toast(t("Sessions are now analyzed with {agent}.", { agent: choices.find((c) => c.name === name)?.label }));
     render();
   };
+  // a green dot on the tab that analyzes now; a tab whose agent isn't installed here says so
+  const tag = (inUse, missing) => inUse ? h("span", { class: "seg-dot", role: "img", "aria-label": t("In use"), title: t("In use") })
+    : missing ? h("span", { class: "seg-tag" }, t("Not installed")) : null;
   const tabs = [...agents.map((c) =>
     h("button", { type: "button", role: "radio", class: tab === c.name ? "on" : "", "aria-checked": String(tab === c.name),
       disabled: (!c.path || !canAdmin()) && c.name !== a.backend, title: c.path ? `${c.path} · ${c.model}` : t("{agent} is not installed", { agent: c.label }),
-      onclick: () => open(c.name) }, c.label)),
+      onclick: () => open(c.name) }, c.label, tag(c.name === a.backend, !c.path))),
     apis.length ? h("button", { type: "button", role: "radio", class: tab === "api" ? "on" : "", "aria-checked": String(tab === "api"),
-      disabled: !canAdmin() && tab !== "api", onclick: () => { if (tab !== "api") { apiPane = apiPane || "anthropic"; open("api"); } } }, t("API provider")) : null];
+      disabled: !canAdmin() && tab !== "api", onclick: () => { if (tab !== "api") { apiPane = apiPane || "anthropic"; open("api"); } } },
+      t("API provider"), tag(home === "api", false)) : null];
   const agent = agents.find((c) => c.name === tab);
   return h("div", { class: "analyzer" },
     h("div", { class: "seg", role: "radiogroup", "aria-label": t("Analyzed by") }, tabs),

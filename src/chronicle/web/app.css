@@ -452,6 +452,15 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 .seg button:disabled { cursor: not-allowed; opacity: .45; }
 .analyzer { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; }
 .analyzer .seg { align-self: flex-start; }
+/* the tabs carry an in-use dot or a Not installed tag: in a narrow pane they tile onto a second row rather than break words,
+   and a tab that can't be picked stays legible, since its tag says why */
+.analysis-main .seg { flex-wrap: wrap; max-width: 100%; }
+.analysis-main .seg button { flex: 1 0 auto; white-space: nowrap; box-shadow: -1px -1px 0 var(--border); }
+.analysis-main .seg button + button { border-left: 0; }
+.analysis-main .seg button:disabled { opacity: 1; color: var(--muted); }
+.seg-tag { margin-left: 6px; padding: 0 6px; border-radius: 999px; font-size: 11px; font-weight: 500; vertical-align: 1px;
+  color: var(--muted); background: var(--surface-2); white-space: nowrap; }
+.seg-dot { display: inline-block; width: 7px; height: 7px; margin-left: 7px; border-radius: 50%; background: var(--good); vertical-align: 1px; }
 
 /* ------------------------------------------------------------------ layout */
 .page-head { display: flex; align-items: flex-end; justify-content: space-between; gap: 16px; margin-bottom: 16px; flex-wrap: wrap; }
