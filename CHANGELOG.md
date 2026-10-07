@@ -5,6 +5,8 @@
 - **The Map's search finds knowledge and sessions too:** besides terms and groups, it now matches the knowledge items
   (title and text) and session titles drawn under each term, opens them on the map, highlights them and lists them in
   the side panel. Before, text you could see on a knowledge node found nothing.
+- **A hidden sidebar peeks out on hover:** with the sidebar hidden, resting the pointer on the rail brings it out
+  over the page, and it goes again once the pointer moves away. Whether the sidebar is shown stays as you set it.
 
 ## 0.14.1 (2026-10-07)
 
