@@ -296,9 +296,10 @@ def test_open_a_file_even_after_it_is_gone(synced, monkeypatch):
         local = json.loads(call("/api/artifacts")[2])["local"]
         status, _, _ = call(f"/api/artifacts/{ids[str(notes)]}/reveal", method="POST")
         assert (status, len(launched)) == ((200, 1) if local else (403, 0))
-        status, _, _ = call(f"/api/artifacts/{ids[str(notes)]}/reveal", method="POST", headers={"X-Forwarded-For": "100.64.0.2"})
+        serve = {"X-Forwarded-For": "100.64.0.2", "Tailscale-User-Login": "me@github"}
+        status, _, _ = call(f"/api/artifacts/{ids[str(notes)]}/reveal", method="POST", headers=serve)
         assert status == 403 and len(launched) == (1 if local else 0)  # through Tailscale Serve: never
-        assert json.loads(call("/api/artifacts", headers={"X-Forwarded-For": "100.64.0.2"})[2])["local"] is None
+        assert json.loads(call("/api/artifacts", headers=serve)[2])["local"] is None
     finally:
         httpd.shutdown()
 

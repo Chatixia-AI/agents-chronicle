@@ -111,6 +111,8 @@ def file_written(ps, path: str | None, *, content=None, created: bool = True, ts
 
 
 def _link(ps, kind: str, url: str, title: str | None, *, action: str, ts, agent_id: str, tool_use_id, meta=None) -> None:
+    if not isinstance(url, str) or not re.match(r"https?://", url, re.I):
+        return  # a transcript states the link: one the dashboard can't open as a page (javascript:, say) isn't kept
     _record(ps, {"key": f"url:{url}", "kind": kind, "action": action, "title": one_line(safe_text(title or ""), 200) or None,
                  "path": None, "url": url, "size": None, "sha256": None, "ts": ts, "agent_id": agent_id,
                  "tool_use_id": tool_use_id, "meta": dict(meta or {})})

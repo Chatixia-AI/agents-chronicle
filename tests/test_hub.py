@@ -532,7 +532,8 @@ def test_tailnet_names_and_logins(synced):
         assert status({"Host": "evil.example"}) == 403
         assert status({}) == 200  # this computer itself, by 127.0.0.1
         cfg.server_allowed_users = []
-        assert status(ts) == 200  # anyone on the tailnet
+        assert status({**ts, "Tailscale-User-Login": "anyone@else"}) == 200  # anyone on the tailnet
+        assert status(ts) == 403  # but with no people, never someone Serve names no login for (Funnel, a tagged device)
         req = urllib.request.Request(base + "/api/sync", data=b"{}", method="POST",
                                      headers={**ts, "X-Chronicle": "1", "Tailscale-User-Login": "x"})
         cfg.server_allowed_users = ["me@github"]

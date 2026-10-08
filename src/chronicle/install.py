@@ -35,15 +35,16 @@ def write_shim(target: str) -> Path:
 
     Hooks and MCP registrations store a command path, and the app's own path changes when it is moved or
     updated, so they point here instead. The app rewrites this on every launch; if the app has moved since,
-    the shim looks it up by bundle id with Spotlight.
+    the shim looks it up by bundle id with Spotlight, in the Applications folders only: an app anywhere else (a
+    download, a mounted disk image) can claim the same bundle id.
     """
     path = shim_path()
     text = (
         "#!/bin/sh\n"
         "# Written by Chronicle.app on every launch. Claude Code hooks and MCP servers run this.\n"
         f"exe={shlex.quote(target)}\n"
-        '[ -x "$exe" ] || exe="$(mdfind "kMDItemCFBundleIdentifier == \'' + APP_BUNDLE_ID + '\'" | head -n 1)'
-        '/Contents/MacOS/Chronicle"\n'
+        '[ -x "$exe" ] || exe="$(mdfind "kMDItemCFBundleIdentifier == \'' + APP_BUNDLE_ID + '\'" '
+        '| grep -E "^(/Applications|$HOME/Applications)/[^/]+\\.app$" | head -n 1)/Contents/MacOS/Chronicle"\n'
         'exec "$exe" "$@"\n'
     )
     if not path.exists() or path.read_text() != text:

@@ -250,13 +250,22 @@ def store_parsed(
     agent: str = "claude",
     source: str = "transcript",
 ) -> str:
-    """Replace a session's derived rows and upsert its metadata. Returns 'new' or 'updated'."""
+    """Replace a session's derived rows and upsert its metadata. Returns 'new' or 'updated', or 'foreign' (nothing
+    changed) when another computer's session already has this id."""
+    from .hub import machine_of, resolver
+
     prev = conn.execute(
         "SELECT analysis_status, analyzed_prompts, ended_flag, ended_at, llm_title, analysis_reason, source, n_prompts, "
-        "parser_version FROM sessions WHERE id = ?",
+        "parser_version, machine_id FROM sessions WHERE id = ?",
         (ps.id,),
     ).fetchone()
     sid = ps.id
+    machine = machine_of(cfg, claude_dir)
+    me = local_machine_id(cfg)
+    if prev is not None and (prev["machine_id"] or me) != (machine or me):
+        # a hub: a transcript a computer sent under the id of a session another computer (or the hub) has
+        log.warning("session %s from %s not stored: it belongs to %s", sid, machine or me, prev["machine_id"] or me)
+        return "foreign"
     for table in ("events", "tool_calls", "session_files", "subagents", "api_calls", "artifacts"):
         conn.execute(f"DELETE FROM {table} WHERE session_id = ?", (sid,))
     artifacts.finish(ps)
@@ -317,9 +326,6 @@ def store_parsed(
     )
 
     totals = ps.totals()
-    from .hub import machine_of, resolver
-
-    machine = machine_of(cfg, claude_dir)
     recorded_path = ps.project_path or (decode_project_dir(project_dir) if project_dir else None)
     # another computer's folder as this hub files it; this computer's own, under a project set up here if any
     project_path = resolver(cfg, conn).resolve(machine, recorded_path, ps.git_remote)
@@ -463,6 +469,8 @@ def _ingest_main(conn, cfg, archiver, claude_dir, proj: Path, main: Path, report
         log.exception("store failed: %s", main)
         report.errors.append(f"store {main}: {exc}")
         return
+    if result == "foreign":
+        return
     report.touched.append(sid)
     if result == "new":
         report.sessions_new += 1
@@ -494,9 +502,10 @@ def _reparse_archived(conn, cfg, report: SyncReport, skip: set[str]) -> None:
         if cfg.is_excluded(ps.project_path) or kv_get(conn, f"forget:{ps.id}"):
             continue
         try:
-            store_parsed(conn, cfg, ps, claude_dir=Path(r["claude_dir"]), project_dir=r["project_dir"],
-                         transcript_path=Path(r["transcript_path"] or main), archive_path=main,
-                         files_sig=files_signature(main, session_dir))
+            if store_parsed(conn, cfg, ps, claude_dir=Path(r["claude_dir"]), project_dir=r["project_dir"],
+                            transcript_path=Path(r["transcript_path"] or main), archive_path=main,
+                            files_sig=files_signature(main, session_dir)) == "foreign":
+                continue
             conn.execute("UPDATE sessions SET source_present = 0 WHERE id = ?", (ps.id,))
             conn.commit()
         except Exception as exc:
@@ -715,6 +724,8 @@ def _ingest_codex(conn, cfg, codex_dir: Path, main: Path, subs: list[Path], dst:
         log.exception("store failed: %s", main)
         report.errors.append(f"store {main}: {exc}")
         return
+    if result == "foreign":
+        return
     report.touched.append(sid)
     if result == "new":
         report.sessions_new += 1
@@ -768,6 +779,8 @@ def _store_other(conn, cfg, ps: ParsedSession, report: SyncReport, *, root: Path
         conn.rollback()
         log.exception("store failed: %s", transcript)
         report.errors.append(f"store {transcript}: {exc}")
+        return
+    if result == "foreign":
         return
     report.touched.append(ps.id)
     if result == "new":
@@ -1042,10 +1055,13 @@ def import_history(conn: sqlite3.Connection, cfg: Config, path: Path) -> int:
     if kv_get(conn, f"history_sig:{path}") == marker:
         return 0
     created = 0
-    known = {r[0] for r in conn.execute("SELECT id FROM sessions WHERE source != 'history'")} | forgotten_ids(conn)
     from .hub import machine_of, resolver
 
     machine = machine_of(cfg, path)
+    me = local_machine_id(cfg)
+    # a stub another computer's history made is that computer's, as a transcript is
+    known = {r[0] for r in conn.execute("SELECT id FROM sessions WHERE source != 'history' OR COALESCE(machine_id, ?) != ?",
+                                        (me, machine or me))} | forgotten_ids(conn)
     for sid, rec in parse_history(path).items():
         rec["project"] = resolver(cfg, conn).resolve(machine, rec.get("project"))
         if sid in known or cfg.is_excluded(rec.get("project")):
@@ -1076,7 +1092,7 @@ def import_history(conn: sqlite3.Connection, cfg: Config, path: Path) -> int:
             (sid, "history", str(path.parent), project, project_name_for(project), 0, one_line(first, 90), first,
              prompts[-1][1], started, ended, dur, min(dur, len(prompts) * 300.0), len(real), len(prompts), "skipped",
              "history only (transcript deleted before Chronicle)", utcnow_iso(), PARSER_VERSION,
-             machine or local_machine_id(cfg)),
+             machine or me),
         )
         created += 1
     kv_set(conn, f"history_sig:{path}", marker)

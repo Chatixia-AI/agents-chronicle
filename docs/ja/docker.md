@@ -109,8 +109,8 @@ Added You (you@example.com) as this hub's admin. The invite works once, for 7 da
 docker compose exec hub chronicle hub invite you@example.com
 ```
 
-ハブに管理者ができるまで、コンテナーは何も提供しません。利用者のいないハブは、届いた人を誰でも管理者として通して
-しまうため、`CHRONICLE_ADMIN_EMAIL` なしで起動するとエラーで止まり、何も提供しません。
+ハブに管理者ができるまで、コンテナーは何も提供しません。利用者のいないハブにはサインインがなく、そのダッシュボードは
+プロキシ経由の人には誰にも応答しないため、`CHRONICLE_ADMIN_EMAIL` なしで起動するとエラーで止まり、何も提供しません。
 
 ### 4. サインインする
 

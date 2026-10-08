@@ -148,7 +148,9 @@ def git_ignored(root: str, paths: list[str]) -> set[str]:
     if not paths:
         return set()
     try:
-        out = subprocess.run(["git", "-C", root, "check-ignore", "-z", "--stdin"], input="\0".join(paths) + "\0",
+        # root comes from the request: a repository's own config may not run anything (fsmonitor, hooks)
+        out = subprocess.run(["git", "-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null", "-C", root,
+                              "check-ignore", "-z", "--stdin"], input="\0".join(paths) + "\0",
                              capture_output=True, text=True, timeout=10)
     except (OSError, subprocess.SubprocessError):
         return set()
@@ -1975,6 +1977,13 @@ def make_handler(app: App, port: int):
         def log_message(self, fmt, *args):  # quiet
             log.debug("%s - %s", self.address_string(), fmt % args)
 
+        def send_header(self, keyword, value):
+            """http.server writes a header as given: one with a line break in it would start headers (or a body) of
+            its own. Header values come from transcripts too (a file's name), so none may hold one."""
+            if any(c in str(keyword) + str(value) for c in "\r\n\0"):
+                raise ValueError(f"line break in the {keyword} header")
+            super().send_header(keyword, value)
+
         def _host(self) -> str:
             return (self.headers.get("Host") or "").strip().lower()
 
@@ -2050,12 +2059,23 @@ def make_handler(app: App, port: int):
 
         def _viewer(self) -> tuple[dict | None, tuple[dict, int] | None]:
             """(person, None) for who is viewing, person None being an admin: someone at the hub computer itself, or,
-            while the hub has no people, anyone the dashboard let in before people existed. (None, (error, status))
-            when no one is signed in."""
+            while the hub has no people, a Tailscale login that Serve on this computer vouched for ([server]
+            allowed_users already checked it). (None, (error, status)) when no one is signed in.
+
+            A hub without people has no sign-in, so anything else is refused: a request from another device
+            (server.host 0.0.0.0), through a reverse proxy, or through Tailscale Funnel would be an admin of
+            everything."""
             from . import people
 
-            if self._from_here() or not self._people_mode():
+            if self._from_here():
                 return None, None
+            if not self._people_mode():
+                if (not app.cfg.server_behind_proxy and self.client_address[0] in ("127.0.0.1", "::1")
+                        and self.headers.get("Tailscale-User-Login")):
+                    return None, None
+                return None, ({"error": tr("this dashboard has no people yet, so only this computer may open it. At "
+                                           "the hub, run `chronicle hub invite <your name> --email <email> --role admin` "
+                                           "and open the invite link it prints"), "nobody": True}, 403)
             header = app.cfg.server_auth_header
             if header and self.client_address[0] in app.cfg.server_trusted_proxies and self.headers.get(header):
                 person = people.by_email(app.conn, self.headers.get(header))  # a company sign-in in front of the hub
@@ -2124,7 +2144,9 @@ def make_handler(app: App, port: int):
         def _open_file(self, f: dict):
             from urllib.parse import quote
 
-            ascii_name = f["name"].encode("ascii", "replace").decode().replace("?", "_").replace('"', "'")
+            # the name came from a transcript: no control characters (a line break would end the header)
+            ascii_name = re.sub(r"[\x00-\x1f\x7f]", "_", f["name"].encode("ascii", "replace").decode())
+            ascii_name = ascii_name.replace("?", "_").replace('"', "'").replace("\\", "_")
             self.send_response(200)
             self.send_header("Content-Type", f["ctype"])
             self.send_header("Content-Disposition", f"{'inline' if f['inline'] else 'attachment'}; filename=\"{ascii_name}\"; "

@@ -1838,6 +1838,7 @@ a.ar-tile-media.empty:hover { background: var(--accent-wash); }
 .signin-card { width: min(480px, 100%); box-sizing: border-box; padding: 24px 26px; }
 .signin-card h1 { font-size: 22px; margin: 14px 0 8px; }
 .signin-card p { line-height: 1.5; }
+.signin-card .signin-note { padding: 10px 12px; border-radius: 8px; background: var(--critical-wash); color: var(--critical-ink); }
 .signin-brand { display: flex; align-items: center; gap: 8px; font-weight: 600; color: var(--ink-2); }
 .signin-form { display: flex; gap: 8px; margin: 4px 0 8px; }
 .signin-form .input { flex: 1; min-width: 0; font-family: var(--mono); letter-spacing: 0.04em; }

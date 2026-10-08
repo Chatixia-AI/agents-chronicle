@@ -322,6 +322,10 @@ JA: dict[str, str] = {
     "not available": "利用できません",
     # ---- people on a hub: signing in, roles, invites
     "sign in to this hub": "このハブにサインインしてください",
+    "this dashboard has no people yet, so only this computer may open it. At the hub, run `chronicle hub invite <your "
+    "name> --email <email> --role admin` and open the invite link it prints":
+        "このダッシュボードにはまだ人が登録されていないため、開けるのはこのコンピューター自身だけです。ハブで "
+        "`chronicle hub invite <名前> --email <メール> --role admin` を実行し、表示される招待リンクを開いてください",
     "you're not on this hub; ask an admin to add you": "あなたはこのハブに登録されていません。管理者に追加を頼んでください",
     "only an admin of this hub can do this": "これができるのはこのハブの管理者だけです",
     "this computer is not a hub": "このコンピューターはハブではありません",
@@ -353,6 +357,8 @@ JA: dict[str, str] = {
     "that code was already used; ask an admin for a new one": "そのコードは使用済みです。管理者に新しいコードを頼んでください",
     "that code has expired; ask an admin for a new one": "そのコードは期限切れです。管理者に新しいコードを頼んでください",
     "that person is no longer on this hub": "その人はもうこのハブにいません",
+    "this computer already joined this hub as someone else; an admin removes it from that person first (Team › People)":
+        "このコンピューターは別の人としてこのハブに参加済みです。先に管理者がその人からこのコンピューターを外してください（チーム › 利用者）",
     "this computer has not joined a hub (`chronicle hub join`)": "このコンピューターはハブに参加していません（`chronicle hub join`）",
     "the hub sent no sign-in code": "ハブからサインインのコードが届きませんでした",
     "Can't reach the hub: {error}": "ハブにつながりません: {error}",

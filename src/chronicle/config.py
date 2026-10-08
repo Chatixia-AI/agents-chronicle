@@ -312,6 +312,13 @@ class Config:
     def ensure_dirs(self) -> None:
         for d in (self.home, self.archive_dir, self.logs_dir, self.locks_dir):
             d.mkdir(parents=True, exist_ok=True)
+        # every transcript, the hub's tokens and API keys live under it: this user's only, whatever the umask
+        try:
+            st = self.home.stat()
+            if os.name == "posix" and st.st_uid == os.getuid() and st.st_mode & 0o077:
+                self.home.chmod(st.st_mode & 0o700)
+        except OSError:
+            pass
 
     def is_excluded(self, project_path: str | None) -> bool:
         if not project_path:
