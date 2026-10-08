@@ -13,6 +13,7 @@ docs_dir: docs
 exclude_docs: |
   demo/
   _site/
+  design/
 hooks:
   - docs/_site/hooks.py
 
