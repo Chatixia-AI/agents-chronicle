@@ -31,7 +31,7 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 | Chronicle が編集したエージェントの設定ファイルと指示ファイルのバックアップ | `~/.claude-chronicle/backups/` |
 | セッションごとのステータスラインの使用量（`--statusline` を使った場合のみ） | `~/.claude-chronicle/statusline/` |
 | アプリの起動スクリプトとウインドウの保存領域 | `~/.claude-chronicle/bin/chronicle`、`~/.claude-chronicle/webview/` |
-| このコンピューターの ID と名前、ハブのトークン（あなただけが読めます） | `~/.claude-chronicle/machine.json`、`~/.claude-chronicle/hub-token` |
+| このコンピューターの ID と名前、ハブに示す鍵、ハブのトークン（鍵とトークンはあなただけが読めます） | `~/.claude-chronicle/machine.json`、`~/.claude-chronicle/machine-key`、`~/.claude-chronicle/hub-token` |
 | ハブで：ほかのコンピューターが送ってきたセッションファイル | `~/.claude-chronicle/machines/` |
 
 ## 詳細

@@ -72,12 +72,12 @@ def test_a_hub_that_takes_everything_still_does(hubenv):  # noqa: F811
 def test_joining_a_knowledge_only_hub_shares_knowledge(team):  # noqa: F811
     conn, bob = team["conn"], team["bob"]  # a member who sees every project
     code = people.invite(conn, bob["id"])
-    status, r = _call(team["url"], "/api/hub/join", {"code": code, "machine": MACHINE, "name": "Bob laptop"})
+    status, r = _call(team["url"], "/api/hub/join", {"code": code, "machine": MACHINE, "name": "Bob laptop", "key": "k" * 43})
     assert status == 200 and r["share"] is None and r["projects"] is None
 
     _knowledge_only(team)
     code = people.invite(conn, bob["id"])
-    status, r = _call(team["url"], "/api/hub/join", {"code": code, "machine": MACHINE, "name": "Bob laptop"})
+    status, r = _call(team["url"], "/api/hub/join", {"code": code, "machine": MACHINE, "name": "Bob laptop", "key": "k" * 43})
     assert status == 200 and r["share"] == "knowledge" and r["projects"] is None
     assert _upload(team, "/api/hub/file", r["token"])[0] == 403  # his own token is turned away too
 

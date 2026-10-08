@@ -29,6 +29,7 @@ joined before are not cut off.
 from __future__ import annotations
 
 import hashlib
+import hmac
 import json
 import math
 import re
@@ -286,17 +287,21 @@ def listing(conn: sqlite3.Connection) -> list[dict]:
 
 
 # ------------------------------------------------------------------ one-time codes
-def invite(conn: sqlite3.Connection, person_id: int, *, by: dict | None = None, days: int = INVITE_DAYS) -> str:
+def invite(conn: sqlite3.Connection, person_id: int, *, by: dict | None = None, days: int = INVITE_DAYS,
+           machine: str | None = None) -> str:
     """A one-time code for this person: redeemed by `chronicle hub join … --code` (a computer) or the invite link
-    (a browser). Returns the code; only its hash is kept."""
+    (a browser). Returns the code; only its hash is kept. With `machine`, the invite is for that one computer the hub
+    already knows: an admin's word that it is this person's, for a computer that can't show its key (may_claim)."""
     p = get(conn, person_id)
     if not p or p["removed_at"]:
         raise PeopleError("no such person")
+    if machine and not conn.execute("SELECT 1 FROM machines WHERE id = ?", (machine,)).fetchone():
+        raise PeopleError("this hub doesn't know a computer {machine}", machine=machine)
     code = new_code()
     now = _now()
-    conn.execute("INSERT INTO people_codes(code_hash, person_id, kind, created_at, expires_at) VALUES (?, ?, 'invite', ?, ?)",
-                 (_hash(code), person_id, _iso(now), _iso(now + timedelta(days=days))))
-    audit(conn, actor_of(by), "invite", person_id, days=days)
+    conn.execute("INSERT INTO people_codes(code_hash, person_id, kind, created_at, expires_at, machine_id) "
+                 "VALUES (?, ?, 'invite', ?, ?, ?)", (_hash(code), person_id, _iso(now), _iso(now + timedelta(days=days)), machine))
+    audit(conn, actor_of(by), "invite", person_id, days=days, **({"machine": machine} if machine else {}))
     conn.commit()
     return code
 
@@ -342,16 +347,61 @@ def _take_code(conn: sqlite3.Connection, code: str, kinds: tuple[str, ...]) -> d
     return p
 
 
-def join_computer(conn: sqlite3.Connection, code: str, machine_id: str, machine_name: str | None = None) -> tuple[dict, str]:
+def key_hash(key) -> str | None:
+    """What a computer's key (its machine-key file) is kept as; None for anything that isn't one."""
+    return _hash(key) if isinstance(key, str) and 32 <= len(key) <= 200 else None
+
+
+def record_key(conn: sqlite3.Connection, machine_id: str, key) -> None:
+    """Keep a computer's key, as its hash, the first time it shows one (it says hello, or joins). One on record never
+    changes: a computer that later shows another isn't that computer."""
+    if h := key_hash(key):
+        conn.execute("UPDATE machines SET key_hash = ? WHERE id = ? AND key_hash IS NULL", (h, machine_id))
+
+
+def invite_machine(conn: sqlite3.Connection, code: str) -> str | None:
+    """The one computer an invite was made for (`chronicle hub invite --computer`), if it was."""
+    r = conn.execute("SELECT machine_id FROM people_codes WHERE kind = 'invite' AND code_hash IN (?, ?)",
+                     (_hash(normalize_code(code)), _hash(code or ""))).fetchone()
+    return r["machine_id"] if r else None
+
+
+def may_claim(conn: sqlite3.Connection, code: str, machine_id: str, key) -> bool:
+    """Whether a (live) invite may make `machine_id` its person's computer. One the hub has never heard of may join. One
+    it knows (it said hello or sent sessions) only by showing the key the hub recorded from it, or with an invite an
+    admin made for that computer: anyone with an invite could otherwise claim another computer's id, and its sessions
+    with it, and lock it out (a computer that joined as a person sends with its own token only)."""
+    known = conn.execute("SELECT key_hash FROM machines WHERE id = ?", (machine_id,)).fetchone()
+    if known is None and not conn.execute("SELECT 1 FROM sessions WHERE machine_id = ? LIMIT 1", (machine_id,)).fetchone():
+        return True
+    if invite_machine(conn, code) == machine_id:
+        return True
+    stored, shown = known["key_hash"] if known else None, key_hash(key)
+    return bool(stored and shown and hmac.compare_digest(stored, shown))
+
+
+NOT_THAT_COMPUTER = ("this hub already knows a computer with this id ({machine}) and can't tell this is it: an admin "
+                     "makes an invite for that computer (`chronicle hub invite <name> --computer {machine}`), and you "
+                     "join with that code")
+
+
+def join_computer(conn: sqlite3.Connection, code: str, machine_id: str, machine_name: str | None = None,
+                  key: str | None = None) -> tuple[dict, str]:
     """Redeem an invite for a computer: (person, push token). The token replaces any earlier one of that computer of
     the same person. A computer someone else's live token is bound to is refused: the invite would take it over, and
-    send (or take back) sessions as that computer. An admin removes that computer first."""
+    send (or take back) sessions as that computer. An admin removes that computer first. A computer the hub already
+    knows must show its key (may_claim). Both are checked only for a live invite, before it is used up: a wrong code
+    learns nothing about the computer."""
     owner = peek_invite(conn, code)
     if owner and conn.execute(
             "SELECT 1 FROM people_tokens t JOIN people x ON x.id = t.person_id WHERE t.machine_id = ? AND t.kind = 'computer' "
             "AND t.revoked_at IS NULL AND x.removed_at IS NULL AND t.person_id != ?", (machine_id, owner["id"])).fetchone():
         raise PeopleError("this computer already joined this hub as someone else; an admin removes it from that "
                           "person first (Team › People)")
+    if owner and (meant := invite_machine(conn, code)) and meant != machine_id:
+        raise PeopleError("this invite is for another computer ({machine}); join from that one", machine=meant)
+    if owner and not may_claim(conn, code, machine_id, key):
+        raise PeopleError(NOT_THAT_COMPUTER, machine=machine_id)
     p = _take_code(conn, code, ("invite",))
     token = secrets.token_urlsafe(32)
     now = utcnow_iso()

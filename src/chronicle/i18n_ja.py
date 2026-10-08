@@ -361,6 +361,11 @@ JA: dict[str, str] = {
     "that person is no longer on this hub": "その人はもうこのハブにいません",
     "this computer already joined this hub as someone else; an admin removes it from that person first (Team › People)":
         "このコンピューターは別の人としてこのハブに参加済みです。先に管理者がその人からこのコンピューターを外してください（チーム › 利用者）",
+    "this hub already knows a computer with this id ({machine}) and can't tell this is it: an admin makes an invite for that computer (`chronicle hub invite <name> --computer {machine}`), and you join with that code":
+        "このハブは同じ ID のコンピューター（{machine}）をすでに知っていて、これがそのコンピューターだと確かめられません。管理者がそのコンピューター用の招待を作り（`chronicle hub invite <名前> --computer {machine}`）、そのコードで参加してください",
+    "this invite is for another computer ({machine}); join from that one":
+        "この招待は別のコンピューター（{machine}）のものです。そのコンピューターから参加してください",
+    "this hub doesn't know a computer {machine}": "このハブはコンピューター {machine} を知りません",
     "this computer has not joined a hub (`chronicle hub join`)": "このコンピューターはハブに参加していません（`chronicle hub join`）",
     "the hub sent no sign-in code": "ハブからサインインのコードが届きませんでした",
     "Can't reach the hub: {error}": "ハブにつながりません: {error}",

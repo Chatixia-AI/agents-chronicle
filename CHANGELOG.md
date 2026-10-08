@@ -19,6 +19,10 @@
 - **The team's Home shows who worked on what, without counts per person:** **Who's active** listed each person's
   sessions and lessons. It is now **Who worked on what**: each person with the projects they worked on in the period.
   A tally per person reads as a score, and a lesson count mostly counts what went wrong in someone's sessions.
+- **An invite can't claim a computer the hub already knows:** a computer that sent with the shared token now keeps a
+  key the hub records, and an invite that names its id must show it. Someone else's invite could take over that
+  computer and its sessions. `chronicle hub join --code` shows the key on its own; for a computer that can't, an
+  admin makes an invite for it with `chronicle hub invite <name> --computer <name or id>`.
 - **Teammates' lessons on your own dashboard:** a computer that shares with a team hub showed its teammates' lessons
   only as a count in **Settings › Devices**. They now show on project pages and in **All knowledge**, marked **from**
   the computers whose sessions stated them; **From teammates** in the source filter lists only them, and **Read them**

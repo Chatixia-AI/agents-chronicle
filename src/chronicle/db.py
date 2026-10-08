@@ -342,7 +342,9 @@ CREATE TABLE IF NOT EXISTS machines (
     files INTEGER DEFAULT 0,                       -- files received from it
     bytes INTEGER DEFAULT 0,
     repos_json TEXT,                               -- {cwd: [git top level, normalized remote]} it reported
-    person_id INTEGER                              -- whose computer it is (people.py), once it joined with an invite
+    person_id INTEGER,                             -- whose computer it is (people.py), once it joined with an invite
+    key_hash TEXT                                  -- sha256 of the key in its machine-key file, recorded the first time
+                                                   -- it said hello: an invite that claims this id must show it
 );
 
 CREATE TABLE IF NOT EXISTS people (                -- people on a hub (people.py): who may send and see, with which role
@@ -368,7 +370,8 @@ CREATE TABLE IF NOT EXISTS people_codes (          -- one-time codes: invites, a
     kind TEXT NOT NULL,                            -- invite | signin
     created_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
-    used_at TEXT
+    used_at TEXT,
+    machine_id TEXT                                -- an invite an admin made for one computer the hub knows
 );
 
 CREATE TABLE IF NOT EXISTS people_tokens (         -- a computer's push token, or a browser's dashboard session

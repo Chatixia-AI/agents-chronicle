@@ -1924,6 +1924,18 @@ def _projects_words(conn, projects: list[str] | None) -> str:
     return ", ".join(project_name_for(x) for x in projects) or "no project yet"
 
 
+def _find_computer(conn, key: str) -> tuple[str | None, str | None]:
+    """(id, problem): a computer this hub knows, by its id or its name (Team › Computers shows both)."""
+    key = key.strip()
+    rows = conn.execute("SELECT id, name FROM machines WHERE COALESCE(role, '') != 'this' AND (id = ? OR lower(name) = lower(?))",
+                        (key, key)).fetchall()
+    if len(rows) == 1:
+        return rows[0]["id"], None
+    if rows:
+        return None, f"Several computers are called {key}: give its id instead ({', '.join(r['id'] for r in rows)})."
+    return None, f"This hub doesn't know a computer {key}. Team › Computers lists them with their ids."
+
+
 def _find_person(conn, key: str | None) -> dict | None:
     """A person on this hub by email, or by the id `chronicle hub people` shows."""
     from . import people
@@ -2077,6 +2089,12 @@ def _hub_people(cfg, console, args) -> int:
                 console.print(problem, highlight=False)
                 return 1
             chose = bool(args.project or args.all_projects)
+            machine = None
+            if args.computer:  # an invite for one computer the hub knows: it joins as this person without its key
+                machine, problem = _find_computer(conn, args.computer)
+                if problem:
+                    console.print(problem, highlight=False)
+                    return 1
             if not existing and role != "admin" and not chose:  # nothing until granted: the inviter says what they see
                 console.print(f"Which projects should {name} see? Add --project <name> (repeat it for more), or "
                               "--all-projects. `chronicle hub project list` shows the hub's projects.", highlight=False)
@@ -2087,7 +2105,7 @@ def _hub_people(cfg, console, args) -> int:
                 if existing and chose:
                     existing = people.set_projects(conn, existing["id"], projects)
                 person = existing or people.add(conn, name, args.email, role, projects=projects)
-                code = people.invite(conn, person["id"])
+                code = people.invite(conn, person["id"], machine=machine)
             except people.PeopleError as exc:
                 console.print(f"Can't invite {name}: {exc}", highlight=False)
                 return 1
@@ -2101,6 +2119,10 @@ def _hub_people(cfg, console, args) -> int:
                           f"{ROLE_WORDS[person['role']]}{sees}. The invite code works once, until {local_str(expires)}:\n",
                           highlight=False)
             console.print(f"  [bold]{code}[/]\n", highlight=False)
+            if machine:
+                known = conn.execute("SELECT name FROM machines WHERE id = ?", (machine,)).fetchone()
+                console.print(f"It joins only the computer [bold]{known['name'] or machine}[/] ({machine}), as "
+                              f"{person['name']}'s.\n", highlight=False)
             if person["role"] != "readonly":
                 console.print("On their computer (it joins as them and sends what it learned, not transcripts):")
                 console.print(f"  {hub.invite_command(where, code)}\n", highlight=False, soft_wrap=True)
@@ -2769,6 +2791,9 @@ def build_parser() -> argparse.ArgumentParser:
                    help="with add-folder: the project on the hub its sessions belong to (name or path); with leave and "
                         "rejoin: the project this computer leaves or rejoins; with invite and access: a project the "
                         "person sees (repeat it for more)")
+    s.add_argument("--computer", metavar="id|name",
+                   help="with invite: a code for that one computer the hub already knows (Team › Computers), when it "
+                        "can't show the key it sent the hub before")
     s.add_argument("--all-projects", action="store_true",
                    help="with invite and access: the person sees every project on the hub")
     s.add_argument("--share", choices=["everything", "knowledge"],

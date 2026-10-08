@@ -323,6 +323,14 @@ for the same person replaces the computer's old token. A code for someone else i
 still joined as another person, so an invite can't take a computer over: an admin first uses **Revoke** next to it
 ([Removing someone](#removing-someone)), then it joins with the new code.
 
+A computer the hub already knows (one that sent to it with the shared token) joins only from itself. Chronicle keeps
+a key in `~/.claude-chronicle/machine-key`, the hub records it the first time the computer says hello, and `hub join
+--code` shows it, saying hello with the shared token first if the computer still has it. Someone else's invite used
+with that computer's id is refused, so it can't claim the computer and its sessions. For a computer that can't show
+its key (it last sent with an older Chronicle, and the shared token is off now), an admin makes an invite for that
+one computer: `chronicle hub invite <name> --computer <name or id>`, with its name as **Team › Computers** shows it
+or the id the refused join printed. That code joins that computer only.
+
 ### Opening the hub's dashboard
 
 - **From your own Chronicle.** On a computer that joined, **Settings › Devices › Open the hub's dashboard** asks the
