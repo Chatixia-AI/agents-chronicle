@@ -18,8 +18,11 @@ remembered for a week. Without `gh` nothing is sent ([Suggestions](suggestions.m
 
 **With your phone and other computers** ([Phone and other computers](devices.md)), nothing leaves your own
 devices either: `chronicle tailnet on` makes the dashboard reachable inside your Tailscale network, to your
-Tailscale login only; a computer that joined a hub sends it that computer's raw session files, unredacted like the
-archive, over HTTPS inside the tailnet.
+Tailscale login only. A computer that joined a hub sends it one of two things. With `share = "everything"` (the
+default) it sends its **raw session files, unredacted** like the archive: secrets that appeared in a session (a key
+pasted in a prompt, a `.env` an agent read) reach the hub and its admins as they are. With `share = "knowledge"` it
+sends only summaries and project lessons, made from the redacted digest. Pick `knowledge` for a hub you don't run
+yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encrypted; over plain `http://` they don't.
 
 | Stored locally | Where |
 | --- | --- |
@@ -54,7 +57,12 @@ archive, over HTTPS inside the tailnet.
   on state-changing requests (CSRF). In the app window, the page can call only three window actions (theme, drag,
   zoom). Reached through Tailscale Serve, it answers only to the names in `[server] allowed_hosts` and lets in only
   the Tailscale logins in `[server] allowed_users`, a header it trusts only from Serve on the same computer. A
-  hub takes other computers' files only with its token (`chronicle hub enable --rotate` replaces it).
+  hub takes other computers' files only with its token (`chronicle hub enable --rotate` replaces it). Reached from
+  another device directly (`server.host 0.0.0.0`) or through a reverse proxy, the dashboard opens only for people
+  signed in: until a hub has people (`chronicle hub invite`), it answers only this computer itself.
+- **On a hub, each computer's sessions stay its own.** A session another computer sent can't be replaced, changed
+  or taken back by a different computer, and an invite can't take over a computer that already joined as someone
+  else.
 - **Exports** (Export on a session, or on a selection in the Sessions list) are redacted like everything the
   dashboard shows, in Markdown and JSON. **Original transcript** is the agent's own file as archived, unredacted:
   check it before sharing.

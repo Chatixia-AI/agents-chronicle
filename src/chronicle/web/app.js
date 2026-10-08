@@ -424,16 +424,19 @@ async function api(path, params) {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
     if (res.status === 401 && body.signin) { showSignin(); throw handledError(body.error); }
+    if (res.status === 403 && body.nobody) { showSignin(body.error); throw handledError(body.error); }
     throw new Error(body.error || res.statusText);
   }
   return res.json();
 }
 // A hub with people answers 401 {signin: true} to someone not signed in (the sign-in screen takes over) and 403 to
-// a viewer whose role doesn't allow the change (said in a toast). Both reject with an error already shown.
+// a viewer whose role doesn't allow the change (said in a toast). Both reject with an error already shown. A hub
+// without people answers another device 403 {nobody: true}: the sign-in screen, saying how to add the first admin.
 async function post(path, body) {
   const res = await fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "X-Chronicle": "1", "X-Chronicle-Lang": LANG }, body: JSON.stringify(body || {}) });
   const data = await res.json().catch(() => ({ error: res.statusText }));
   if (res.status === 401 && data.signin) { showSignin(); throw handledError(data.error); }
+  if (res.status === 403 && data.nobody) { showSignin(data.error); throw handledError(data.error); }
   if (res.status === 403) { toast(data.error || t("Only an admin of this hub can change this."), 6000); throw handledError(data.error); }
   return data;
 }
@@ -1807,10 +1810,12 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   const promptList = h("ol", { class: "ol-prompts" });
   const outline = h("aside", { class: "s-outline", "aria-label": t("Session outline") },
     sx.n_prompts ? [h("h4", null, t("Prompts")), promptList] : null, // none: a Codex Cloud task, say; the list would say "Loading…" forever
-    made.length ? [h("h4", null, t("Made")), h("div", { class: "ol-files ol-made" }, made.slice(0, 10).map((a) =>
-      h("a", { href: a.url && a.seq == null ? a.url : artifactSessionHref(a), title: a.title || a.path || a.url || "",
-        target: a.url && a.seq == null ? "_blank" : null, rel: a.url && a.seq == null ? "noopener" : null },
-        icon(a.kind), h("span", null, a.title || artifactWhere(a)))),
+    made.length ? [h("h4", null, t("Made")), h("div", { class: "ol-files ol-made" }, made.slice(0, 10).map((a) => {
+      const out = a.seq == null ? safeUrl(a.url) : null; // a link the transcript recorded: http(s) only, never javascript:
+      return h("a", { href: out || artifactSessionHref(a), title: a.title || a.path || a.url || "",
+        target: out ? "_blank" : null, rel: out ? "noopener" : null },
+        icon(a.kind), h("span", null, a.title || artifactWhere(a)));
+    }),
       made.length > 10 ? h("div", { class: "muted" }, t("and {n} more", { n: made.length - 10 })) : null)] : null,
     changed.length ? [h("h4", null, t("Files changed")), h("div", { class: "ol-files" }, changed.slice(0, 12).map((f) =>
       h("div", { title: f.path }, h("span", null, f.path.split("/").pop()), f.lines_added || f.lines_removed ? h("em", null, `+${fmtCompact(f.lines_added)}`) : null)),
@@ -6781,7 +6786,7 @@ function renderHubFrame() {
 }
 // A hub with people answered 401: nothing shows until this browser signs in, with a link from the person's own
 // Chronicle or an invite code (GET /signin?code=… sets the session cookie and comes back here).
-function showSignin() {
+function showSignin(note) {
   if (signinShown) return;
   signinShown = true;
   clearTimeout(pollTimer);
@@ -6801,6 +6806,7 @@ function showSignin() {
     h("div", { class: "card signin-card" },
       h("div", { class: "signin-brand" }, h("img", { src: "icon.png", width: "26", height: "26", alt: "" }), "Chronicle"),
       h("h1", { id: "signin-title" }, t("Sign in to this hub")),
+      note ? h("p", { class: "signin-note" }, note) : null,
       h("p", null, t("This hub's dashboard opens only for people an admin has added. There is no password: you sign in from your own Chronicle, or with an invite code.")),
       h("div", { class: "subhead" }, t("From your own computer")),
       h("p", null, tx("If your computer already sends to this hub, open Chronicle there and choose {path}.",

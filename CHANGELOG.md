@@ -10,6 +10,23 @@
 - **Check for updates finds a new release on the first click:** PyPI's cache servers can keep serving the previous
   version for a few minutes after a release, so one check sometimes said you were up to date. Chronicle now asks up
   to three times and keeps the newest answer.
+- **Security fixes from a review of the hub and the dashboard:**
+  - On a hub, each computer's sessions stay its own. A computer could send a session, its lessons or its transcript
+    under another computer's session id and replace it, then take it back. Now the hub keeps the first computer's
+    copy and refuses the other one, and a computer can take back only what it sent itself.
+  - An invite can no longer take over a computer that already joined as someone else. An admin removes that
+    computer from its person first.
+  - A hub without people no longer lets other devices in as admins. Reached directly with `server.host 0.0.0.0`,
+    through a reverse proxy or through Tailscale Funnel, its dashboard now answers only the hub itself and says how
+    to add the first admin (`chronicle hub invite <your name> --email <email> --role admin`). A Tailscale login that
+    `chronicle tailnet on` lets in still gets in.
+  - Shared sessions and analyses are unpacked only up to a size limit. Before, a small upload could unpack to
+    gigabytes and fill the hub's memory.
+  - A file name taken from a transcript can't add response headers when the file is opened, and a link a transcript
+    recorded opens only as `http(s)`, never as `javascript:`.
+  - Smaller hardening: listing git-ignored files runs no repository hooks or fsmonitor; the app's launcher finds
+    Chronicle by bundle id only in the Applications folders; Chronicle's folder is made private to you (mode 700).
+    [Data and privacy](docs/privacy.md) now says plainly that `share = "everything"` sends unredacted transcripts.
 
 ## 0.14.3 (2026-10-07)
 

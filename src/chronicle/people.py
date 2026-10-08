@@ -300,7 +300,15 @@ def _take_code(conn: sqlite3.Connection, code: str, kinds: tuple[str, ...]) -> d
 
 
 def join_computer(conn: sqlite3.Connection, code: str, machine_id: str, machine_name: str | None = None) -> tuple[dict, str]:
-    """Redeem an invite for a computer: (person, push token). The token replaces any earlier one of that computer."""
+    """Redeem an invite for a computer: (person, push token). The token replaces any earlier one of that computer of
+    the same person. A computer someone else's live token is bound to is refused: the invite would take it over, and
+    send (or take back) sessions as that computer. An admin removes that computer first."""
+    owner = peek_invite(conn, code)
+    if owner and conn.execute(
+            "SELECT 1 FROM people_tokens t JOIN people x ON x.id = t.person_id WHERE t.machine_id = ? AND t.kind = 'computer' "
+            "AND t.revoked_at IS NULL AND x.removed_at IS NULL AND t.person_id != ?", (machine_id, owner["id"])).fetchone():
+        raise PeopleError("this computer already joined this hub as someone else; an admin removes it from that "
+                          "person first (Team › People)")
     p = _take_code(conn, code, ("invite",))
     token = secrets.token_urlsafe(32)
     now = utcnow_iso()

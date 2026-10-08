@@ -15,6 +15,7 @@ from test_hub import _serve
 MACHINE = "11111111-2222-4333-8444-555555555555"
 OTHER = "99999999-2222-4333-8444-555555555555"
 REMOTE = {"X-Forwarded-For": "203.0.113.5"}  # not this computer: test requests all come from 127.0.0.1
+TAILNET = {**REMOTE, "Tailscale-User-Login": "me@github"}  # a phone through Tailscale Serve, which names its login
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
@@ -73,11 +74,11 @@ def test_a_hub_without_people_answers_as_before(hubweb):
     url = hubweb["url"]
     code, dv = _call(url, "/api/devices")
     assert code == 200 and dv["here"] and dv["can_admin"] and not dv["people_mode"] and dv["viewer"]["role"] == "admin"
-    code, dv = _call(url, "/api/devices", headers=REMOTE)  # another device: lets in, but hub settings stay here
+    code, dv = _call(url, "/api/devices", headers=TAILNET)  # a Tailscale login: lets in, but hub settings stay here
     assert code == 200 and not dv["here"] and not dv["can_admin"] and not dv["viewer"]["here"]
-    assert _call(url, "/api/suggestions/seen", {}, REMOTE) == (200, {"ok": True})
-    assert _call(url, "/api/people", headers=REMOTE)[0] == 403
-    assert _call(url, "/api/team-store/save", {"enabled": False}, REMOTE)[0] == 403
+    assert _call(url, "/api/suggestions/seen", {}, TAILNET) == (200, {"ok": True})
+    assert _call(url, "/api/people", headers=TAILNET)[0] == 403
+    assert _call(url, "/api/team-store/save", {"enabled": False}, TAILNET)[0] == 403
     code, me = _call(url, "/api/me")
     assert code == 200 and me["viewer"]["here"] and not me["people_mode"]
     status, headers, page = _raw(url, "/signin?code=AAAA-BBBB-CCCC")
@@ -229,12 +230,16 @@ def test_person_tokens_on_the_hub_api(team):
 def test_a_proxy_on_the_hub_itself_is_not_someone_here(hubweb):
     url, app = hubweb["url"], hubweb["app"]
     for header in ("X-Forwarded-Proto", "X-Real-IP", "Forwarded"):  # added by a proxy: not someone at this computer
-        code, dv = _call(url, "/api/devices", headers={header: "https" if header == "X-Forwarded-Proto" else "for=1.2.3.4"})
+        code, dv = _call(url, "/api/devices", headers={header: "https" if header == "X-Forwarded-Proto" else "for=1.2.3.4",
+                                                       "Tailscale-User-Login": "me@github"})
         assert code == 200 and not dv["here"] and not dv["can_admin"], header
+        code, dv = _call(url, "/api/devices", headers={header: "https" if header == "X-Forwarded-Proto" else "for=1.2.3.4"})
+        assert code == 403 and dv["nobody"] is True, header  # nginx in front, say: no people, no way in
     app.cfg.server_behind_proxy = True  # nginx's default: the hub's own Host and no forwarding headers at all
     code, dv = _call(url, "/api/devices")
-    assert code == 200 and not dv["here"] and not dv["can_admin"]
+    assert code == 403 and dv["nobody"] is True  # no people, so no sign-in: nobody through the proxy gets in
     assert _call(url, "/api/team-store/save", {"enabled": False})[0] == 403
+    assert _call(url, "/api/update", {})[0] == 403
     people.add(hubweb["conn"], "Ada", "ada@example.com", "admin")
     code, r = _call(url, "/api/overview")
     assert code == 401 and r["signin"] is True  # with people, everyone through the proxy signs in

@@ -374,12 +374,16 @@ class TeamStore:
                       (machine_id, Jsonb({"sessions": len(sessions), "lessons": n_lessons})))
         return {"sessions": len(sessions), "lessons": n_lessons}
 
-    def forget_sessions(self, session_ids: list[str]) -> int:
-        """Remove sessions (a hub's `chronicle hub purge`) and the lessons only they stated; returns how many went."""
+    def forget_sessions(self, session_ids: list[str], computer_id: str | None = None) -> int:
+        """Remove sessions (a hub's `chronicle hub purge`) and the lessons only they stated; returns how many went.
+        With `computer_id` (a computer taking back what it shared), only the sessions that computer sent."""
         from psycopg.types.json import Jsonb
 
         s = self.schema
         with self._session() as c:
+            if computer_id is not None:
+                session_ids = [r[0] for r in c.execute(f"SELECT id FROM {s}.sessions WHERE id = ANY(%s) AND "
+                                                       "computer_id = %s", (session_ids, computer_id))]
             lessons = [r[0] for r in c.execute(f"SELECT DISTINCT lesson_id FROM {s}.lesson_sources "
                                                "WHERE session_id = ANY(%s)", (session_ids,))]
             gone = c.execute(f"DELETE FROM {s}.sessions WHERE id = ANY(%s)", (session_ids,)).rowcount

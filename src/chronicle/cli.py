@@ -1684,8 +1684,9 @@ def cmd_hub(args) -> int:
             _set_config_value(cfg, "server", "allowed_hosts", json.dumps([*cfg.server_allowed_hosts, name]))
             if cfg.server_host in ("127.0.0.1", "localhost"):
                 console.print(f"[yellow]The dashboard listens on {cfg.server_host} only[/]: for other computers to reach "
-                              f"{url} without Tailscale, set `chronicle config set server.host 0.0.0.0` and restart it.",
-                              highlight=False)
+                              f"{url} without Tailscale, set `chronicle config set server.host 0.0.0.0` and restart it. "
+                              "Its dashboard then opens on other devices only for people signed in: add yourself with "
+                              "`chronicle hub invite <your name> --email <email> --role admin`.", highlight=False)
         console.print("On each other computer, install Chronicle and run:\n")
         console.print(f"  [bold]{hub.join_command(url, token)}[/]\n", highlight=False, soft_wrap=True)
         console.print("[dim]The token lets a computer send sessions here; keep it private. "

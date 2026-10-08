@@ -109,8 +109,9 @@ it expires, make another:
 docker compose exec hub chronicle hub invite you@example.com
 ```
 
-The container won't serve anything until the hub has an admin. A hub with no people lets in anyone who reaches it
-as an admin, so a start without `CHRONICLE_ADMIN_EMAIL` stops with an error and serves nothing.
+The container won't serve anything until the hub has an admin. A hub with no people has no sign-in, and its
+dashboard answers no one who comes through a proxy, so a start without `CHRONICLE_ADMIN_EMAIL` stops with an error
+and serves nothing.
 
 ### 4. Sign in
 

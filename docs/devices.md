@@ -488,8 +488,8 @@ network or over the company VPN. Say the hub should be reached at `https://chron
 
 1. **Set the address and add people first.** At the hub, `chronicle hub enable --url
    https://chronicle.example.internal` sets `[hub] address`, which the join commands and sign-in links use. Then
-   invite yourself and your team ([above](#inviting-someone)). Until a hub has people, anyone who reaches its
-   dashboard gets in as an admin, so do this before you open it to the network.
+   invite yourself and your team ([above](#inviting-someone)). Until a hub has people, its dashboard has no sign-in
+   and answers only the hub itself: anyone else, through the proxy or from another device, is turned away.
 2. **Put HTTPS in front.** The dashboard speaks plain HTTP, and codes, tokens and sign-in cookies must not cross the
    network in clear text. Put a reverse proxy in front of it with a certificate your computers trust: Caddy, nginx,
    or the company's load balancer. The proxy passes on the original `Host` and sets `X-Forwarded-For` and

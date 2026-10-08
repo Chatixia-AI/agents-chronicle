@@ -57,6 +57,8 @@ ROOT_RE = re.compile(r"^(claude|codex)(-\d+)?$")
 MACHINE_RE = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 MAX_FILE_BYTES = 4 << 30  # one transcript; far above any real one
 ANALYSES_FILE = "analyses.json.gz"
+MAX_SESSIONS_JSON = 256 << 20  # one batch of shared sessions, unpacked
+MAX_ANALYSES_JSON = 1 << 30  # every analysis a computer has, unpacked
 ANALYSES_MAX_AGE = 30 * 86400  # imported analyses whose sessions never arrive are dropped after this
 REPOS_CACHE_S = 86400
 FOLDERS_KV = "hub-folders:"  # + machine id: the folders that computer added to projects here (spoke's [hub] folders)
@@ -569,11 +571,12 @@ def purge_targets(conn, machine_ids: list[str], *, projects: list[str] | None = 
 
 
 def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, person_id: int | None = None,
-          action: str = "purge", keep_out: bool = True, **detail) -> dict:
+          action: str = "purge", keep_out: bool = True, owner: str | None = None, **detail) -> dict:
     """Remove sessions other computers sent from this hub for good (purge_targets picks them): their rows, lessons,
     notes and received transcripts, the team store's copy, and the knowledge bases built from them. Each is forgotten
     (ingest.forget_session), so the computer that sent it can't send it again, unless `keep_out` is off (withdraw).
-    `action` and `detail` go in the audit. Returns what was removed."""
+    `owner`: the only computer whose sessions may go (withdraw). `action` and `detail` go in the audit. Returns what
+    was removed."""
     from .ingest import forget_session
     from .people import LOCAL, audit
 
@@ -582,9 +585,13 @@ def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, per
     if conn.execute(f"SELECT 1 FROM sessions WHERE machine_id = ? AND id IN ({', '.join('?' for _ in ids) or 'NULL'})",
                     (me, *ids)).fetchone():
         raise HubError("purge removes what other computers sent, not this hub's own sessions (`chronicle forget`)")
+    if owner is not None and conn.execute(
+            f"SELECT 1 FROM sessions WHERE machine_id IS NOT ? AND id IN ({', '.join('?' for _ in ids) or 'NULL'})",
+            (owner, *ids)).fetchone():
+        raise HubError("a computer takes back only the sessions it sent")
     store = _store(cfg)
     if store and ids:  # the team's record first: if it fails, nothing here changes and purge can run again
-        _in_store(store.forget_sessions, ids)
+        _in_store(store.forget_sessions, ids, owner)
     received = cfg.machines_dir
     for x in sessions:  # forget_session also removes its note in the Markdown vault
         sent_here = bool(x["transcript_path"]) and under(x["transcript_path"], str(received))
@@ -626,7 +633,7 @@ def withdraw(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
     name = conn.execute("SELECT name FROM machines WHERE id = ?", (machine_id,)).fetchone()
     try:
         done = purge(cfg, conn, targets, by=actor_of(person), person_id=person and person["id"], action="withdraw",
-                     keep_out=False, machine=machine_id, name=name[0] if name else None, path=project)
+                     keep_out=False, owner=machine_id, machine=machine_id, name=name[0] if name else None, path=project)
     except RuntimeError as exc:  # the hub is syncing: the computer asks again
         raise HubError(str(exc)) from None
     return {"sessions": done["sessions"], "project": project}
@@ -1710,6 +1717,18 @@ def _drain(rfile, left: int) -> None:
         left -= len(chunk)
 
 
+def _gunzip(blob: bytes, limit: int, what: str) -> bytes:
+    """Gzip data another computer sent, inflated only up to `limit` bytes: a small upload that inflates to gigabytes
+    is refused before it fills the hub's memory."""
+    d = zlib.decompressobj(wbits=31)
+    out = d.decompress(blob, limit + 1)
+    if len(out) > limit or d.unconsumed_tail:
+        raise HubError(f"{what} too large once unpacked")
+    if not d.eof:
+        raise HubError(f"bad {what}: gzip data cut off")
+    return out
+
+
 def _cell(value):
     """A value another computer sent, as SQLite can store it."""
     if value is None or isinstance(value, (str, int, float)):
@@ -1728,8 +1747,8 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
         _drain(rfile, length)
         raise HubError("sessions too large")
     try:
-        data = json.loads(gzip.decompress(rfile.read(length)))
-    except (OSError, ValueError, EOFError) as exc:
+        data = json.loads(_gunzip(rfile.read(length), MAX_SESSIONS_JSON, "sessions"))
+    except (OSError, ValueError, EOFError, zlib.error) as exc:
         raise HubError(f"bad sessions: {exc}") from None
     if not isinstance(data, dict) or not isinstance(data.get("sessions"), list):
         raise HubError("bad sessions")
@@ -1750,9 +1769,13 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
         if sid in forgotten:
             refused += 1
             continue
-        have = conn.execute("SELECT source FROM sessions WHERE id = ?", (sid,)).fetchone()
+        have = conn.execute("SELECT source, machine_id FROM sessions WHERE id = ?", (sid,)).fetchone()
         if have and have["source"] != "remote":
             kept += 1  # its transcript is here: the hub's own record wins
+            continue
+        if have and have["machine_id"] != machine_id:
+            refused += 1  # another computer shared it: only that computer may change or take back its session
+            log.warning("shared session %s from %s refused: it came from %s", sid, machine_id, have["machine_id"])
             continue
         recorded = str(rec.get("project_path") or "") or None
         remote = rec.get("remote") if isinstance(rec.get("remote"), str) else None
@@ -1835,8 +1858,8 @@ def receive_analyses(cfg: Config, conn, params: dict, rfile, length: int) -> dic
         raise HubError("analyses too large")
     blob = rfile.read(length)
     try:
-        data = json.loads(gzip.decompress(blob))
-    except (OSError, ValueError, EOFError) as exc:
+        data = json.loads(_gunzip(blob, MAX_ANALYSES_JSON, "analyses"))
+    except (OSError, ValueError, EOFError, zlib.error) as exc:
         raise HubError(f"bad analyses: {exc}") from None
     if not isinstance(data, dict) or not isinstance(data.get("sessions"), list):
         raise HubError("bad analyses")

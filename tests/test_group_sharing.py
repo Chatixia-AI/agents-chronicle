@@ -133,7 +133,7 @@ def test_sharing_a_group_from_the_dashboard(member):
 
 def test_only_this_computer_itself_shares_a_group(member):
     from test_hub import _serve
-    from test_people_web import REMOTE, _call
+    from test_people_web import TAILNET as REMOTE, _call
 
     gid = member["gid"]
     _, httpd, url = _serve(member["cfg"])

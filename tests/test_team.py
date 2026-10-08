@@ -65,7 +65,9 @@ class FakeStore:
                 del self.lessons[lid]
         return {"sessions": len(sessions)}
 
-    def forget_sessions(self, session_ids):
+    def forget_sessions(self, session_ids, computer_id=None):
+        if computer_id is not None:
+            session_ids = [sid for sid in session_ids if self.sessions.get(sid, {}).get("computer") == computer_id]
         gone = [sid for sid in session_ids if self.sessions.pop(sid, None) is not None]
         before = {lid for lid, sid, _ in self.sources if sid in gone}
         self.sources = [x for x in self.sources if x[1] not in gone]
