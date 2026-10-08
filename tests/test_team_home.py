@@ -75,7 +75,9 @@ def test_the_team_home_for_an_admin(limited):  # noqa: F811
     assert r["projects"][-1]["path"] == SET_UP and r["projects"][-1]["sessions"] == 0  # busiest first
     mine = next(p for p in r["projects"] if p["path"] == PROJECTS)
     assert mine["recent"] == 1 and mine["lessons"] == 1 and [x["who"] for x in mine["people"]] == ["Bob"]
-    assert {x["who"]: x["lessons"] for x in r["who"]} == {"Bob": 1, "build-box": 1}
+    # who worked on what: each person's projects, and no count per person (sessions, time or lessons)
+    assert {x["who"]: [p["path"] for p in x["projects"]] for x in r["who"]} == {"Bob": [PROJECTS], "build-box": [ELSEWHERE]}
+    assert all(set(x) == {"who_key", "who", "last", "projects"} for x in r["who"])
     assert {k["title"] for k in r["lessons"][:2]} == {"Bob's lesson", "ELSE-CANARY lesson"}  # the newest first
     assert next(k for k in r["lessons"] if k["title"] == "Bob's lesson")["who"] == "Bob"
     for canary in ("OTHER-CANARY", "PREF-CANARY", "GLOBAL-CANARY"):  # personal work and lessons about a person

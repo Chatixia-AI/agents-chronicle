@@ -85,7 +85,9 @@ dashboard, where you see your projects.
 - **Each time it sends,** it gets back what your teammates learned in the project. Your agents find those lessons
   through Chronicle's MCP tools, marked as teammates'. With start-of-session notes on (`chronicle install
   --inject-context`), new sessions also list them under "From teammates' sessions".
-- **Your own dashboard** keeps showing your own sessions, as before.
+- **Your own dashboard** keeps showing your own sessions, as before. Your teammates' lessons appear on its project
+  pages and in **All knowledge**, marked with the computers they came from; **Read them** in **Settings › Devices**
+  lists only those.
 
 To stop sharing to one project, choose **Leave** next to it in **Settings › Devices** (or run `chronicle hub leave
 --project <name>`). What you shared there stays on the hub. Added the wrong folder? **Remove** next to it takes the

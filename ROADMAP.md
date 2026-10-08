@@ -41,13 +41,6 @@ carefully.
   same time, both can claim the same number and one upgrade step gets skipped (this was caught before 0.6.0). Each
   step will be recorded by name instead, so every step runs exactly once whatever order changes land in.
 
-### The team hub
-
-- **No per-person counts on the team's Home.** **Who's active** shows how many lessons each person's sessions
-  produced. A lesson count mostly counts what went wrong in someone's sessions, and a visible tally can teach a team
-  to stop sharing. It will show who has worked on what (projects and topics, no numbers) instead
-  ([design](docs/design/learning.md#4-the-team)).
-
 ## Next
 
 - **Tailscale and the phone, on real hardware.** A team's hub now runs on a real Linux server in Docker, with
@@ -68,10 +61,10 @@ carefully.
   Whether it works is measured by recall and by whether the same gotcha comes back in your sessions, not by
   asking, and every per-person measure stays on your computer
   ([design](docs/design/learning.md)).
-- **Teammates' lessons where you can see them.** A computer that shares with a team hub gets its teammates'
-  lessons, but today they show only as a count in **Settings › Devices**. They will carry a badge and a filter on
-  project pages and in the weekly review, credited to whose session they came from, and a lesson two people stated
-  will show both cases.
+- **Teammates' lessons, by person and side by side.** They show on project pages and in **All knowledge**, marked
+  with the computers they came from. Still to come: the person's name instead of the computer's, teammates' lessons
+  in the weekly review, and a lesson two people stated shown as both their cases
+  ([design](docs/design/learning.md#4-the-team)).
 - **Refreshing knowledge in long sessions** (optional). The start-of-session notes already come back after
   compaction. After many hours of work in one session, Chronicle could offer the relevant knowledge again, saying
   why it is doing so. It will be off by default, since it runs on every prompt.

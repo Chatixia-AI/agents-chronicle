@@ -171,6 +171,21 @@ def test_teammates_lessons_come_back_read_only(teamenv):
     assert "teammates' sessions on Teammate PC" in tools.search_knowledge("Teammate")
     assert "Teammate lesson** — why: Teammate lesson (from teammates)" in tools.project_knowledge(SPOKE_CWD)
 
+    # its own dashboard shows it too, marked with the computers whose sessions stated it, and can list only those
+    from test_people_web import _call
+
+    app, httpd, url = _serve(load_config(spoke.home))
+    try:
+        _, everything = _call(url, "/api/knowledge")
+        _, only = _call(url, "/api/knowledge?source=team&limit=1")  # filtered before the limit, not after
+        _, page = _call(url, f"/api/project?path={SPOKE_CWD}")
+    finally:
+        httpd.shutdown()
+    assert everything["sources"]["team"] == 1
+    assert [(k["title"], k["team_from"]) for k in only["items"]] == [("Teammate lesson", ["Teammate PC"])]
+    assert all("team_from" not in k for k in everything["items"] if k["source"] != "team")
+    assert next(k for k in page["knowledge"] if k["source"] == "team")["team_from"] == ["Teammate PC"]
+
     # the same answer again: nothing changes here
     assert hub.push(spoke).team == 1 and _team_rows(spoke)[0]["id"] == row["id"]
     connl = connect(spoke.db_path)
