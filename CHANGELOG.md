@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.15.0 (2026-10-08)
 
 - **Security fixes from a review of the hub and the dashboard:**
   - On a hub, each computer's sessions stay its own. A computer could send a session, its lessons or its transcript
