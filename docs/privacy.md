@@ -33,7 +33,7 @@ yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encry
 | Backups of agent config and instruction files Chronicle edits | `~/.claude-chronicle/backups/` |
 | Status-line usage per session (only with `--statusline`) | `~/.claude-chronicle/statusline/` |
 | The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
-| This computer's id and name; a hub's token (readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/hub-token` |
+| This computer's id and name, its key for a hub; a hub's token (the key and token readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/machine-key`, `~/.claude-chronicle/hub-token` |
 | On a hub: the session files other computers sent | `~/.claude-chronicle/machines/` |
 
 ## Details

@@ -59,7 +59,8 @@ def _yuma(conn, spoke):
     """Yuma, given every project, and the spoke as her computer, sending with her token from now on (the hub's
     shared token no longer acts as a computer that joined as a person)."""
     p = people.add(conn, "Yuma", "yuma@example.com", "member", projects=None)
-    _, token = people.join_computer(conn, people.invite(conn, p["id"]), hub.local_machine(spoke)["id"], "Yuma's Mac")
+    _, token = people.join_computer(conn, people.invite(conn, p["id"]), hub.local_machine(spoke)["id"], "Yuma's Mac",
+                                    hub.machine_key(spoke))  # it pushed before: the hub has its key
     hub.write_token(spoke, token)
     return p
 

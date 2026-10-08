@@ -5,6 +5,7 @@ can't take over another person's computer; and a few hardening steps (git flags,
 import gzip
 import json
 import os
+import re
 import stat
 import subprocess
 import textwrap
@@ -173,6 +174,56 @@ def test_another_computers_analysis_doesnt_apply_to_a_session(two_spokes):
                       two_spokes["token"])
     assert status == 200 and hub.apply_analyses(cfg, conn) == 1
     assert conn.execute("SELECT title FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == "A's own title"
+
+
+# ------------------------------------------------------------------ an invite can't claim a computer the hub knows (#92)
+def test_an_invite_cant_claim_a_computer_the_hub_already_knows(two_spokes, capsys):
+    from chronicle.cli import main
+
+    cfg, conn, url, a, b = (two_spokes[k] for k in ("cfg", "conn", "url", "a", "b"))
+    a_id, b_id = hub.local_machine(a)["id"], hub.local_machine(b)["id"]
+    hub.push(a)  # A joined with the shared token and sends: the hub records its key with its hello
+    assert conn.execute("SELECT key_hash FROM machines WHERE id = ?", (a_id,)).fetchone()[0]
+    key_file = a.home / "machine-key"
+    assert stat.S_IMODE(key_file.stat().st_mode) == 0o600 and "key" not in hub.local_machine(a)
+
+    mallory = people.add(conn, "Mallory", "mallory@example.com", "member", projects=None)
+    code = people.invite(conn, mallory["id"])
+    for key in (None, "x" * 43):  # A's id without A's key, or with another: refused, and the code stays unused
+        status, r = _call(url, "/api/hub/join", {"code": code, "machine": a_id, "name": "not A", **({"key": key} if key else {})})
+        assert status == 400 and "can't tell this is it" in r["error"]
+    assert people.peek_invite(conn, code) and not people.computer_bound(conn, a_id)
+
+    ada = people.add(conn, "Ada", "ada@example.com", "admin")  # A itself joins with an invite: it shows its key
+    assert hub.redeem_invite(a, url, people.invite(conn, ada["id"]))["person"]["name"] == "Ada"
+    assert people.computer_bound(conn, a_id)
+
+    # B said hello with an older Chronicle, so no key is on record: joining says hello first, with the shared token
+    hub.handshake(b)
+    conn.execute("UPDATE machines SET key_hash = NULL WHERE id = ?", (b_id,))
+    conn.commit()
+    bob = people.add(conn, "Bob", "bob@example.com", "member", projects=None)
+    assert hub.redeem_invite(b, url, people.invite(conn, bob["id"]))["person"]["name"] == "Bob"
+    assert people.computer_bound(conn, b_id)
+
+    # a computer known without a key that can't say hello any more: only an admin's invite for that computer
+    old = "33333333-2222-4333-8444-555555555555"
+    conn.execute("INSERT INTO machines(id, name, role) VALUES (?, 'old-box', 'spoke')", (old,))
+    conn.commit()
+    cy = people.add(conn, "Cy", "cy@example.com", "member", projects=None)
+    status, r = _call(url, "/api/hub/join", {"code": people.invite(conn, cy["id"]), "machine": old, "key": "c" * 43})
+    assert status == 400 and f"--computer {old}" in r["error"]
+    capsys.readouterr()
+    assert main(["hub", "invite", "Cy", "--email", "cy@example.com", "--computer", "nowhere"]) == 1
+    assert "doesn't know a computer nowhere" in capsys.readouterr().out
+    assert main(["hub", "invite", "Cy", "--email", "cy@example.com", "--computer", "old-box"]) == 0
+    out = capsys.readouterr().out
+    assert f"It joins only the computer old-box ({old})" in out
+    for_old = re.search(r"\b[A-Z2-9]{4}-[A-Z2-9]{4}-[A-Z2-9]{4}\b", out).group(0)
+    status, r = _call(url, "/api/hub/join", {"code": for_old, "machine": "44444444-2222-4333-8444-555555555555"})
+    assert status == 400 and "for another computer" in r["error"]  # it joins that one computer only, not a new one
+    status, r = _call(url, "/api/hub/join", {"code": for_old, "machine": old})
+    assert status == 200 and r["person"]["name"] == "Cy" and people.computer_bound(conn, old)
 
 
 # ------------------------------------------------------------------ the shared token can't act as a person's computer

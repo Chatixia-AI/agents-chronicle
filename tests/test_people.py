@@ -6,6 +6,7 @@ from chronicle import people
 from chronicle.db import connect
 
 MACHINE = "11111111-2222-4333-8444-555555555555"
+KEY = "k" * 43  # the key Bob's laptop keeps in its machine-key file
 
 
 @pytest.fixture()
@@ -29,7 +30,8 @@ def test_invite_join_and_tokens(conn):
 
     code = people.invite(conn, bob["id"], by=admin)
     assert len(code) == 14 and code.count("-") == 2
-    who, token = people.join_computer(conn, code.lower().replace("-", ""), MACHINE, "Bob laptop")
+    people.record_key(conn, MACHINE, KEY)  # Bob's laptop said hello before: the hub knows it, and its key
+    who, token = people.join_computer(conn, code.lower().replace("-", ""), MACHINE, "Bob laptop", KEY)
     assert who["id"] == bob["id"]
     with pytest.raises(people.PeopleError, match="already used"):
         people.join_computer(conn, code, MACHINE)
@@ -102,9 +104,29 @@ def test_wrong_codes_make_an_address_wait():
 def test_only_an_unknown_code_counts_as_a_guess(conn):
     bob = people.add(conn, "Bob", "bob@example.com", "member")
     code = people.invite(conn, bob["id"])
-    people.join_computer(conn, code, MACHINE)
+    people.record_key(conn, MACHINE, KEY)  # the hub knows Bob's laptop: it joins with its key
+    people.join_computer(conn, code, MACHINE, "Bob laptop", KEY)
     with pytest.raises(people.PeopleError) as used:
         people.open_browser(conn, code)
     assert not isinstance(used.value, people.UnknownCode)  # a real code, already used: not a guess
     with pytest.raises(people.UnknownCode):
         people.open_browser(conn, "AAAA-BBBB-CCCC")
+
+
+def test_a_computer_the_hub_knows_is_claimed_only_with_its_key(conn):
+    bob = people.add(conn, "Bob", "bob@example.com", "member")
+    new = "22222222-2222-4333-8444-555555555555"
+    code = people.invite(conn, bob["id"])
+    assert people.may_claim(conn, code, new, None)  # one the hub never heard of joins as before
+    assert not people.may_claim(conn, code, MACHINE, KEY)  # the fixture's laptop: known, with no key on record
+    people.record_key(conn, MACHINE, KEY)
+    people.record_key(conn, MACHINE, "o" * 43)  # the first key stays
+    assert people.may_claim(conn, code, MACHINE, KEY)
+    assert not people.may_claim(conn, code, MACHINE, "o" * 43) and not people.may_claim(conn, code, MACHINE, "short")
+    with pytest.raises(people.PeopleError, match="doesn't know a computer"):
+        people.invite(conn, bob["id"], machine=new)
+    for_it = people.invite(conn, bob["id"], machine=MACHINE)  # an admin's word: this one is Bob's
+    assert people.may_claim(conn, for_it, MACHINE, None)
+    with pytest.raises(people.PeopleError, match="for another computer"):
+        people.join_computer(conn, for_it, new)
+    assert people.peek_invite(conn, for_it)  # refused before it was used

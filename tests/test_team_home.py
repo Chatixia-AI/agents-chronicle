@@ -36,7 +36,7 @@ def _team(env):
     for mid, name in ((MACHINE, "bob-laptop"), (ELSE_MACHINE, "build-box")):
         conn.execute("INSERT INTO machines(id, name, role, first_seen, last_seen, last_push) VALUES (?, ?, 'spoke', ?, ?, ?)",
                      (mid, name, now, now, now))
-    people.join_computer(conn, people.invite(conn, env["bob"]["id"]), MACHINE, "bob-laptop")
+    people.join_computer(conn, people.invite(conn, env["bob"]["id"], machine=MACHINE), MACHINE, "bob-laptop")
     _remote(conn, BOB_SID, MACHINE, PROJECTS, "Bob's session", "Bob's lesson")
     _remote(conn, ELSE_SID, ELSE_MACHINE, ELSEWHERE, "ELSE-CANARY session", "ELSE-CANARY lesson")
     conn.execute("INSERT INTO hub_projects(path, created_at) VALUES (?, ?)", (SET_UP, now))

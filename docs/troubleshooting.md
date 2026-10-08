@@ -73,6 +73,11 @@ prints ([People and roles](devices.md#people-and-roles)).
 another person's token on the hub. An admin uses **Revoke** next to that computer in **Team › People**, then the
 computer joins with the new code ([Joining a computer](devices.md#joining-a-computer)).
 
+**`chronicle hub join` says "this hub already knows a computer with this id … and can't tell this is it".** The
+computer sent to the hub before, and the hub has no key on record from it, or another one. An admin makes an invite
+for that computer, with the id the message shows: `chronicle hub invite <name> --computer <id>`; join with that code
+([Joining a computer](devices.md#joining-a-computer)).
+
 **A computer's sessions don't show up on the hub.** On a hub, a session belongs to the computer that sent it first:
 the same session from another computer is refused, and the hub's log says "refused: it came from …" (shared
 sessions) or "not stored: it belongs to …" (transcripts). This happens

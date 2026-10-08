@@ -148,6 +148,30 @@ def local_machine(cfg: Config) -> dict:
     return data
 
 
+def machine_key(cfg: Config) -> str:
+    """This computer's key, made once and kept in <home>/machine-key (readable by you only). It goes to the hub with
+    every hello; the hub keeps the first one it sees, and an invite that claims this computer's id later must show it
+    (people.may_claim). A file of its own, not machine.json: that one is shown and edited (its name)."""
+    path = cfg.home / "machine-key"
+    try:
+        key = path.read_text().strip()
+        if len(key) >= 32:
+            return key
+    except OSError:
+        pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
+    tmp.write_text(secrets.token_urlsafe(32) + "\n")
+    os.chmod(tmp, 0o600)
+    try:
+        os.link(tmp, path)  # only if there is none yet: two processes starting at once end up with one key
+    except FileExistsError:
+        pass
+    finally:
+        tmp.unlink(missing_ok=True)
+    return path.read_text().strip()
+
+
 def platform_label() -> str:
     return {"Darwin": "macOS", "Linux": "Linux", "Windows": "Windows"}.get(platform.system(), platform.system())
 
@@ -865,8 +889,8 @@ def sent_folders(cfg: Config, routes: GroupRoutes) -> dict[str, str]:
 def hello_info(cfg: Config, roots: list[Root], routes: GroupRoutes | None = None) -> dict:
     me = local_machine(cfg)
     routes = group_routes(cfg) if routes is None else routes
-    return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "platform": platform_label(),
-            "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
+    return {"protocol": PROTOCOL, "machine": me["id"], "name": me["name"], "key": machine_key(cfg),
+            "platform": platform_label(), "version": __version__, "roots": [r.name for r in roots], "repos": spoke_repos(cfg, roots),
             "folders": sent_folders(cfg, routes), "left": cfg.hub_left, "share": cfg.hub_share}
 
 
@@ -901,9 +925,17 @@ def redeem_invite(cfg: Config, url: str, code: str, client: HubClient | None = N
     """
     me = local_machine(cfg)
     client = client or HubClient(url, "")
+    if read_token(cfg) and cfg.hub_url and HubClient(cfg.hub_url, "").url == client.url:
+        # it sends to this hub already (with the shared token): a hello first puts its key on record there, so the
+        # invite can claim this computer's id with it (people.may_claim)
+        try:
+            handshake(cfg)
+        except HubError:
+            pass
     try:
         got = client.request("POST", "/api/hub/join", body={"code": code, "machine": me["id"], "name": me["name"],
-                                                             "platform": platform_label(), "version": __version__})
+                                                             "key": machine_key(cfg), "platform": platform_label(),
+                                                             "version": __version__})
     except HubUnauthorized:  # a hub that predates invites asks every caller for its shared token
         raise HubError(f"the hub at {client.url} doesn't take invite codes yet: update Chronicle there, or join with "
                        "the command its `chronicle hub enable` prints") from None
@@ -1553,6 +1585,7 @@ def hello(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
     """A computer says who it is and which folders it added to projects here; the hub answers with what it has of
     that computer's, and the projects it may add folders to. A person limited to projects (people.py) hears only of
     theirs. They, and every computer of a hub that takes knowledge only, must share knowledge (no transcripts)."""
+    from . import people
     from .people import projects_of
 
     machine_id = check_machine(cfg, str(body.get("machine") or ""))
@@ -1576,6 +1609,7 @@ def hello(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
         (machine_id, str(body.get("name") or "")[:120] or None, str(body.get("platform") or "")[:40] or None,
          str(body.get("version") or "")[:40] or None, "spoke", now, now, json.dumps(repos)),
     )
+    people.record_key(conn, machine_id, body.get("key"))  # the first one it shows: an invite for this id must show it
     conn.commit()
     from .db import kv_get, kv_set
 
@@ -1634,7 +1668,7 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
         raise HubError(f"{invited['name']} is read-only on this hub: read-only people see its dashboard but don't send "
                        "to it. Open the invite link in a browser instead; the code still works there.")
     try:
-        person, token = people.join_computer(conn, code, machine_id, name)
+        person, token = people.join_computer(conn, code, machine_id, name, body.get("key"))
     except people.UnknownCode as exc:
         raise UnknownInvite(str(exc)) from None
     except people.PeopleError as exc:
@@ -1646,6 +1680,7 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
         (machine_id, name, str(body.get("platform") or "")[:40] or None, str(body.get("version") or "")[:40] or None,
          "spoke", now, now, person["id"]),
     )
+    people.record_key(conn, machine_id, body.get("key"))  # a computer new to the hub: its key from now on
     conn.commit()
     scope = people.projects_of(person)
     return {"token": token, "person": people.public(person), "hub": cfg.hub_name or local_machine(cfg)["name"],
