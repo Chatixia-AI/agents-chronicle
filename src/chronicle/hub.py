@@ -205,7 +205,13 @@ def authorize(cfg: Config, conn, authorization: str | None, machine_id: str | No
     if not read_token(cfg) or cfg.is_spoke or not authorization or not authorization.startswith("Bearer "):
         return False, None
     if token_ok(cfg, authorization):
-        return bool(cfg.hub_shared_token or not people.has_people(conn)), None
+        if not (cfg.hub_shared_token or not people.has_people(conn)):
+            return False, None
+        if machine_id and people.computer_bound(conn, machine_id):
+            # the shared token names no computer: it may not act as one that joined as a person (send, refile or take
+            # back that computer's sessions); that computer sends with its own token
+            return False, None
+        return True, None
     person = people.computer_person(conn, authorization[7:].strip(), machine_id or None)
     return (True, person) if person else (False, None)
 
@@ -1945,6 +1951,9 @@ def apply_analyses(cfg: Config, conn) -> int:
     if not cfg.machines_dir.is_dir():
         return 0
     for path in cfg.machines_dir.glob(f"*/{ANALYSES_FILE}"):
+        machine_id = path.parent.name  # the computer that sent this file (receive_analyses)
+        if not MACHINE_RE.match(machine_id):
+            continue
         try:
             data = json.loads(gzip.decompress(path.read_bytes()))
             records = data.get("sessions") or []
@@ -1953,12 +1962,17 @@ def apply_analyses(cfg: Config, conn) -> int:
             continue
         waiting = []
         for rec in records:
-            if not isinstance(rec, dict) or not rec.get("id"):
+            if not isinstance(rec, dict) or not isinstance(rec.get("id"), str) or not SESSION_ID_RE.match(rec["id"]):
                 continue
-            s = conn.execute("SELECT analysis_status, n_prompts, project_path, project_name, ai_title, first_prompt "
-                             "FROM sessions WHERE id = ?", (rec["id"],)).fetchone()
+            s = conn.execute("SELECT analysis_status, n_prompts, project_path, project_name, ai_title, first_prompt, "
+                             "machine_id FROM sessions WHERE id = ?", (rec["id"],)).fetchone()
             if s is None:
                 waiting.append(rec)  # its transcript has not arrived yet
+                continue
+            if s["machine_id"] != machine_id:
+                # another computer's session (or the hub's own) under that id: only its own computer's analysis applies
+                log.warning("analysis of %s from %s not applied: the session is %s's", rec["id"], machine_id,
+                            s["machine_id"] or "this hub")
                 continue
             if s["analysis_status"] in ("done", "running"):
                 continue  # the hub's own analysis wins

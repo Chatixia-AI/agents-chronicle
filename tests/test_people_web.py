@@ -215,16 +215,19 @@ def test_person_tokens_on_the_hub_api(team):
     status, r = api("/api/hub/signin", {"machine": MACHINE}, bob_token)
     assert status == 200 and _raw(url, f"/signin?code={r['code']}", headers=REMOTE)[0] == 302
     status, r = api("/api/hub/signin", {"machine": MACHINE}, token)
-    assert status == 400 and "join with an invite" in r["error"]
+    assert status == 401  # the shared token can't act as Bob's computer
+    status, r = api("/api/hub/signin", {"machine": OTHER}, token)
+    assert status == 400 and "join with an invite" in r["error"]  # a computer that is nobody's: no sign-in
 
     people.set_role(conn, team["bob"]["id"], "readonly")
     status, r = api("/api/hub/done", {"machine": MACHINE}, bob_token)
     assert status == 403 and r["error"] == "read-only people can't send to the hub"
     assert api("/api/hub/signin", {"machine": MACHINE}, bob_token)[0] == 200  # still opens the dashboard
 
-    assert api("/api/hub/done", {"machine": MACHINE}, token)[0] == 200  # the shared token, while it's on
+    assert api("/api/hub/done", {"machine": OTHER}, token)[0] == 200  # the shared token, while it's on, as nobody's computer
+    assert api("/api/hub/done", {"machine": MACHINE}, token)[0] == 401  # but never as Bob's
     set_config_value(team["cfg"], "hub", "shared_token", "false")
-    assert api("/api/hub/done", {"machine": MACHINE}, token)[0] == 401
+    assert api("/api/hub/done", {"machine": OTHER}, token)[0] == 401
 
 
 def test_a_proxy_on_the_hub_itself_is_not_someone_here(hubweb):

@@ -438,7 +438,9 @@ chronicle hub add-folder ~/work/Resona --project Resona
 ### The shared token
 
 Computers that joined with `--token` keep sending with the hub's shared token after people are added, so nobody is
-cut off. Once everyone has joined with an invite, turn it off on the hub:
+cut off. The shared token names no computer, so whoever holds it can send as any computer that has not joined as a
+person; a computer that joined with an invite is its person's, and only its own token sends as it. Once everyone has
+joined with an invite, turn it off on the hub:
 
 ```bash
 chronicle hub shared-token off

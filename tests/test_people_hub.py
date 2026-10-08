@@ -170,9 +170,9 @@ def test_join_with_an_invite_then_sign_in(hubcfg, monkeypatch, capsys):
         assert link.startswith(f"{url}/signin?code=") and link == link.strip()
         assert people.open_browser(conn, link.split("code=", 1)[1])[0]["id"] == bob["id"]
 
-        hub.write_token(spoke, hubcfg["token"])  # a computer that joined with the shared token is nobody
+        hub.write_token(spoke, hubcfg["token"])  # Bob's computer with the shared token: the hub refuses it
         assert main(["hub", "signin"]) == 1
-        assert "join with an invite to sign in" in _out(capsys)
+        assert "did not accept this computer's token" in _out(capsys)
     finally:
         httpd.shutdown()
 

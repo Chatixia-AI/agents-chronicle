@@ -55,25 +55,24 @@ def test_join_keeps_to_the_hubs_projects_unless_asked(teamenv, monkeypatch, caps
     assert load_config(spoke.home).hub_all_folders is True
 
 
-def _yuma(conn, machine_id):
-    """Yuma, given every project, and the spoke as her computer."""
+def _yuma(conn, spoke):
+    """Yuma, given every project, and the spoke as her computer, sending with her token from now on (the hub's
+    shared token no longer acts as a computer that joined as a person)."""
     p = people.add(conn, "Yuma", "yuma@example.com", "member", projects=None)
-    conn.execute("INSERT INTO people_tokens(token_hash, person_id, kind, machine_id, created_at) VALUES "
-                 "('h', ?, 'computer', ?, '2026-10-01')", (p["id"], machine_id))
-    conn.commit()
+    _, token = people.join_computer(conn, people.invite(conn, p["id"]), hub.local_machine(spoke)["id"], "Yuma's Mac")
+    hub.write_token(spoke, token)
     return p
 
 
 def test_purge_what_someone_shared_outside_their_projects(teamenv, monkeypatch, capsys):  # noqa: F811
     fake, spoke, conn, cfg = teamenv["fake"], teamenv["spoke"], teamenv["conn"], teamenv["cfg"]
-    spoke_id = hub.local_machine(spoke)["id"]
     _analyzed_on_spoke(spoke, title="Private work", at="2026-10-02T00:00:00Z", lessons=[("p1", "project", "fact")])
     assert hub.push(spoke).sent == 1
     assert SPOKE_SID in fake.sessions and fake.lessons
     conn.execute("INSERT INTO project_kb(project_path, project_name, updated_at, markdown) VALUES (?, 'demo-app', "
                  "'2026-10-02', 'lesson p1')", (SPOKE_CWD,))
     conn.commit()
-    yuma = _yuma(conn, spoke_id)
+    yuma = _yuma(conn, spoke)
 
     assert main(["hub", "purge", "yuma@example.com", "--outside-access"]) == 1
     assert "sees every project" in capsys.readouterr().out
@@ -95,7 +94,8 @@ def test_purge_what_someone_shared_outside_their_projects(teamenv, monkeypatch, 
     gone.close()
     assert SPOKE_SID not in fake.sessions and fake.lessons == {}
 
-    # the computer still has it and offers it again: the hub doesn't take it back
+    # the computer still has it and offers it again (Yuma seeing every project once more): the hub doesn't take it back
+    people.set_projects(conn, yuma["id"], None)
     report = hub.push(spoke)
     assert report.sent == 1 and not report.errors
     assert conn.execute("SELECT COUNT(*) FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == 0
