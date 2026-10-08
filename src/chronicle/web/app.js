@@ -6294,19 +6294,18 @@ route(/^\/appearance$/, async () => {
 // =====================================================================================
 // Shell: rail, section sidebar, toolbar, status bar, command palette
 // =====================================================================================
-const SECTIONS = [ // hint: what the section holds, shown beside its rail icon
+const SECTIONS = [
   { key: "home", href: "#/", // a hub with people names it for what it shows, beside its Team overview
     get label() { return ME?.hub?.team ? t("Activity") : t("Home"); },
-    get hint() { return ME?.hub?.team ? t("Charts of every session on this hub, and recent sessions") : t("Activity at a glance and recent sessions"); },
     get icon() { return ME?.hub?.team ? "status" : "home"; } },
-  { key: "teamhome", label: t("Team overview"), href: "#/overview", hint: t("Team projects, and what needs attention"), icon: "overview", team: true },
-  { key: "sessions", label: t("Sessions"), href: "#/sessions", hint: t("Every recorded conversation") },
-  { key: "knowledge", label: t("Knowledge"), href: "#/knowledge", hint: t("Glossary, map, playbook, weekly reviews") },
-  { key: "artifacts", label: t("Artifacts"), href: "#/artifacts", hint: t("Documents, pages, PRs and commits your agents made") },
-  { key: "projects", label: t("Projects"), href: "#/projects", hint: t("A knowledge base for each project") },
-  { key: "suggestions", label: t("Suggestions"), href: "#/suggestions", hint: t("Fixes to approve, and what goes wrong") },
-  { key: "team", label: t("Team"), href: "#/team", hint: t("People, shared projects, computers, team store") }, // a hub's admins
-  { key: "settings", label: t("Settings"), href: "#/status", hint: t("Status, sources, MCP, devices, appearance") },
+  { key: "teamhome", label: t("Team overview"), href: "#/overview", icon: "overview", team: true },
+  { key: "sessions", label: t("Sessions"), href: "#/sessions" },
+  { key: "knowledge", label: t("Knowledge"), href: "#/knowledge" },
+  { key: "artifacts", label: t("Artifacts"), href: "#/artifacts" },
+  { key: "projects", label: t("Projects"), href: "#/projects" },
+  { key: "suggestions", label: t("Suggestions"), href: "#/suggestions" },
+  { key: "team", label: t("Team"), href: "#/team" }, // a hub's admins
+  { key: "settings", label: t("Settings"), href: "#/status" },
 ];
 const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
@@ -6346,16 +6345,8 @@ function defaultCrumbs(path, params) {
 
 function renderRail() {
   const rail = $("#rail");
-  const link = (sx) => {
-    const a = h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label, "aria-describedby": "rail-tip",
-      onclick: () => { hideRailTip(); if (sx.key !== "search") showSidebar(); } }, icon(sx.icon || sx.key)); // search has no sidebar
-    // a tooltip of our own: the native one comes late, and not at all in the app window
-    a.addEventListener("mouseenter", () => { if (matchMedia("(hover: hover)").matches) showRailTip(a, sx); });
-    a.addEventListener("focus", () => { if (a.matches(":focus-visible")) showRailTip(a, sx); });
-    a.addEventListener("mouseleave", hideRailTip);
-    a.addEventListener("blur", hideRailTip);
-    return a;
-  };
+  const link = (sx) => h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label,
+    onclick: () => { if (sx.key !== "search") showSidebar(); } }, icon(sx.icon || sx.key)); // search has no sidebar
   const settings = SECTIONS.find((x) => x.key === "settings");
   const shown = SECTIONS.filter((x) => (!x.team || ME?.hub?.team) && !(dedicated() && DEDICATED_HIDDEN.has(x.key)));
   if (limited()) { // no transcripts to search, no settings of this hub to see
@@ -6364,23 +6355,10 @@ function renderRail() {
   }
   const team = SECTIONS.find((x) => x.key === "team");
   rail.replaceChildren(...shown.filter((x) => x !== settings && x !== team).map(link),
-    link({ key: "search", label: t("Search all sessions"), href: "#/search", hint: t("Full text of every session (⌘K jumps anywhere)") }),
+    link({ key: "search", label: t("Search all sessions"), href: "#/search" }),
     h("div", { class: "spacer" }), ...(ME?.hub && canAdmin() ? [link(team)] : []), link(settings));
   drawUnseen(unseenCount);
 }
-function showRailTip(a, sx) {
-  if (matchMedia("(max-width: 600px)").matches) return; // the rail is a bar along the bottom there
-  let tipEl = $("#rail-tip");
-  if (!tipEl) document.body.append((tipEl = h("div", { id: "rail-tip", class: "rail-tip", role: "tooltip", hidden: true })));
-  const extra = sx.key === "suggestions" && unseenCount ? t("{n} new", { n: fmtNum(unseenCount) })
-    : sx.key === "settings" && document.documentElement.classList.contains("has-update") ? t("An update is ready") : null;
-  tipEl.replaceChildren(...[h("b", null, sx.label), h("span", null, sx.hint), extra ? h("span", { class: "rail-tip-extra" }, extra) : null].filter(Boolean));
-  const r = a.getBoundingClientRect();
-  tipEl.style.left = `${r.right + 10}px`;
-  tipEl.style.top = `${r.top + r.height / 2}px`;
-  tipEl.hidden = false;
-}
-function hideRailTip() { const t = $("#rail-tip"); if (t) t.hidden = true; }
 
 // ------------------------------------------------------------------ sidebar
 const sbState = { q: "", agent: "", offset: 0, total: 0, projectQ: "" };
