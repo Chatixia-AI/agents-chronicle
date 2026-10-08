@@ -267,6 +267,7 @@ class Config:
     suggestions_notify: bool = False
     systems_read_manifests: bool = True
     providers: dict[str, dict] = field(default_factory=dict)  # [providers.<name>]: see providers.py
+    loaded: tuple[int, int] | None = field(default=None, repr=False, compare=False)  # config.toml when read: current()
 
     # ---- derived paths -------------------------------------------------
     @property
@@ -388,6 +389,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         home.mkdir(parents=True, exist_ok=True)
         path.write_text(DEFAULT_CONFIG_TOML)
     data: dict = {}
+    loaded = _stamp(path)  # before reading: an edit made while it is read is picked up by the next current()
     if path.exists():
         try:
             data = tomllib.loads(path.read_text())
@@ -453,6 +455,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         suggestions_notify=bool(_section(data, "suggestions").get("notify", False)),
         systems_read_manifests=bool(_section(data, "systems").get("read_manifests", True)),
         providers={str(k): v for k, v in _section(data, "providers").items() if isinstance(v, dict)},
+        loaded=loaded,
     )
     if cfg.analysis.language not in LANGUAGES:
         import logging
@@ -471,6 +474,23 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         logging.getLogger("chronicle").warning("[hub] accept %r is not one of: \"everything\", \"knowledge\"; taking "
                                                "knowledge only", accept)
     return cfg
+
+
+def _stamp(path: Path) -> tuple[int, int] | None:
+    try:
+        st = path.stat()
+    except OSError:
+        return None
+    return st.st_mtime_ns, st.st_size
+
+
+def current(cfg: Config) -> Config:
+    """`cfg` as config.toml says now. A job that runs for minutes holds the config it started with; what it then tells
+    the hub (the folders this computer shares, the projects it left) must be what the person set since. A config
+    that was not read from the file (tests) is kept as it is."""
+    if cfg.loaded is None or _stamp(cfg.config_path) == cfg.loaded:
+        return cfg
+    return load_config(cfg.home, create=False)
 
 
 def toml_table(d: dict[str, str]) -> str:
