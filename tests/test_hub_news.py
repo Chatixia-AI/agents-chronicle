@@ -127,3 +127,22 @@ def _parse(ts):
     from chronicle.util import parse_ts
 
     return parse_ts(ts)
+
+
+def test_an_archive_at_the_case_files_schema_gains_the_news_table(tmp_path):
+    """Case files (#101) took schema 17 first: an archive already there must still get hub_news."""
+    import sqlite3
+
+    from chronicle.db import SCHEMA_VERSION, connect
+
+    db = tmp_path / "chronicle.db"
+    connect(db).close()
+    old = sqlite3.connect(db)
+    old.execute("DROP TABLE hub_news")
+    old.execute("PRAGMA user_version = 17")
+    old.commit()
+    old.close()
+    conn = connect(db)
+    assert conn.execute("PRAGMA user_version").fetchone()[0] == SCHEMA_VERSION
+    assert conn.execute("SELECT COUNT(*) FROM hub_news").fetchone()[0] == 0
+    conn.close()
