@@ -14,7 +14,7 @@ Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) の�
 
 | ツール | 返すもの | 引数 |
 | --- | --- | --- |
-| `search_knowledge` | 語句に一致するナレッジ（修正、落とし穴、決定、事実、コマンド、好み）を信頼度の高い順に返し、各項目に[段階](analysis.md#ナレッジの信頼度)（`established ×3`）を付けます。まず最初に使うツールです。 | `query`, `project`, `kind`, `limit` |
+| `search_knowledge` | 語句に一致するナレッジ（修正、落とし穴、決定、事実、コマンド、好み）を信頼度の高い順に返し、各項目に[段階](analysis.md#ナレッジの信頼度)（`established ×3`）を付けます。[事件簿](analysis.md#事件簿)に載った項目には、問題が最初にどう見えたかと外れた手がかりも付きます。まず最初に使うツールです。 | `query`, `project`, `kind`, `limit` |
 | `search_sessions` | トランスクリプトか要約が一致するセッションと、その抜粋 | `query`, `project`, `limit` |
 | `get_session` | 1 つのセッション：要約、結果、ナレッジ、変更したファイル、プロンプト | `session_id`（または一意な先頭部分） |
 | `get_transcript` | セッションの会話の一部。ツール呼び出しも含められます | `session_id`, `offset`, `limit`, `include_tools` |

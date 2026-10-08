@@ -122,6 +122,32 @@ source, and syntheses see each item's stage. Leaving the ladder is a status, not
 its stage and names its successor, and when an established or canonical item is overturned by a newer one (not
 just merged as a duplicate), that week's review lists it under **Overturned**.
 
+## Case files
+
+Fixes, gotchas and decisions are also kept as case files, so you can learn from them as well as look them up. For
+each one the analysis records:
+
+- **The scene:** what was being done and what showed up first, before the cause was known. For a decision, the
+  problem it had to settle.
+- **The question** the scene raised, and **the answer** in a few words.
+- **Leads ruled out:** what the session tried and found wrong, each with what showed it wrong. For a decision, the
+  options turned down. Only dead ends the transcript shows: the analysis is told never to make one up.
+
+In **Knowledge › All knowledge**, a case you haven't answered opens with its scene and question. The choices are the
+real answer and up to two of the ruled-out leads. Pick one and the card says whether it was right; a ruled-out lead
+comes with what ruled it out. Then it shows the lesson. A case with no ruled-out leads asks you to think of your
+answer first. **Skip, just show me** opens a case at once, and after five skips in a row cases open with their
+answer until you turn **Ask first** back on. A search shows answers straight away, and so do session pages and the
+list layout. **Case files**, in the filter row and on the Knowledge page, lists only the cases. What you answered
+stays in that browser: it isn't stored in the archive or sent to a hub.
+
+Agents get the scene and the ruled-out leads too: the MCP tools show them under each lesson, so an agent can
+recognize the symptom and skip the dead ends. A hub keeps the case files of the lessons computers share with it;
+teammates' lessons sent back to members don't carry them yet.
+
+Lessons from an earlier version have no case file. A session's lessons get theirs when it is analyzed again
+(`chronicle analyze <session>`), which uses your analysis login like any other analysis.
+
 ## Model providers
 
 Instead of a coding agent, analysis can call a model provider's API with your own key. Pick **API provider** in

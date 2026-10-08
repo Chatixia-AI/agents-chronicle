@@ -122,6 +122,7 @@ const ICONS = {
   exploratory: [C10, "m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36z"],
   unclear: [C10, "M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3", "M12 17h.01"],
   history: ["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5", "M12 7v5l4 2"],
+  again: ["M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8", "M3 3v5h5"],
   queued: [C10, "M12 6v6l4 2"],
   pause: ["M9 5v14", "M15 5v14"],
   running: ["M21 12a9 9 0 1 1-6.22-8.56"],
@@ -2065,30 +2066,132 @@ function prettyJson(text) {
 // =====================================================================================
 // Knowledge
 // =====================================================================================
-function knowledgeCard(k, { compact = false, hideSession = false } = {}) {
-  const body = mdEl(k.body || "", `kbody ${compact ? "clamp" : ""}`);
-  const card = h("article", { class: `kcard ${k.pinned ? "pinned" : ""}` },
-    h("div", { class: "khead" }, kindChip(k.kind),
-      h("span", { class: "kmeta" },
-        k.scope === "global" ? h("span", { class: "scope-tag", title: t("Applies across projects") }, icon("domain"), t("global")) : null,
-        k.source === "memory" ? h("span", { class: "scope-tag", title: t("Imported from the agent's own memory notes") }, icon("knowledge"), t("{agent} memory", { agent: agentShort(k.agent) })) : null,
-        k.source === "team" ? teamTag(k) : null,
-        stageTag(k.stage, confirmCount(k), k.stage_reason, { quiet: true }),
-        confidenceMeter(k.confidence))),
-    h("div", { class: "ktitle" }, k.title), body,
-    k.tags?.length ? h("div", { class: "ktags" }, k.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null);
-  if (compact && (k.body || "").length > 380) {
-    const more = h("button", { class: "link-btn more-btn", type: "button", onclick: () => { body.classList.toggle("clamp"); more.textContent = body.classList.contains("clamp") ? t("Show more") : t("Show less"); } }, t("Show more"));
-    card.append(more);
-  }
-  card.append(h("div", { class: "kfoot" },
+// `ask`: a case file (hasCase) this browser hasn't answered opens with its scene and question, the lesson after
+function knowledgeCard(k, { compact = false, hideSession = false, ask = false } = {}) {
+  const card = h("article", { class: `kcard ${k.pinned ? "pinned" : ""}` });
+  const head = h("div", { class: "khead" }, kindChip(k.kind),
+    h("span", { class: "kmeta" },
+      k.scope === "global" ? h("span", { class: "scope-tag", title: t("Applies across projects") }, icon("domain"), t("global")) : null,
+      k.source === "memory" ? h("span", { class: "scope-tag", title: t("Imported from the agent's own memory notes") }, icon("knowledge"), t("{agent} memory", { agent: agentShort(k.agent) })) : null,
+      k.source === "team" ? teamTag(k) : null,
+      stageTag(k.stage, confirmCount(k), k.stage_reason, { quiet: true }),
+      confidenceMeter(k.confidence)));
+  const foot = h("div", { class: "kfoot" },
     h("span", { class: "kfoot-meta" },
       k.project_name ? h("span", { class: "meta-item", title: k.project_path || "" }, icon("projects"), k.project_name) : null,
       k.who ? h("span", { class: "meta-item" }, whoTag(k.who, k.who_key, "#/knowledge/all")) : null,
       !hideSession && k.session_id ? h("a", { class: "meta-item session-link", href: `#/session/${k.session_id}`, title: k.session_title || "" }, icon("sessions"), h("span", { class: "ellipsis" }, k.session_title || t("session"))) : null,
       k.created_at ? h("span", { class: "meta-item" }, fmtDate(k.created_at)) : null),
-    knowledgeActions(k, card, () => card.remove())));
+    knowledgeActions(k, card, () => card.remove()));
+  const fill = (asking, parts) => {
+    card.classList.toggle("asking", asking);
+    card.replaceChildren();
+    append(card, [head, parts, foot]);
+    if (card.isConnected) card.querySelectorAll(".gloss").forEach((el) => glossify(el)); // the first render: by render()
+  };
+  const again = ask && hasCase(k) ? () => { forgetCase(k.id); askNow(); } : null;
+  // the lesson itself; `picked`: the answer just chosen, when there was a question
+  const show = (picked) => fill(false, lessonParts(k, compact, picked, again));
+  const askNow = () => fill(true, caseQuestion(k, show));
+  if (again && !caseAnswers()[k.id]) askNow();
+  else show(null);
   return card;
+}
+function lessonParts(k, compact, picked, again) {
+  const c = hasCase(k) ? k.case : null;
+  const body = mdEl(k.body || "", `kbody ${compact ? "clamp" : ""}`);
+  const leads = c ? c.ruled_out.filter((x) => x.lead) : [];
+  const parts = [
+    picked ? caseVerdict(c, picked) : null,
+    h("div", { class: "ktitle" }, k.title),
+    c && !picked ? caseScene(c) : null, // just answered: the scene was read a moment ago
+    body,
+  ];
+  if (compact && (k.body || "").length > 380) {
+    const more = h("button", { class: "link-btn more-btn", type: "button", onclick: () => { body.classList.toggle("clamp"); more.textContent = body.classList.contains("clamp") ? t("Show more") : t("Show less"); } }, t("Show more"));
+    parts.push(more);
+  }
+  if (leads.length) parts.push(compact && !picked
+    ? h("details", { class: "kcase-more" }, h("summary", null, tn(leads.length, "{n} lead ruled out", "{n} leads ruled out")), caseLeads(leads))
+    : h("div", { class: "kcase-block" }, h("span", { class: "kcase-label" }, t("Ruled out")), caseLeads(leads)));
+  parts.push(k.tags?.length ? h("div", { class: "ktags" }, k.tags.slice(0, 6).map((t) => h("span", { class: "tag" }, t))) : null);
+  if (again) parts.push(h("button", { type: "button", class: "link-btn kcase-again", onclick: again }, icon("again"), t("Ask me again")));
+  return parts;
+}
+
+// Case files (analyze.case_of): a fix, gotcha or decision opens with the scene and asks before it tells. The answers
+// to pick from are the real one and the leads the session ruled out, never made-up ones. What this browser answered,
+// and whether it asks at all, stay in this browser.
+const CASES_KEY = "chronicle.cases", ASK_KEY = "chronicle.cases.ask", SKIPS_KEY = "chronicle.cases.skips";
+const SKIPS_TO_STOP = 5; // someone who keeps skipping stops being asked
+let caseLog = null;
+// a case's one-line texts: inline code only, since some sit inside buttons (no links there)
+function codeSpans(text) { return escapeHtml(text || "").replace(/`([^`\n]+)`/g, "<code>$1</code>"); }
+function hasCase(k) { return !!(k.case && k.case.scene && k.case.question && k.case.answer && Array.isArray(k.case.ruled_out)); }
+function caseScene(c) { return h("div", { class: "kcase-block" }, h("span", { class: "kcase-label" }, t("The scene")), mdEl(c.scene, "kcase-scene")); }
+function caseLeads(leads) {
+  return h("ul", { class: "kcase-leads" }, leads.map((x) =>
+    h("li", null, icon("x"), h("span", null, h("span", { class: "lead", html: codeSpans(x.lead) }), x.why ? h("span", { class: "why", html: codeSpans(x.why) }) : null))));
+}
+function caseAnswers() {
+  if (!caseLog) {
+    try { caseLog = JSON.parse(localStorage.getItem(CASES_KEY) || "{}") || {}; } catch { caseLog = {}; }
+  }
+  return caseLog;
+}
+function saveCases() {
+  const ids = Object.keys(caseLog);
+  ids.slice(0, Math.max(0, ids.length - 3000)).forEach((id) => delete caseLog[id]); // the oldest lessons go first
+  try { localStorage.setItem(CASES_KEY, JSON.stringify(caseLog)); } catch { /* remembered for this tab only */ }
+}
+function forgetCase(id) { delete caseAnswers()[id]; saveCases(); }
+function askFirst() { try { return localStorage.getItem(ASK_KEY) !== "0"; } catch { return true; } }
+function setAskFirst(on) {
+  try {
+    if (on) localStorage.removeItem(ASK_KEY); else localStorage.setItem(ASK_KEY, "0");
+    localStorage.removeItem(SKIPS_KEY);
+  } catch { /* this tab only */ }
+}
+function recordCase(id, outcome) { // right | wrong | recalled (thought it over, then looked) | skipped
+  caseAnswers()[id] = outcome;
+  saveCases();
+  let skips = 0;
+  try {
+    skips = outcome === "skipped" ? Number(localStorage.getItem(SKIPS_KEY) || 0) + 1 : 0;
+    localStorage.setItem(SKIPS_KEY, String(skips));
+  } catch { /* not counted */ }
+  if (skips >= SKIPS_TO_STOP) {
+    setAskFirst(false);
+    document.querySelectorAll(".ask-chip").forEach((c) => { c.classList.remove("on"); c.setAttribute("aria-pressed", "false"); });
+    toast(t("You skipped {n} questions in a row, so cases now open with the answer. Turn Ask first back on in All knowledge.", { n: skips }), 7000);
+  }
+}
+function caseOptions(k) { // the real answer and up to two ruled-out leads; the order is fixed per case, not always first
+  const opts = [{ label: k.case.answer, right: true }, ...k.case.ruled_out.filter((x) => x.lead).slice(0, 2).map((x) => ({ label: x.lead, why: x.why }))];
+  const turn = k.id % opts.length;
+  return [...opts.slice(turn), ...opts.slice(0, turn)];
+}
+function caseQuestion(k, show) {
+  const c = k.case, opts = caseOptions(k);
+  const answer = (outcome, picked) => { recordCase(k.id, outcome); show(picked); };
+  return [
+    caseScene(c),
+    h("div", { class: "kcase-q", html: codeSpans(c.question) }),
+    opts.length > 1
+      ? h("div", { class: "kcase-options", role: "group", "aria-label": t("Your call") }, opts.map((o, i) =>
+        h("button", { type: "button", class: "kcase-option", onclick: () => answer(o.right ? "right" : "wrong", o) }, h("b", null, "ABC"[i]), h("span", { html: codeSpans(o.label) }))))
+      : h("p", { class: "kcase-hint" }, t("Think of your answer first.")),
+    h("div", { class: "kcase-acts" },
+      opts.length > 1 ? null : h("button", { type: "button", class: "btn small", onclick: () => answer("recalled", { recalled: true }) }, t("Show the answer")),
+      h("button", { type: "button", class: "link-btn", onclick: () => answer("skipped", null) }, t("Skip, just show me"))),
+  ];
+}
+function caseVerdict(c, picked) {
+  if (picked.right) return h("div", { class: "kcase-verdict right", role: "status" }, icon("completed"), h("span", null, h("b", null, t("Right.")), " ", h("span", { html: codeSpans(c.answer) })));
+  return h("div", { class: `kcase-verdict ${picked.recalled ? "" : "wrong"}`, role: "status" }, icon(picked.recalled ? "sparkles" : "x"),
+    h("span", null,
+      picked.recalled ? null : [h("b", null, t("Ruled out in the session.")), " ", picked.why ? h("span", { html: codeSpans(picked.why) }) : null, h("br")],
+      h("b", null, t("The answer:")), " ", h("span", { html: codeSpans(c.answer) })));
 }
 // a teammate's lesson, sent back by the team hub: whose computers stated it
 function teamFrom(k) {
@@ -2140,7 +2243,9 @@ function knowledgeTable(items) {
       h("td", { class: "nowrap" }, confidenceMeter(k.confidence) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, fmtDate(k.created_at)));
     tr.append(h("td", { class: "actions-cell" }, knowledgeActions(k, tr, () => { tr.closeDetail(); tr.remove(); })));
-    return expandable(tr, cols.length, () => [mdEl(k.body || "", "kbody"),
+    const leads = hasCase(k) ? k.case.ruled_out.filter((x) => x.lead) : [];
+    return expandable(tr, cols.length, () => [hasCase(k) ? caseScene(k.case) : null, mdEl(k.body || "", "kbody"),
+      leads.length ? h("div", { class: "kcase-block" }, h("span", { class: "kcase-label" }, t("Ruled out")), caseLeads(leads)) : null,
       k.tags?.length ? h("div", { style: { marginTop: "6px" } }, k.tags.map((t) => h("span", { class: "tag" }, t))) : null], { indent: 1 });
   };
   return localTable(items, cols, row, { empty: t("No knowledge matches"), cls: "knowledge-table" });
@@ -2195,7 +2300,10 @@ route(/^\/knowledge$/, async (params) => {
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Knowledge")),
       h("div", { class: "sub" }, t("What your sessions taught you, four ways in"))),
-      h("div", { class: "head-actions" }, h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
+      h("div", { class: "head-actions" },
+        k.cases ? h("a", { class: "btn", href: "#/knowledge/all?cases=1", title: t("Fixes, gotchas and decisions told as cases: the scene, a question, then the answer") },
+          icon("reviews"), t("Case files"), h("span", { class: "count" }, fmtNum(k.cases))) : null,
+        h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
     h("div", { class: "hub-grid" }, map, all, gloss, reviews));
 });
 
@@ -2235,7 +2343,7 @@ function dayBars(values, days, { height = 90 } = {}) { // active time per day of
 route(/^\/knowledge\/all$/, (params) => knowledgeListView(params));
 async function knowledgeListView(params) {
   setCrumbs(defaultCrumbs("/knowledge/all", params));
-  const state = { q: params.q || "", kind: params.kind || "", project: params.project || "", source: params.source || "", who: params.who || "" };
+  const state = { q: params.q || "", kind: params.kind || "", project: params.project || "", source: params.source || "", who: params.who || "", cases: params.cases === "1" ? "1" : "" };
   const mode = viewMode("knowledge", "cards");
   const box = h("div");
   const count = h("span", { class: "sub" });
@@ -2245,17 +2353,27 @@ async function knowledgeListView(params) {
   async function load() {
     const data = await api("/api/knowledge", { ...state, limit: 400 });
     sources = data.sources || {};
+    const ask = askFirst() && !state.q; // a search looks something up: its cases open with the answer
     box.replaceChildren(mode === "list" ? h("section", { class: "card flush" }, knowledgeTable(data.items))
-      : data.items.length ? h("div", { class: "kgrid" }, data.items.map((k) => knowledgeCard(k, { compact: true })))
-      : h("div", { class: "card empty" }, t("No knowledge matches")));
+      : data.items.length ? h("div", { class: "kgrid" }, data.items.map((k) => knowledgeCard(k, { compact: true, ask })))
+      : h("div", { class: "card empty" }, state.cases ? t("No case files match. A fix, gotcha or decision gets one when its session is analyzed.") : t("No knowledge matches")));
     if (loaded) box.querySelectorAll(".gloss").forEach((el) => glossify(el)); // the first render is glossified by render()
     loaded = true;
     count.textContent = tn(data.items.length, "{n} item", "{n} items", { n: fmtNum(data.items.length) });
     const total = Object.values(data.counts).reduce((a, b) => a + b, 0);
-    chipsBox.replaceChildren(
+    chipsBox.replaceChildren();
+    append(chipsBox, [
       h("button", { type: "button", class: `chip ${!state.kind ? "on" : ""}`, onclick: () => { state.kind = ""; refresh(); } }, t("All"), h("span", { class: "count" }, total)),
-      ...Object.entries(KIND).filter(([k]) => data.counts[k]).map(([k, label]) =>
-        h("button", { type: "button", class: `chip ${state.kind === k ? "on" : ""}`, onclick: () => { state.kind = k; refresh(); } }, icon(k), label, h("span", { class: "count" }, data.counts[k]))));
+      Object.entries(KIND).filter(([k]) => data.counts[k]).map(([k, label]) =>
+        h("button", { type: "button", class: `chip ${state.kind === k ? "on" : ""}`, onclick: () => { state.kind = k; refresh(); } }, icon(k), label, h("span", { class: "count" }, data.counts[k]))),
+      data.cases || state.cases ? [h("span", { class: "spacer" }),
+        h("button", { type: "button", class: `chip ${state.cases ? "on" : ""}`, "aria-pressed": String(!!state.cases),
+          title: t("Fixes, gotchas and decisions told as cases: the scene, a question, then the answer"),
+          onclick: () => { state.cases = state.cases ? "" : "1"; refresh(); } }, icon("reviews"), t("Case files"), h("span", { class: "count" }, fmtNum(data.cases))),
+        mode === "cards" ? h("button", { type: "button", class: `chip ask-chip ${askFirst() ? "on" : ""}`, "aria-pressed": String(askFirst()),
+          title: t("A case you haven't answered asks its question before it shows the lesson. Your answers stay in this browser."),
+          onclick: () => { setAskFirst(!askFirst()); load(); } }, icon("completed"), t("Ask first")) : null] : null,
+    ]);
   }
   const refresh = () => { setParams(state); load(); };
   let debounce;

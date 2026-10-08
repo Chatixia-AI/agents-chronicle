@@ -18,7 +18,7 @@ from .util import dumps, fingerprint, to_iso, utcnow, utcnow_iso
 
 log = logging.getLogger("chronicle.analyze")
 
-PROMPT_VERSION = 1
+PROMPT_VERSION = 2  # 2: fixes, gotchas and decisions carry a case file (scene, question, answer, ruled_out)
 
 KNOWLEDGE_KINDS = {
     "fix": "a bug or failure with its root cause and the fix",
@@ -38,11 +38,23 @@ WORK_TYPES = [
 ]
 OUTCOMES = ["completed", "partial", "blocked", "abandoned", "exploratory", "unclear"]
 FRICTION_KINDS = ["tool_error", "environment", "misunderstanding", "rework", "permissions", "performance", "external", "other"]
+CASE_KINDS = ("fix", "gotcha", "decision")  # shown to people as case files: the scene and a question before the answer
+MAX_LEADS = 4
 
+RULED_OUT_SCHEMA = {
+    "type": "object",
+    "additionalProperties": False,
+    "required": ["lead", "why"],
+    "properties": {
+        "lead": {"type": "string", "description": "The wrong lead, phrased as an answer to the question, at most 12 words"},
+        "why": {"type": "string", "description": "What showed it wrong, one sentence"},
+    },
+}
 KNOWLEDGE_ITEM_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["kind", "title", "body", "tags", "scope", "confidence", "evidence"],
+    "required": ["kind", "title", "body", "tags", "scope", "confidence", "evidence", "scene", "question", "answer",
+                 "ruled_out"],
     "properties": {
         "kind": {
             "type": "string",
@@ -55,6 +67,16 @@ KNOWLEDGE_ITEM_SCHEMA = {
         "scope": {"type": "string", "enum": ["project", "global"]},
         "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
         "evidence": {"type": "string", "description": "Where the session established this, e.g. 'prompt 4: tests passed after the fix'"},
+        "scene": {"type": "string", "description": "fix, gotcha, decision: what was being done and what was seen, before "
+                  "the answer was known (1-3 sentences, the error verbatim); a decision: the problem it settled. Never "
+                  "gives the answer away. Empty for other kinds"},
+        "question": {"type": "string", "description": "fix, gotcha, decision: the question the scene raises, as the "
+                     "developer would have asked it then. Empty for other kinds"},
+        "answer": {"type": "string", "description": "fix, gotcha, decision: the answer to the question, at most 12 "
+                   "words (the cause or the call, not the fix). Empty for other kinds"},
+        "ruled_out": {"type": "array", "items": RULED_OUT_SCHEMA, "description": "fix, gotcha, decision: leads the "
+                      "session tried and found wrong (a decision: the options turned down), at most 4. Only dead ends "
+                      "the transcript shows; empty when there were none or for other kinds"},
     },
 }
 FRICTION_SCHEMA = {
@@ -122,6 +144,18 @@ commands, config keys, versions and error messages.
 Leave out generic programming advice, restatements of the task, and trivia that is quick to rediscover. \
 A routine session may have few or no knowledge items; that is a correct answer.
 
+The developer also reads fixes, gotchas and decisions as case files, which ask before they tell: the scene, then the \
+question, and only then the answer. For those three kinds, fill in:
+- scene: what was being done and what was seen first, before the cause was known (the symptom, the error message \
+verbatim). For a decision, the problem it had to settle. The scene must not give the answer away.
+- question: the question the scene raises, as the developer would have asked it then ("Why didn't the edit show up?").
+- answer: the cause, or the call made, in at most 12 words. The explanation and the fix belong in the body.
+- ruled_out: the leads the session actually tried and found wrong, each with what showed it wrong. Phrase each lead \
+like the answer, also in at most 12 words, so it reads as an alternative to it and the right one doesn't stand out \
+by its length. For a decision, the options weighed and turned down. Only dead ends the transcript shows: an invented \
+one would teach something false. Leave it empty when there were none.
+For every other kind, leave these four empty.
+
 Use scope "global" for items useful beyond this project (tools, languages, platforms, the developer's working \
 preferences), otherwise "project". Write in English, but keep identifiers, error messages and quotes verbatim, \
 whatever their language."""
@@ -173,22 +207,47 @@ def _str_list(value) -> list[str]:
     return [str(v).strip() for v in value if str(v).strip()]
 
 
+def _leads(value) -> list[dict]:
+    out = []
+    for lead in value if isinstance(value, list) else []:
+        if isinstance(lead, str):
+            lead = {"lead": lead}
+        if isinstance(lead, dict) and str(lead.get("lead") or "").strip():
+            out.append({"lead": str(lead["lead"]).strip(), "why": str(lead.get("why") or "").strip()})
+    return out[:MAX_LEADS]
+
+
 def normalize_knowledge(items) -> list[dict]:
     out = []
     for item in items if isinstance(items, list) else []:
         if not isinstance(item, dict) or not str(item.get("title") or "").strip():
             continue
         kind = str(item.get("kind") or "").lower().strip()
+        kind = kind if kind in KNOWLEDGE_KINDS else "learning"
+        case = kind in CASE_KINDS
         out.append({
-            "kind": kind if kind in KNOWLEDGE_KINDS else "learning",
+            "kind": kind,
             "title": str(item["title"]).strip(),
             "body": str(item.get("body") or "").strip(),
             "tags": [t.lower() for t in _str_list(item.get("tags"))][:8],
             "scope": item.get("scope") if item.get("scope") in ("project", "global") else "project",
             "confidence": item.get("confidence") if item.get("confidence") in ("high", "medium", "low") else "medium",
             "evidence": str(item.get("evidence") or "").strip(),
+            **{k: str(item.get(k) or "").strip() if case else "" for k in ("scene", "question", "answer")},
+            "ruled_out": _leads(item.get("ruled_out")) if case else [],
         })
     return out
+
+
+def case_of(item: dict) -> dict | None:
+    """A fix, gotcha or decision as a case file, redacted; None when the analysis gave no scene, question and answer."""
+    if item.get("kind") not in CASE_KINDS:
+        return None
+    scene, question, answer = (redact(str(item.get(k) or "")).strip() for k in ("scene", "question", "answer"))
+    if not (scene and question and answer):
+        return None
+    return {"scene": scene, "question": question, "answer": answer,
+            "ruled_out": [{"lead": redact(x["lead"]), "why": redact(x["why"])} for x in _leads(item.get("ruled_out"))]}
 
 
 def normalize_analysis(data: dict) -> dict:
@@ -329,16 +388,20 @@ def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data:
     for item in data.get("knowledge") or []:
         if not item.get("title") or item.get("kind") not in KNOWLEDGE_KINDS:
             continue
+        case = case_of(item)
+        # a pinned or dismissed item with the same fingerprint is kept as it is, but gains a case file it lacked
         conn.execute(
-            "INSERT OR IGNORE INTO knowledge(session_id, project_path, project_name, kind, title, body, tags_json, scope, "
-            "confidence, evidence, source, source_ref, fingerprint, created_at, updated_at, stage) "
-            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, tags_json, scope, "
+            "confidence, evidence, source, source_ref, fingerprint, created_at, updated_at, stage, case_json) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
+            "ON CONFLICT(fingerprint) DO UPDATE SET case_json = COALESCE(knowledge.case_json, excluded.case_json)",
             (
                 session_id, s["project_path"], s["project_name"], item["kind"], redact(item["title"]).strip(),
                 redact(item.get("body") or "").strip(), dumps([t.lower() for t in item.get("tags") or []]),
                 item.get("scope") if item.get("scope") in ("project", "global") else "project",
                 item.get("confidence"), redact(item.get("evidence") or ""), "analysis", f"prompt-v{PROMPT_VERSION}",
                 fingerprint(session_id, item["kind"], item["title"]), now, now, ladder.initial_stage(item),
+                dumps(case) if case else None,
             ),
         )
     ladder.after_reanalysis(conn, session_id, kept)
