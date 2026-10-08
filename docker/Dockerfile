@@ -2,7 +2,7 @@
 # publishes it as ghcr.io/chatixia-ai/chronicle-hub. Built without it, it installs the latest release from PyPI; a
 # wheel in docker/wheels/ is installed instead, to try a change before it is released:
 #   uv build --wheel -o docker/wheels && docker build -t chronicle-hub docker
-FROM python:3.13-slim
+FROM python:3.13.16-slim@sha256:bf44cdfcb76cd3b41e879bc058fc37ec5872002ccfde7fcb765e218cde0cd79c
 
 ARG CHRONICLE_VERSION=
 LABEL org.opencontainers.image.title="Chronicle hub" \

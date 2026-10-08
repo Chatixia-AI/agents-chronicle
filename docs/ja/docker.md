@@ -275,8 +275,18 @@ docker compose restart hub
 ## 自分の証明書を使う
 
 Caddy は Let's Encrypt から証明書を取得します。そのためには Let's Encrypt がサーバーのポート 80 か 443 に届く必要が
-あります。社内ネットワークからしか届かない名前の場合は、会社の証明書を Caddy に渡します。`compose.yaml` の `caddy`
-の `volumes` に `- ./certs:/certs:ro` を加えてマウントし、`Caddyfile` に `tls` の行を加えます。
+あります。社内ネットワークからしか届かない名前の場合は、会社の証明書を Caddy に渡します。`compose.yaml` の
+隣に置いた `compose.override.yaml` でマウントします。Compose はこれを `compose.yaml` と一緒に読み込みます（[更新](#更新する)で
+`compose.yaml` を取り直しても、こちらはそのまま残ります）。
+
+```yaml
+services:
+  caddy:
+    volumes:
+      - ./certs:/certs:ro
+```
+
+そして `Caddyfile` に `tls` の行を加えます。
 
 ```text
 {$CHRONICLE_DOMAIN} {
@@ -308,9 +318,15 @@ Postgres を加えるには `CHRONICLE_TEAM_STORE=postgres` と `PG*` 変数を�
 ## 更新する
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker/compose.yaml -o compose.yaml
 docker compose pull
 docker compose up -d
 ```
+
+`compose.yaml` は Caddy と Postgres のバージョンとダイジェストを固定しているので、イメージが知らないうちに変わることは
+ありません。新しいものはリリースされるたびにこのリポジトリの `compose.yaml` に入るので、取得の前に取り直してください。
+自分で加える変更は `compose.yaml` ではなく `compose.override.yaml` に書きます（[自分の証明書を使う](#自分の証明書を使う)と同じです）。
+Postgres は 17 のままです。新しいメジャーバージョンは、移行しないと古いバージョンのデータを読めません。
 
 バージョンを固定するには、`.env` の `CHRONICLE_VERSION` を設定します（例：`0.13.0`）。ダッシュボードからはコンテナーを
 アップデートできません。**Status** には、代わりに新しいイメージを取得するよう表示されます。

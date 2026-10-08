@@ -6,11 +6,15 @@
 # Caddy gets a certificate for CHRONICLE_DOMAIN (its DNS must point here, and ports 80 and 443 be open) and forwards
 # to the hub. The hub shares Caddy's network, so its dashboard listens on 127.0.0.1 and nothing but Caddy reaches it.
 # Postgres keeps the team store: what computers share, lessons merged across them, sent back to teammates.
+#
+# Caddy and Postgres are pinned to an exact version and digest, so the images can't change under you; Dependabot
+# moves them forward here (docs/docker.md#update). Keep your own changes in compose.override.yaml, which Compose
+# reads with this file, so a new copy of this one doesn't undo them.
 name: chronicle
 
 services:
   caddy:
-    image: caddy:2
+    image: caddy:2.11.7@sha256:f2a1290d0463aad60660d4ec134943f183ee2a5f6c3eb7bf32dd984f2f020772
     restart: unless-stopped
     ports:
       - "80:80"
@@ -48,8 +52,8 @@ services:
     volumes:
       - hub-data:/data
 
-  postgres:
-    image: postgres:17
+  postgres:  # stays on 17: a new major version can't read the old one's data
+    image: postgres:17.11@sha256:2d2b8998d31037bf721cfdf764d76ba74171b4fab3431b7f72c27c56ddbdf9e3
     restart: unless-stopped
     environment:
       POSTGRES_DB: chronicle
