@@ -3,12 +3,12 @@
 [← Chronicle](README.md) · [Changelog](CHANGELOG.md) · 日本語: [ROADMAP.ja.md](ROADMAP.ja.md)
 
 What is coming to Chronicle, roughly in the order it will be worked on. Nothing here has a date. Items move between
-sections as plans change, and finished work moves to the [changelog](CHANGELOG.md). Last updated 2026-10-02, at
-version 0.6.1.
+sections as plans change, and finished work moves to the [changelog](CHANGELOG.md). Last updated 2026-10-08, at
+version 0.15.0.
 
 Three rules shape everything below. Chronicle stays local: no server of ours, no telemetry, no account. Analysis
-runs through your own Claude Code or Codex login, never a key we hold. And Chronicle should say what it doesn't
-know rather than guess.
+runs on your own account: your Claude Code or Codex login, or your own API key for IBM Bob or a model provider,
+never a key we hold. And Chronicle should say what it doesn't know rather than guess.
 
 ## Now
 
@@ -41,22 +41,37 @@ carefully.
   same time, both can claim the same number and one upgrade step gets skipped (this was caught before 0.6.0). Each
   step will be recorded by name instead, so every step runs exactly once whatever order changes land in.
 
+### The team hub
+
+- **No per-person counts on the team's Home.** **Who's active** shows how many lessons each person's sessions
+  produced. A lesson count mostly counts what went wrong in someone's sessions, and a visible tally can teach a team
+  to stop sharing. It will show who has worked on what (projects and topics, no numbers) instead
+  ([design](docs/design/learning.md#4-the-team)).
+
 ## Next
 
-- **Phone and other computers, on real hardware.** The hub, Tailscale access and the phone layout are built and
-  tested, but so far only with demo data, automated tests and mobile emulation in a desktop browser. They need a
-  run on a real tailnet, a real Linux hub and a real iPhone. Fixes from that run will come first.
-- **Claude Code on the web.** These sessions aren't in the claude.ai export, and there is no public API for them.
-  The only way in today is `claude --teleport <session-id>`, which copies one onto your computer as an ordinary
-  transcript. Chronicle will document this path, list it as a missing source in search results, and pick up a
-  teleported session as soon as its transcript appears.
+- **Tailscale and the phone, on real hardware.** A team's hub now runs on a real Linux server in Docker, with
+  members' Macs joining over HTTPS. Tailscale access and the phone layout have still only been tried with automated
+  tests and mobile emulation in a desktop browser, and need a run on a real tailnet and a real iPhone.
 - **Knowing when a session has really ended.** Chronicle waits for a session to go quiet before analyzing it.
   Claude Code keeps a small status file for each running session, and reading it would let Chronicle analyze a
   session as soon as it closes and say exactly where it is still running. The file format is undocumented, so the
   quiet-period timer stays as the fallback.
 - **Lessons with their reason attached.** Gotchas extracted in a fixed shape: the moment it bites, the reflex that
-  goes wrong, what to do instead, and why. Agents get something they can act on, not just a fact. Existing items
-  keep their current shape unless you re-analyze them.
+  goes wrong, what to do instead, and why. Agents get something they can act on, not just a fact. Each lesson also
+  keeps the symptom and what was tried and ruled out, which the case files below need. Existing items keep their
+  current shape unless you re-analyze them.
+- **Lessons people learn from.** Today the lessons go mostly to the agents, and the agent remembering means the
+  person never has to. Gotchas, fixes and decisions will read as case files: the scene, a question you can skip
+  ("what would you check first?"), then the verdict, the rule, and related cases side by side. The weekly review
+  will bring five back in that form, with no overdue count and no backlog. The agent keeps getting every lesson.
+  Whether it works is measured by recall and by whether the same gotcha comes back in your sessions, not by
+  asking, and every per-person measure stays on your computer
+  ([design](docs/design/learning.md)).
+- **Teammates' lessons where you can see them.** A computer that shares with a team hub gets its teammates'
+  lessons, but today they show only as a count in **Settings › Devices**. They will carry a badge and a filter on
+  project pages and in the weekly review, credited to whose session they came from, and a lesson two people stated
+  will show both cases.
 - **Refreshing knowledge in long sessions** (optional). The start-of-session notes already come back after
   compaction. After many hours of work in one session, Chronicle could offer the relevant knowledge again, saying
   why it is doing so. It will be off by default, since it runs on every prompt.
@@ -77,6 +92,17 @@ carefully.
 - **Windows.** Not supported yet. The command line and dashboard are mostly portable; background running and the
   desktop app are not.
 - **Notifications on your phone** for new versions and finished analyses, without adding a server.
+- **Growing as an architect.** Each case names the design principle it shows, from a fixed list based on
+  architecture's quality attributes and tactics, with an open question and one to three readings. An Architect's
+  track groups the cases by principle, each with a kata about your own project. Security lessons get a MITRE CWE
+  ID and lessons about the agents themselves a NIST AI 600-1 risk name. Principles and readings come from lists,
+  never from the model ([design](docs/design/learning.md#2-the-architects-lens-and-track)).
+- **Your skills.** A private page of what you've worked on with your agents and, kept apart, what you've shown you
+  know: cases answered weeks later, causes named before the agent named them, decisions you recorded. It follows
+  the SFIA 9, NIST NICE and SWEBOK skill lists, never shows levels, and can be exported as a draft brag document.
+  Nothing from it reaches the hub ([design](docs/design/learning.md#5-your-skills)).
+- **More for the team on the hub.** Members react to a lesson (useful, outdated, I knew this), a case of the week
+  on the team's Home, and a casebook for whoever is new to a project.
 
 ## Not planned
 
@@ -85,8 +111,9 @@ carefully.
 - **Computers connecting to a shared database.** One computer, the hub, writes; the others send it their sessions
   and never get a database's address or password. A hub may keep the team's record in your own Postgres as well
   ([team store](docs/devices.md#teammates-lessons-and-a-team-store-in-postgres)), but it stays the only writer.
-- **Analysis with an API key we hold.** Analysis always uses the Claude Code or Codex login already on your
-  computer and counts against your own plan.
+- **Analysis with an API key we hold.** Analysis always runs on your own account: the Claude Code or Codex login
+  already on your computer, or your own API key for IBM Bob or a model provider. With Ollama it never leaves your
+  computer.
 
 ## Suggesting something
 
