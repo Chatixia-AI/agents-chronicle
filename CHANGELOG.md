@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.14.4 (2026-10-07)
 
 - **Share a group as one project on the hub:** on a computer that sends to a hub, edit a group and pick one of the
   hub's projects under **On the hub**. Every project in the group goes there from the next push, including ones that
