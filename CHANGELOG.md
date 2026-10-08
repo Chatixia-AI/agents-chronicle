@@ -41,6 +41,13 @@
   holds. The sidebar already shows that, and with the sidebar hidden, pointing at the rail brings it out.
 - **The Sync button shows when a sync is running:** its icon turns into a spinner from the click until the sync ends,
   whether it was started from the button, the command palette or Settings › Status.
+- **A folder you add to a hub's project stays there:** a share that started before the change (an analysis run takes
+  minutes) told the hub the folders as they were when it started. The hub took the new folder back out and listed
+  its sessions as a project of their own, until the next share put them back. A folder removed, or a project left,
+  during such a run was shared again the same way. Each share now reads the config when it starts talking to the
+  hub, and a share or folder change waits for the one before it.
+- **Each folder of a hub project counts its own sessions:** in **Settings › Devices**, two folders of one project each
+  showed the project's total.
 
 ## 0.15.0 (2026-10-08)
 

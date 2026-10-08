@@ -21,6 +21,7 @@ A person limited to projects (people.py) hears only of those projects, and the h
 
 from __future__ import annotations
 
+import functools
 import gzip
 import hashlib
 import hmac
@@ -41,6 +42,7 @@ import threading
 import time
 import uuid
 import zlib
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlencode, urlparse
@@ -65,6 +67,9 @@ FOLDERS_KV = "hub-folders:"  # + machine id: the folders that computer added to 
 FOLDERS_FILE = "hub-folders.json"  # on a spoke: what the hub made of its folders at the last hello
 LEFT_KV = "hub-left:"  # + machine id: the projects here that computer left (spoke's [hub] left)
 MAX_FOLDERS = 200
+SHARING_LOCK = "hub-sharing.lock"  # on a spoke: one push, hello or folder change at a time (sharing())
+PUSH_WAIT_S = 600  # a push waits this long for another to finish
+CHANGE_WAIT_S = 60  # a folder change, which someone is waiting on, this long
 
 # The analysis a spoke's own Chronicle already wrote, carried over when it joins (see export_analyses).
 ANALYSIS_COLS = ("analysis_status", "analysis_reason", "analyzed_at", "analysis_model", "analyzed_prompts", "llm_title",
@@ -675,11 +680,14 @@ def withdraw(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
 
 def folders_report(conn, machine_id: str, folders: dict[str, str], repos: dict, remotes: dict[str, str]) -> dict:
     """Per folder: its project, this computer's sessions filed there, and the repositories inside it that their git
-    remote files under another project (a remote the hub knows wins over a folder around it)."""
+    remote files under another project (a remote the hub knows wins over a folder around it). A session counts for
+    the most specific folder it ran in, so two folders of one project don't each show the project's total."""
+    recorded = {project: [r[0] for r in conn.execute(
+        "SELECT COALESCE(machine_path, project_path) FROM sessions WHERE machine_id = ? AND project_path = ? "
+        "AND source != 'history'", (machine_id, project))] for project in set(folders.values())}
     out = {}
     for folder, project in folders.items():
-        n = conn.execute("SELECT COUNT(*) FROM sessions WHERE machine_id = ? AND project_path = ? AND source != 'history'",
-                         (machine_id, project)).fetchone()[0]
+        n = sum(max((f for f in folders if under(p, f)), key=len, default=None) == folder for p in recorded[project])
         other = sorted({(top, remotes[rem]) for top, rem in repos.values()
                         if under(top, folder) and remotes.get(rem) and remotes[rem] != project})
         out[folder] = {"project": project, "sessions": n, "overridden": [{"repo": t, "project": p} for t, p in other]}
@@ -900,6 +908,45 @@ def _check_protocol(hello: dict) -> None:
                        "update both computers to the same version")
 
 
+_sharing = threading.local()
+
+
+@contextmanager
+def sharing(cfg: Config, wait: float):
+    """Yields the config as config.toml says now, while no other push, hello or folder change of this computer runs.
+
+    Every hello tells the hub the whole list of this computer's folders and the projects it left, and the hub files
+    by the last list it heard. A push that started before a folder was added (an analysis run takes minutes) would
+    send the list it started with, and the hub would take the folder back out; one that started before a folder was
+    removed or a project left would share it again. So a push reads the config only once it holds this, and a folder
+    change waits for a push between its hello and its last batch. Held already by this thread: just the config."""
+    from .config import current
+    from .util import file_lock
+
+    if getattr(_sharing, "held", False):
+        yield current(cfg)
+        return
+    with file_lock(cfg.locks_dir / SHARING_LOCK, timeout=wait) as got:
+        if not got:
+            raise HubError("this computer is still sharing with the hub; try again in a minute")
+        _sharing.held = True
+        try:
+            yield current(cfg)
+        finally:
+            _sharing.held = False
+
+
+def _one_change(fn):
+    """A hello or a change to this computer's folders on the hub, which someone waits on: under sharing(), by the
+    config as it is now."""
+    @functools.wraps(fn)
+    def wrapped(cfg: Config, *args, **kwargs):
+        with sharing(cfg, CHANGE_WAIT_S) as now:
+            return fn(now, *args, **kwargs)
+    return wrapped
+
+
+@_one_change
 def handshake(cfg: Config, client: HubClient | None = None) -> dict:
     """Say hello without sending files: the hub's projects and what it made of this computer's folders."""
     token = read_token(cfg)
@@ -964,9 +1011,23 @@ def dashboard_signin(cfg: Config, client: HubClient | None = None) -> str:
 
 def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
     """Send the hub every session file it lacks (or has an older copy of); with [hub] share = "knowledge", what
-    this computer learned instead (push_knowledge)."""
-    if cfg.shares_knowledge:
-        return push_knowledge(cfg, progress=progress, client=client)
+    this computer learned instead (push_knowledge). By the config as it is now (sharing)."""
+    with sharing(cfg, PUSH_WAIT_S) as cfg:
+        if cfg.shares_knowledge:
+            return _push_knowledge(cfg, progress=progress, client=client)
+        return _push_files(cfg, progress=progress, client=client)
+
+
+def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
+    """[hub] share = "knowledge": send the hub each analyzed session's details, analysis and project lessons that it
+    lacks or has an older analysis of. Transcripts never leave this computer."""
+    with sharing(cfg, PUSH_WAIT_S) as cfg:
+        if not cfg.shares_knowledge:  # changed since the caller read it
+            raise HubError("this computer no longer shares knowledge only with the hub")
+        return _push_knowledge(cfg, progress=progress, client=client)
+
+
+def _push_files(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
     token = read_token(cfg)
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
@@ -1165,9 +1226,7 @@ def share_own(cfg: Config, conn, store) -> int:
     return len(records)
 
 
-def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
-    """[hub] share = "knowledge": send the hub each analyzed session's details, analysis and project lessons that it
-    lacks or has an older analysis of. Transcripts never leave this computer."""
+def _push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
     token = read_token(cfg)
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
@@ -1414,6 +1473,7 @@ def _save_hub(cfg: Config, *, folders: dict[str, str] | None = None, left: list[
     return load_config(cfg.home)
 
 
+@_one_change
 def add_folder(cfg: Config, folder: str, project: dict, hello: dict) -> tuple[Config, str | None]:
     """`chronicle hub add-folder`: file the sessions in `folder` (absolute), and the folders below it, under the hub's
     `project`; one this computer left is joined again. `hello`: the hub's answer to handshake(), for the git remotes
@@ -1435,6 +1495,7 @@ def add_folder(cfg: Config, folder: str, project: dict, hello: dict) -> tuple[Co
                      left=left if left != cfg.hub_left else None), None
 
 
+@_one_change
 def remove_folder(cfg: Config, folder: str, client: HubClient | None = None) -> tuple[Config, int | None]:
     """`chronicle hub remove-folder`, for the wrong folder: its sessions no longer go to the project. A computer that
     shares knowledge first has the hub take back what it shared from there (withdraw); one that sends transcripts
@@ -1466,6 +1527,7 @@ def remove_folder(cfg: Config, folder: str, client: HubClient | None = None) -> 
     return _save_hub(cfg, folders=rest, left=left if left != cfg.hub_left else None), taken
 
 
+@_one_change
 def leave_project(cfg: Config, project: str) -> Config:
     """This computer leaves a project on the hub ([hub] left): it no longer shares sessions filed there or gets their
     teammates' lessons. What it already shared stays on the hub. Only for a computer that shares knowledge: one that
@@ -1476,11 +1538,13 @@ def leave_project(cfg: Config, project: str) -> Config:
     return cfg if project in cfg.hub_left else _save_hub(cfg, left=[*cfg.hub_left, project])
 
 
+@_one_change
 def rejoin_project(cfg: Config, project: str) -> Config:
     """Undo leave_project: sessions filed under `project` are shared again, and its teammates' lessons come back."""
     return _save_hub(cfg, left=[x for x in cfg.hub_left if x != project]) if project in cfg.hub_left else cfg
 
 
+@_one_change
 def leave_hub(cfg: Config) -> Config:
     """`chronicle hub leave`: stop sending to the hub. This computer records and analyzes its own sessions again; the
     hub keeps what it was sent."""
