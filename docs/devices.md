@@ -36,7 +36,8 @@ cards. Everything works as on the computer: search, knowledge, reviews, pinning 
 How it works: Tailscale Serve forwards that HTTPS address to the dashboard, which still listens on 127.0.0.1 only.
 The dashboard answers to that name (`[server] allowed_hosts`) and lets in only your Tailscale login
 (`[server] allowed_users`), which Serve passes along. `chronicle tailnet on --anyone` lets in everyone in your
-tailnet; `chronicle tailnet status` shows the setup; `chronicle tailnet off` takes the dashboard off the tailnet.
+tailnet who has a Tailscale login. Serve names no login for a tagged device or a Tailscale Funnel visitor, so
+those get in only once the hub has people and they sign in. `chronicle tailnet status` shows the setup; `chronicle tailnet off` takes the dashboard off the tailnet.
 The dashboard has to be running on the hub: `chronicle install` keeps it running in the background.
 
 ## Your other computers
@@ -264,9 +265,10 @@ Members and read-only people see the projects they were given, every project or 
 them](#projects-and-who-sees-them)); admins always see every project. Only admins change anything on the hub's
 dashboard: settings, Sync, analyses, pinning and dismissing. A member's own Chronicle works as before.
 
-Until you add the first person, a hub works as it always did: computers send with the shared token, and the
-dashboard lets in whoever reaches it (through Tailscale, whoever `[server] allowed_users` allows). Once it has
-people, everyone who opens its dashboard from another device signs in, through Tailscale too.
+Until you add the first person, computers send with the shared token, and the hub's dashboard has no sign-in, so it
+opens only at the hub itself and for the Tailscale logins `chronicle tailnet on` lets in ([Your phone](#your-phone)).
+Anyone else, from another device or through a reverse proxy, is turned away with how to add the first admin. Once
+the hub has people, everyone who opens its dashboard from another device signs in, through Tailscale too.
 
 ### Whoever is at the hub is an admin
 
@@ -315,7 +317,9 @@ The hub trades the code for a token for that person and that computer, kept in `
 token only works from that computer. From then on the computer sends like any other
 ([Your other computers](#your-other-computers)). `--share knowledge` keeps its transcripts on the computer
 ([Sharing knowledge only](#sharing-knowledge-only)); leave it out to send everything. Joining again with a new code
-replaces the computer's old token.
+for the same person replaces the computer's old token. A code for someone else is refused while the computer is
+still joined as another person, so an invite can't take a computer over: an admin first uses **Revoke** next to it
+([Removing someone](#removing-someone)), then it joins with the new code.
 
 ### Opening the hub's dashboard
 
@@ -452,7 +456,7 @@ person off the hub. Their unused codes, their computers' tokens and their browse
 request. What their computers sent stays on the hub.
 
 To cut off one computer or one browser and keep the person, a lost laptop say, use **Revoke** next to it in the
-same list. That computer can join again with a new code. `chronicle hub role ana@example.com readonly` changes a
+same list. That computer can join again with a new code, as the same person or as someone else. `chronicle hub role ana@example.com readonly` changes a
 role, and `chronicle hub access ana@example.com --project demo-app` the projects someone sees. These commands take an
 email or the id that `chronicle hub people` shows.
 
