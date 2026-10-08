@@ -218,8 +218,10 @@ unless the connection works, the password is never shown again, and only an admi
   after each analysis (when a session ends, and every 15 minutes with the background agent from `chronicle install`),
   and at once with `chronicle push` or **Share now** in **Settings › Devices**. They are
   kept read-only in its own database, under its own folder for that repository, where its MCP tools answer with them
-  (marked as teammates') and the start-of-session notes list them under **From teammates' sessions**. Lessons it
-  stated itself are not sent back. One it dismisses stays dismissed; one the team no longer has disappears.
+  (marked as teammates') and the start-of-session notes list them under **From teammates' sessions**. Its dashboard
+  shows them on project pages and in **All knowledge**, marked **from** the computers whose sessions stated them;
+  the source **From teammates** there lists only them, and **Read them** in **Settings › Devices** opens that list.
+  Lessons it stated itself are not sent back. One it dismisses stays dismissed; one the team no longer has disappears.
   `chronicle hub status` and its **Settings › Devices** show how many it holds; **Share now** there
   pushes at once.
 - **Only the hub connects to the database.** Computers never get its address or password, so it can sit on a
@@ -335,7 +337,9 @@ A browser stays signed in until 30 days after it was last used. **Sign out** in 
 
 Once the hub has people, its **Home** is the team's. It shows the team projects (the ones set up on the hub, and the
 ones other computers send to) with the sessions and new lessons of the last 7, 30 or 90 days in each, who worked on
-them, and the newest lessons and sessions, each with the person whose computer it came from. A session counts by the
+them, and the newest lessons and sessions, each with the person whose computer it came from. **Who worked on what**
+lists each person with the projects they worked on in the period; it counts no one's sessions or lessons, since a
+tally per person reads as a score and a lesson count mostly counts what went wrong. A session counts by the
 day it ran, a lesson by the day it was written, so a computer that shares older sessions it analyzed this week adds
 lessons to the week without adding sessions to it. A project's own page counts all its sessions. Admins also see what
 needs attention: people who haven't joined yet or have no way in, and computers the hub hasn't heard from for a week.

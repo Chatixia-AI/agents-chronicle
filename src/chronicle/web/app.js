@@ -1475,11 +1475,12 @@ async function teamHome(params) {
         h("td", null, p.people.length ? h("div", { class: "who-list" }, p.people.slice(0, 3).map((x) => whoTag(x.who, x.key)),
           p.people.length > 3 ? h("span", { class: "muted" }, `+${p.people.length - 3}`) : null) : h("span", { class: "muted" }, "–")),
         h("td", { class: "nowrap", title: p.last ? fmtDT(p.last) : "" }, p.last ? ago(p.last) : h("span", { class: "muted" }, t("no sessions yet")))))))));
-  const whoCard = h("section", { class: "card" }, cardHead(t("Who's active"), { iconName: "team", hint: period }),
+  // who worked on what, without counts per person (a tally reads as a score; see docs/design/learning.md)
+  const whoCard = h("section", { class: "card" }, cardHead(t("Who worked on what"), { iconName: "team", hint: period }),
     data.who.length ? h("div", { class: "session-list" }, data.who.map((x) => h("a", { class: "session-item", href: `#/sessions?who=${encodeURIComponent(x.who_key)}`, title: t("Only {name}'s", { name: x.who }) },
       avatar(x.who),
       h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, x.who),
-        h("div", { class: "m" }, [tn(x.sessions, "{n} session", "{n} sessions"), tn(x.lessons, "{n} lesson", "{n} lessons"), tn(x.projects, "{n} project", "{n} projects")].join(" · "))),
+        h("div", { class: "m" }, x.projects.slice(0, 4).map((p) => p.label).join(" · ") + (x.projects.length > 4 ? ` +${x.projects.length - 4}` : ""))),
       h("div", { class: "r", title: fmtDT(x.last) }, ago(x.last)))))
     : h("div", { class: "empty" }, t("Nobody worked on a team project in {period}.", { period })));
   const lessonsCard = h("section", { class: "card" }, cardHead(t("New lessons"), { iconName: "knowledge", tools: h("a", { href: "#/knowledge/all", class: "hint link-arrow" }, t("Browse"), icon("arrow")) }),
@@ -2063,6 +2064,7 @@ function knowledgeCard(k, { compact = false, hideSession = false } = {}) {
       h("span", { class: "kmeta" },
         k.scope === "global" ? h("span", { class: "scope-tag", title: t("Applies across projects") }, icon("domain"), t("global")) : null,
         k.source === "memory" ? h("span", { class: "scope-tag", title: t("Imported from the agent's own memory notes") }, icon("knowledge"), t("{agent} memory", { agent: agentShort(k.agent) })) : null,
+        k.source === "team" ? teamTag(k) : null,
         stageTag(k.stage, confirmCount(k), k.stage_reason, { quiet: true }),
         confidenceMeter(k.confidence))),
     h("div", { class: "ktitle" }, k.title), body,
@@ -2079,6 +2081,13 @@ function knowledgeCard(k, { compact = false, hideSession = false } = {}) {
       k.created_at ? h("span", { class: "meta-item" }, fmtDate(k.created_at)) : null),
     knowledgeActions(k, card, () => card.remove())));
   return card;
+}
+// a teammate's lesson, sent back by the team hub: whose computers stated it
+function teamFrom(k) {
+  return k.team_from?.length ? t("from {names}", { names: k.team_from.join(", ") }) : t("from teammates");
+}
+function teamTag(k) {
+  return h("span", { class: "scope-tag", title: t("A teammate's lesson, sent back by the team hub. Your agent gets it too.") }, icon("team"), teamFrom(k));
 }
 function knowledgeActions(k, node, onDismiss) {
   const pin = h("button", { type: "button", title: k.pinned ? t("Unpin") : t("Pin (always kept in syntheses)"), "aria-pressed": String(!!k.pinned), onclick: async () => {
@@ -2116,6 +2125,7 @@ function knowledgeTable(items) {
       h("td", { class: "title-cell" }, h("div", { class: "t" }, k.title), k.body ? h("div", { class: "s" }, plainText(k.body)) : null),
       h("td", { class: "nowrap" }, scopeOf(k) || "–"),
       h("td", { class: "from-cell" }, k.session_id ? h("a", { href: `#/session/${k.session_id}` }, (k.session_title || t("session")).slice(0, 44))
+        : k.source === "team" ? teamTag(k)
         : h("span", { class: "muted" }, k.source === "memory" ? t("{agent} memory", { agent: agentShort(k.agent) }) : "–"),
         k.who ? h("div", { class: "who-line" }, whoTag(k.who, k.who_key, "#/knowledge/all")) : null),
       h("td", { class: "nowrap" }, stageTag(k.stage, confirmCount(k), k.stage_reason) || h("span", { class: "muted" }, "–")),
@@ -2223,8 +2233,10 @@ async function knowledgeListView(params) {
   const count = h("span", { class: "sub" });
   const chipsBox = h("div", { class: "filters", style: { marginBottom: "14px" } });
   let loaded = false;
+  let sources = {};
   async function load() {
     const data = await api("/api/knowledge", { ...state, limit: 400 });
+    sources = data.sources || {};
     box.replaceChildren(mode === "list" ? h("section", { class: "card flush" }, knowledgeTable(data.items))
       : data.items.length ? h("div", { class: "kgrid" }, data.items.map((k) => knowledgeCard(k, { compact: true })))
       : h("div", { class: "card empty" }, t("No knowledge matches")));
@@ -2248,7 +2260,8 @@ async function knowledgeListView(params) {
         oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { state.q = e.target.value; refresh(); }, 250); } }),
       h("select", { onchange: (e) => { state.project = e.target.value; refresh(); } }, await projectOptions(state.project)),
       h("select", { onchange: (e) => { state.source = e.target.value; refresh(); } },
-        [["", t("All sources")], ["analysis", t("Extracted from sessions")], ["memory", t("Agent memory files")]].map(([v, l]) => h("option", { value: v, selected: state.source === v }, l))),
+        [["", t("All sources")], ["analysis", t("Extracted from sessions")], ["memory", t("Agent memory files")],
+          ...(sources.team || state.source === "team" ? [["team", t("From teammates")]] : [])].map(([v, l]) => h("option", { value: v, selected: state.source === v }, l))),
       await whoFilter(state.who, (v) => { state.who = v; refresh(); })),
     chipsBox, box);
 }
@@ -4957,7 +4970,8 @@ function spokeHubCard(dv) {
       : lp ? h("div", { class: "muted hl-note" }, t("Last sent {ago}: {summary}", { ago: ago(lp.at), summary: lp.summary })) : null,
     ...(lp?.errors || []).map((e) => h("div", { class: "warn-line" }, e)),
     knowledge ? h("p", { class: "muted hl-note" }, dv.team
-      ? t("Teammates' lessons are read-only here: your MCP tools answer with them, and the start-of-session notes list them as teammates'.")
+      ? [t("Teammates' lessons are read-only here: your MCP tools answer with them, and the start-of-session notes list them as teammates'."), " ",
+        h("a", { href: "#/knowledge/all?source=team" }, t("Read them"))]
       : t("No teammates' lessons yet: a hub with a team store sends them back after each share.")) : null,
     h("div", { class: "hl-actions" }, sendNow, hubDashboardLink(dv.hub_url, "btn small"), h("span", { class: "grow" }), leave));
 }

@@ -437,13 +437,15 @@ class App:
                     for path in paths]
         projects.sort(key=lambda x: (x["recent"], x["last"] or ""), reverse=True)
 
-        lessons_by = {r["who_key"]: r["n"] for r in c.execute(
-            f"SELECT {who}, COUNT(*) n FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} "
-            f"WHERE {lesson} AND k.created_at >= ? GROUP BY who_key", [*wp, *bp, since])}
-        everyone = [dict(r) | {"lessons": lessons_by.get(r["who_key"], 0)} for r in c.execute(
-            f"SELECT {who}, COUNT(*) sessions, COALESCE(SUM(s.active_s), 0) active_s, MAX(s.started_at) last, "
-            f"COUNT(DISTINCT s.project_path) projects FROM sessions s {join} WHERE {base} AND s.started_at >= ? "
-            f"GROUP BY who_key ORDER BY sessions DESC LIMIT 100", [*wp, *bp, since])]
+        # who worked on what: each person's projects in the period, latest first. No counts per person: a tally of
+        # sessions or lessons reads as a score, and a lesson count mostly counts what went wrong in someone's sessions
+        # (docs/design/learning.md).
+        by_who: dict[str, dict] = {}
+        for r in c.execute(f"SELECT {who}, s.project_path, MAX(s.started_at) last FROM sessions s {join} WHERE {base} "
+                           f"AND s.started_at >= ? GROUP BY who_key, s.project_path ORDER BY last DESC", [*wp, *bp, since]):
+            x = by_who.setdefault(r["who_key"], {"who_key": r["who_key"], "who": r["who"], "last": r["last"], "projects": []})
+            x["projects"].append({"path": r["project_path"], "label": labels.get(r["project_path"]) or project_name_for(r["project_path"])})
+        everyone = sorted(by_who.values(), key=lambda x: x["last"] or "", reverse=True)[:100]
         lessons = [dict(r) for r in c.execute(
             f"SELECT k.id, k.kind, k.title, k.confidence, k.created_at, k.session_id, s.project_path, s.project_name, {who} "
             f"FROM knowledge k JOIN sessions s ON s.id = k.session_id {join} WHERE {lesson} "
@@ -480,6 +482,10 @@ class App:
     def _reason(k: dict) -> dict:
         if k.get("stage_reason"):
             k["stage_reason"] = reason_text(k["stage_reason"])
+        if k.get("source") == "team":  # a teammate's lesson: the computers whose sessions stated it
+            from .hub import team_from
+
+            k["team_from"] = team_from(k)
         return k
 
     def _session_rows(self, where: str, params: list, order: str, limit: int, offset: int = 0) -> list[dict]:
@@ -926,7 +932,9 @@ class App:
                 r.pop("session_machine", None)
         counts = {r["kind"]: r["n"] for r in self.conn.execute(
             "SELECT kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY kind")}
-        return {"items": [self._reason(r) for r in rows], "counts": counts}
+        sources = dict(self.conn.execute(
+            "SELECT source, COUNT(*) FROM knowledge WHERE status = 'active' GROUP BY source").fetchall())
+        return {"items": [self._reason(r) for r in rows], "counts": counts, "sources": sources}
 
     def search(self, q: dict) -> dict:
         query = q.get("q") or ""

@@ -9,6 +9,13 @@
   - The hub's shared token can no longer act as a computer that joined as a person. Named with that computer's id,
     it could send, refile or take back that computer's sessions. Such a computer sends with its own token only.
   - A response header with a line break in it is sent with a space instead, rather than failing midway.
+- **The team's Home shows who worked on what, without counts per person:** **Who's active** listed each person's
+  sessions and lessons. It is now **Who worked on what**: each person with the projects they worked on in the period.
+  A tally per person reads as a score, and a lesson count mostly counts what went wrong in someone's sessions.
+- **Teammates' lessons on your own dashboard:** a computer that shares with a team hub showed its teammates' lessons
+  only as a count in **Settings › Devices**. They now show on project pages and in **All knowledge**, marked **from**
+  the computers whose sessions stated them; **From teammates** in the source filter lists only them, and **Read them**
+  in **Settings › Devices** opens that list.
 
 ## 0.15.0 (2026-10-08)
 
