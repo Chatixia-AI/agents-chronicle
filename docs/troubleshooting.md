@@ -62,6 +62,25 @@ page retries at once.
 **I want to see what a backlog would cost first.** `chronicle analyze --pending --dry-run` sizes the queue without
 spending tokens; `analysis.max_budget_usd` caps each call, and `analysis.auto = false` stops automatic analysis.
 
+## A hub
+
+**The hub's dashboard says "this dashboard has no people yet".** The hub has no people, so its dashboard has no
+sign-in and opens only at the hub itself (and for Tailscale logins, [Your phone](devices.md#your-phone)). At the
+hub, add yourself: `chronicle hub invite <your name> --email <email> --role admin`, then open the invite link it
+prints ([People and roles](devices.md#people-and-roles)).
+
+**`chronicle hub join` says "this computer already joined this hub as someone else".** The computer still holds
+another person's token on the hub. An admin uses **Revoke** next to that computer in **Team › People**, then the
+computer joins with the new code ([Joining a computer](devices.md#joining-a-computer)).
+
+**A computer's sessions don't show up on the hub.** On a hub, a session belongs to the computer that sent it first:
+the same session from another computer is refused, and the hub's log says "refused: it came from …" (shared
+sessions) or "not stored: it belongs to …" (transcripts). This happens
+when a Claude Code folder was copied from one computer to another. The first computer's copy stays on the hub.
+
+**A push fails with "too large once unpacked".** The hub unpacks what a computer sends only up to a limit (256 MB
+for one batch of shared sessions, 1 GB for analyses). Only a damaged or crafted upload reaches it.
+
 ## Starting over
 
 `chronicle uninstall` removes the hooks, background agents and MCP registrations and keeps your data;
