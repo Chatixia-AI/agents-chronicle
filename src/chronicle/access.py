@@ -9,6 +9,7 @@ Two layers, so one forgotten filter can't show another project:
      the analysis); prompts, paths, commands and prompt-made titles read as NULL
    - knowledge: project lessons from those sessions' analysis (never lessons about a person, never global ones)
    - project_kb: their projects' knowledge bases; api_calls: their sessions' token counts
+   - hub_news: what computers sent to their projects (news.py), no computer joining
    - every other table that holds session or project content reads as empty (EMPTY), transcripts above all.
 
 The temp views live only on that request's connection, which the server closes when the request ends.
@@ -20,8 +21,8 @@ import re
 import sqlite3
 
 # GET endpoints a limited person may call; /api/sessions/<id> (the summary page) is matched separately
-LIMITED_GET = frozenset({"/api/me", "/api/overview", "/api/team", "/api/team/who", "/api/sessions", "/api/projects", "/api/project",
-                         "/api/knowledge", "/api/jobs", "/api/diagram"})
+LIMITED_GET = frozenset({"/api/me", "/api/overview", "/api/team", "/api/team/who", "/api/team/news", "/api/sessions",
+                         "/api/projects", "/api/project", "/api/knowledge", "/api/jobs", "/api/diagram"})
 SESSION_PAGE = re.compile(r"/api/sessions/[\w-]+")
 
 # tables whose rows are a session's content or another project's: read as empty
@@ -57,7 +58,7 @@ def limit(conn: sqlite3.Connection, projects: list[str]) -> None:
             cols.append(c)
         else:
             cols.append(f"NULL AS {c}")
-    for t in ("sessions", "knowledge", "project_kb", "api_calls", *EMPTY):  # never a view left from before
+    for t in ("sessions", "knowledge", "project_kb", "api_calls", "hub_news", *EMPTY):  # never a view left from before
         conn.execute(f"DROP VIEW IF EXISTS temp.{t}")
     mine = f"project_path IN ({lit}) AND analysis_status = 'done' AND source NOT IN ('history')"
     conn.execute(f"CREATE TEMP VIEW sessions AS SELECT {', '.join(cols)} FROM main.sessions WHERE {mine}")
@@ -67,6 +68,7 @@ def limit(conn: sqlite3.Connection, projects: list[str]) -> None:
     conn.execute(f"CREATE TEMP VIEW project_kb AS SELECT * FROM main.project_kb WHERE project_path IN ({lit})")
     conn.execute("CREATE TEMP VIEW api_calls AS SELECT * FROM main.api_calls WHERE "
                  f"session_id IN (SELECT id FROM main.sessions WHERE {mine})")
+    conn.execute(f"CREATE TEMP VIEW hub_news AS SELECT * FROM main.hub_news WHERE kind = 'shared' AND project_path IN ({lit})")
     for t in EMPTY:
         if _columns(conn, t):
             conn.execute(f"CREATE TEMP VIEW {t} AS SELECT * FROM main.{t} WHERE 0")

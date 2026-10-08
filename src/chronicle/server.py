@@ -28,7 +28,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
-from . import __version__, i18n
+from . import __version__, i18n, news
 from .config import LANGUAGES, Config
 from .db import connect, kv_get
 from .i18n import tr
@@ -405,12 +405,13 @@ class App:
                           for r in self.conn.execute(
                               f"SELECT {WHO_SELECT}, COUNT(*) n FROM sessions s {WHO_JOIN} GROUP BY who_key ORDER BY n DESC, who", [here["name"], here["id"]]) if r["who_key"]]}
 
-    def team(self, q: dict, *, scope: list[str] | None, admin: bool) -> dict:
+    def team(self, q: dict, *, scope: list[str] | None, admin: bool, viewer: dict | None = None) -> dict:
         """The team Home of a hub. Team projects are the ones set up on the hub and the ones other computers send
         sessions to; a project only this computer works on stays personal (Home › Activity shows it). Sessions and
         lessons are read through this request's connection, so someone limited to projects sees theirs only
         (access.py), and `scope` keeps the set-up projects to theirs as well. Who: the person whose computer ran the
-        session, else that computer's name. People, computers and open invites: admins only."""
+        session, else that computer's name. People, computers and open invites: admins only. News: what other
+        computers sent lately, and what `viewer` saw of it (news.py)."""
         from . import people
         from .hub import SHARED_AGENTS, declared_projects, machines
         from .ingest import project_name_for
@@ -465,7 +466,7 @@ class App:
             f"s.n_prompts, s.outcome, s.analysis_status, {who} FROM sessions s {join} WHERE {base} "
             f"ORDER BY s.started_at DESC LIMIT 10", [*wp, *bp])]
         out = {"days": days, "hub": self.hub_info(), "projects": projects, "who": everyone, "lessons": lessons,
-               "recent": recent, "people": None, "computers": None,
+               "recent": recent, "people": None, "computers": None, "news": self.news(viewer, scope=scope, admin=admin),
                "totals": {"sessions": sum(x["recent"] for x in projects), "lessons": sum(learned.values()),
                           "people": len(everyone), "projects": sum(1 for x in projects if x["recent"]),
                           "team_projects": len(projects)}}
@@ -483,6 +484,20 @@ class App:
                           "last_dashboard": max((b["last_used"] or "" for b in x["browsers"]), default="") or None,
                           "invites": [i["expires_at"] for i in x["invites"]]} for x in listing]
         return out
+
+    def news(self, viewer: dict | None, *, scope: list[str] | None, admin: bool, after: str | None = None) -> dict:
+        """What other computers sent lately (news.py): the newest items, or with `after` those added to since; how
+        many `viewer` hasn't seen; and `now`, which the page sends back once they saw it (mark_seen)."""
+        from .ingest import project_name_for
+
+        c = self.conn
+        now = to_iso(utcnow())  # before reading: what is added meanwhile stays unseen
+        labels = project_labels(c)
+        items = news.items(c, scope=scope, admin=admin, after=after)
+        for x in items:
+            x["project"] = (labels.get(x["project_path"]) or project_name_for(x["project_path"])) if x["project_path"] else None
+        return {"now": now, "seen": news.seen_at(c, viewer), "unseen": news.unseen(c, viewer, scope=scope, admin=admin),
+                "items": items}
 
     def _k(self, k: dict) -> dict:
         k["tags"] = loads(k.pop("tags_json", None), []) or []
@@ -2376,7 +2391,12 @@ def make_handler(app: App, port: int):
                 if p == "/api/team/who":
                     return self._json(app.who_options())
                 if p == "/api/team":
-                    return self._json(app.team(q, scope=people.projects_of(self.viewer), admin=self._can_admin()))
+                    return self._json(app.team(q, scope=people.projects_of(self.viewer), admin=self._can_admin(),
+                                               viewer=self.viewer))
+                if p == "/api/team/news":
+                    after = q.get("after") if news.ISO_RE.fullmatch(q.get("after") or "") else None
+                    return self._json(app.news(self.viewer, scope=people.projects_of(self.viewer),
+                                               admin=self._can_admin(), after=after))
                 if p == "/api/sessions":
                     return self._json(app.sessions(q, limited=self.limited))
                 if p == "/api/export":  # a download: one session's file, or a .zip of several
@@ -2532,6 +2552,16 @@ def make_handler(app: App, port: int):
             self.viewer, refused = self._viewer()
             if refused:
                 return self._json(*refused)
+            if urlparse(self.path).path == "/api/team/news/seen":  # anyone who sees the Team page: their own news only
+                length = int(self.headers.get("Content-Length") or 0)
+                try:
+                    if length > 4096:
+                        raise ValueError
+                    body = json.loads(self.rfile.read(length) or b"{}") if length else {}
+                except ValueError:
+                    return self._json({"error": tr("bad json")}, 400)
+                news.mark_seen(app.conn, self.viewer, body.get("at") if isinstance(body, dict) else None)
+                return self._json({"ok": True})
             if self.viewer is not None and self.viewer["role"] != "admin":  # members and read-only people look
                 return self._json({"error": tr("only an admin of this hub can do this")}, 403)
             if urlparse(self.path).path == "/api/import":

@@ -7,7 +7,7 @@ import logging
 import sqlite3
 from datetime import timedelta
 
-from . import ladder
+from . import ladder, news
 from .config import Config
 from .digest import build_digest
 from .ingest import best_title
@@ -358,8 +358,8 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
 
 def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data: dict, model: str | None,
                    n_prompts: int) -> None:
-    s = conn.execute("SELECT project_path, project_name, ai_title, first_prompt FROM sessions WHERE id = ?",
-                     (session_id,)).fetchone()
+    s = conn.execute("SELECT project_path, project_name, ai_title, first_prompt, machine_id, source FROM sessions "
+                     "WHERE id = ?", (session_id,)).fetchone()
     title = (data.get("title") or "").strip() or None
     # prompts that arrived while Claude was analyzing leave the session stale, so they get analyzed too
     conn.execute(
@@ -380,6 +380,11 @@ def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data:
         ),
     )
     kept = ladder.before_reanalysis(conn, session_id)
+    from .ingest import local_machine_id
+
+    # a hub analyzing another computer's transcript: the lessons new to it are the Team page's news (news.py)
+    other = s["machine_id"] if s["machine_id"] and s["machine_id"] != local_machine_id(cfg) and s["source"] != "history" else None
+    before = news.lesson_keys(conn, session_id) if other else None
     conn.execute(
         "DELETE FROM knowledge WHERE session_id = ? AND source = 'analysis' AND pinned = 0 AND status != 'dismissed'",
         (session_id,),
@@ -405,3 +410,5 @@ def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data:
             ),
         )
     ladder.after_reanalysis(conn, session_id, kept)
+    if other:
+        news.record(conn, other, s["project_path"], lessons=news.learned(conn, session_id, before))

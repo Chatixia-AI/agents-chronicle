@@ -397,6 +397,18 @@ CREATE TABLE IF NOT EXISTS people_audit (          -- who did what to people, ro
     detail TEXT                                    -- JSON
 );
 
+CREATE TABLE IF NOT EXISTS hub_news (              -- on a hub: what other computers sent lately, for the Team page (news.py)
+    id INTEGER PRIMARY KEY,
+    at TEXT NOT NULL,                              -- last added to: a computer that keeps sending adds to its row
+    since TEXT NOT NULL,
+    kind TEXT NOT NULL,                            -- shared | joined
+    machine_id TEXT NOT NULL,
+    project_path TEXT,                             -- the project on this hub; NULL for joined
+    sessions INTEGER NOT NULL DEFAULT 0,           -- sessions this hub had not had before
+    lessons INTEGER NOT NULL DEFAULT 0             -- project lessons new to it
+);
+CREATE INDEX IF NOT EXISTS idx_hub_news_at ON hub_news(at);
+
 CREATE TABLE IF NOT EXISTS suggestions (
     id INTEGER PRIMARY KEY,
     key TEXT NOT NULL UNIQUE,                      -- stable identity, e.g. friction:<cause>:<agent>:user, knowledge:<id>:<file>

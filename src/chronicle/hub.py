@@ -47,7 +47,7 @@ from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
 from urllib.parse import quote, urlencode, urlparse
 
-from . import __version__
+from . import __version__, news
 from .config import Config
 from .util import utcnow_iso
 
@@ -1745,6 +1745,7 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
          "spoke", now, now, person["id"]),
     )
     people.record_key(conn, machine_id, body.get("key"))  # a computer new to the hub: its key from now on
+    news.record(conn, machine_id, None, kind="joined")
     conn.commit()
     scope = people.projects_of(person)
     return {"token": token, "person": people.public(person), "hub": cfg.hub_name or local_machine(cfg)["name"],
@@ -1872,7 +1873,7 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
     r = ProjectResolver(cfg, conn)
     now = utcnow_iso()
     stored = kept = refused = 0
-    accepted = []
+    accepted, fresh, got = [], set(), {}  # got: {project: [new sessions, new lessons]}
     for rec in data["sessions"][:SHARE_BATCH * 2]:
         sid = str(rec.get("id") or "") if isinstance(rec, dict) else ""
         if not SESSION_ID_RE.match(sid) or rec.get("agent") not in SHARED_AGENTS:
@@ -1881,6 +1882,8 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
             refused += 1
             continue
         have = conn.execute("SELECT source, machine_id FROM sessions WHERE id = ?", (sid,)).fetchone()
+        if not have:
+            fresh.add(sid)
         if have and have["source"] != "remote":
             kept += 1  # its transcript is here: the hub's own record wins
             continue
@@ -1921,13 +1924,19 @@ def receive_sessions(cfg: Config, conn, params: dict, rfile, length: int, person
             log.warning("shared session %s from %s not stored: %s", sid, machine_id, exc)
             continue
         project, name = row["project_path"], row["project_name"]
+        before = news.lesson_keys(conn, sid)
         conn.execute("DELETE FROM knowledge WHERE session_id = ? AND source = 'analysis'", (sid,))
         for k in rec["knowledge"]:
             krow = {c: _cell(k.get(c)) for c in KNOWLEDGE_COLS}
             krow.update(session_id=sid, project_path=project, project_name=name, source="analysis")
             conn.execute(f"INSERT OR IGNORE INTO knowledge({', '.join(krow)}) VALUES ({', '.join('?' for _ in krow)})",
                          list(krow.values()))
+        tally = got.setdefault(project, [0, 0])
+        tally[0] += sid in fresh
+        tally[1] += news.learned(conn, sid, before)
         stored += 1
+    for project, (sessions, lessons) in got.items():  # the Team page's news (news.py)
+        news.record(conn, machine_id, project, sessions=sessions, lessons=lessons)
     if stored:
         conn.execute("UPDATE machines SET last_push = ? WHERE id = ?", (now, machine_id))
     conn.commit()
