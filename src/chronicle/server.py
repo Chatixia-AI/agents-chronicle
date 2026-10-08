@@ -1979,10 +1979,9 @@ def make_handler(app: App, port: int):
 
         def send_header(self, keyword, value):
             """http.server writes a header as given: one with a line break in it would start headers (or a body) of
-            its own. Header values come from transcripts too (a file's name), so none may hold one."""
-            if any(c in str(keyword) + str(value) for c in "\r\n\0"):
-                raise ValueError(f"line break in the {keyword} header")
-            super().send_header(keyword, value)
+            its own. Header values come from transcripts too (a file's name), so none may hold one: a break becomes
+            a space rather than an error, which, raised after send_response, would leave two status lines queued."""
+            super().send_header(re.sub(r"[\r\n\0]", " ", str(keyword)), re.sub(r"[\r\n\0]", " ", str(value)))
 
         def _host(self) -> str:
             return (self.headers.get("Host") or "").strip().lower()
@@ -2197,7 +2196,8 @@ def make_handler(app: App, port: int):
                 body = json.loads(self.rfile.read(length) or b"{}") if length else {}
                 if not isinstance(body, dict):
                     return self._json({"error": "bad json"}, 400)
-                if person and body.get("machine"):  # a person's token works only from the computer it was issued to
+                if body.get("machine"):  # a person's token works only from the computer it was issued to, and the
+                    # shared token not as a computer that joined as a person: the body names the computer acting
                     ok, person = hub.authorize(app.cfg, app.conn, auth, str(body["machine"]))
                     if not ok:
                         return self._json({"error": "unauthorized"}, 401)

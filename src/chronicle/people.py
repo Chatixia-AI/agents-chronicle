@@ -348,6 +348,14 @@ def _by_token(conn: sqlite3.Connection, secret: str, kind: str) -> tuple[dict, d
     return p, dict(t)
 
 
+def computer_bound(conn: sqlite3.Connection, machine_id: str) -> bool:
+    """Whether a computer joined this hub as a person who is still on it (a live computer token is bound to it).
+    Such a computer sends with its own token: the hub's shared token may not act as it (hub.authorize)."""
+    return conn.execute(
+        "SELECT 1 FROM people_tokens t JOIN people x ON x.id = t.person_id WHERE t.machine_id = ? AND t.kind = 'computer' "
+        "AND t.revoked_at IS NULL AND x.removed_at IS NULL", (machine_id,)).fetchone() is not None
+
+
 def computer_person(conn: sqlite3.Connection, token: str, machine_id: str | None = None) -> dict | None:
     """The person a computer's push token belongs to; None when it is no (longer a) valid token. A token presented by
     another computer than the one it was issued to is refused."""

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Security fixes, continued (the hub):**
+  - An analysis a computer sends applies only to that computer's own sessions. A computer could send an analysis
+    under the id of a session another computer (or the hub itself) has, before the hub analyzed it, and replace its
+    title, summary and lessons. Now the hub applies an analysis only to the sending computer's session.
+  - The hub's shared token can no longer act as a computer that joined as a person. Named with that computer's id,
+    it could send, refile or take back that computer's sessions. Such a computer sends with its own token only.
+  - A response header with a line break in it is sent with a space instead, rather than failing midway.
+
 ## 0.15.0 (2026-10-08)
 
 - **Security fixes from a review of the hub and the dashboard:**

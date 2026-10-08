@@ -140,6 +140,59 @@ def test_a_gzip_bomb_is_refused(two_spokes, monkeypatch):
     assert status == 400  # cut off
 
 
+# ------------------------------------------------------------------ an analysis applies only to its own computer's session
+def test_another_computers_analysis_doesnt_apply_to_a_session(two_spokes):
+    from chronicle.ingest import sync
+
+    cfg, conn, a, b = two_spokes["cfg"], two_spokes["conn"], two_spokes["a"], two_spokes["b"]
+    a_id, b_id = hub.local_machine(a)["id"], hub.local_machine(b)["id"]
+    hub.push(a)  # A's transcript: the hub ingests it as A's, analysis pending
+    sync(cfg, conn)
+    row = conn.execute("SELECT machine_id, analysis_status, title FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert row["machine_id"] == a_id and row["analysis_status"] != "done"
+    title = row["title"]
+    forged = {"version": 1, "sessions": [{
+        "id": SPOKE_SID, "analysis_status": "done", "analyzed_prompts": 1, "llm_title": "B's title for A's session",
+        "summary": "B wrote this",
+        "knowledge": [{"kind": "fact", "title": "lesson b-injected", "body": "body", "scope": "project",
+                       "source": "analysis", "fingerprint": "b-injected"}]}]}
+    status, _ = _post(two_spokes["url"], "/api/hub/analyses", f"machine={b_id}", gzip.compress(json.dumps(forged).encode()),
+                      two_spokes["token"])
+    assert status == 200
+    assert hub.apply_analyses(cfg, conn) == 0
+    row = conn.execute("SELECT machine_id, analysis_status, title, summary FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()
+    assert (row["machine_id"], row["title"], row["summary"]) == (a_id, title, None)
+    assert row["analysis_status"] != "done"
+    assert conn.execute("SELECT COUNT(*) FROM knowledge WHERE session_id = ? AND fingerprint = 'b-injected'",
+                        (SPOKE_SID,)).fetchone()[0] == 0
+    assert not (cfg.machines_dir / b_id / hub.ANALYSES_FILE).exists()  # not kept waiting for a session of B's either
+
+    # the same analysis from A, the session's own computer, applies
+    forged["sessions"][0]["llm_title"] = "A's own title"
+    status, _ = _post(two_spokes["url"], "/api/hub/analyses", f"machine={a_id}", gzip.compress(json.dumps(forged).encode()),
+                      two_spokes["token"])
+    assert status == 200 and hub.apply_analyses(cfg, conn) == 1
+    assert conn.execute("SELECT title FROM sessions WHERE id = ?", (SPOKE_SID,)).fetchone()[0] == "A's own title"
+
+
+# ------------------------------------------------------------------ the shared token can't act as a person's computer
+def test_the_shared_token_cant_act_as_a_persons_computer(two_spokes):
+    cfg, conn, a = two_spokes["cfg"], two_spokes["conn"], two_spokes["a"]
+    a_id = hub.local_machine(a)["id"]
+    shared = f"Bearer {two_spokes['token']}"
+    assert hub.authorize(cfg, conn, shared, a_id) == (True, None)  # nobody has joined as a person: any computer
+    ada = people.add(conn, "Ada", "ada@example.com", "admin")
+    _, ada_token = people.join_computer(conn, people.invite(conn, ada["id"]), a_id, "Ada's Mac")
+    assert hub.authorize(cfg, conn, shared, a_id) == (False, None)  # Ada's computer: only her token sends as it
+    assert hub.authorize(cfg, conn, shared, MACHINE) == (True, None)  # another computer still may, while the token is on
+    assert hub.authorize(cfg, conn, f"Bearer {ada_token}", a_id)[1]["id"] == ada["id"]
+    status, _ = _post(two_spokes["url"], "/api/hub/withdraw", "", json.dumps({"machine": a_id, "folder": SPOKE_CWD}).encode(),
+                      two_spokes["token"])
+    assert status == 401
+    people.remove(conn, ada["id"])
+    assert hub.authorize(cfg, conn, shared, a_id) == (True, None)  # once she is removed, the computer is nobody's again
+
+
 # ------------------------------------------------------------------ H4: no people, no other device
 def test_a_hub_without_people_lets_no_other_device_in(dashboard):
     url = dashboard["url"]
