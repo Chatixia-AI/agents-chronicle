@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- **Case files: lessons that ask before they tell:** the analysis now keeps, for each fix, gotcha and decision, how it
+  first showed up, the question it raised, the answer, and the leads the session tried and ruled out. In **All
+  knowledge** a case you haven't answered opens with its scene and question; the choices are the real answer and the
+  real dead ends, and a wrong pick says what ruled it out. **Skip, just show me** opens it at once, five skips in a row
+  turn the questions off, and **Ask first** turns them back on. **Case files** lists only them. Your answers stay in
+  that browser. The MCP tools show agents the scene and the ruled-out leads too. Lessons analyzed before get a case
+  file when their session is analyzed again. See [Case files](docs/analysis.md#case-files).
 - **Wrong invite and sign-in codes make an address wait:** after five codes the hub never issued, from one address
   within 15 minutes, each further try from there waits 1 second, then 2, 4 and so on up to a minute, and its code
   isn't looked at meanwhile. Behind a proxy in `[server] trusted_proxies` the hub counts each visitor by

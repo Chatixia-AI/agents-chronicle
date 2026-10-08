@@ -14,7 +14,7 @@ the network. Every tool only reads the local vault.
 
 | Tool | What it returns | Arguments |
 | --- | --- | --- |
-| `search_knowledge` | Knowledge items (fixes, gotchas, decisions, facts, commands, preferences) matching the words, the most trusted first, each labelled with its [stage](analysis.md#how-knowledge-earns-trust) (`established ×3`). The best first stop. | `query`, `project`, `kind`, `limit` |
+| `search_knowledge` | Knowledge items (fixes, gotchas, decisions, facts, commands, preferences) matching the words, the most trusted first, each labelled with its [stage](analysis.md#how-knowledge-earns-trust) (`established ×3`); a [case file](analysis.md#case-files) adds how the problem first showed and the leads ruled out. The best first stop. | `query`, `project`, `kind`, `limit` |
 | `search_sessions` | Sessions whose transcript or summary matches, with snippets | `query`, `project`, `limit` |
 | `get_session` | One session: summary, outcome, knowledge, files changed, prompts | `session_id` (or a unique prefix) |
 | `get_transcript` | Part of a session's conversation, optionally with tool calls | `session_id`, `offset`, `limit`, `include_tools` |

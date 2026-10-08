@@ -51,15 +51,14 @@ carefully.
   session as soon as it closes and say exactly where it is still running. The file format is undocumented, so the
   quiet-period timer stays as the fallback.
 - **Lessons with their reason attached.** Gotchas extracted in a fixed shape: the moment it bites, the reflex that
-  goes wrong, what to do instead, and why. Agents get something they can act on, not just a fact. Each lesson also
-  keeps the symptom and what was tried and ruled out, which the case files below need. Existing items keep their
+  goes wrong, what to do instead, and why. Agents get something they can act on, not just a fact. (The symptom and
+  the leads ruled out are kept already, in [case files](docs/analysis.md#case-files).) Existing items keep their
   current shape unless you re-analyze them.
-- **Lessons people learn from.** Today the lessons go mostly to the agents, and the agent remembering means the
-  person never has to. Gotchas, fixes and decisions will read as case files: the scene, a question you can skip
-  ("what would you check first?"), then the verdict, the rule, and related cases side by side. The weekly review
-  will bring five back in that form, with no overdue count and no backlog. The agent keeps getting every lesson.
-  Whether it works is measured by recall and by whether the same gotcha comes back in your sessions, not by
-  asking, and every per-person measure stays on your computer
+- **Lessons people learn from.** Gotchas, fixes and decisions already read as
+  [case files](docs/analysis.md#case-files) that ask before they tell. Still to come: related cases side by side,
+  and the weekly review bringing five back in that form, with no overdue count and no backlog. The agent keeps
+  getting every lesson. Whether it works is measured by recall and by whether the same gotcha comes back in your
+  sessions, not by asking, and every per-person measure stays on your computer
   ([design](docs/design/learning.md)).
 - **Teammates' lessons, by person and side by side.** They show on project pages and in **All knowledge**, marked
   with the computers they came from. Still to come: the person's name instead of the computer's, teammates' lessons

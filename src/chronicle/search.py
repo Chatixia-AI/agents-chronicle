@@ -122,9 +122,11 @@ def search_sessions(conn: sqlite3.Connection, query: str, *, project: str | None
 
 def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, project: str | None = None,
                      kind: str | None = None, include_inactive: bool = False, limit: int = 30,
-                     sessions: tuple[str, list] | None = None, source: str | None = None) -> list[dict]:
+                     sessions: tuple[str, list] | None = None, source: str | None = None,
+                     cases: bool = False) -> list[dict]:
     """`sessions`: (SQL on the sessions table, its params) to keep the lessons of those sessions only. `source`: only
-    items from there ('analysis', 'memory', 'team'), filtered before the limit."""
+    items from there ('analysis', 'memory', 'team'), filtered before the limit. `cases`: only the ones with a case
+    file (analyze.case_of)."""
     where, params = [], []
     if query and query.strip():
         fts = fts_query(query)
@@ -147,6 +149,8 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
     if source:
         where.append("k.source = ?")
         params.append(source)
+    if cases:
+        where.append("k.case_json IS NOT NULL")
     if sessions:
         where.append(f"k.session_id IN (SELECT id FROM sessions WHERE {sessions[0]})")
         params += sessions[1]

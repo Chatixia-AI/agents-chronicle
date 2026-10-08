@@ -76,7 +76,7 @@ ANALYSIS_COLS = ("analysis_status", "analysis_reason", "analyzed_at", "analysis_
                  "summary", "goal", "outcome", "outcome_note", "sentiment", "work_types_json", "tags_json",
                  "highlights_json", "open_threads_json", "friction_json", "analysis_json")
 KNOWLEDGE_COLS = ("kind", "title", "body", "tags_json", "scope", "confidence", "evidence", "source", "agent",
-                  "source_ref", "fingerprint", "status", "pinned", "created_at", "updated_at")
+                  "source_ref", "fingerprint", "status", "pinned", "created_at", "updated_at", "case_json")
 
 # [hub] share = "knowledge": what a computer sends about a session it analyzed itself. Never its prompts, commands,
 # file paths or transcript; the hub stores it with source 'remote' and never analyzes it again (receive_sessions).

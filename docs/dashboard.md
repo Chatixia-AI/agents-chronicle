@@ -42,7 +42,8 @@ context-window chart with compactions, tools, files, subagents, and the [artifac
 output, and subagent threads; on wide windows an **Outline** of the prompts, what the session made and the changed files
 sits beside the transcript and follows your scroll), a Knowledge overview (one card each for the Map, All knowledge,
 the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
-[stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it), project knowledge
+[stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it; fixes, gotchas and decisions read as
+[case files](analysis.md#case-files) that ask before they tell), project knowledge
 bases and the global playbook (a TL;DR, section chips, a filter, and sections as cards of short bullets that
 open to their detail and sources, with established and canonical bullets marked; a project's opens with its
 [architecture sketch](#architecture-sketch)), glossary, a mindmap of the glossary (see Map below), weekly reviews (one week at a time: a

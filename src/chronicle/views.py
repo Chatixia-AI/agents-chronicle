@@ -99,6 +99,19 @@ def _rel(path: str, root: str | None) -> str:
     return path
 
 
+def case_lines(k: dict) -> list[str]:
+    """A fix, gotcha or decision's case file as Markdown lines: how it first showed, and the leads ruled out."""
+    case = k.get("case") if isinstance(k.get("case"), dict) else loads(k.get("case_json"), None)
+    if not isinstance(case, dict) or not case.get("scene"):
+        return []
+    out = [f"**Seen as:** {redact(case['scene'])}", ""]
+    leads = [x for x in case.get("ruled_out") or [] if isinstance(x, dict) and x.get("lead")]
+    if leads:
+        out += ["**Ruled out:**", *(f"- {redact(x['lead'])}" + (f" ({redact(x['why'])})" if x.get("why") else "")
+                                    for x in leads), ""]
+    return out
+
+
 def session_markdown(s: dict, *, frontmatter: bool = False, project_link: str | None = None,
                      include_prompts: bool = True, max_prompts: int = 60) -> str:
     """Render a session record (from session_record) as a Markdown overview."""
@@ -178,7 +191,7 @@ def session_markdown(s: dict, *, frontmatter: bool = False, project_link: str | 
             conf = f" · {k['confidence']} confidence" if k.get("confidence") else ""
             status = f" · _{k['status']}_" if k.get("status") and k["status"] != "active" else ""
             out += [f"### {redact(k['title'])}", f"<sub>{badge}{conf} · {k.get('scope')}{status}</sub>", "",
-                    redact(k.get("body") or ""), ""]
+                    redact(k.get("body") or ""), "", *case_lines(k)]
     if s.get("open_threads"):
         out += ["## Open threads", ""] + [f"- [ ] {redact(t)}" for t in s["open_threads"]] + [""]
     if s.get("friction"):

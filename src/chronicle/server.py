@@ -496,6 +496,7 @@ class App:
             from .hub import team_from
 
             k["team_from"] = team_from(k)
+        k["case"] = loads(k.pop("case_json", None), None)  # a fix, gotcha or decision as a case file
         return k
 
     def _session_rows(self, where: str, params: list, order: str, limit: int, offset: int = 0) -> list[dict]:
@@ -926,7 +927,7 @@ class App:
         rows = search_knowledge(self.conn, q.get("q") or None, project=q.get("project") or None, kind=q.get("kind") or None,
                                 include_inactive=q.get("status") == "all", limit=min(int(q.get("limit") or 200), 1000),
                                 sessions=self._who_clause(q["who"]) if q.get("who") else None,
-                                source=q.get("source") or None)
+                                source=q.get("source") or None, cases=q.get("cases") == "1")
         if self._whos() is not None and rows:  # each lesson's person, through the session it came from
             ids = list({r["session_id"] for r in rows if r.get("session_id")})
             machine = {}
@@ -943,7 +944,9 @@ class App:
             "SELECT kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY kind")}
         sources = dict(self.conn.execute(
             "SELECT source, COUNT(*) FROM knowledge WHERE status = 'active' GROUP BY source").fetchall())
-        return {"items": [self._reason(r) for r in rows], "counts": counts, "sources": sources}
+        cases = self.conn.execute(
+            "SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND case_json IS NOT NULL").fetchone()[0]
+        return {"items": [self._reason(r) for r in rows], "counts": counts, "sources": sources, "cases": cases}
 
     def search(self, q: dict) -> dict:
         query = q.get("q") or ""
@@ -1121,7 +1124,10 @@ class App:
                       "tldr": data["tldr"],
                       "stats": _stats(self.conn, row["start"], row["end"]) if row["start"] else loads(row["stats_json"], {}) or {},
                       "daily": week_glance(self.conn, row["start"], row["end"])["daily"] if row["start"] else []}
-        return {"knowledge": {"total": sum(counts.values()), "counts": counts, "new_week": new_week, "recent": recent},
+        cases = self.conn.execute(
+            "SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND case_json IS NOT NULL").fetchone()[0]
+        return {"knowledge": {"total": sum(counts.values()), "counts": counts, "new_week": new_week, "recent": recent,
+                              "cases": cases},
                 "glossary": {"total": sum(cats.values()), "categories": cats, "top": top_terms},
                 "map": {"projects": map_projects, "themes": themes},
                 "review": review, "reviews": self.conn.execute("SELECT COUNT(*) FROM reviews").fetchone()[0]}

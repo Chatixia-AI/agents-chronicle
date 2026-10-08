@@ -19,7 +19,7 @@ from .redact import redact
 from .search import search_knowledge, search_sessions
 from .synthesize import GLOBAL, kb_for_path
 from .util import human_duration, local_str, one_line, to_iso, truncate, utcnow
-from .views import project_labels, resolve_session_id, session_markdown, session_record
+from .views import case_lines, project_labels, resolve_session_id, session_markdown, session_record
 
 SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
@@ -188,7 +188,8 @@ class Tools:
                 src = "teammates' sessions" + (f" on {', '.join(who)}" if (who := team_from(k)) else "") + ", via the team hub"
             trust = stage_label(k) + (f" ({k['stage_reason']})" if k.get("stage_reason") else "")
             out.append(f"## [{k['kind']} · {stage_label(k)}] {k['title']}\n_{k.get('project_name') or '-'} · {trust} · "
-                       f"{k.get('confidence') or '-'} confidence · {src}_\n\n{truncate(k.get('body') or '', 1500)}\n")
+                       f"{k.get('confidence') or '-'} confidence · {src}_\n\n{truncate(k.get('body') or '', 1500)}\n"
+                       + "".join(f"{line}\n" for line in case_lines(k)))
         return "\n".join(out)
 
     def search_sessions(self, query: str, project: str | None = None, agent: str | None = None, limit: int = 10) -> str:

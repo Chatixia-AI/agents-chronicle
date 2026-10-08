@@ -2,7 +2,8 @@
 
 [← Roadmap](../../ROADMAP.md) · 日本語: [ja/learning.md](ja/learning.md)
 
-Status: proposal, 2026-10-08. Nothing on this page is built yet. The [roadmap](../../ROADMAP.md) says when each part
+Status: proposal, 2026-10-08. Built so far: steps 1 and 2 of the order of work (case files, without related cases;
+see [Case files](../analysis.md#case-files)) and step 4 (the hub). The [roadmap](../../ROADMAP.md) says when the rest
 is planned.
 
 Chronicle writes down what every session taught, and today almost all of it goes to the agents: the MCP tools and

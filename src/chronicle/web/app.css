@@ -629,6 +629,48 @@ table.data td.num, table.data th.num { text-align: right; font-variant-numeric: 
 .kcard .kactions button { border: 0; background: none; cursor: pointer; color: var(--ink-2); padding: 2px 5px; border-radius: 5px; font-size: 12px; }
 .kcard .kactions button:hover { background: var(--surface-2); color: var(--ink); }
 
+/* case files: a fix, gotcha or decision that asks before it tells (knowledgeCard's `ask`) */
+.kcase-block { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.kcase-label { font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.kcase-scene { color: var(--ink-2); font-size: 13px; }
+.kcard.asking .kcase-scene { color: var(--ink); font-size: 13.5px; }
+.kcase-q { font-weight: 600; font-size: 14.5px; line-height: 1.38; }
+.kcase-options { display: grid; gap: 6px; }
+.kcase-option {
+  display: flex; align-items: baseline; gap: 9px; width: 100%; text-align: left; padding: 8px 10px; cursor: pointer;
+  border: 1px solid var(--border); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; font-size: 13px;
+  line-height: 1.4; transition: border-color 0.15s, background 0.15s;
+}
+.kcase-option:hover { border-color: var(--accent); background: var(--accent-wash); }
+.kcase-option b {
+  flex: none; display: inline-grid; place-items: center; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent-wash); color: var(--accent-ink); font-size: 11px; transform: translateY(-1px);
+}
+.kcase-hint { margin: 0; color: var(--muted); font-size: 12.5px; }
+.kcase-acts { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.kcase-verdict {
+  display: flex; align-items: flex-start; gap: 8px; padding: 8px 10px; border-radius: 8px; font-size: 13px;
+  line-height: 1.45; background: var(--accent-wash); color: var(--ink);
+}
+.kcase-verdict .icon { flex: none; width: 15px; height: 15px; margin-top: 2px; color: var(--accent-ink); }
+.kcase-verdict.right { background: color-mix(in srgb, var(--good) 13%, transparent); }
+.kcase-verdict.right .icon { color: var(--good-ink); }
+.kcase-verdict.wrong { background: color-mix(in srgb, var(--serious) 13%, transparent); }
+.kcase-verdict.wrong .icon { color: var(--serious-ink); }
+.kcase-leads { list-style: none; margin: 0; padding: 0; display: grid; gap: 5px; font-size: 12.5px; }
+.kcase-leads li { display: flex; gap: 6px; align-items: flex-start; }
+.kcase-leads .icon { flex: none; width: 13px; height: 13px; margin-top: 2px; color: var(--serious-ink); }
+.kcase-leads .lead { color: var(--ink-2); }
+.kcase-leads .why { display: block; color: var(--muted); }
+.kcase-more summary { cursor: pointer; font-size: 12.5px; color: var(--accent-ink); }
+.kcase-more[open] summary { margin-bottom: 5px; }
+.kcase-again { align-self: flex-start; display: inline-flex; align-items: center; gap: 4px; padding-left: 0; }
+.kcase-again .icon { width: 13px; height: 13px; }
+.head-actions .btn .count { color: var(--muted); margin-left: 6px; font-variant-numeric: tabular-nums; }
+.kcase-q code, .kcase-option code, .kcase-leads code, .kcase-verdict code {
+  background: var(--code-bg); padding: 1px 5px; border-radius: 4px; overflow-wrap: anywhere;
+}
+
 /* ------------------------------------------------------------------ markdown */
 .md { overflow-wrap: anywhere; }
 .md p { margin: 0 0 8px; }

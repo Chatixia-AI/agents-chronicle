@@ -317,9 +317,11 @@ def _analyzed_on_spoke(spoke, *, title: str, at: str, lessons: list[tuple[str, s
                   "analyzed_prompts = n_prompts WHERE id = ?", (at, title, SPOKE_SID))
     sconn.execute("DELETE FROM knowledge WHERE session_id = ?", (SPOKE_SID,))
     for fp, scope, kind in lessons:
+        case = json.dumps({"scene": f"scene {fp}", "question": "why?", "answer": "because", "ruled_out": []}) \
+            if kind in ("fix", "gotcha") else None
         sconn.execute("INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, scope, confidence, "
-                      "source, fingerprint, created_at, updated_at) VALUES (?, ?, 'demo-app', ?, ?, 'body', ?, 'high', "
-                      "'analysis', ?, ?, ?)", (SPOKE_SID, SPOKE_CWD, kind, f"lesson {fp}", scope, fp, at, at))
+                      "source, fingerprint, created_at, updated_at, case_json) VALUES (?, ?, 'demo-app', ?, ?, 'body', ?, "
+                      "'high', 'analysis', ?, ?, ?, ?)", (SPOKE_SID, SPOKE_CWD, kind, f"lesson {fp}", scope, fp, at, at, case))
     sconn.commit()
     sconn.close()
 
@@ -355,6 +357,8 @@ def test_knowledge_only_sharing(hubenv):
     assert row["first_prompt"] is None and row["transcript_path"] is None and row["last_prompt"] is None
     lessons = [r[0] for r in conn.execute("SELECT fingerprint FROM knowledge WHERE session_id = ?", (SPOKE_SID,))]
     assert lessons == ["p-gotcha"]  # lessons about the person stay on the spoke
+    case = conn.execute("SELECT case_json FROM knowledge WHERE fingerprint = 'p-gotcha'").fetchone()[0]
+    assert json.loads(case)["scene"] == "scene p-gotcha"  # its case file came along
 
     assert SPOKE_SID not in pending_sessions(conn, cfg, 100)
     ready = count_pending(conn, cfg)["ready"]
