@@ -32,6 +32,8 @@
   certificate](docs/docker.md#your-own-certificate)) in `compose.override.yaml`.
 - **No more tooltips on the rail:** pointing at a rail icon no longer shows a card with its name and what the section
   holds. The sidebar already shows that, and with the sidebar hidden, pointing at the rail brings it out.
+- **The Sync button shows when a sync is running:** its icon turns into a spinner from the click until the sync ends,
+  whether it was started from the button, the command palette or Settings › Status.
 
 ## 0.15.0 (2026-10-08)
 

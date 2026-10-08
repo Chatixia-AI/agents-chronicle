@@ -6826,6 +6826,7 @@ async function pollStatus() {
     const jobs = st.jobs || {};
     const running = Object.entries(jobs).filter(([, j]) => j.state === "running");
     busy = running.length > 0;
+    drawSyncBtn(jobs.sync?.state === "running");
     const paused = st.paused_until && st.paused_until > new Date().toISOString();
     const pill = $("#status-pill");
     pill.className = busy ? "busy" : paused ? "warn" : "";
@@ -6977,9 +6978,16 @@ function showUpdate(u, version) {
   card.hidden = false;
 }
 async function syncNow() {
-  const r = await post("/api/sync");
+  drawSyncBtn(true); // at once: the next status poll puts the sync icon back if it didn't start
+  const r = await post("/api/sync").catch((e) => { drawSyncBtn(false); throw e; });
   toast(r.started ? t("Syncing transcripts and processing the queue…") : t("A sync is already running"));
   watchJob("sync");
+}
+function drawSyncBtn(syncing) { // a spinner in place of the sync icon while a sync runs
+  const btn = $("#sync-btn");
+  if ((btn.getAttribute("aria-busy") === "true") === syncing) return;
+  btn.setAttribute("aria-busy", String(syncing));
+  btn.querySelector(".icon").replaceWith(icon(syncing ? "running" : "sync", syncing ? "spin" : ""));
 }
 function isDark() {
   const root = document.documentElement;
