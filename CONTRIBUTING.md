@@ -16,6 +16,8 @@ When you open a pull request, say what changed and how you checked it, and inclu
 (taken from the demo data, not your own sessions). Please keep all data local: Chronicle must not send anything
 anywhere except the analysis calls through the user's own `claude`.
 
+Found a way in rather than a bug? [SECURITY.md](SECURITY.md) says how to report it privately.
+
 A change users will notice gets a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) (start the section if
 the last release dated it). The **Changelog** check fails a pull request that changes `src/`, `ee/src/`, `docker/`
 or `vscode-extension/` without one; label it `no-changelog` if nothing changes for users.
