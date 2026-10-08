@@ -61,6 +61,12 @@ HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub
 SIGNIN_HELP = ("Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
                "(Settings › Devices).")
 TOO_MANY_CODES = "too many wrong codes from this address; try again in {seconds} s"  # people.CodeAttempts
+# The dashboard page's Content-Security-Policy: scripts, styles, images, fonts and requests from the dashboard itself
+# only, no inline script or style (index.html loads boot.js; app.js sets styles through the CSSOM), no plugins, no
+# <base>. A mistake that lets a transcript's text into the page as HTML can't run anything. The macOS app's window
+# (?app=mac, at this computer) also allows eval: pywebview builds its bridge to the window (theme, drag, zoom) with
+# new Function.
+PAGE_CSP = "default-src 'self'; script-src 'self'{eval}; object-src 'none'; base-uri 'none'; form-action 'self'"
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("font/woff2", ".woff2")
 
@@ -2306,6 +2312,9 @@ def make_handler(app: App, port: int):
             self.send_header("Content-Length", str(len(body)))
             self.send_header("Cache-Control", "no-cache")
             self.send_header("X-Content-Type-Options", "nosniff")
+            if name == "index.html":
+                app_window = parse_qs(urlparse(self.path).query).get("app") == ["mac"] and self._from_here()
+                self.send_header("Content-Security-Policy", PAGE_CSP.format(eval=" 'unsafe-eval'" if app_window else ""))
             self.end_headers()
             self.wfile.write(body)
 

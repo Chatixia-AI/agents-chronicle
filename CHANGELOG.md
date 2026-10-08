@@ -13,6 +13,9 @@
   - The hub's shared token can no longer act as a computer that joined as a person. Named with that computer's id,
     it could send, refile or take back that computer's sessions. Such a computer sends with its own token only.
   - A response header with a line break in it is sent with a space instead, rather than failing midway.
+- **The dashboard page runs only its own scripts:** it now sends a Content-Security-Policy that allows scripts and
+  styles from the dashboard's own files only, so a mistake that lets a transcript's text into the page as HTML could
+  run nothing. The macOS app's window also allows `eval`, which its bridge to the window needs.
 - **The team's Home shows who worked on what, without counts per person:** **Who's active** listed each person's
   sessions and lessons. It is now **Who worked on what**: each person with the projects they worked on in the period.
   A tally per person reads as a score, and a lesson count mostly counts what went wrong in someone's sessions.

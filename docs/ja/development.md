@@ -102,6 +102,11 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 `llm.py`（分析）、`synthesize.py`（ナレッジベース）、`diagram.py`（アーキテクチャ図）、`artifacts.py`（セッションが作ったものと、その今の状態）、`glossary.py`、`reviews.py`、`worker.py`（キュー）、`server.py` ＋ `web/`
 （ダッシュボード）、`mcp_server.py`、`export_md.py`、`hooks.py` / `install.py`、`desktop.py`（macOS アプリ）、`cli.py`。`packaging/macos/` がアプリをビルドします。
 
+ダッシュボードのページは Content-Security-Policy（`server.py` の `PAGE_CSP`）の下で動き、スクリプトとスタイルは自分のファイルの
+ものしか使えません。`index.html` にインラインの `<script>` や `on…=` 属性を加えないでください。また `h()` に渡すスタイルは
+文字列ではなくオブジェクト（`style: { "--h": "40px" }`）にします。文字列は style 属性になり、ポリシーが拒否します。
+どちらも `tests/test_security.py` が確かめます。
+
 ## 変更を試す
 
 `./dev.sh` は、チェックアウトのコードでダッシュボードを起動します。データは `~/.chronicle-sandbox/dev-sh` にコピーした

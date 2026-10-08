@@ -5,6 +5,7 @@ can't take over another person's computer; and a few hardening steps (git flags,
 import gzip
 import json
 import os
+import re
 import stat
 import subprocess
 import textwrap
@@ -219,6 +220,24 @@ def test_a_file_name_cant_add_response_headers(dashboard, monkeypatch):
     assert "Set-Cookie" not in headers
     disposition = headers["Content-Disposition"]
     assert "\r" not in disposition and "\n" not in disposition and disposition.startswith('attachment; filename="x.txt__')
+
+
+# ------------------------------------------------------------------ the dashboard page runs only its own scripts (#92)
+def test_the_dashboard_page_runs_only_its_own_scripts(dashboard):
+    from chronicle.server import WEB_DIR
+
+    url = dashboard["url"]
+    status, headers, page = _raw(url, "/")
+    policy = headers["Content-Security-Policy"]
+    assert status == 200 and policy.startswith("default-src 'self'; script-src 'self';")
+    assert "unsafe-inline" not in policy and "unsafe-eval" not in policy
+    assert "'unsafe-eval'" in _raw(url, "/?app=mac")[1]["Content-Security-Policy"]  # the app window: pywebview's bridge
+    assert "unsafe-eval" not in _raw(url, "/?app=mac", headers=REMOTE)[1]["Content-Security-Policy"]  # not from elsewhere
+    # what the policy refuses is not in the page: no inline script, event handler or style attribute
+    html = page.decode()
+    assert not re.search(r"<script(?![^>]*\bsrc=)", html) and not re.search(r"\son[a-z]+=", html) and " style=" not in html
+    js = (WEB_DIR / "app.js").read_text()
+    assert not re.search(r"\bstyle: [`\"']", js)  # a string becomes a style attribute: setStyle takes an object
 
 
 # ------------------------------------------------------------------ M2: only http(s) links are kept

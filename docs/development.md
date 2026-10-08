@@ -105,6 +105,11 @@ sessions + VS Code chat logs), `bob_parser.py` (Bob tasks), `antigravity_parser.
 Mermaid export), `artifacts.py` (what sessions made, and where each stands), `glossary.py`, `reviews.py`, `worker.py` (queue), `server.py` + `web/`
 (dashboard), `mcp_server.py`, `export_md.py`, `hooks.py` / `install.py`, `desktop.py` (macOS app), `cli.py`; `packaging/macos/` builds the app.
 
+The dashboard page runs under a Content-Security-Policy (`PAGE_CSP` in `server.py`) that allows scripts and styles
+from its own files only. Add no inline `<script>` or `on…=` attribute to `index.html`, and give `h()` a style as an
+object (`style: { "--h": "40px" }`), never a string: a string becomes a style attribute the policy refuses.
+`tests/test_security.py` checks both.
+
 `ee/` is Chronicle Enterprise: its own package (`chronicle_ee`) under the [Chronicle Enterprise License](../ee/LICENSE),
 left out of the MIT wheel and sdist. The core never imports it; [ee/README.md](../ee/README.md) says what belongs there.
 
