@@ -1,15 +1,7 @@
 # Changelog
 
-## 0.14.4 (2026-10-07)
+## Unreleased
 
-- **Share a group as one project on the hub:** on a computer that sends to a hub, edit a group and pick one of the
-  hub's projects under **On the hub**. Every project in the group goes there from the next push, including ones that
-  join the group later; one you keep out of the group stays on your computer. A project that leaves the group stops
-  going, and what it shared stays on the hub. See [A group as one project on the
-  hub](docs/devices.md#a-group-as-one-project-on-the-hub).
-- **Check for updates finds a new release on the first click:** PyPI's cache servers can keep serving the previous
-  version for a few minutes after a release, so one check sometimes said you were up to date. Chronicle now asks up
-  to three times and keeps the newest answer.
 - **Security fixes from a review of the hub and the dashboard:**
   - On a hub, each computer's sessions stay its own. A computer could send a session, its lessons or its transcript
     under another computer's session id and replace it, then take it back. Now the hub keeps the first computer's
@@ -27,6 +19,18 @@
   - Smaller hardening: listing git-ignored files runs no repository hooks or fsmonitor; the app's launcher finds
     Chronicle by bundle id only in the Applications folders; Chronicle's folder is made private to you (mode 700).
     [Data and privacy](docs/privacy.md) now says plainly that `share = "everything"` sends unredacted transcripts.
+    [Troubleshooting](docs/troubleshooting.md#a-hub) explains the new hub messages.
+
+## 0.14.4 (2026-10-07)
+
+- **Share a group as one project on the hub:** on a computer that sends to a hub, edit a group and pick one of the
+  hub's projects under **On the hub**. Every project in the group goes there from the next push, including ones that
+  join the group later; one you keep out of the group stays on your computer. A project that leaves the group stops
+  going, and what it shared stays on the hub. See [A group as one project on the
+  hub](docs/devices.md#a-group-as-one-project-on-the-hub).
+- **Check for updates finds a new release on the first click:** PyPI's cache servers can keep serving the previous
+  version for a few minutes after a release, so one check sometimes said you were up to date. Chronicle now asks up
+  to three times and keeps the newest answer.
 
 ## 0.14.3 (2026-10-07)
 
