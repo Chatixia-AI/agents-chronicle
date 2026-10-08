@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.16.0 (2026-10-08)
 
 - **Case files: lessons that ask before they tell:** the analysis now keeps, for each fix, gotcha and decision, how it
   first showed up, the question it raised, the answer, and the leads the session tried and ruled out. In **All
