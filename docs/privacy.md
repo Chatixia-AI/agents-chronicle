@@ -44,7 +44,8 @@ yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encry
   nothing is stored or sent: the map is rebuilt from them in memory. A git remote is shown without its credentials.
   `[systems] read_manifests = false` turns this off ([Systems map](dashboard.md#systems-map)).
 - **Redaction.** API keys, tokens and similar secrets are replaced in the digest before any call. The raw archive
-  keeps the original transcripts unchanged, on your disk only.
+  keeps the original transcripts unchanged, on your disk only. Redaction goes by patterns, so it misses a secret
+  that looks like nothing in particular: see [What redaction catches](#what-redaction-catches).
 - **Analysis runs sandboxed.** No session is written for the analysis itself, none of your hooks, plugins, MCP
   servers or instruction files load, and the model can only answer. `claude -p` runs with
   `--no-session-persistence --safe-mode --tools "" --strict-mcp-config`; `codex exec` runs `--ephemeral` and
@@ -63,8 +64,8 @@ yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encry
 - **On a hub, each computer's sessions stay its own.** A session another computer sent can't be replaced, changed
   or taken back by a different computer, and an invite can't take over a computer that already joined as someone
   else.
-- **Exports** (Export on a session, or on a selection in the Sessions list) are redacted like everything the
-  dashboard shows, in Markdown and JSON. **Original transcript** is the agent's own file as archived, unredacted:
+- **Exports** (Export on a session, or on a selection in the Sessions list) are redacted, in Markdown and JSON
+  ([what that catches](#what-redaction-catches)). **Original transcript** is the agent's own file as archived, unredacted:
   check it before sharing.
 - **MCP tools** read the database and answer on stdio; nothing listens on the network. Their results join the
   client's conversation and so reach that client's model, with secrets redacted as in the digests. Give the server
@@ -79,3 +80,36 @@ yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encry
   never runs them or edits your shell startup files. See [Suggestions](suggestions.md).
 - **Deleting.** `chronicle forget <id> [--delete-transcript]` removes a session for good; `chronicle uninstall
   --purge` deletes everything.
+
+## What redaction catches
+
+Redaction replaces what matches a list of patterns (`src/chronicle/redact.py`) with `[REDACTED]`. It runs on the
+digest sent for analysis and on what analysis writes back (titles, summaries, lessons), and on exports, the Markdown
+vault and what the MCP tools answer. It never changes the raw archive, which the dashboard's transcript view shows as
+it is on your computer, an **Original transcript** download, or the session files a computer sends a hub with
+`share = "everything"`.
+
+**Caught:**
+
+- Private keys (`-----BEGIN … PRIVATE KEY-----` blocks) and JWTs (`eyJ….….…`).
+- Keys and tokens with a known prefix: Anthropic (`sk-ant-`), OpenAI (`sk-`), GitHub (`ghp_`, `gho_`, `github_pat_`
+  and the like), GitLab (`glpat-`), Slack (`xoxb-` and the like), AWS access key ids (`AKIA`, `ASIA`), Google
+  (`AIza`), Databricks (`dapi`), Stripe (`sk_live_`, `rk_test_` and the like), Hugging Face (`hf_`) and npm (`npm_`).
+- A value after a secret's name and `=` or `:`: `password`, `passwd`, `pwd`, `secret`, `client_secret`, `api_key`,
+  `access_key`, `secret_key`, `auth_token`, `access_token`, `refresh_token`, `private_key` or `token`, also with a
+  prefix as in an environment variable (`DB_PASSWORD=`, `AWS_SECRET_ACCESS_KEY=`).
+- HTTP credentials: `Bearer` tokens, the credential in an `Authorization:` or `Proxy-Authorization:` header
+  (`Basic`, `Bearer`, `token`), a password in a URL (`postgres://user:password@host`) or in `curl -u user:password`,
+  and cookies (`Cookie:` and `Set-Cookie:` lines, `curl --cookie`).
+- Azure keys: `AccountKey=`, `SharedAccessKey=` and a SAS token's `sig=`.
+
+**Not caught:**
+
+- A secret with no known prefix and no name beside it: a password typed on its own, a key pasted without its
+  variable, a value under a name not listed above (`DB_PASS=`, `PGUSER_PW=`).
+- A secret split across lines, encoded (base64 other than a `Basic` header, URL-encoded), or inside a file an agent
+  attached as an image or a PDF.
+- Personal data: names, email addresses, phone numbers and the like are left as they are.
+
+When a secret has reached a session, rotate it: redaction keeps it out of what Chronicle shows and sends, not out of
+the transcript the agent wrote.

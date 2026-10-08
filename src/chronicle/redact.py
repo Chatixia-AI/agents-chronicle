@@ -24,13 +24,21 @@ _PATTERNS: list[tuple[re.Pattern, str]] = [
     (re.compile(r"(?i)(\b[a-z][a-z0-9+.\-]*://[^:/\s@]+:)([^@/\s]{3,})(@)"), r"\1[REDACTED]\3"),
     (
         re.compile(
-            r"(?i)(\b(?:password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|apikey|access[_-]?key|"
+            # the name may carry a prefix, as an environment variable's does (DB_PASSWORD, PGPASSWORD, AWS_SECRET_ACCESS_KEY)
+            r"(?i)(\b[a-z0-9_-]*?(?:password|passwd|pwd|secret|client[_-]?secret|api[_-]?key|apikey|access[_-]?key|"
             r"secret[_-]?key|auth[_-]?token|access[_-]?token|refresh[_-]?token|private[_-]?key|token)\b"
             r"[\"']?\s*[:=]\s*[\"']?)([^\s\"'`,;]{6,})"
         ),
         r"\1[REDACTED]",
     ),
     (re.compile(r"(?i)\b(AccountKey|SharedAccessKey|sig)=([A-Za-z0-9%+/=]{16,})"), r"\1=[REDACTED]"),
+    # HTTP credentials: an Authorization header's (a Basic one is user:password in base64, a short Bearer one escapes
+    # the pattern above), curl's -u user:password, and cookies, which are as good as a password while they last
+    (re.compile(r"(?i)(\b(?:proxy-)?authorization[\"']?\s*[:=]\s*[\"']?(?:basic|bearer|token)\s+)([^\s\"',;]{4,})"),
+     r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\bcurl\b[^\n]*?\s(?:-u|--user)[=\s]\s*[\"']?[^\s:\"']+:)([^\s\"']+)"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(\b(?:set-)?cookie[\"']?\s*:\s*[\"']?)([^\s=;:\"']+=[^\r\n\"']*)"), r"\1[REDACTED]"),
+    (re.compile(r"(?i)(--cookie[=\s]\s*[\"']?)([^\s=;\"']+=[^\r\n\"']*)"), r"\1[REDACTED]"),
 ]
 
 

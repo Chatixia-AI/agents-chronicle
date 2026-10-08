@@ -18,6 +18,14 @@
   in **Settings › Devices** opens that list.
 - **All knowledge's source filter finds every match:** it used to filter the newest 400 items, so with a large archive
   it missed older ones (157 of 227 teammates' lessons, on one archive of 3,581 items).
+- **Redaction catches more:** the credential in an `Authorization:` header (`Basic`, `Bearer`, `token`), the password
+  in `curl -u user:password`, cookies (`Cookie:` and `Set-Cookie:` lines, `curl --cookie`), and a secret under a
+  prefixed name such as `DB_PASSWORD`, `PGPASSWORD` or `AWS_SECRET_ACCESS_KEY`, which went through as they were.
+  [Data and privacy](docs/privacy.md#what-redaction-catches) now lists what redaction catches and what it doesn't.
+- **The hub's Docker setup pins Caddy and Postgres** to an exact version and digest, so their images can't change
+  under you; Dependabot moves them forward. To [update](docs/docker.md#update), download `compose.yaml` again before
+  `docker compose pull`, and keep your own changes (such as [your own
+  certificate](docs/docker.md#your-own-certificate)) in `compose.override.yaml`.
 
 ## 0.15.0 (2026-10-08)
 

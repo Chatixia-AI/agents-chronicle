@@ -134,6 +134,42 @@ def test_redaction_patterns():
     assert "postgres://user:[REDACTED]@db" in out
 
 
+def test_redaction_of_http_credentials():
+    cases = {  # fake credentials the test needs
+        "curl -H 'Authorization: Basic dXNlcjpodW50ZXIy' https://x": "curl -H 'Authorization: Basic [REDACTED]' https://x",  # gitleaks:allow
+        '{"Authorization": "Bearer short123"}': '{"Authorization": "Bearer [REDACTED]"}',  # gitleaks:allow
+        "Proxy-Authorization: Basic YWRhOmxvdmVsYWNl": "Proxy-Authorization: Basic [REDACTED]",  # gitleaks:allow
+        "curl -s -u ada:lovelace1 https://api.example.com": "curl -s -u ada:[REDACTED] https://api.example.com",  # gitleaks:allow
+        "curl --user=ada:lovelace1 x": "curl --user=ada:[REDACTED] x",  # gitleaks:allow
+        "Cookie: session=abc123; theme=dark": "Cookie: [REDACTED]",
+        "set-cookie: sid=s%3Axyz; Path=/; HttpOnly\nnext line": "set-cookie: [REDACTED]\nnext line",
+        '"Cookie": "_gh_sess=Zm9vYmFy"': '"Cookie": "[REDACTED]"',
+        "curl --cookie 'sid=xyz; a=b' https://x": "curl --cookie '[REDACTED]' https://x",
+    }
+    for text, want in cases.items():
+        assert redact(text) == want, text
+    for prose in ("a basic understanding of the API", "authorization: required for every call", "the Cookie: header",
+                  "Set-Cookie is sent by the server", "curl -u ada https://x (prompts for the password)",
+                  "cookie: crumbs everywhere"):
+        assert redact(prose) == prose, prose
+
+
+def test_redaction_of_prefixed_names():
+    """An environment variable's name carries a prefix: DB_PASSWORD is a password as much as password is."""
+    cases = {  # fake credentials the test needs
+        "DB_PASSWORD=hunter2hunter2": "DB_PASSWORD=[REDACTED]",  # gitleaks:allow
+        "POSTGRES_PASSWORD: s3cretvalue": "POSTGRES_PASSWORD: [REDACTED]",  # gitleaks:allow
+        "PGPASSWORD=s3cretvalue psql": "PGPASSWORD=[REDACTED] psql",  # gitleaks:allow
+        "AWS_SECRET_ACCESS_KEY=wJalrXUtnFEMI": "AWS_SECRET_ACCESS_KEY=[REDACTED]",  # gitleaks:allow
+        "export SLACK_SIGNING_SECRET=8f742231b10e": "export SLACK_SIGNING_SECRET=[REDACTED]",  # gitleaks:allow
+        "my-app-api-key: abcdef123": "my-app-api-key: [REDACTED]",  # gitleaks:allow
+    }
+    for text, want in cases.items():
+        assert redact(text) == want, text
+    for kept in ("PASSWORD_FILE=/run/secrets/db", "TOKEN_TTL=3600", "secretary: Ada", "max_tokens: 4096"):  # not a secret's own name
+        assert redact(kept) == kept, kept
+
+
 def test_weekly_review(synced):
     from chronicle.reviews import generate_review, review_ready, week_bounds
 

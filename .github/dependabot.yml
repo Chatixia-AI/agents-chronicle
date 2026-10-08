@@ -1,5 +1,5 @@
-# Weekly updates for the locked Python dependencies, the pinned GitHub Actions and the hub image's base
-# (security updates come sooner).
+# Weekly updates for the locked Python dependencies, the pinned GitHub Actions, the hub image's base and the images
+# compose.yaml runs (security updates come sooner).
 # A new release waits 7 days before it is proposed, so a compromised one is usually caught and pulled first.
 version: 2
 updates:
@@ -28,3 +28,16 @@ updates:
     cooldown:
       default-days: 7
     labels: [dependencies, no-changelog]  # a new base image is nothing users notice: no changelog line needed
+  - package-ecosystem: docker-compose  # Caddy and Postgres in docker/compose.yaml
+    directory: /docker
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    ignore:  # a new major is a migration, not an update: Postgres can't read the old major's data, Caddy may change
+      # the Caddyfile
+      - dependency-name: postgres
+        update-types: ["version-update:semver-major"]
+      - dependency-name: caddy
+        update-types: ["version-update:semver-major"]
+    labels: [dependencies, no-changelog]  # updating a hub downloads compose.yaml again (docs/docker.md#update)

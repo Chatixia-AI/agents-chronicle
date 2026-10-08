@@ -62,7 +62,7 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
   コンピューターが置き換えたり、変えたり、取り下げたりすることはできません。招待コードで、すでに別の人として参加したコンピューターを
   乗っ取ることもできません。
 - **書き出し**（セッションページの Export、または Sessions の一覧で選んだセッションの Export）は、Markdown と JSON では
-  ダッシュボードの表示と同じく機密情報を伏せ字にします。**Original transcript** はエージェント自身のファイルをそのまま渡すため
+  機密情報を伏せ字にします（[伏せ字にされるもの](#伏せ字にされるもの)）。**Original transcript** はエージェント自身のファイルをそのまま渡すため
   伏せ字になりません。共有する前に確認してください。
 - **MCP ツール**はデータベースを読んで stdio で答えるだけで、ネットワークで待ち受けるものはありません。その結果はクライアントの会話に
   加わるため、そのクライアントのモデルに届きます（要約と同じく機密情報は伏せ字にします）。セッションを見せてもよいモデル提供元の
@@ -77,3 +77,35 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
   [提案](suggestions.md)を参照してください。
 - **削除。** `chronicle forget <id> [--delete-transcript]` でセッションを完全に削除できます。`chronicle uninstall
   --purge` はすべてを削除します。
+
+## 伏せ字にされるもの
+
+伏せ字処理は、パターンの一覧（`src/chronicle/redact.py`）に合うものを `[REDACTED]` に置き換えます。分析に送る要約と
+分析が書き戻すもの（タイトル、要約、教訓）、書き出し、Markdown ボールト、MCP ツールの答えにかかります。生のアーカイブ
+（ダッシュボードのトランスクリプト表示は、あなたのコンピューター上のそれをそのまま見せます）、**Original transcript** の
+ダウンロード、`share = "everything"` のコンピューターがハブに送るセッションファイルは変えません。
+
+**伏せ字にするもの：**
+
+- 秘密鍵（`-----BEGIN … PRIVATE KEY-----` のブロック）と JWT（`eyJ….….…`）。
+- 決まった接頭辞を持つキーとトークン：Anthropic（`sk-ant-`）、OpenAI（`sk-`）、GitHub（`ghp_`、`gho_`、`github_pat_`
+  など）、GitLab（`glpat-`）、Slack（`xoxb-` など）、AWS のアクセスキー ID（`AKIA`、`ASIA`）、Google（`AIza`）、
+  Databricks（`dapi`）、Stripe（`sk_live_`、`rk_test_` など）、Hugging Face（`hf_`）、npm（`npm_`）。
+- 秘密情報の名前と `=` または `:` に続く値：`password`、`passwd`、`pwd`、`secret`、`client_secret`、`api_key`、
+  `access_key`、`secret_key`、`auth_token`、`access_token`、`refresh_token`、`private_key`、`token`。環境変数のように
+  接頭辞が付いていても同じです（`DB_PASSWORD=`、`AWS_SECRET_ACCESS_KEY=`）。
+- HTTP の認証情報：`Bearer` トークン、`Authorization:` や `Proxy-Authorization:` ヘッダーの認証情報（`Basic`、`Bearer`、
+  `token`）、URL の中のパスワード（`postgres://user:password@host`）や `curl -u user:password` のパスワード、Cookie
+  （`Cookie:` と `Set-Cookie:` の行、`curl --cookie`）。
+- Azure のキー：`AccountKey=`、`SharedAccessKey=`、SAS トークンの `sig=`。
+
+**伏せ字にならないもの：**
+
+- 決まった接頭辞も、横に名前もない秘密情報：単独で入力したパスワード、変数名なしで貼ったキー、上にない名前の値
+  （`DB_PASS=`、`PGUSER_PW=`）。
+- 複数行に分かれたもの、エンコードされたもの（`Basic` ヘッダー以外の base64、URL エンコード）、エージェントが画像や PDF として
+  添付したファイルの中のもの。
+- 個人情報：名前、メールアドレス、電話番号などはそのまま残ります。
+
+秘密情報がセッションに入ってしまったら、その秘密情報を取り替えてください。伏せ字処理は、Chronicle が見せるものと送るものから
+それを外しますが、エージェントが書いたトランスクリプトからは消しません。

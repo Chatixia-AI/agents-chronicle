@@ -276,8 +276,18 @@ them, since each start writes them again: change the variable in `.env` and run 
 ## Your own certificate
 
 Caddy gets a certificate from Let's Encrypt, which must reach the server on port 80 or 443. For a name only your
-company network reaches, give Caddy your company's certificate. Mount it in `compose.yaml` (under `caddy`, add
-`- ./certs:/certs:ro` to `volumes`) and add a `tls` line to the `Caddyfile`:
+company network reaches, give Caddy your company's certificate. Mount it in a `compose.override.yaml` next to
+`compose.yaml`, which Compose reads with it (a new copy of `compose.yaml` when you [update](#update) leaves it as it
+is):
+
+```yaml
+services:
+  caddy:
+    volumes:
+      - ./certs:/certs:ro
+```
+
+and add a `tls` line to the `Caddyfile`:
 
 ```text
 {$CHRONICLE_DOMAIN} {
@@ -308,9 +318,15 @@ lessons back. Add Postgres with `CHRONICLE_TEAM_STORE=postgres` and the `PG*` va
 ## Update
 
 ```bash
+curl -fsSL https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker/compose.yaml -o compose.yaml
 docker compose pull
 docker compose up -d
 ```
+
+`compose.yaml` pins Caddy and Postgres to an exact version and digest, so their images can't change under you.
+Newer ones reach this repository's copy as they are released, so download it again before pulling. Keep your own
+changes in `compose.override.yaml` (as for [your own certificate](#your-own-certificate)), never in
+`compose.yaml`. Postgres stays on 17: a new major version can't read the old one's data without moving it.
 
 To stay on one version, set `CHRONICLE_VERSION` in `.env` (e.g. `0.13.0`). The dashboard can't update a container:
 **Status** says to pull the new image instead.
