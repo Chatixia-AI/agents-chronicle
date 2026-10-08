@@ -825,6 +825,7 @@ async function render() {
   const { path, params } = parseHash();
   const app = $("#app");
   const seq = ++renderSeq;
+  if (path !== "/overview") newsVisit = null; // what was new when Team overview opened holds while it stays open
   updateShell(path, params);
   for (const [pattern, view] of routes) {
     const m = path.match(pattern);
@@ -1450,10 +1451,31 @@ function teamAttention(data) {
     h("ul", { class: "attention" }, items.map(([lead, text, href]) => h("li", null, lead, h("span", null, text), h("a", { class: "hint link-arrow", href }, t("Open"), icon("arrow"))))));
 }
 
+// what other computers sent since this viewer last opened Team overview (news.py)
+function newsCard(items) {
+  if (!items.length) return null;
+  return h("section", { class: "card news-card section-gap" }, cardHead(t("New since your last visit"), { iconName: "sparkles", hint: tn(items.length, "{n} update", "{n} updates") }),
+    h("ul", { class: "attention" }, items.map((x) => h("li", null,
+      x.kind === "joined" ? icon("devices") : avatar(x.person || x.computer || "?"),
+      h("span", null, newsText(x)),
+      h("span", { class: "hint nowrap", title: fmtDT(x.at) }, ago(x.at))))));
+}
+
 async function teamHome(params) {
   const days = TEAM_PERIODS.includes(params.days) ? params.days : TEAM_PERIODS[0];
   const data = await api("/api/team", { days });
   const tot = data.totals, period = t("the last {n} days", { n: days });
+  newsVisit ||= { seen: data.news?.seen || "" }; // a period picked meanwhile still shows what was new on opening
+  const fresh = (data.news?.items || []).filter((x) => x.at > newsVisit.seen);
+  const gained = {}; // project -> what it gained since
+  for (const x of fresh.filter((x) => x.kind === "shared")) {
+    const g = (gained[x.project_path] ||= { sessions: 0, lessons: 0 });
+    g.sessions += x.sessions;
+    g.lessons += x.lessons;
+  }
+  const plus = (n) => n ? h("span", { class: "new-chip", title: t("New since your last visit") }, `+${fmtNum(n)}`) : null;
+  if (data.news) post("/api/team/news/seen", { at: data.news.now }).then(() => drawNews(0)).catch(() => {});
+  const news = newsCard(fresh);
   const head = h("div", { class: "page-head" },
     h("div", null, h("h1", null, data.hub?.name || t("Team")),
       h("div", { class: "sub" }, limited() ? t("Your projects on this hub, {period}", { period }) : t("The team's projects on this hub, {period}", { period }))),
@@ -1461,7 +1483,7 @@ async function teamHome(params) {
       segControl(TEAM_PERIODS.map((d) => [d, t("{n}d", { n: d })]), days, (v) => { setParams({ days: v }); render(); })));
   const attention = teamAttention(data);
   if (!data.projects.length) {
-    return h("div", null, head, attention, h("section", { class: "card section-gap" }, cardHead(t("No team projects yet"), { iconName: "projects" }),
+    return h("div", null, head, news, attention, h("section", { class: "card section-gap" }, cardHead(t("No team projects yet"), { iconName: "projects" }),
       limited() ? h("p", null, t("No project on this hub is shared with you yet. Ask an admin of this hub."))
         : dedicated() ? h("p", null, tx("A project shows up here once an admin makes it in {projects}, or a computer sends sessions to it.",
           { projects: h("a", { href: "#/team/projects" }, t("Team › Projects")) }))
@@ -1479,8 +1501,8 @@ async function teamHome(params) {
         h("th", null, t("Who")), h("th", null, t("Latest")))),
       h("tbody", null, data.projects.map((p) => h("tr", null,
         h("td", null, h("a", { class: "proj", href: `#/project?path=${encodeURIComponent(p.path)}`, title: p.path }, p.label)),
-        h("td", { class: "num" }, p.recent ? fmtNum(p.recent) : h("span", { class: "muted" }, "0")),
-        h("td", { class: "num" }, p.lessons ? fmtNum(p.lessons) : h("span", { class: "muted" }, "0")),
+        h("td", { class: "num" }, p.recent ? fmtNum(p.recent) : h("span", { class: "muted" }, "0"), plus(gained[p.path]?.sessions)),
+        h("td", { class: "num" }, p.lessons ? fmtNum(p.lessons) : h("span", { class: "muted" }, "0"), plus(gained[p.path]?.lessons)),
         h("td", null, p.people.length ? h("div", { class: "who-list" }, p.people.slice(0, 3).map((x) => whoTag(x.who, x.key)),
           p.people.length > 3 ? h("span", { class: "muted" }, `+${p.people.length - 3}`) : null) : h("span", { class: "muted" }, "–")),
         h("td", { class: "nowrap", title: p.last ? fmtDT(p.last) : "" }, p.last ? ago(p.last) : h("span", { class: "muted" }, t("no sessions yet")))))))));
@@ -1507,7 +1529,7 @@ async function teamHome(params) {
         h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, x.title || t("(untitled)"), agentTag(x.agent)),
           h("div", { class: "m" }, [x.project_name, x.who, ago(x.started_at), x.active_s ? t("{dur} active", { dur: fmtDur(x.active_s) }) : null].filter(Boolean).join(" · "))));
     })) : h("div", { class: "empty" }, t("No sessions yet")));
-  return h("div", null, head, tiles, attention,
+  return h("div", null, head, tiles, news, attention,
     h("div", { class: "grid cols-main section-gap" }, projCard, whoCard),
     h("div", { class: "grid cols-2 section-gap" }, lessonsCard, recentCard));
 }
@@ -6011,13 +6033,50 @@ async function pollUnseen() {
 }
 function drawUnseen(n) {
   unseenCount = n;
-  const a = $('#rail a[data-section="suggestions"]');
+  railBadge("suggestions", n, n ? t("Suggestions, {n} new", { n }) : t("Suggestions"));
+}
+function railBadge(section, n, label) { // a count on a rail icon, e.g. what's new there
+  const a = $(`#rail a[data-section="${section}"]`);
   if (!a) return;
   let badge = a.querySelector(".rail-badge");
-  a.setAttribute("aria-label", n ? t("Suggestions, {n} new", { n }) : t("Suggestions"));
+  a.setAttribute("aria-label", label);
   if (!n) { badge?.remove(); return; }
   if (!badge) a.append((badge = h("span", { class: "rail-badge", "aria-hidden": "true" })));
   badge.textContent = n > 99 ? "99+" : String(n);
+}
+
+// On a hub with people: what other computers sent (news.py), as a count on Team overview's rail icon and in the tab's
+// title, and a toast for what comes in while the dashboard is open. The first poll only counts; later ones ask for what
+// was added to since, and a row a computer keeps adding to is told by what it gained.
+let newsUnseen = 0, newsCursor = null, newsVisit = null;
+const newsKnown = new Map(); // row id -> the row as last seen here
+async function pollNews() {
+  if (!ME?.hub?.team) return;
+  let r;
+  try { r = await api("/api/team/news", newsCursor ? { after: newsCursor } : {}); } catch (e) { return; }
+  const gained = [];
+  for (const x of r.items) {
+    const was = newsKnown.get(x.id);
+    const d = { ...x, sessions: x.sessions - (was?.sessions || 0), lessons: x.lessons - (was?.lessons || 0) };
+    if (newsCursor && (!was || d.sessions > 0 || d.lessons > 0)) gained.push(d);
+    newsKnown.set(x.id, x);
+  }
+  newsCursor = r.now;
+  drawNews(r.unseen);
+  if (gained.length === 1) toast(newsText(gained[0]), 6000);
+  else if (gained.length) toast(tn(gained.length, "{n} update from the team: see Team overview", "{n} updates from the team: see Team overview"), 6000);
+}
+function drawNews(n) {
+  newsUnseen = n;
+  railBadge("teamhome", n, n ? t("Team overview, {n} new", { n }) : t("Team overview"));
+  document.title = newsPrefix() + document.title.replace(/^\(\d+\+?\) /, "");
+}
+function newsPrefix() { return newsUnseen ? `(${newsUnseen > 99 ? "99+" : newsUnseen}) ` : ""; }
+function newsText(x) {
+  const computer = x.computer || t("A computer");
+  if (x.kind === "joined") return x.person ? t("{computer} joined the hub as {name}", { computer, name: x.person }) : t("{computer} joined the hub", { computer });
+  const what = [x.sessions ? tn(x.sessions, "{n} session", "{n} sessions") : null, x.lessons ? tn(x.lessons, "{n} lesson", "{n} lessons") : null];
+  return t("New from {who} in {project}: {what}", { who: x.person || computer, project: x.project, what: what.filter(Boolean).join(", ") });
 }
 function suggestionsChanged() { // counts in the sidebar and the rail follow an action
   if (sbSection === "suggestions") buildSidebar("suggestions");
@@ -6450,7 +6509,7 @@ function sectionLink(key) { const sx = SECTIONS.find((x) => x.key === key); retu
 function setCrumbs(items, token = renderSeq) { // [[label, href?], ...]; the last is the current page
   if (token !== renderSeq) return; // a view that finished after the user moved on
   const page = items.length ? items[items.length - 1][0] : "";
-  document.title = page && page !== t("Home") ? `${page} — Chronicle` : "Chronicle";
+  document.title = newsPrefix() + (page && page !== t("Home") ? `${page} — Chronicle` : "Chronicle");
   $("#crumbs").replaceChildren(...items.flatMap(([label, href], i) => [
     i ? h("span", { class: "sep" }, "›") : null,
     href && i < items.length - 1 ? h("a", { href }, label) : h("b", { title: label }, label)]).filter(Boolean));
@@ -6484,6 +6543,7 @@ function renderRail() {
     link({ key: "search", label: t("Search all sessions"), href: "#/search" }),
     h("div", { class: "spacer" }), ...(ME?.hub && canAdmin() ? [link(team)] : []), link(settings));
   drawUnseen(unseenCount);
+  drawNews(newsUnseen);
 }
 
 // ------------------------------------------------------------------ sidebar
@@ -6965,6 +7025,7 @@ async function pollStatus() {
     $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
     showUpdate(st.update, st.version);
     pollUnseen();
+    pollNews();
     for (const name of [...watched]) {
       const j = jobs[name];
       if (name === "update" && restartAfterUpdate && (!j || j.state === "done")) {

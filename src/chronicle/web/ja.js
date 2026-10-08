@@ -1716,4 +1716,16 @@ window.CHRONICLE_JA = {
   "From teammates": "チームメイトから",
   "A teammate's lesson, sent back by the team hub. Your agent gets it too.": "チームのハブから届いた、チームメイトのナレッジです。あなたのエージェントにも渡ります。",
   "Read them": "見る",
+  // Team overview: what other computers sent (news.py)
+  "New since your last visit": "前回からの新着",
+  "{n} update": "{n} 件の更新",
+  "{n} updates": "{n} 件の更新",
+  "{n} update from the team: see Team overview": "チームから {n} 件の更新があります。チームの概要で確認できます",
+  "{n} updates from the team: see Team overview": "チームから {n} 件の更新があります。チームの概要で確認できます",
+  "Team overview, {n} new": "チームの概要（新着 {n} 件）",
+  "{computer} joined the hub as {name}": "{computer} が {name} としてハブに参加しました",
+  "{computer} joined the hub": "{computer} がハブに参加しました",
+  "{n} lesson": "{n} 件の教訓",
+  "{n} lessons": "{n} 件の教訓",
+  "New from {who} in {project}: {what}": "{project} に {who} から新着: {what}",
 };

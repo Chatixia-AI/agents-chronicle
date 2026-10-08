@@ -21,7 +21,7 @@ from datetime import datetime, timezone
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from . import artifacts
+from . import artifacts, news
 from .config import Config
 from .db import kv_get, kv_set
 from .ladder import MEMORY_STAGE_REASON
@@ -431,6 +431,8 @@ def store_parsed(
         f"ON CONFLICT(id) DO UPDATE SET {updates}",
         [row[c] for c in cols],
     )
+    if prev is None and machine and machine != me and source != "history":  # the Team page's news (news.py)
+        news.record(conn, machine, project_path, sessions=1)
     return "new" if prev is None else "updated"
 
 

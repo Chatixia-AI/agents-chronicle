@@ -354,6 +354,14 @@ needs attention: people who haven't joined yet or have no way in, and computers 
 A project only the hub computer works on stays off the team's Home; **Activity** (top right of Home) keeps the charts
 of every session on the hub. Someone limited to projects sees their projects only.
 
+**What's new.** When another computer shares sessions or lessons the hub didn't have, or a computer joins, the
+**Team overview** icon shows a count, so does the browser tab (`(3) Team overview — Chronicle`), and an open dashboard
+says what came in: *New from Yuma in AI-BPO-Resona: 2 sessions, 4 lessons*. Opening Team overview lists what is new
+since your last visit, adds **+2** to that project's sessions and lessons, and clears the count. A session a computer
+sends again because it went on is not new; a lesson its new analysis found is. What you saw is kept on the hub, per
+person, so another browser knows it too; the first time, the last 7 days are new. Someone limited to projects hears of
+those projects only, and only admins hear of computers joining. The hub keeps this for 90 days.
+
 Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**, **Computers**, **Team store** and
 **Hub settings** (the hub's name and address, **Knowledge only**, the model that writes knowledge bases, updates and
 backups).

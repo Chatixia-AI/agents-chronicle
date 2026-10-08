@@ -55,6 +55,12 @@
   hub, and a share or folder change waits for the one before it.
 - **Each folder of a hub project counts its own sessions:** in **Settings › Devices**, two folders of one project each
   showed the project's total.
+- **A hub says what's new:** when another computer shares sessions or lessons the hub didn't have, or a computer
+  joins, the **Team overview** icon and the browser tab show a count, and an open dashboard says what came in (*New
+  from Yuma in AI-BPO-Resona: 2 sessions, 4 lessons*). Team overview lists what is new since your last visit and adds
+  **+n** to each project's sessions and lessons. Each person's count is their own and follows them to another browser;
+  someone limited to projects hears of theirs only, and only admins hear of computers joining.
+  [The hub's dashboard](docs/devices.md#the-hubs-dashboard)
 
 ## 0.15.0 (2026-10-08)
 

@@ -1988,6 +1988,9 @@ a.who-tag:hover > span:last-child { text-decoration: underline; }
 .who-line { margin-top: 4px; }
 table.team-projects td { vertical-align: middle; }
 .attention-card { border-left: 3px solid var(--warning); }
+.news-card { border-left: 3px solid var(--cta); }
+.new-chip { display: inline-block; margin-left: 6px; padding: 0 5px; border-radius: 8px; background: var(--cta); color: var(--cta-ink);
+  font-size: 11px; font-weight: 600; line-height: 16px; vertical-align: 1px; }
 .attention { list-style: none; margin: 0; padding: 0; display: grid; gap: 4px; }
 .attention li { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 6px 4px; }
 .attention li > .icon { width: 30px; height: 18px; color: var(--muted); }
