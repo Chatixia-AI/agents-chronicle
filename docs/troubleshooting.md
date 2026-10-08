@@ -81,6 +81,12 @@ when a Claude Code folder was copied from one computer to another. The first com
 **A push fails with "too large once unpacked".** The hub unpacks what a computer sends only up to a limit (256 MB
 for one batch of shared sessions, 1 GB for analyses). Only a damaged or crafted upload reaches it.
 
+**An invite or sign-in link says "too many wrong codes from this address".** After five codes the hub never issued
+from one address within 15 minutes, each further try from there waits a little longer: 1 second, then 2, 4 and so on,
+up to a minute. Wait that long, then paste the code again, exactly as it was sent. A code that was already used or has
+expired doesn't count. Behind your own proxy, add its address to `[server] trusted_proxies` (`CHRONICLE_TRUSTED_PROXIES`
+in Docker) so the hub tells visitors apart rather than counting them all as the proxy.
+
 ## Starting over
 
 `chronicle uninstall` removes the hooks, background agents and MCP registrations and keeps your data;

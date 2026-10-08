@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import re
 import secrets
 import sqlite3
+import threading
+import time
 from datetime import datetime, timedelta, timezone
 
 from .util import utcnow_iso
@@ -58,6 +61,46 @@ class PeopleError(Exception):
         from .i18n import tr
 
         return tr(self.template, **self.values)
+
+
+class UnknownCode(PeopleError):
+    """A code this hub never issued (or not of the kind asked for): what a guess gets, so CodeAttempts counts it."""
+
+
+class CodeAttempts:
+    """Wrong codes per address, for the two places a code is the credential (/signin?code= and /api/hub/join).
+
+    The first FREE wrong ones in WINDOW cost nothing. After them, a try from that address waits 1 s after the last wrong
+    one, then 2 s, 4 s and so on up to MAX_WAIT, and is answered without its code being looked at. Never a lockout: a
+    wait runs out, a quiet WINDOW forgets the address, and a code the hub issued (used or expired) doesn't count.
+    Codes are long and single-use, so this is belt and braces."""
+
+    FREE, WINDOW, MAX_WAIT, KEEP = 5, 15 * 60, 60, 10_000
+
+    def __init__(self, clock=time.monotonic):
+        self._clock, self._lock = clock, threading.Lock()
+        self._seen: dict[str, tuple[int, float]] = {}  # address -> (wrong codes, when the last one came)
+
+    def _count(self, who: str, now: float) -> tuple[int, float]:
+        n, last = self._seen.get(who, (0, 0.0))
+        return (0, 0.0) if n and now - last > self.WINDOW else (n, last)
+
+    def wait(self, who: str) -> int:
+        """Seconds `who` still waits before a code of theirs is looked at; 0 to go ahead."""
+        with self._lock:
+            now = self._clock()
+            n, last = self._count(who, now)
+            if n < self.FREE:
+                return 0
+            return max(0, math.ceil(min(self.MAX_WAIT, 2 ** (n - self.FREE)) - (now - last)))
+
+    def wrong(self, who: str) -> None:
+        with self._lock:
+            now = self._clock()
+            self._seen[who] = (self._count(who, now)[0] + 1, now)
+            if len(self._seen) > self.KEEP:  # many addresses at once: forget the half that went quiet first
+                cut = sorted(last for _, last in self._seen.values())[len(self._seen) // 2]
+                self._seen = {k: v for k, v in self._seen.items() if v[1] > cut}
 
 
 def _hash(secret: str) -> str:
@@ -285,7 +328,7 @@ def _take_code(conn: sqlite3.Connection, code: str, kinds: tuple[str, ...]) -> d
                      (_hash(normalize_code(code)), _hash(code or ""))).fetchone()
     h = r["code_hash"] if r else None
     if not r or r["kind"] not in kinds:
-        raise PeopleError("that code isn't known on this hub")
+        raise UnknownCode("that code isn't known on this hub")
     if r["used_at"]:
         raise PeopleError("that code was already used; ask an admin for a new one")
     if _expired(r["expires_at"]):

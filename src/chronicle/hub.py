@@ -96,6 +96,10 @@ class HubUnreachable(HubError):
     pass
 
 
+class UnknownInvite(HubError):
+    """An invite code the hub never issued: the server counts it against the address that sent it (people.CodeAttempts)."""
+
+
 class FolderError(HubError):
     """Why a folder can't be added or a project left: a template and its values, so the dashboard can show it in the
     viewer's language (`shown`) and the command line in English."""
@@ -1631,6 +1635,8 @@ def join_with_code(cfg: Config, conn, body: dict) -> dict:
                        "to it. Open the invite link in a browser instead; the code still works there.")
     try:
         person, token = people.join_computer(conn, code, machine_id, name)
+    except people.UnknownCode as exc:
+        raise UnknownInvite(str(exc)) from None
     except people.PeopleError as exc:
         raise HubError(str(exc)) from None
     now = utcnow_iso()

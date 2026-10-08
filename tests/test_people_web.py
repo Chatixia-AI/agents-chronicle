@@ -230,6 +230,42 @@ def test_person_tokens_on_the_hub_api(team):
     assert api("/api/hub/done", {"machine": OTHER}, token)[0] == 401
 
 
+def test_wrong_codes_make_an_address_wait(team):
+    url, app, conn = team["url"], team["app"], team["conn"]
+    t = [1000.0]
+    app.code_attempts = people.CodeAttempts(clock=lambda: t[0])
+    there = {"X-Forwarded-For": "203.0.113.7"}  # through the proxy on the hub itself (trusted): that visitor's address
+    for _ in range(people.CodeAttempts.FREE):
+        assert _raw(url, "/signin?code=AAAA-BBBB-CCCC", headers=there)[0] == 400
+    good = people.invite(conn, team["bob"]["id"])
+    status, headers, page = _raw(url, f"/signin?code={good}", headers=there)
+    assert status == 429 and headers["Retry-After"] == "1" and b"too many wrong codes" in page
+    assert people.peek_invite(conn, good)  # not looked at, so not used up
+    assert _raw(url, f"/signin?code={good}", headers={"X-Forwarded-For": "198.51.100.9"})[0] == 302  # nobody else waits
+
+    # joining with a code counts the same way, for the same address
+    wrong = {"code": "AAAA-BBBB-CCCC", "machine": OTHER}
+    status, r = _call(url, "/api/hub/join", wrong, there)
+    assert status == 429 and "try again in 1 s" in r["error"]
+    t[0] += 1
+    status, r = _call(url, "/api/hub/join", wrong, there)
+    assert status == 400 and "isn't known" in r["error"]
+    status, headers, _ = _raw(url, "/api/hub/join", wrong, there)
+    assert status == 429 and headers["Retry-After"] == "2"
+
+    # a code the hub issued, used or expired, is no guess: it never makes anyone wait
+    app.code_attempts = people.CodeAttempts(clock=lambda: t[0])
+    for _ in range(people.CodeAttempts.FREE + 3):
+        assert _raw(url, f"/signin?code={good}", headers=there)[0] == 400  # already used
+    assert app.code_attempts.wait("203.0.113.7") == 0
+
+    # X-Forwarded-For from a proxy the hub doesn't trust is not believed: every visitor is that proxy
+    app.cfg.server_trusted_proxies = []
+    for i in range(people.CodeAttempts.FREE):
+        assert _raw(url, "/signin?code=AAAA-BBBB-CCCC", headers={"X-Forwarded-For": f"192.0.2.{i}"})[0] == 400
+    assert _raw(url, "/signin?code=AAAA-BBBB-CCCC", headers={"X-Forwarded-For": "192.0.2.99"})[0] == 429
+
+
 def test_a_proxy_on_the_hub_itself_is_not_someone_here(hubweb):
     url, app = hubweb["url"], hubweb["app"]
     for header in ("X-Forwarded-Proto", "X-Real-IP", "Forwarded"):  # added by a proxy: not someone at this computer

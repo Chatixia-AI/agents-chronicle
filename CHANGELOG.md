@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **Wrong invite and sign-in codes make an address wait:** after five codes the hub never issued, from one address
+  within 15 minutes, each further try from there waits 1 second, then 2, 4 and so on up to a minute, and its code
+  isn't looked at meanwhile. Behind a proxy in `[server] trusted_proxies` the hub counts each visitor by
+  `X-Forwarded-For`. A used or expired code never counts. See [Troubleshooting](docs/troubleshooting.md#a-hub).
 - **Security fixes, continued (the hub):**
   - An analysis a computer sends applies only to that computer's own sessions. A computer could send an analysis
     under the id of a session another computer (or the hub itself) has, before the hub analyzed it, and replace its

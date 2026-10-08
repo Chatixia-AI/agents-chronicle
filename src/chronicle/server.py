@@ -60,6 +60,7 @@ HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub
             "/api/hub/withdraw")
 SIGNIN_HELP = ("Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
                "(Settings › Devices).")
+TOO_MANY_CODES = "too many wrong codes from this address; try again in {seconds} s"  # people.CodeAttempts
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("font/woff2", ".woff2")
 
@@ -170,6 +171,9 @@ class App:
         from .hub import IngestTrigger
 
         self.ingest = IngestTrigger(cfg)  # a hub ingests what other computers send, right after they send it
+        from .people import CodeAttempts
+
+        self.code_attempts = CodeAttempts()  # wrong invite and sign-in codes per address
 
     def _config_sig(self):
         try:
@@ -2044,6 +2048,17 @@ def make_handler(app: App, port: int):
             return "mac" if sys.platform == "darwin" else "linux" if sys.platform.startswith("linux") else None
 
         # ---- who is viewing (people.py): set per request in _get/_post, None meaning an admin
+        def _client(self) -> str:
+            """The address a request came from. Through a proxy in [server] trusted_proxies, the visitor that proxy
+            names: the last X-Forwarded-For entry, the one it added itself. Anyone else's X-Forwarded-For is not
+            believed."""
+            addr = self.client_address[0]
+            if addr in app.cfg.server_trusted_proxies:
+                forwarded = (self.headers.get("X-Forwarded-For") or "").split(",")[-1].strip()
+                if forwarded:
+                    return forwarded
+            return addr
+
         def _proxied_https(self) -> bool:
             """The request reached a proxy in [server] trusted_proxies over https. X-Forwarded-Proto from anyone else
             is not believed."""
@@ -2111,16 +2126,23 @@ def make_handler(app: App, port: int):
             return f"{'https' if self._proxied_https() else 'http'}://{self._host() or '127.0.0.1'}"
 
         def _signin(self, code: str):
-            """An invite link, or a sign-in link a person's own Chronicle asked for: opens a browser session."""
+            """An invite link, or a sign-in link a person's own Chronicle asked for: opens a browser session. After a
+            few unknown codes from one address, its next tries wait their turn (people.CodeAttempts)."""
             import html
 
             from . import people
 
             accept = (self.headers.get("Accept-Language") or "").strip().lower()
             i18n.lang.set("ja" if accept.startswith("ja") else "en")  # a link opened by hand sends no X-Chronicle-Lang
+            who = self._client()
+            wait = app.code_attempts.wait(who)
             try:
+                if wait:
+                    raise people.PeopleError(TOO_MANY_CODES, seconds=wait)  # the code isn't looked at
                 _person, session = people.open_browser(app.conn, code, label=self.headers.get("User-Agent"))
             except people.PeopleError as exc:
+                if isinstance(exc, people.UnknownCode):
+                    app.code_attempts.wrong(who)
                 title = html.escape(tr("Could not sign in"))
                 body = (f'<!doctype html><html lang="{i18n.lang.get()}"><meta charset="utf-8">'
                         '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -2129,10 +2151,12 @@ def make_handler(app: App, port: int):
                         f'padding: 0 16px"><h1 style="font-size: 1.3rem">{title}</h1><p>{html.escape(exc.shown())}</p>'
                         f"<p>{html.escape(tr(SIGNIN_HELP))}</p>"
                         f'<p><a href="/">{html.escape(tr("Open the dashboard"))}</a></p></body></html>').encode()
-                self.send_response(400)
+                self.send_response(429 if wait else 400)
                 self.send_header("Content-Type", "text/html; charset=utf-8")
                 self.send_header("Content-Length", str(len(body)))
                 self.send_header("Cache-Control", "no-store")
+                if wait:
+                    self.send_header("Retry-After", str(wait))
                 self.send_header("X-Content-Type-Options", "nosniff")
                 self.send_header("Referrer-Policy", "no-referrer")
                 self.send_header("Content-Security-Policy", "default-src 'none'; style-src 'unsafe-inline'")
@@ -2177,11 +2201,17 @@ def make_handler(app: App, port: int):
             if p == "/api/hub/join":  # the invite code is the credential
                 if length > 65536:
                     return self._json({"error": "too large"}, 413)
+                who = self._client()
                 try:
                     body = json.loads(self.rfile.read(length) or b"{}") if length else {}
                     if not isinstance(body, dict):
                         return self._json({"error": "bad json"}, 400)
+                    if wait := app.code_attempts.wait(who):  # after a few unknown codes from here: not looked at
+                        return self._json({"error": tr(TOO_MANY_CODES, seconds=wait)}, 429, headers={"Retry-After": str(wait)})
                     return self._json(hub.join_with_code(app.cfg, app.conn, body))
+                except hub.UnknownInvite as exc:
+                    app.code_attempts.wrong(who)
+                    return self._json({"error": str(exc)}, 400)
                 except (hub.HubError, ValueError) as exc:
                     return self._json({"error": str(exc)}, 400)
             auth = self.headers.get("Authorization")
@@ -2226,7 +2256,7 @@ def make_handler(app: App, port: int):
                 return self._json({"error": str(exc)}, 400)
             return self._json({"error": "not found"}, 404)
 
-        def _json(self, data, status=200, cookie: str | None = None):
+        def _json(self, data, status=200, cookie: str | None = None, headers: dict | None = None):
             body = json.dumps(data, ensure_ascii=False, default=str).encode()
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
@@ -2234,6 +2264,8 @@ def make_handler(app: App, port: int):
             self.send_header("Content-Length", str(len(body)))
             if cookie:
                 self.send_header("Set-Cookie", cookie)
+            for name, value in (headers or {}).items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(body)
 
