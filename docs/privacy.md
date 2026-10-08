@@ -55,7 +55,8 @@ yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encry
 - **Provider API keys** live in `provider-keys.json` in Chronicle's folder (mode 600), not in `config.toml`, and the
   dashboard never sends one back to the browser.
 - **The dashboard** binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding) and requires a custom header
-  on state-changing requests (CSRF). In the app window, the page can call only three window actions (theme, drag,
+  on state-changing requests (CSRF). Its page runs only the dashboard's own script files (a Content-Security-Policy),
+  so text from a transcript that slipped into the page as HTML could run nothing. In the app window, the page can call only three window actions (theme, drag,
   zoom). Reached through Tailscale Serve, it answers only to the names in `[server] allowed_hosts` and lets in only
   the Tailscale logins in `[server] allowed_users`, a header it trusts only from Serve on the same computer. A
   hub takes other computers' files only with its token (`chronicle hub enable --rotate` replaces it). Reached from

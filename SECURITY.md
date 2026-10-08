@@ -26,7 +26,8 @@ fixes.
 - The dashboard listens on `127.0.0.1` by default. Reached from other devices, it opens only for people an admin
   added, or for a Tailscale login the hub's owner allowed ([Phone and other computers](docs/devices.md)).
 - On a hub, each computer's sessions stay its own: another computer can neither replace nor take them back.
-- Files agents made open under a sandboxing content policy; links a transcript recorded open only as `http(s)`.
+- The dashboard page runs only the dashboard's own script files (a Content-Security-Policy). Files agents made open
+  under a sandboxing content policy; links a transcript recorded open only as `http(s)`.
 - The analyses Chronicle runs with `claude` or `codex` disable every tool, so a transcript can't make the analyzer
   act on your computer.
 

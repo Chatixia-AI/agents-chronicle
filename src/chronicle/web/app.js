@@ -24,11 +24,19 @@ function setAttrs(e, attrs) {
   for (const [k, v] of Object.entries(attrs)) {
     if (v == null || v === false) continue;
     if (k === "class") e.setAttribute("class", v);
-    else if (k === "style" && typeof v === "object") Object.assign(e.style, v);
+    else if (k === "style" && typeof v === "object") setStyle(e, v);
     else if (k.startsWith("on") && typeof v === "function") e.addEventListener(k.slice(2), v);
     else if (k === "html") e.innerHTML = v; // only for output of our own escaping renderers
     else if (k === "text") e.textContent = v;
     else e.setAttribute(k, v === true ? "" : v);
+  }
+}
+// styles go through the CSSOM, custom properties (--x) included, never a style attribute: the page's
+// Content-Security-Policy allows no inline styles (server.py, PAGE_CSP)
+function setStyle(e, styles) {
+  for (const [p, v] of Object.entries(styles)) {
+    if (p.startsWith("--")) e.style.setProperty(p, v);
+    else e.style[p] = v;
   }
 }
 function append(e, kids) {
@@ -1401,7 +1409,7 @@ function initials(name) { return (name || "?").trim().split(/\s+/).slice(0, 2).m
 function avatar(name) { // a person's initials on a wash of one categorical colour, the same for the same name
   let n = 0;
   for (const ch of name || "") n = (n * 31 + ch.codePointAt(0)) >>> 0;
-  return h("span", { class: "avatar", "aria-hidden": "true", style: `--av: var(--series-${(n % 8) + 1})` }, initials(name));
+  return h("span", { class: "avatar", "aria-hidden": "true", style: { "--av": `var(--series-${(n % 8) + 1})` } }, initials(name));
 }
 // a person (or a computer no one joined) by name; with a key, a link to their sessions, or to `base` narrowed to them
 function whoTag(name, key, base = "#/sessions") {
@@ -2199,7 +2207,7 @@ function miniMindmap(cats) {
     const a = (i / cats.length) * Math.PI * 2 - Math.PI / 2;
     const x = cx + Math.cos(a) * 112, y = cy + Math.sin(a) * 42, r = 3 + (n / max) * 6;
     svg.append(s("path", { class: "hub-mm-link", d: `M${cx},${cy} Q${(cx + x) / 2},${y} ${x},${y}` }),
-      s("circle", { class: "hub-mm-node", cx: x, cy: y, r, style: `fill: var(--series-${(i % 8) + 1})` }),
+      s("circle", { class: "hub-mm-node", cx: x, cy: y, r, style: { fill: `var(--series-${(i % 8) + 1})` } }),
       s("text", { x: x + (Math.cos(a) >= 0 ? r + 4 : -r - 4), y: y + 3.5, "text-anchor": Math.cos(a) >= 0 ? "start" : "end" }, catLabel(cat)));
   });
   svg.append(s("circle", { class: "hub-mm-root", cx, cy, r: 7 }));
@@ -2213,7 +2221,7 @@ function weekDays(start) {
 const dayFmt = new Intl.DateTimeFormat(LOCALE, { weekday: "short" });
 function dayBars(values, days, { height = 90 } = {}) { // active time per day of one week, labelled Mon..Sun
   const max = Math.max(0, ...values);
-  return h("div", { class: "day-bars", style: `--h: ${height}px`, role: "img",
+  return h("div", { class: "day-bars", style: { "--h": `${height}px` }, role: "img",
     "aria-label": values.map((v, i) => `${days[i] ? dayFmt.format(days[i]) : i}: ${fmtDur(v)}`).join(", ") },
     values.map((v, i) => {
       const col = h("div", { class: "db-col" },
@@ -4533,7 +4541,7 @@ function reviewView(r) {
   const lists = LISTS.filter(([key]) => rv[key] && rv[key].length);
   const spans = { 1: [6], 2: [3, 3], 3: [2, 2, 2], 4: [3, 3, 3, 3], 5: [2, 2, 2, 3, 3], 6: [2, 2, 2, 2, 2, 2] }[lists.length] || [];
   const listGrid = lists.length ? h("div", { class: "rv-lists" }, lists.map(([key, title, ic, tone], i) =>
-    h("section", { class: `card rv-list t-${tone}`, style: `--span: ${spans[i] || 2}` },
+    h("section", { class: `card rv-list t-${tone}`, style: { "--span": String(spans[i] || 2) } },
       h("div", { class: "rv-list-head" }, icon(ic), h("h3", null, title), h("span", null, fmtNum(rv[key].length))),
       clampList(rv[key])))) : null;
   const full = rv.summary ? h("details", { class: "card rv-full" }, h("summary", null, t("Read the full write-up")), mdEl(rv.summary)) : null;
