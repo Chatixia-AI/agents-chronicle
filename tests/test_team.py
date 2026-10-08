@@ -177,7 +177,7 @@ def test_teammates_lessons_come_back_read_only(teamenv):
     app, httpd, url = _serve(load_config(spoke.home))
     try:
         _, everything = _call(url, "/api/knowledge")
-        _, only = _call(url, "/api/knowledge?source=team")
+        _, only = _call(url, "/api/knowledge?source=team&limit=1")  # filtered before the limit, not after
         _, page = _call(url, f"/api/project?path={SPOKE_CWD}")
     finally:
         httpd.shutdown()

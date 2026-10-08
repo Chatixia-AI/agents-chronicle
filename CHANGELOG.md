@@ -16,6 +16,8 @@
   only as a count in **Settings › Devices**. They now show on project pages and in **All knowledge**, marked **from**
   the computers whose sessions stated them; **From teammates** in the source filter lists only them, and **Read them**
   in **Settings › Devices** opens that list.
+- **All knowledge's source filter finds every match:** it used to filter the newest 400 items, so with a large archive
+  it missed older ones (157 of 227 teammates' lessons, on one archive of 3,581 items).
 
 ## 0.15.0 (2026-10-08)
 

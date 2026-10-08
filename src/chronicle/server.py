@@ -915,9 +915,8 @@ class App:
     def knowledge(self, q: dict) -> dict:
         rows = search_knowledge(self.conn, q.get("q") or None, project=q.get("project") or None, kind=q.get("kind") or None,
                                 include_inactive=q.get("status") == "all", limit=min(int(q.get("limit") or 200), 1000),
-                                sessions=self._who_clause(q["who"]) if q.get("who") else None)
-        if q.get("source"):
-            rows = [r for r in rows if r["source"] == q["source"]]
+                                sessions=self._who_clause(q["who"]) if q.get("who") else None,
+                                source=q.get("source") or None)
         if self._whos() is not None and rows:  # each lesson's person, through the session it came from
             ids = list({r["session_id"] for r in rows if r.get("session_id")})
             machine = {}
