@@ -67,7 +67,7 @@
 | `server.allowed_hosts` | `[]` | 127.0.0.1 と localhost のほかにダッシュボードが応答する名前。Tailscale の名前など。`chronicle tailnet on` が設定します（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `server.allowed_users` | `[]` | それらの名前で Tailscale Serve 経由でアクセスしたとき、通す Tailscale ログイン（空の場合は tailnet の全員）。`chronicle tailnet on` があなたのログインを設定します |
 | `server.auth_header` | `""` | 認証プロキシ経由の会社のサインイン：サインインした人のメールアドレスを運ぶリクエストヘッダー。例：`"X-Forwarded-Email"`。`trusted_proxies` からのリクエストで、ハブに追加された人の場合だけ信頼します。空の場合は招待かサインインリンクでサインインします（[会社のサインイン](devices.md#会社のサインイン)） |
-| `server.trusted_proxies` | `["127.0.0.1", "::1"]` | ダッシュボードが `auth_header` と `X-Forwarded-Proto` を信頼するプロキシのアドレス（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
+| `server.trusted_proxies` | `["127.0.0.1", "::1"]` | ダッシュボードが `auth_header`、`X-Forwarded-Proto`、`X-Forwarded-For` を信頼するプロキシのアドレス。コードを試す訪問者は、`X-Forwarded-For` の最後の項目で見分けます（[間違ったコードが続いたとき](troubleshooting.md#ハブ)）（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
 | `server.behind_proxy` | `false` | このコンピューター上のリバースプロキシがダッシュボードに転送する：それを通るリクエストはハブ自身から（常に管理者）とは見なされず、管理者はサインインするか `chronicle hub` コマンドを使う（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
 | `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |

@@ -70,3 +70,41 @@ def test_browser_sessions_signin_and_removal(conn):
     actions = [a["action"] for a in people.audit_log(conn)]
     assert actions[0] == "remove" and "add" in actions and "signin" in actions
     assert people.add(conn, "Vic", "vic@example.com", "member")["role"] == "member"  # can be added again
+
+
+def test_wrong_codes_make_an_address_wait():
+    t = [1000.0]
+    a = people.CodeAttempts(clock=lambda: t[0])
+    for _ in range(people.CodeAttempts.FREE):  # the first few cost nothing
+        assert a.wait("203.0.113.7") == 0
+        a.wrong("203.0.113.7")
+    assert a.wait("203.0.113.7") == 1 and a.wait("198.51.100.9") == 0  # only that address waits
+    t[0] += 1
+    assert a.wait("203.0.113.7") == 0
+    a.wrong("203.0.113.7")
+    assert a.wait("203.0.113.7") == 2  # each wrong one doubles the wait
+    for _ in range(10):
+        a.wrong("203.0.113.7")
+    assert a.wait("203.0.113.7") == people.CodeAttempts.MAX_WAIT  # up to a minute: never a lockout
+    t[0] += people.CodeAttempts.MAX_WAIT
+    assert a.wait("203.0.113.7") == 0
+    t[0] += people.CodeAttempts.WINDOW + 1  # a quiet quarter of an hour forgets the address
+    a.wrong("203.0.113.7")
+    assert a.wait("203.0.113.7") == 0
+
+    a.KEEP = 8  # many addresses at once: the ones that went quiet first are forgotten, the busy ones kept
+    for i in range(20):
+        t[0] += 1
+        a.wrong(f"192.0.2.{i}")
+    assert len(a._seen) <= 8 and "192.0.2.19" in a._seen and "192.0.2.0" not in a._seen
+
+
+def test_only_an_unknown_code_counts_as_a_guess(conn):
+    bob = people.add(conn, "Bob", "bob@example.com", "member")
+    code = people.invite(conn, bob["id"])
+    people.join_computer(conn, code, MACHINE)
+    with pytest.raises(people.PeopleError) as used:
+        people.open_browser(conn, code)
+    assert not isinstance(used.value, people.UnknownCode)  # a real code, already used: not a guess
+    with pytest.raises(people.UnknownCode):
+        people.open_browser(conn, "AAAA-BBBB-CCCC")

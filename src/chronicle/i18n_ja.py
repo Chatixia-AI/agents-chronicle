@@ -354,6 +354,8 @@ JA: dict[str, str] = {
     "A project's name is up to 80 characters, without / or \\, and doesn't start with a dot.":
         "プロジェクト名は 80 文字以内で、/ と \\ を含まず、ドットで始まらない名前にしてください。",
     "that code isn't known on this hub": "このハブはそのコードを知りません",
+    "too many wrong codes from this address; try again in {seconds} s":
+        "このアドレスから間違ったコードが続きました。{seconds} 秒後にもう一度試してください",
     "that code was already used; ask an admin for a new one": "そのコードは使用済みです。管理者に新しいコードを頼んでください",
     "that code has expired; ask an admin for a new one": "そのコードは期限切れです。管理者に新しいコードを頼んでください",
     "that person is no longer on this hub": "その人はもうこのハブにいません",
