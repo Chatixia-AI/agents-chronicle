@@ -11,6 +11,10 @@
   topics are worked out once per lesson text, so the library and this band load faster after the first time.
 - **VS Code extension 0.2.0:** rebuild and reinstall it to pick up the dashboard's new port (11524, then 8765) and
   Antigravity sessions; the version bump lets VS Code tell the new build from the old one.
+- **A session's Files table keeps its numbers readable:** a long path wraps at its slashes instead of squeezing the
+  Reads, Edits and Lines columns, and a file outside the project (a temp scratchpad, say) shows its last two folders,
+  with the full path on hover. The context chart's "API calls" note moves to a second line when the chart is too
+  narrow for it to sit between the start and end times.
 
 ## 0.17.0 (2026-10-09)
 
