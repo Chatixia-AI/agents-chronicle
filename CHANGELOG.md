@@ -4,6 +4,11 @@
 
 - **Make a group from the Projects sidebar:** a folder-plus button beside the project count opens **New group**, the
   same dialog as on the Projects page, so a new group no longer means going to All projects first.
+- **Learn from your work on the Knowledge page:** the page now opens with a band from the library instead of a plain
+  link: the latest lesson with its principle, a case file you haven't answered (answer it right there, with the same
+  choices as All knowledge), the topic you ask about most or that has the most lessons this month, with its two
+  newest lessons, and how many lessons are ready to revisit. Each part shows only when it has something. Lesson
+  topics are worked out once per lesson text, so the library and this band load faster after the first time.
 
 ## 0.17.0 (2026-10-09)
 

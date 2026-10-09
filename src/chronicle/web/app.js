@@ -2322,7 +2322,8 @@ route(/^\/knowledge$/, async (params) => {
     lastHash = location.hash;
     return knowledgeListView(params);
   }
-  const data = await api("/api/knowledge/hub");
+  // the Learn band's picks come with the page; without them it is a plain link into the library
+  const [data, glance] = await Promise.all([api("/api/knowledge/hub"), api("/api/learning/glance").catch(() => null)]);
   const k = data.knowledge, g = data.glossary, rv = data.review;
   const hubCard = (href, iconName, title, desc, num, numLabel, ...body) => h("a", { class: "card hub-card", href },
     h("div", { class: "hub-top" }, h("span", { class: "hub-icon" }, icon(iconName)),
@@ -2368,8 +2369,7 @@ route(/^\/knowledge$/, async (params) => {
         k.cases ? h("a", { class: "btn", href: "#/knowledge/all?cases=1", title: t("Fixes, gotchas and decisions told as cases: the scene, a question, then the answer") },
           icon("reviews"), t("Case files"), h("span", { class: "count" }, fmtNum(k.cases))) : null,
         h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
-    h("a", { class: "card learn-entry", href: "#/learn" }, icon("learning"),
-      h("div", null, h("h2", null, t("Learn from your work")), h("p", null, t("Explore every lesson by category, with diagrams and ready-to-use explanations."))), icon("arrow")),
+    learningGlance(glance),
     h("div", { class: "hub-grid" }, map, all, gloss, reviews));
 });
 

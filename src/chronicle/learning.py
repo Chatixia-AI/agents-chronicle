@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import functools
 import re
 import sqlite3
 from datetime import datetime, timedelta
@@ -48,7 +49,14 @@ def topics_for(item: dict) -> list[str]:
     text = " ".join(str(item.get(key) or "") for key in ("title", "body", "tags"))
     text = text.replace("_", " ").replace("-", " ")
     tagged = topic_ids(item.get("tags"))
-    return list(dict.fromkeys([*tagged, *(key for key, pattern in _TOPIC_RE.items() if pattern.search(text))]))[:4]
+    return list(dict.fromkeys([*tagged, *_text_topics(text)]))[:4]
+
+
+@functools.lru_cache(maxsize=20000)
+def _text_topics(text: str) -> tuple[str, ...]:
+    """Every lesson's text through 13 patterns takes most of a second on a few thousand lessons; a lesson's topics
+    change only with its text, and the dashboard asks for all of them on each library and Knowledge page."""
+    return tuple(key for key, pattern in _TOPIC_RE.items() if pattern.search(text))
 
 
 def normalize_interests(value) -> list[dict]:
@@ -132,3 +140,31 @@ def interest_profile(conn: sqlite3.Connection, *, viewer_id: int | None, machine
                 entry["examples"].append({"question": signal["question"], "session_id": session["id"],
                                           "at": session["started_at"]})
     return {"interests": sorted(found.values(), key=lambda s: (-s["score"], s["topic"]))[:6]}
+
+
+def glance(items: list[dict], interests: list[dict], *, now=None) -> dict:
+    """The Knowledge page's look into Learn from your work, from lessons shaped like /api/knowledge items (search
+    lessons=True, then Server._reason): the newest lesson with a principle (else the newest case file), the newest case
+    files for the page to ask (it skips the ones this browser answered; ones with ruled-out leads first, since those
+    ask with real choices), and the topic to read next: the one asked
+    about most, else the one with the most lessons in the last 30 days. "Other" is never the topic."""
+    now = now or utcnow()
+    lessons = sorted((k for k in items if k.get("confidence") != "low" and k.get("stage") != "wip"),
+                     key=lambda k: str(k.get("session_started") or k.get("created_at") or ""), reverse=True)
+    case = lambda k: k.get("case") or {}  # noqa: E731
+    latest = next((k for k in lessons if case(k).get("principle")), None) \
+        or next((k for k in lessons if case(k).get("question")), None)
+    by_topic: dict[str, list[dict]] = {}
+    for k in lessons:
+        for topic in k.get("learning_topics") or []:
+            by_topic.setdefault(topic, []).append(k)
+    asked = [i["topic"] for i in interests if by_topic.get(i.get("topic"))]
+    since = to_iso(now - timedelta(days=30))
+    recent = {t: sum(str(k.get("session_started") or k.get("created_at") or "") >= since for k in ks)
+              for t, ks in by_topic.items()}
+    topic = asked[0] if asked else max(by_topic, key=lambda t: (recent[t], len(by_topic[t]), t), default=None)
+    cases = [k for k in lessons if case(k).get("question")]
+    cases = [k for k in cases if case(k).get("ruled_out")] + [k for k in cases if not case(k).get("ruled_out")]
+    return {"latest": latest, "cases": cases[:20],
+            "topic": {"id": topic, "count": len(by_topic[topic]), "asked": bool(asked), "lessons": by_topic[topic][:2]}
+            if topic else None}

@@ -2140,11 +2140,31 @@ td.pg-cell { width: 1%; text-align: right; }
 .gd > select { width: 100%; }
 
 /* Human learning: a complete category library, visual lessons and private work notes. */
-.learn-entry { display: flex; align-items: center; gap: 18px; margin-bottom: 18px; text-decoration: none; }
-.learn-entry > .icon { color: var(--accent-ink); flex: none; width: 25px; height: 25px; }
-.learn-entry > .icon:last-child { margin-left: auto; width: 18px; }
-.learn-entry h2 { margin: 0 0 4px; font-size: 18px; }
-.learn-entry p { margin: 0; color: var(--ink-2); }
+.learn-glance { margin-bottom: 18px; display: grid; gap: 14px; }
+.learn-glance-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.learn-glance-head > a { display: inline-flex; align-items: center; gap: 10px; color: var(--ink); text-decoration: none; }
+.learn-glance-head > a > .icon { color: var(--accent-ink); width: 22px; height: 22px; }
+.learn-glance-head h2 { margin: 0; font-size: 18px; }
+.learn-glance-all { font-size: 12.5px; color: var(--accent-ink) !important; }
+.learn-glance-all .icon { width: 14px; height: 14px; }
+.learn-glance > p { margin: 0; }
+.learn-glance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; align-items: start; }
+.learn-glance-grid.with-case { grid-template-columns: minmax(0, 1fr) minmax(340px, 1.2fr); }
+.learn-glance-case { grid-column: 2; grid-row: 1 / span 2; }
+.learn-glance-tile { display: grid; gap: 8px; min-width: 0; padding: 14px 16px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface-2); overflow-wrap: anywhere; }
+.learn-glance-case { padding: 0; border: 0; background: none; }
+.learn-glance-case > .learn-glance-label { padding: 0 2px; }
+.learn-glance-label { display: inline-flex; align-items: center; gap: 6px; font-size: 10.5px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); }
+.learn-glance-label .icon { width: 13px; height: 13px; color: var(--accent-ink); }
+.learn-glance-title { font-weight: 600; font-size: 14px; line-height: 1.4; color: var(--ink); text-decoration: none; }
+.learn-glance-title:hover { color: var(--accent-ink); }
+.learn-glance-count { margin-left: 8px; font-weight: 400; font-size: 12px; color: var(--muted); }
+.learn-glance-principle { margin: 0; padding-left: 10px; border-left: 3px solid var(--accent); color: var(--ink-2); font-size: 13px; line-height: 1.55; }
+.learn-glance-note { margin: 0; color: var(--ink-2); font-size: 13px; line-height: 1.5; }
+.learn-glance-list { margin: 0; padding-left: 16px; display: grid; gap: 4px; font-size: 12.5px; line-height: 1.45; }
+.learn-glance-list a { color: var(--ink-2); }
+.learn-glance-due { display: inline-flex; align-items: center; gap: 6px; font-size: 12.5px; justify-self: start; }
+.learn-glance-due .icon { width: 14px; height: 14px; }
 .learning-page { max-width: 1200px; margin: 0 auto; }
 .learn-category-nav { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin: 20px 0 12px; }
 .learn-category-tile { position: relative; display: flex; align-items: center; gap: 10px; padding: 12px; border: 1px solid var(--border); border-radius: var(--radius); background: var(--surface); color: var(--ink); text-decoration: none; min-width: 0; }
@@ -2291,5 +2311,6 @@ td.pg-cell { width: 1%; text-align: right; }
   .learn-prose { font-size: 14px; }
   .learn-draft { font-size: 16px; }
   .learn-actions .btn, .learn-actions .link-btn { min-height: 44px; }
-  .learn-entry { gap: 12px; }
+  .learn-glance-grid, .learn-glance-grid.with-case { grid-template-columns: 1fr; }
+  .learn-glance-case { grid-column: auto; grid-row: auto; }
 }

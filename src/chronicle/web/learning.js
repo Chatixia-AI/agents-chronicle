@@ -402,3 +402,37 @@ function learningNotes(items, store) {
   }));
   return list;
 }
+
+// The Knowledge page's Learn band (learning.glance): the newest lesson worth reading with its principle, a case file
+// to answer in place (All knowledge's card, asking first), the topic to read next and what is ready to revisit. Each
+// part shows only when it has something; with nothing at all, the band is a link into the library.
+function learningGlance(g) {
+  const store = learningStore();
+  const lessonHref = (k) => `#/learn?${new URLSearchParams({ lesson: LearningPractice.key(k) })}`;
+  const tile = (cls, label, iconName, ...body) => h("div", { class: `learn-glance-tile ${cls}` },
+    h("span", { class: "learn-glance-label" }, icon(iconName), label), ...body);
+  const latest = g?.latest, c = latest?.case || {};
+  const open = askFirst() ? (g?.cases || []).find((k) => !caseAnswers()[k.id]) : null;
+  const topic = g?.topic;
+  const due = Object.values(store.data.history).filter((r) => Number.isFinite(r?.dueAt) && r.dueAt <= Date.now()).length;
+  const tiles = [
+    latest ? tile("", t("Latest lesson"), "learning",
+      h("a", { class: "learn-glance-title", href: lessonHref(latest), html: codeSpans(latest.title) }),
+      c.principle ? h("p", { class: "learn-glance-principle" }, c.principle)
+        : c.question ? h("p", { class: "learn-glance-note", html: codeSpans(c.question) }) : null) : null,
+    topic ? tile("", topic.asked ? t("From your questions") : t("Your top topic"), learningTopicIcon(topic.id),
+      h("a", { class: "learn-glance-title", href: `#/learn?${new URLSearchParams({ topic: topic.id })}` },
+        learningTopicLabel(topic.id), h("span", { class: "learn-glance-count" }, tn(topic.count, "{n} lesson", "{n} lessons"))),
+      h("ul", { class: "learn-glance-list" }, topic.lessons.map((k) =>
+        h("li", null, h("a", { href: lessonHref(k), html: codeSpans(k.title) }))))) : null,
+    open ? tile("learn-glance-case", t("A case to solve"), "reviews", knowledgeCard(open, { compact: true, ask: true })) : null,
+  ].filter(Boolean);
+  return h("section", { class: "card learn-glance" },
+    h("div", { class: "learn-glance-head" },
+      h("a", { href: "#/learn" }, icon("learning"), h("h2", null, t("Learn from your work"))),
+      h("a", { class: "learn-glance-all", href: "#/learn" }, t("All lessons"), icon("arrow"))),
+    tiles.length ? h("div", { class: "learn-glance-grid" + (open ? " with-case" : "") }, tiles)
+      : h("p", { class: "muted" }, t("Explore every lesson by category, with diagrams and ready-to-use explanations.")),
+    due ? h("a", { class: "learn-glance-due", href: "#/learn" }, icon("again"),
+      tn(due, "{n} lesson ready to revisit", "{n} lessons ready to revisit")) : null);
+}
