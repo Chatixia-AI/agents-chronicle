@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.0 (2026-10-09)
 
 - **Your hub's projects in a section of their own:** on a computer that sends to a hub, the Projects sidebar and page
   now list first the hub's projects that folders here go to, under the hub's name. Each shows the team's sessions there
