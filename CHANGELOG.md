@@ -9,6 +9,8 @@
   choices as All knowledge), the topic you ask about most or that has the most lessons this month, with its two
   newest lessons, and how many lessons are ready to revisit. Each part shows only when it has something. Lesson
   topics are worked out once per lesson text, so the library and this band load faster after the first time.
+- **VS Code extension 0.2.0:** rebuild and reinstall it to pick up the dashboard's new port (11524, then 8765) and
+  Antigravity sessions; the version bump lets VS Code tell the new build from the old one.
 
 ## 0.17.0 (2026-10-09)
 
