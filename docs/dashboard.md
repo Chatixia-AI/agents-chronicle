@@ -32,6 +32,37 @@ Ctrl replaces ⌘ outside macOS. In the macOS app, drag the window by its toolba
 
 ## Pages
 
+**Knowledge › Learn from your work** automatically finds learning interests in your recent questions and requests
+for explanations: system design, frontend, backend, APIs, data modeling and other engineering areas. **Picked up
+from your questions** shows these interests; **Why these topics?** links to the actual questions. Repeated questions
+across sessions and recent curiosity give matching lessons priority. Project and topic filters let you focus.
+Implementation requests alone don't establish curiosity, and teammates' sessions don't shape your profile.
+Signals use your own last 90 days (up to 200 sessions); new analyses extract them semantically, while older sessions
+use question matching. Curiosity quotes stay in the local archive and aren't added to shared analysis data.
+A hub receiving only knowledge may have no personal interest signals; its lessons remain available to browse.
+
+The default **Lesson library** lists every lesson in each category, with counts and previews. Nothing is capped:
+read lessons and saved notes stay listed. Your interests put relevant categories first without hiding the others.
+A lesson can sit in several categories; the library's total counts it once. Project and topic filters and a search
+help with larger archives.
+
+A lesson reads top to bottom, each part once, with nothing to type or reveal. A [case file](analysis.md#case-files)
+starts with the scene, the question and its answer. Then come the explanation, the leads the session ruled out,
+**The principle to keep** (the idea that carries over to other work) and **Use it in your next task** (checks for
+similar work). A diagram appears only when the analysis drew one from the session: its parts carry the session's own
+names, and each says its role. The principle, checks and diagram come from analyses made with this version; a lesson
+analyzed earlier shows its title and explanation until its session is analyzed again, and nothing is made up to fill
+the gap. **Explore related ideas**, **Look at the evidence** and the source session are a click away.
+
+**Save work note** saves a prepared explanation with any recorded principle and checklist immediately. **Saved
+work notes** displays these notes ready to read or copy; **Edit work note** opens an optional, prefilled editor.
+Nothing is written to project files or agent instructions. Reading history and notes stay in this browser,
+separated by signed-in viewer; they are never sent to the hub. **Mark as read** adds a read badge, while **Next lesson**
+continues through the category's full list. **Revisit sooner** adds a revisit badge in three days; other read lessons
+get that badge in seven days. Both remain available to open at any time. Reading isn't scored as mastery or recall.
+There is no overdue counter or required backlog. Changed lesson material receives a new badge. Hypotheses and work
+in progress are excluded.
+
 Pages: Home (active-time headline with active days and longest run; stat tiles with sparklines and a per-day rate
 until a full prior period exists to compare against; daily chart with a 7-day average; outcome breakdown; activity
 calendar with streaks; busiest hour; projects, tools with failed calls, models and agents), a sortable, filterable

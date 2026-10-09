@@ -12,6 +12,16 @@
 
 ## 0.16.0 (2026-10-08)
 
+- **Learn from your work:** a library under Knowledge with every fix, gotcha, decision, learning and pattern, grouped
+  by topic (system design, frontend, APIs, data modeling and more) with counts and a search. A lesson reads top to
+  bottom, each part once: a case file's scene, question and answer, then the explanation, the leads ruled out, and the
+  principle and checks for next time where the analysis found them. A diagram appears only where the analysis drew one
+  from the session. **Save work note** keeps a copy; **Mark as read** and **Revisit sooner** add badges. All of it
+  stays in that browser. A lesson analyzed before shows its title and explanation until its session is analyzed
+  again. See [Pages](docs/dashboard.md#pages).
+- **Learning follows your curiosity:** the analysis notes the questions you ask about concepts and tradeoffs, and
+  Learn from your work puts those topics first, with the questions behind them under **Why these topics?**. Only your
+  own sessions count, and the quotes stay on your computer, out of what a hub receives.
 - **Case files: lessons that ask before they tell:** the analysis now keeps, for each fix, gotcha and decision, how it
   first showed up, the question it raised, the answer, and the leads the session tried and ruled out. In **All
   knowledge** a case you haven't answered opens with its scene and question; the choices are the real answer and the

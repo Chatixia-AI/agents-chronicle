@@ -233,7 +233,7 @@ CREATE TABLE IF NOT EXISTS knowledge (
     superseded_by INTEGER,                         -- the item that replaced this one, when there is one
     superseded_reason TEXT,                        -- duplicate | outdated | contradicted
     superseded_at TEXT,
-    case_json TEXT                                 -- a fix, gotcha or decision as a case file (analyze.case_of)
+    case_json TEXT                                 -- lesson material (analyze.case_of): a fix, gotcha or decision's case file, and principle, checks, topics, diagram
 );
 CREATE INDEX IF NOT EXISTS idx_knowledge_session ON knowledge(session_id);
 CREATE INDEX IF NOT EXISTS idx_knowledge_project ON knowledge(project_path);

@@ -123,10 +123,10 @@ def search_sessions(conn: sqlite3.Connection, query: str, *, project: str | None
 def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, project: str | None = None,
                      kind: str | None = None, include_inactive: bool = False, limit: int = 30,
                      sessions: tuple[str, list] | None = None, source: str | None = None,
-                     cases: bool = False) -> list[dict]:
+                     cases: bool = False, lessons: bool = False, offset: int = 0) -> list[dict]:
     """`sessions`: (SQL on the sessions table, its params) to keep the lessons of those sessions only. `source`: only
     items from there ('analysis', 'memory', 'team'), filtered before the limit. `cases`: only the ones with a case
-    file (analyze.case_of)."""
+    file (analyze.case_of). `lessons`: only the kinds a lesson is made of (learning.PRACTICE_SQL)."""
     where, params = [], []
     if query and query.strip():
         fts = fts_query(query)
@@ -150,7 +150,13 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
         where.append("k.source = ?")
         params.append(source)
     if cases:
-        where.append("k.case_json IS NOT NULL")
+        from .analyze import CASE_FILE_SQL
+
+        where.append(CASE_FILE_SQL)
+    if lessons:
+        from .learning import PRACTICE_SQL
+
+        where.append(PRACTICE_SQL)
     if sessions:
         where.append(f"k.session_id IN (SELECT id FROM sessions WHERE {sessions[0]})")
         params += sessions[1]
@@ -159,8 +165,8 @@ def search_knowledge(conn: sqlite3.Connection, query: str | None = None, *, proj
     sql = "SELECT k.*, s.title AS session_title, s.started_at AS session_started FROM knowledge k LEFT JOIN sessions s ON s.id = k.session_id"
     if where:
         sql += " WHERE " + " AND ".join(where)
-    sql += f" ORDER BY k.pinned DESC, {STAGE_ORDER_SQL}, COALESCE(s.started_at, k.created_at) DESC LIMIT ?"
-    params.append(limit)
+    sql += f" ORDER BY k.pinned DESC, {STAGE_ORDER_SQL}, COALESCE(s.started_at, k.created_at) DESC, k.id DESC LIMIT ? OFFSET ?"
+    params.extend([limit, max(0, offset)])
     try:
         rows = [dict(r) for r in conn.execute(sql, params).fetchall()]
     except sqlite3.OperationalError:

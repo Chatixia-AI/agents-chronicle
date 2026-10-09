@@ -145,8 +145,14 @@ Agents get the scene and the ruled-out leads too: the MCP tools show them under 
 recognize the symptom and skip the dead ends. A hub keeps the case files of the lessons computers share with it;
 teammates' lessons sent back to members don't carry them yet.
 
-Lessons from an earlier version have no case file. A session's lessons get theirs when it is analyzed again
-(`chronicle analyze <session>`), which uses your analysis login like any other analysis.
+For [Learn from your work](dashboard.md#pages) the analysis also keeps, for fixes, gotchas, decisions, learnings and
+patterns alike, only where the session supports them: **the principle** (the general idea the lesson is an instance of,
+stated so it applies to other work), **checks** for similar work next time, the **topics** it teaches, and a small
+**diagram** when the explanation describes a flow, connected parts or real alternatives. Each is left empty rather
+than made up. When a session revised a finding or a decision, the lesson states where it ended up.
+
+Lessons from an earlier version have no case file, principle or diagram. A session's lessons get them when it is
+analyzed again (`chronicle analyze <session>`), which uses your analysis login like any other analysis.
 
 ## Model providers
 

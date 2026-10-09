@@ -82,6 +82,7 @@ def test_a_hub_without_people_answers_as_before(hubweb):
     assert _call(url, "/api/team-store/save", {"enabled": False}, TAILNET)[0] == 403
     code, me = _call(url, "/api/me")
     assert code == 200 and me["viewer"]["here"] and not me["people_mode"]
+    assert _call(url, "/api/learning/interests") == (200, {"interests": []})
     status, headers, page = _raw(url, "/signin?code=AAAA-BBBB-CCCC")
     assert status == 400 and b"known on this hub" in page and headers["Content-Type"].startswith("text/html")
 
@@ -325,3 +326,23 @@ def test_tailscale_logins_and_people(team):
     signin = people.signin_code(team["conn"], team["vic"])
     assert _raw(url, f"/signin?code={signin}", headers=REMOTE)[0] == 302
     assert _call(url, "/api/suggestions/seen", {}, _as(s["Ada"])) == (200, {"ok": True})
+
+
+def test_learning_interests_use_the_authenticated_person_not_query_parameters(team):
+    from chronicle.util import utcnow_iso
+
+    conn, url, sessions = team["conn"], team["url"], team["sessions"]
+    for mid, person, sid, question in (
+        (MACHINE, team["bob"]["id"], "curious-bob", "Explain API versioning."),
+        (OTHER, team["vic"]["id"], "curious-vic", "Explain frontend React hooks."),
+    ):
+        conn.execute("INSERT INTO machines(id, person_id) VALUES(?,?) ON CONFLICT(id) DO UPDATE SET person_id=excluded.person_id",
+                     (mid, person))
+        conn.execute("INSERT INTO sessions(id, machine_id, started_at) VALUES(?,?,?)", (sid, mid, utcnow_iso()))
+        conn.execute("INSERT INTO events(session_id, seq, kind, text) VALUES(?,1,'prompt',?)", (sid, question))
+    conn.commit()
+    assert _call(url, "/api/learning/interests", headers=REMOTE)[0] == 401
+    code, result = _call(url, f"/api/learning/interests?viewer_id={team['vic']['id']}", headers=_as(sessions["Bob"]))
+    assert code == 200 and [i["topic"] for i in result["interests"]] == ["api"]
+    code, result = _call(url, "/api/learning/interests", headers=_as(sessions["Vic"]))
+    assert code == 200 and [i["topic"] for i in result["interests"]] == ["frontend"]
