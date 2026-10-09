@@ -141,6 +141,15 @@ CHUNK_SCHEMA = {
         "tags": {"type": "array", "items": {"type": "string"}},
     },
 }
+# The merge of a long session's parts names the part notes' knowledge items it keeps instead of writing them out
+# again: retyping a few dozen lessons with their case files in one reply came back empty, and wiped the session's.
+REDUCE_SCHEMA = {
+    **ANALYSIS_SCHEMA,
+    "required": [k if k != "knowledge" else "knowledge_ids" for k in ANALYSIS_SCHEMA["required"]],
+    "properties": {**{k: v for k, v in ANALYSIS_SCHEMA["properties"].items() if k != "knowledge"},
+                   "knowledge_ids": {"type": "array", "items": {"type": "string"},
+                                     "description": "The ids of the part notes' knowledge items to keep, in order"}},
+}
 
 SYSTEM_PROMPT = """\
 You are Chronicle, an analyst that turns AI coding-agent session transcripts (Claude Code, OpenAI Codex, GitHub Copilot, IBM Bob, \
@@ -239,9 +248,19 @@ def _reduce_prompt(header: str, notes: list[dict], opening: str, closing: str) -
         f"<part_notes>\n{parts}\n</part_notes>\n\n"
         f"<opening_excerpt>\n{opening}\n</opening_excerpt>\n\n"
         f"<closing_excerpt>\n{closing}\n</closing_excerpt>\n\n"
-        "Write the final analysis of the whole session. Merge duplicate knowledge items and keep the most "
-        "specific version, drop items that later parts show to be wrong, and describe the end state from the last part."
+        "Write the final analysis of the whole session, and describe the end state from the last part. For "
+        "knowledge, list in knowledge_ids the ids of the part notes' items to keep: of duplicates only the most "
+        "specific, of a finding a later part revised only the later one, and none that later parts show to be wrong."
     )
+
+
+def _kept(items: dict[str, dict], ids) -> list[dict]:
+    """The part notes' knowledge items the merge kept, each once. All of them when it named none it was given: a
+    reply that lost its list must not replace the session's lessons with nothing."""
+    kept = [items[i] for i in dict.fromkeys(ids if isinstance(ids, list) else []) if isinstance(i, str) and i in items]
+    if not kept and items:
+        log.warning("the merge kept no knowledge item; keeping all %d from the parts", len(items))
+    return kept or list(items.values())
 
 
 def _str_list(value) -> list[str]:
@@ -370,18 +389,22 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
             total_cost += res.cost_usd
             data = normalize_analysis(res.data)
         else:
-            notes = []
+            notes, items = [], {}
             for i, chunk in enumerate(digest.chunks, 1):
                 part = runner.run(_chunk_prompt(header, chunk, i, len(digest.chunks)), CHUNK_SCHEMA, system=system, model=model)
                 total_cost += part.cost_usd
                 _log_run(conn, "chunk", session_id, part, status="done", input_chars=len(chunk), started=started)
-                notes.append({**part.data, "knowledge": normalize_knowledge(part.data.get("knowledge"))})
+                shown = []  # the merge judges each item by what it says; the full item is kept here, by id
+                for j, item in enumerate(normalize_knowledge(part.data.get("knowledge")), 1):
+                    items[f"p{i}.{j}"] = item
+                    shown.append({"id": f"p{i}.{j}", **{k: item[k] for k in ("kind", "title", "body", "confidence")}})
+                notes.append({**part.data, "knowledge": shown})
             res = runner.run(
                 _reduce_prompt(header, notes, digest.chunks[0][:6000], digest.chunks[-1][-6000:]),
-                ANALYSIS_SCHEMA, system=system, model=model,
+                REDUCE_SCHEMA, system=system, model=model,
             )
             total_cost += res.cost_usd
-            data = normalize_analysis(res.data)
+            data = {**normalize_analysis(res.data), "knowledge": _kept(items, res.data.get("knowledge_ids"))}
     except (UsageLimitError, BudgetExceededError, LLMError) as exc:
         if isinstance(exc, (UsageLimitError, SleepInterruptedError)):  # not the session's fault: just retry later
             status, attempts, not_before = "pending", s["analysis_attempts"] or 0, None

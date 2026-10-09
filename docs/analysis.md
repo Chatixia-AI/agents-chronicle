@@ -40,7 +40,8 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
 1. A session is queued once it ends (hook) or has been idle for `idle_minutes`.
 2. The transcript is condensed into a digest at the richest detail level that fits `chunk_chars`
    (full prompts and replies, one line per tool call, error excerpts, subagent reports). Very long
-   sessions are split at prompt boundaries and map-reduced. Secrets are redacted first.
+   sessions are split at prompt boundaries and map-reduced: each part's lessons are written once, and the final
+   pass picks which to keep. Secrets are redacted first.
 3. The digest goes to the agent chosen in `analysis.backend`, through your own login, sandboxed so that no
    session is written for the analysis itself, none of your hooks, plugins, MCP servers or instruction files load,
    and the model can only answer:

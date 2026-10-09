@@ -19,6 +19,10 @@
   from the session. **Save work note** keeps a copy; **Mark as read** and **Revisit sooner** add badges. All of it
   stays in that browser. A lesson analyzed before shows its title and explanation until its session is analyzed
   again. See [Pages](docs/dashboard.md#pages).
+- **A long session's analysis keeps its lessons:** a session too long for one pass is analyzed in parts, and the
+  final pass used to write every part's lessons out again. With case files that reply could come back with none,
+  and the session's lessons were replaced by nothing. The final pass now picks the parts' lessons to keep, and
+  keeps all of them if its reply names none.
 - **Learning follows your curiosity:** the analysis notes the questions you ask about concepts and tradeoffs, and
   Learn from your work puts those topics first, with the questions behind them under **Why these topics?**. Only your
   own sessions count, and the quotes stay on your computer, out of what a hub receives.

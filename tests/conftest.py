@@ -196,7 +196,13 @@ elif "knowledge base" in system or "playbook" in system:
                            "edges": [{"from": "api", "to": "db", "label": "writes tokens", "sources": ids[:1]},
                                      {"from": "db", "to": "api", "label": "invented", "sources": [999999]}]}
 elif "part " in prompt and "<transcript_part" in prompt:
-    data = {"summary": "part notes", "highlights": ["h"], "knowledge": [{"kind": "gotcha", "title": "Part gotcha", "body": "b", "tags": ["x"], "scope": "project", "confidence": "low", "evidence": "e"}], "open_threads": [], "friction": [], "tags": ["t"]}
+    n = __import__("re").search(r'<transcript_part index="(\d+)"', prompt).group(1)
+    data = {"summary": "part notes", "highlights": ["h"], "knowledge": [{"kind": "gotcha", "title": f"Part {n} gotcha", "body": "b", "tags": ["x"], "scope": "project", "confidence": "low", "evidence": "e"}], "open_threads": [], "friction": [], "tags": ["t"]}
+elif "<part_notes>" in prompt:  # the merge names the items it keeps (FAKE_REDUCE_IDS), by default the last part's
+    ids = __import__("re").findall(r'"id": "(p\d+\.\d+)"', prompt)
+    data = {"title": "Long session", "summary": "merged", "goal": "g", "outcome": "completed", "outcome_note": "n",
+            "work_types": [], "tags": [], "highlights": [], "open_threads": [], "friction": [], "sentiment": "neutral",
+            "knowledge_ids": json.loads(os.environ["FAKE_REDUCE_IDS"]) if "FAKE_REDUCE_IDS" in os.environ else ids[-1:]}
 else:
     data = {
         "title": "Fixed login token expiry bug",
