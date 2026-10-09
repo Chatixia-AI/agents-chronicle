@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- **3D icons from the Chatixia Studio cast:** the app icon, each page's title and the Home tiles now carry 3D art
+  rendered with the same characters and objects as the studio's explainer films (a log scroll for Sessions, a book
+  for Knowledge, a folder for Projects), and an empty Recent sessions or Latest knowledge card shows Pip or Lumi. The
+  sidebar and buttons keep their line icons. `packaging/icons3d` re-renders the art.
 - **Make a group from the Projects sidebar:** a folder-plus button beside the project count opens **New group**, the
   same dialog as on the Projects page, so a new group no longer means going to All projects first.
 - **Learn from your work on the Knowledge page:** the page now opens with a band from the library instead of a plain

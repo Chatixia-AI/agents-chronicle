@@ -1,5 +1,8 @@
 # Chronicle Blueprint icon
 
+Superseded as the app icon by the 3D render in `icon-3d.webp` (see `packaging/icons3d/README.md`), which keeps this
+emblem's shape and palette. `icon-blueprint.webp` stays as the flat original.
+
 Created with the built-in imagegen tool on October 3, 2026. The new Chatixia organization icon was used only as a style reference; Chronicle has its own layered-session emblem.
 
 ## Assets

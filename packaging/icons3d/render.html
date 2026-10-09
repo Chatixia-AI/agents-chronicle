@@ -1,0 +1,65 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chronicle 3D icon render</title></head>
+<body style="margin:0;background:#888">
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="blueprint-cast.js"></script>
+<script src="members.js"></script>
+<script>
+// Studio-film rig (skill §1) on a transparent background, one object per render.
+const SIZE = 512;
+THREE.ColorManagement.legacyMode = false;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1);
+renderer.setSize(SIZE, SIZE);
+renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.08;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight('#cfe4ff', '#0b1f3a', .8));
+const key = new THREE.DirectionalLight('#fff4e4', 1.35);
+key.position.set(3, 12, 6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left: -4, right: 4, top: 4, bottom: -4, near: .5, far: 30 });
+scene.add(key);
+const rim = new THREE.DirectionalLight('#7cc7ff', .9); rim.position.set(-6, 5, -7); scene.add(rim);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(20, 20), new THREE.ShadowMaterial({ opacity: .22 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+const CAST = createBlueprintCast(scene, {});
+const camera = new THREE.PerspectiveCamera(24, 1, .1, 200);
+
+function frame(group, { az = -24, pitch = 20, pad = 1.08, lift = 0 } = {}) {
+  const box = new THREE.Box3().setFromObject(group);
+  const sph = box.getBoundingSphere(new THREE.Sphere());
+  const d = sph.radius * pad / Math.sin(THREE.MathUtils.degToRad(camera.fov / 2));
+  const a = THREE.MathUtils.degToRad(az), p = THREE.MathUtils.degToRad(pitch);
+  const c = sph.center.clone(); c.y += lift;
+  camera.position.set(c.x + d * Math.sin(a) * Math.cos(p), c.y + d * Math.sin(p), c.z + d * Math.cos(a) * Math.cos(p));
+  camera.lookAt(c); camera.updateMatrixWorld();
+}
+
+// build(spec) -> group; spec: {obj|char|mood|custom, az, pitch, pad, ry}
+window.renderIcon = (spec) => {
+  renderer.setSize(spec.size || SIZE, spec.size || SIZE);
+  CAST.setTime(spec.t ?? 1.2);
+  let g;
+  if (spec.custom) g = window.CUSTOM[spec.custom](CAST, scene);
+  else if (spec.char) g = CAST.character(spec.char, spec.mood || 'smile');
+  else g = CAST.object(spec.obj);
+  if (spec.ry) g.rotation.y = spec.ry;
+  if (spec.scale) g.scale.multiplyScalar(spec.scale);
+  ground.visible = spec.shadow !== false;
+  frame(g, spec);
+  renderer.render(scene, camera);
+  const url = renderer.domElement.toDataURL('image/png');
+  scene.remove(g);
+  return url;
+};
+window.ready = true;
+</script>
+</body></html>

@@ -1,0 +1,89 @@
+{
+  "dashboard": {
+    "obj": "dashboard"
+  },
+  "cloud": {
+    "obj": "cloud"
+  },
+  "log": {
+    "obj": "log"
+  },
+  "book": {
+    "custom": "book",
+    "pitch": 40
+  },
+  "folder": {
+    "obj": "folder"
+  },
+  "flag": {
+    "obj": "flag"
+  },
+  "container": {
+    "obj": "container"
+  },
+  "magnifier": {
+    "obj": "magnifier"
+  },
+  "globe": {
+    "obj": "globe"
+  },
+  "rack": {
+    "obj": "rack"
+  },
+  "plug": {
+    "obj": "plug"
+  },
+  "camera": {
+    "obj": "camera"
+  },
+  "gears": {
+    "obj": "gears"
+  },
+  "clock": {
+    "obj": "clock"
+  },
+  "document": {
+    "obj": "document"
+  },
+  "chip": {
+    "obj": "chip",
+    "pitch": 32
+  },
+  "coins": {
+    "obj": "coins"
+  },
+  "pip": {
+    "char": "pip",
+    "mood": "happy"
+  },
+  "dex": {
+    "char": "dex",
+    "mood": "happy"
+  },
+  "tink": {
+    "char": "tink",
+    "mood": "happy"
+  },
+  "lumi": {
+    "char": "lumi",
+    "mood": "happy"
+  },
+  "laptop": {
+    "obj": "laptop"
+  },
+  "gateway": {
+    "obj": "gateway"
+  },
+  "glitch": {
+    "char": "glitch",
+    "mood": "wow"
+  },
+  "app-icon": {
+    "custom": "stack",
+    "pitch": 12,
+    "az": -20,
+    "size": 1024,
+    "shadow": false,
+    "pad": 1.02
+  }
+}

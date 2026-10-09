@@ -19,7 +19,7 @@ uv tool install --force --reinstall --python 3.13 . && chronicle install   # ins
 署名となり、ビルドした Mac でのみ動きます。配布するには `CHRONICLE_CODESIGN_IDENTITY`（Developer ID
 Application 証明書）と `NOTARY_KEYCHAIN_PROFILE`（`xcrun notarytool store-credentials` で作成）を設定すると、スクリプトが
 DMG の署名・公証・ステープルまで行います。`uv run --group build python packaging/macos/make_icon.py` で、
-コミット済みの `packaging/macos/icon-blueprint.webp` から macOS の `.icns`、README のアイコン、ダッシュボードのロゴ、
+コミット済みの `packaging/macos/icon-3d.webp`（`packaging/icons3d/render.py` で描画）から macOS の `.icns`、README のアイコン、ダッシュボードのロゴ、
 favicon、スマートフォンのホーム画面用アイコンを再生成できます。PNG はどの OS でも生成でき、`.icns` には macOS の
 `iconutil` が必要です。`desktop.py` は
 pywebview の Cocoa アプリデリゲートを拡張しているため、pywebview を `<7` に固定しています。
