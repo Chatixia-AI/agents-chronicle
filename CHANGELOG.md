@@ -9,9 +9,6 @@
   that goes to a hub project now has a folder icon with a teal cloud, instead of a plain cloud, in the sidebar, search
   and **Settings › Devices**, and the hub's projects have a stacked-folders icon.
   [Same project, different folders](docs/devices.md#same-project-different-folders)
-
-## 0.16.0 (2026-10-08)
-
 - **Learn from your work:** a library under Knowledge with every fix, gotcha, decision, learning and pattern, grouped
   by topic (system design, frontend, APIs, data modeling and more) with counts and a search. A lesson reads top to
   bottom, each part once: a case file's scene, question and answer, then the explanation, the leads ruled out, and the
@@ -26,6 +23,9 @@
 - **Learning follows your curiosity:** the analysis notes the questions you ask about concepts and tradeoffs, and
   Learn from your work puts those topics first, with the questions behind them under **Why these topics?**. Only your
   own sessions count, and the quotes stay on your computer, out of what a hub receives.
+
+## 0.16.0 (2026-10-08)
+
 - **Case files: lessons that ask before they tell:** the analysis now keeps, for each fix, gotcha and decision, how it
   first showed up, the question it raised, the answer, and the leads the session tried and ruled out. In **All
   knowledge** a case you haven't answered opens with its scene and question; the choices are the real answer and the
