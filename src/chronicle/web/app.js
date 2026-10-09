@@ -65,6 +65,7 @@ const ICONS = {
   prompts: ["M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z", "M8 8h8", "M8 12h5"],
   knowledge: ["M2 4h6a4 4 0 0 1 4 4v13a3 3 0 0 0-3-3H2z", "M22 4h-6a4 4 0 0 0-4 4v13a3 3 0 0 1 3-3h7z"],
   projects: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"],
+  newGroup: ["M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M12 10.5v6", "M9 13.5h6"],
   systems: [["rect", { x: 3, y: 3, width: 7, height: 6, rx: 1.5 }], ["rect", { x: 14, y: 3, width: 7, height: 6, rx: 1.5 }],
     ["rect", { x: 8.5, y: 15, width: 7, height: 6, rx: 1.5 }], "M6.5 9v3h11V9", "M12 12v3"],
   cloud: ["M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"],
@@ -6736,7 +6737,9 @@ async function projectsSidebar(box) {
     const { path, params } = parseHash();
     markSidebar(path, params);
   };
-  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Projects")), h("span", null, fmtNum(projects.length))),
+  box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Projects")),
+    h("div", { class: "sb-head-end" }, h("span", null, fmtNum(projects.length)),
+      canGroup() ? h("button", { type: "button", class: "sb-add", title: t("New group"), "aria-label": t("New group"), onclick: () => groupDialog(null) }, icon("newGroup")) : null)),
     h("label", { class: "sb-filter" }, icon("search"), h("input", { type: "search", placeholder: t("Filter projects"), value: sbState.projectQ, "aria-label": t("Filter projects"),
       oninput: (e) => { sbState.projectQ = e.target.value; draw(); } })), list);
   draw();

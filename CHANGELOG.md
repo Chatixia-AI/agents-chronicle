@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- **Make a group from the Projects sidebar:** a folder-plus button beside the project count opens **New group**, the
+  same dialog as on the Projects page, so a new group no longer means going to All projects first.
+
 ## 0.17.0 (2026-10-09)
 
 - **Your hub's projects in a section of their own:** on a computer that sends to a hub, the Projects sidebar and page
