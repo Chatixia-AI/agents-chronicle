@@ -8,9 +8,11 @@ import sqlite3
 from datetime import timedelta
 
 from . import ladder, news
+from .cases import LESSON_KINDS, VISUAL_SCHEMA, lesson_of
 from .config import Config
 from .digest import build_digest
 from .ingest import best_title
+from .learning import TOPICS, normalize_interests, store_interests
 from .llm import (BudgetExceededError, LLMError, LLMResult, Runner, SleepInterruptedError, UsageLimitError, make_runner,
                   written_in)
 from .redact import redact
@@ -18,7 +20,7 @@ from .util import dumps, fingerprint, to_iso, utcnow, utcnow_iso
 
 log = logging.getLogger("chronicle.analyze")
 
-PROMPT_VERSION = 2  # 2: fixes, gotchas and decisions carry a case file (scene, question, answer, ruled_out)
+PROMPT_VERSION = 3  # 2: fixes, gotchas and decisions carry a case file; 3: lessons carry a principle, checks, topics, a diagram
 
 KNOWLEDGE_KINDS = {
     "fix": "a bug or failure with its root cause and the fix",
@@ -39,6 +41,8 @@ WORK_TYPES = [
 OUTCOMES = ["completed", "partial", "blocked", "abandoned", "exploratory", "unclear"]
 FRICTION_KINDS = ["tool_error", "environment", "misunderstanding", "rework", "permissions", "performance", "external", "other"]
 CASE_KINDS = ("fix", "gotcha", "decision")  # shown to people as case files: the scene and a question before the answer
+# knowledge.case_json also holds lesson material without a case file (a learning's principle, say): a case file has a question
+CASE_FILE_SQL = "json_extract(case_json, '$.question') IS NOT NULL"
 MAX_LEADS = 4
 
 RULED_OUT_SCHEMA = {
@@ -54,7 +58,7 @@ KNOWLEDGE_ITEM_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": ["kind", "title", "body", "tags", "scope", "confidence", "evidence", "scene", "question", "answer",
-                 "ruled_out"],
+                 "ruled_out", "clues", "principle", "checklist", "topics", "visual"],
     "properties": {
         "kind": {
             "type": "string",
@@ -77,6 +81,17 @@ KNOWLEDGE_ITEM_SCHEMA = {
         "ruled_out": {"type": "array", "items": RULED_OUT_SCHEMA, "description": "fix, gotcha, decision: leads the "
                       "session tried and found wrong (a decision: the options turned down), at most 4. Only dead ends "
                       "the transcript shows; empty when there were none or for other kinds"},
+        "clues": {"type": "array", "items": {"type": "string"}, "description": "fix, gotcha: up to 6 facts the session "
+                  "observed before the cause was known (errors, test results), in order. Never invented. Empty otherwise"},
+        "principle": {"type": "string", "description": "fix, gotcha, decision, learning, pattern: the general idea this "
+                      "is an instance of, stated so it applies beyond this project, and when it applies (1-2 sentences). "
+                      "Empty when the session doesn't support one; never generic advice or the title again"},
+        "checklist": {"type": "array", "items": {"type": "string"}, "description": "fix, gotcha, decision, learning, "
+                      "pattern: up to 4 concrete checks for similar work next time, grounded in what the session found. "
+                      "Empty otherwise"},
+        "topics": {"type": "array", "items": {"type": "string", "enum": list(TOPICS)},
+                   "description": "Up to 4 engineering areas this item actually teaches. Empty for other kinds"},
+        "visual": VISUAL_SCHEMA,
     },
 }
 FRICTION_SCHEMA = {
@@ -85,11 +100,16 @@ FRICTION_SCHEMA = {
     "required": ["kind", "note"],
     "properties": {"kind": {"type": "string", "enum": FRICTION_KINDS}, "note": {"type": "string"}},
 }
+INTEREST_SCHEMA = {"type": "array", "items": {"type": "object", "additionalProperties": False,
+                   "required": ["topic", "question"], "properties": {
+                       "topic": {"type": "string", "enum": list(TOPICS)},
+                       "question": {"type": "string", "description": "Verbatim quote of the USER's question or expressed curiosity; never assistant text."}}},
+                   "description": "Only explicit curiosity, requests for explanation, comparison or understanding. Execution tasks alone are not learning interests. Empty if none."}
 ANALYSIS_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
     "required": ["title", "summary", "goal", "outcome", "outcome_note", "work_types", "tags", "highlights",
-                 "knowledge", "open_threads", "friction", "sentiment"],
+                 "knowledge", "open_threads", "friction", "sentiment", "learning_interests"],
     "properties": {
         "title": {"type": "string", "description": "Specific title of what the session was about, at most ~70 characters"},
         "summary": {"type": "string", "description": "3-6 sentences: what was asked, what was done, how it ended"},
@@ -100,6 +120,7 @@ ANALYSIS_SCHEMA = {
         "tags": {"type": "array", "items": {"type": "string"}, "description": "3-8 lowercase topic and technology tags"},
         "highlights": {"type": "array", "items": {"type": "string"}, "description": "Key accomplishments or findings, one line each"},
         "knowledge": {"type": "array", "items": KNOWLEDGE_ITEM_SCHEMA},
+        "learning_interests": INTEREST_SCHEMA,
         "open_threads": {"type": "array", "items": {"type": "string"}, "description": "Unfinished work, follow-ups, open questions"},
         "friction": {"type": "array", "items": FRICTION_SCHEMA, "description": "What slowed the session down"},
         "sentiment": {"type": "string", "enum": ["positive", "neutral", "frustrated", "mixed", "unclear"],
@@ -109,15 +130,25 @@ ANALYSIS_SCHEMA = {
 CHUNK_SCHEMA = {
     "type": "object",
     "additionalProperties": False,
-    "required": ["summary", "highlights", "knowledge", "open_threads", "friction", "tags"],
+    "required": ["summary", "highlights", "knowledge", "open_threads", "friction", "tags", "learning_interests"],
     "properties": {
         "summary": {"type": "string", "description": "What happened in this part, 3-6 sentences"},
         "highlights": {"type": "array", "items": {"type": "string"}},
         "knowledge": {"type": "array", "items": KNOWLEDGE_ITEM_SCHEMA},
+        "learning_interests": INTEREST_SCHEMA,
         "open_threads": {"type": "array", "items": {"type": "string"}},
         "friction": {"type": "array", "items": FRICTION_SCHEMA},
         "tags": {"type": "array", "items": {"type": "string"}},
     },
+}
+# The merge of a long session's parts names the part notes' knowledge items it keeps instead of writing them out
+# again: retyping a few dozen lessons with their case files in one reply came back empty, and wiped the session's.
+REDUCE_SCHEMA = {
+    **ANALYSIS_SCHEMA,
+    "required": [k if k != "knowledge" else "knowledge_ids" for k in ANALYSIS_SCHEMA["required"]],
+    "properties": {**{k: v for k, v in ANALYSIS_SCHEMA["properties"].items() if k != "knowledge"},
+                   "knowledge_ids": {"type": "array", "items": {"type": "string"},
+                                     "description": "The ids of the part notes' knowledge items to keep, in order"}},
 }
 
 SYSTEM_PROMPT = """\
@@ -155,6 +186,29 @@ like the answer, also in at most 12 words, so it reads as an alternative to it a
 by its length. For a decision, the options weighed and turned down. Only dead ends the transcript shows: an invented \
 one would teach something false. Leave it empty when there were none.
 For every other kind, leave these four empty.
+
+The developer also learns from fixes, gotchas, decisions, learnings and patterns, so for those five kinds fill in, \
+only where the transcript supports it:
+- principle: the general idea the item is an instance of, stated so it applies beyond this project, and when it \
+applies ("A write that replaces the whole set must read the set when it is applied, not when it was planned"). Not \
+generic advice and not the title again; leave it empty rather than stretch.
+- checklist: up to 4 concrete checks for similar work next time.
+- clues: for a fix or gotcha, the facts observed in order before the cause was known.
+- topics: the engineering areas the item actually teaches.
+- visual: a small diagram, only when the explanation describes a flow, parts that connect, or real alternatives: \
+2-4 nodes named in the session's own terms, each with a one-sentence detail of its role, and up to 5 labeled edges. \
+Use flow for request paths or steps, relationship for components, data entities or state ownership, comparison for \
+alternatives weighed. Draw only what the explanation establishes, never a generic architecture from topic tags; \
+otherwise return an empty visual (type flow, empty title, nodes and edges). Two boxes saying "problem" and "solution" \
+are not a diagram.
+When the session revised a finding or a decision, the title, answer and principle state where it ended up; the body \
+says what it replaced.
+
+Extract the concepts the USER is curious about: questions about why or how, follow-up explanations, comparisons, \
+architecture tradeoffs, frontend/backend behavior, API contracts and data models. Quote the user's actual question \
+in learning_interests and classify its topic. A delegated implementation task or an assistant's unsolicited \
+explanation is not evidence of curiosity. Preserve substantive answers as learning or pattern items, even when no \
+bug occurred. Connect the concept to the actual project and retain its explanation, not just the task's outcome.
 
 Use scope "global" for items useful beyond this project (tools, languages, platforms, the developer's working \
 preferences), otherwise "project". Write in English, but keep identifiers, error messages and quotes verbatim, \
@@ -194,9 +248,19 @@ def _reduce_prompt(header: str, notes: list[dict], opening: str, closing: str) -
         f"<part_notes>\n{parts}\n</part_notes>\n\n"
         f"<opening_excerpt>\n{opening}\n</opening_excerpt>\n\n"
         f"<closing_excerpt>\n{closing}\n</closing_excerpt>\n\n"
-        "Write the final analysis of the whole session. Merge duplicate knowledge items and keep the most "
-        "specific version, drop items that later parts show to be wrong, and describe the end state from the last part."
+        "Write the final analysis of the whole session, and describe the end state from the last part. For "
+        "knowledge, list in knowledge_ids the ids of the part notes' items to keep: of duplicates only the most "
+        "specific, of a finding a later part revised only the later one, and none that later parts show to be wrong."
     )
+
+
+def _kept(items: dict[str, dict], ids) -> list[dict]:
+    """The part notes' knowledge items the merge kept, each once. All of them when it named none it was given: a
+    reply that lost its list must not replace the session's lessons with nothing."""
+    kept = [items[i] for i in dict.fromkeys(ids if isinstance(ids, list) else []) if isinstance(i, str) and i in items]
+    if not kept and items:
+        log.warning("the merge kept no knowledge item; keeping all %d from the parts", len(items))
+    return kept or list(items.values())
 
 
 def _str_list(value) -> list[str]:
@@ -235,19 +299,25 @@ def normalize_knowledge(items) -> list[dict]:
             "evidence": str(item.get("evidence") or "").strip(),
             **{k: str(item.get(k) or "").strip() if case else "" for k in ("scene", "question", "answer")},
             "ruled_out": _leads(item.get("ruled_out")) if case else [],
+            **(lesson_of(item) if kind in LESSON_KINDS else {}),
         })
     return out
 
 
 def case_of(item: dict) -> dict | None:
-    """A fix, gotcha or decision as a case file, redacted; None when the analysis gave no scene, question and answer."""
-    if item.get("kind") not in CASE_KINDS:
+    """A lesson's material, redacted: for a fix, gotcha or decision its case file (scene, question, answer, ruled_out)
+    when the analysis gave one, and for any lesson kind the principle, checks, topics and diagram it supported (cases.py).
+    `item` is an analysis item, or {"kind", "case": stored case_json}. None when there is nothing."""
+    kind = item.get("kind")
+    if kind not in LESSON_KINDS:
         return None
-    scene, question, answer = (redact(str(item.get(k) or "")).strip() for k in ("scene", "question", "answer"))
-    if not (scene and question and answer):
-        return None
-    return {"scene": scene, "question": question, "answer": answer,
-            "ruled_out": [{"lead": redact(x["lead"]), "why": redact(x["why"])} for x in _leads(item.get("ruled_out"))]}
+    raw = item["case"] if isinstance(item.get("case"), dict) else item
+    out = {}
+    scene, question, answer = (redact(raw[k]).strip() if isinstance(raw.get(k), str) else "" for k in ("scene", "question", "answer"))
+    if kind in CASE_KINDS and scene and question and answer:
+        out = {"scene": scene, "question": question, "answer": answer,
+               "ruled_out": [{"lead": redact(x["lead"]), "why": redact(x["why"])} for x in _leads(raw.get("ruled_out"))]}
+    return {**out, **lesson_of(raw)} or None
 
 
 def normalize_analysis(data: dict) -> dict:
@@ -270,6 +340,7 @@ def normalize_analysis(data: dict) -> dict:
         "tags": [t.lower() for t in _str_list(data.get("tags"))][:10],
         "highlights": _str_list(data.get("highlights")),
         "knowledge": normalize_knowledge(data.get("knowledge")),
+        "learning_interests": normalize_interests(data.get("learning_interests")),
         "open_threads": _str_list(data.get("open_threads")),
         "friction": friction,
         "sentiment": sentiment if sentiment in ("positive", "neutral", "frustrated", "mixed", "unclear") else "unclear",
@@ -318,18 +389,22 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
             total_cost += res.cost_usd
             data = normalize_analysis(res.data)
         else:
-            notes = []
+            notes, items = [], {}
             for i, chunk in enumerate(digest.chunks, 1):
                 part = runner.run(_chunk_prompt(header, chunk, i, len(digest.chunks)), CHUNK_SCHEMA, system=system, model=model)
                 total_cost += part.cost_usd
                 _log_run(conn, "chunk", session_id, part, status="done", input_chars=len(chunk), started=started)
-                notes.append({**part.data, "knowledge": normalize_knowledge(part.data.get("knowledge"))})
+                shown = []  # the merge judges each item by what it says; the full item is kept here, by id
+                for j, item in enumerate(normalize_knowledge(part.data.get("knowledge")), 1):
+                    items[f"p{i}.{j}"] = item
+                    shown.append({"id": f"p{i}.{j}", **{k: item[k] for k in ("kind", "title", "body", "confidence")}})
+                notes.append({**part.data, "knowledge": shown})
             res = runner.run(
                 _reduce_prompt(header, notes, digest.chunks[0][:6000], digest.chunks[-1][-6000:]),
-                ANALYSIS_SCHEMA, system=system, model=model,
+                REDUCE_SCHEMA, system=system, model=model,
             )
             total_cost += res.cost_usd
-            data = normalize_analysis(res.data)
+            data = {**normalize_analysis(res.data), "knowledge": _kept(items, res.data.get("knowledge_ids"))}
     except (UsageLimitError, BudgetExceededError, LLMError) as exc:
         if isinstance(exc, (UsageLimitError, SleepInterruptedError)):  # not the session's fault: just retry later
             status, attempts, not_before = "pending", s["analysis_attempts"] or 0, None
@@ -358,6 +433,9 @@ def analyze_session(conn: sqlite3.Connection, cfg: Config, session_id: str, runn
 
 def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data: dict, model: str | None,
                    n_prompts: int) -> None:
+    store_interests(conn, session_id, data.get("learning_interests"))
+    # Curiosity quotes stay in local kv; shared analysis_json contains only the teaching material.
+    data = {key: value for key, value in data.items() if key != "learning_interests"}
     s = conn.execute("SELECT project_path, project_name, ai_title, first_prompt, machine_id, source FROM sessions "
                      "WHERE id = ?", (session_id,)).fetchone()
     title = (data.get("title") or "").strip() or None
@@ -394,12 +472,18 @@ def store_analysis(conn: sqlite3.Connection, cfg: Config, session_id: str, data:
         if not item.get("title") or item.get("kind") not in KNOWLEDGE_KINDS:
             continue
         case = case_of(item)
-        # a pinned or dismissed item with the same fingerprint is kept as it is, but gains a case file it lacked
+        # a pinned or dismissed item with the same fingerprint is kept as it is, but gains lesson material it lacked,
+        # and a diagram it lacked while its text is unchanged
         conn.execute(
             "INSERT INTO knowledge(session_id, project_path, project_name, kind, title, body, tags_json, scope, "
             "confidence, evidence, source, source_ref, fingerprint, created_at, updated_at, stage, case_json) "
             "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) "
-            "ON CONFLICT(fingerprint) DO UPDATE SET case_json = COALESCE(knowledge.case_json, excluded.case_json)",
+            "ON CONFLICT(fingerprint) DO UPDATE SET case_json = CASE WHEN knowledge.case_json IS NULL "
+            "THEN excluded.case_json WHEN knowledge.body = excluded.body AND json_valid(knowledge.case_json) "
+            "AND json_extract(knowledge.case_json, '$.visual') IS NULL "
+            "AND json_extract(excluded.case_json, '$.visual') IS NOT NULL "
+            "THEN json_set(knowledge.case_json, '$.visual', json_extract(excluded.case_json, '$.visual')) "
+            "ELSE knowledge.case_json END",
             (
                 session_id, s["project_path"], s["project_name"], item["kind"], redact(item["title"]).strip(),
                 redact(item.get("body") or "").strip(), dumps([t.lower() for t in item.get("tags") or []]),

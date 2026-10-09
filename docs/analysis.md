@@ -40,7 +40,8 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
 1. A session is queued once it ends (hook) or has been idle for `idle_minutes`.
 2. The transcript is condensed into a digest at the richest detail level that fits `chunk_chars`
    (full prompts and replies, one line per tool call, error excerpts, subagent reports). Very long
-   sessions are split at prompt boundaries and map-reduced. Secrets are redacted first.
+   sessions are split at prompt boundaries and map-reduced: each part's lessons are written once, and the final
+   pass picks which to keep. Secrets are redacted first.
 3. The digest goes to the agent chosen in `analysis.backend`, through your own login, sandboxed so that no
    session is written for the analysis itself, none of your hooks, plugins, MCP servers or instruction files load,
    and the model can only answer:
@@ -145,8 +146,14 @@ Agents get the scene and the ruled-out leads too: the MCP tools show them under 
 recognize the symptom and skip the dead ends. A hub keeps the case files of the lessons computers share with it;
 teammates' lessons sent back to members don't carry them yet.
 
-Lessons from an earlier version have no case file. A session's lessons get theirs when it is analyzed again
-(`chronicle analyze <session>`), which uses your analysis login like any other analysis.
+For [Learn from your work](dashboard.md#pages) the analysis also keeps, for fixes, gotchas, decisions, learnings and
+patterns alike, only where the session supports them: **the principle** (the general idea the lesson is an instance of,
+stated so it applies to other work), **checks** for similar work next time, the **topics** it teaches, and a small
+**diagram** when the explanation describes a flow, connected parts or real alternatives. Each is left empty rather
+than made up. When a session revised a finding or a decision, the lesson states where it ended up.
+
+Lessons from an earlier version have no case file, principle or diagram. A session's lessons get them when it is
+analyzed again (`chronicle analyze <session>`), which uses your analysis login like any other analysis.
 
 ## Model providers
 

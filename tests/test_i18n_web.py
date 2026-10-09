@@ -140,12 +140,12 @@ def _calls(path: Path) -> list[tuple[str, list[str], int]]:
 def _keys() -> tuple[dict[str, int], list[str]]:
     """{key: first line used} for every literal key in app.js and i18n.js, and the problems: non-literal keys."""
     keys, problems = {}, []
-    for path in (WEB / "app.js", WEB / "i18n.js"):
+    for path in (WEB / "app.js", WEB / "learning.js", WEB / "i18n.js"):
         for name, args, line in _calls(path):
             texts = [args[k] if k < len(args) else "" for k in HELPERS[name]]
             bad = [x for x in texts if not PLAIN.fullmatch(x)]
             if bad:
-                if any(x.startswith("`") for x in bad) or path.name == "app.js":  # i18n.js's helpers pass variables on
+                if any(x.startswith("`") for x in bad) or path.name != "i18n.js":  # i18n.js's helpers pass variables on
                     problems.append(f"{path.name}:{line}: {name}() needs a plain \"...\" string, got {bad[0][:60]}")
                 continue
             values = [json.loads(x) for x in texts]

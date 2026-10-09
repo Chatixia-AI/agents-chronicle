@@ -65,6 +65,22 @@ def test_map_reduce_for_long_sessions(synced):
     assert "<part_notes>" in calls[-1]["prompt_head"]
     kinds = [r[0] for r in conn.execute("SELECT kind FROM analyses WHERE target=?", (SID,))]
     assert kinds.count("chunk") == len(parts) and kinds[-1] == "session"
+    # the merge names the items it keeps; the item itself comes from the part, never retyped
+    assert '"id": "p1.1"' in calls[-1]["prompt_head"]
+    titles = lambda: [r[0] for r in conn.execute("SELECT title FROM knowledge WHERE session_id=? ORDER BY id", (SID,))]
+    assert titles() == [f"Part {len(parts)} gotcha"]
+
+
+@pytest.mark.parametrize("ids", ["[]", '["p99.1", 7]', "null"])
+def test_a_merge_that_keeps_nothing_keeps_every_part_item(synced, monkeypatch, ids):
+    """Merging a long session's 28 lessons once came back with an empty list, and the session lost all of them."""
+    conn, cfg = synced["conn"], synced["cfg"]
+    cfg.analysis.chunk_chars = 400
+    monkeypatch.setenv("FAKE_REDUCE_IDS", ids)
+    analyze_session(conn, cfg, SID)
+    parts = sum("<transcript_part" in c["prompt_head"] for c in fake_log(synced))
+    kept = [r[0] for r in conn.execute("SELECT title FROM knowledge WHERE session_id=? ORDER BY id", (SID,))]
+    assert kept == [f"Part {i} gotcha" for i in range(1, parts + 1)]
 
 
 def test_usage_limit_pauses_the_worker(synced, monkeypatch):

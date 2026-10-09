@@ -163,6 +163,7 @@ ICONS.doc = ICONS.file;
 ICONS.person = ICONS.preference;
 ICONS.team = ["M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2", ["circle", { cx: 9, cy: 7, r: 4 }], "M22 21v-2a4 4 0 0 0-3-3.87", "M16 3.13a4 4 0 0 1 0 7.75"];
 ICONS.other = ICONS.dot;
+ICONS.shield = ["M12 3 3 6v6c0 5 9 9 9 9s9-4 9-9V6z", "m8 12 3 3 5-6"];
 function icon(name, cls = "") {
   return s("svg", { class: `icon ${cls}`, viewBox: "0 0 24 24", "aria-hidden": "true" },
     (ICONS[name] || ICONS.dot).map((p) => (typeof p === "string" ? s("path", { d: p }) : s(p[0], p[1]))));
@@ -858,6 +859,7 @@ function navKey(path) {
   if (path.startsWith("/session")) return "sessions";
   if (path.startsWith("/project")) return "projects";
   if (path.startsWith("/knowledge")) return "knowledge";
+  if (path === "/learn") return "learn";
   if (path.startsWith("/status")) return "status";
   if (path.startsWith("/reviews")) return "reviews";
   if (path.startsWith("/sources")) return "sources";
@@ -2360,11 +2362,13 @@ route(/^\/knowledge$/, async (params) => {
 
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Knowledge")),
-      h("div", { class: "sub" }, t("What your sessions taught you, four ways in"))),
+      h("div", { class: "sub" }, t("What your sessions taught you, and how to put it to use"))),
       h("div", { class: "head-actions" },
         k.cases ? h("a", { class: "btn", href: "#/knowledge/all?cases=1", title: t("Fixes, gotchas and decisions told as cases: the scene, a question, then the answer") },
           icon("reviews"), t("Case files"), h("span", { class: "count" }, fmtNum(k.cases))) : null,
         h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
+    h("a", { class: "card learn-entry", href: "#/learn" }, icon("learning"),
+      h("div", null, h("h2", null, t("Learn from your work")), h("p", null, t("Explore every lesson by category, with diagrams and ready-to-use explanations."))), icon("arrow")),
     h("div", { class: "hub-grid" }, map, all, gloss, reviews));
 });
 
@@ -2401,6 +2405,7 @@ function dayBars(values, days, { height = 90 } = {}) { // active time per day of
     }));
 }
 
+route(/^\/learn$/, (params) => learningView(params));
 route(/^\/knowledge\/all$/, (params) => knowledgeListView(params));
 async function knowledgeListView(params) {
   setCrumbs(defaultCrumbs("/knowledge/all", params));
@@ -2441,7 +2446,8 @@ async function knowledgeListView(params) {
   await load();
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("All knowledge")), count),
-      h("div", { class: "head-actions" }, viewToggle("knowledge", mode), h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
+      h("div", { class: "head-actions" }, h("a", { class: "btn primary", href: `#/learn?${new URLSearchParams({ project: state.project })}` }, icon("learning"), t("Learn from your work")),
+        viewToggle("knowledge", mode), h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
     h("div", { class: "filters" },
       h("input", { class: "input", type: "search", placeholder: t("Search knowledge…"), value: state.q, style: { minWidth: "280px" },
         oninput: (e) => { clearTimeout(debounce); debounce = setTimeout(() => { state.q = e.target.value; refresh(); }, 250); } }),
@@ -6542,7 +6548,7 @@ const SECTIONS = [
   { key: "team", label: t("Team"), href: "#/team" }, // a hub's admins
   { key: "settings", label: t("Settings"), href: "#/status" },
 ];
-const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
+const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", learn: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
   projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
   team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team", teamsettings: "team" };
 const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), teamsettings: t("Hub settings"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
@@ -6568,6 +6574,7 @@ function defaultCrumbs(path, params) {
   const key = navKey(path), section = sectionOf(path, params);
   if (key === "overview") return [[sectionLink("home")[0]]];
   if (key === "teamhome") return [[t("Team overview")]];
+  if (key === "learn") return [sectionLink("knowledge"), [t("Learn from your work")]];
   if (key === "activity" && ME?.hub?.team) return [[t("Activity")]]; // the section is Activity itself there
   if (key === "knowledge") return path === "/knowledge" ? [[t("Knowledge")]] : [sectionLink("knowledge"), [params.kind ? kindPlural(params.kind) : t("All knowledge")]];
   if (key === "projects" && path === "/projects") return [[t("Projects")]];
@@ -6665,12 +6672,14 @@ async function knowledgeSidebar(box) {
   if (limited()) { // the lessons of their projects; the glossary, map, playbook and reviews span every project
     box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Knowledge")), h("span", null, fmtNum(total))),
       h("div", { class: "sb-scroll" }, sbRow(t("All knowledge"), "#/knowledge/all", "knowledge", total, ["/knowledge/all", "kind", ""]),
+        sbRow(t("Learn from your work"), "#/learn", "learning", null, ["/learn"]),
         h("div", { class: "sb-group" }, t("Kinds")), kinds));
     return;
   }
   box.replaceChildren(h("div", { class: "sb-head" }, h("h2", null, t("Knowledge")), h("span", null, fmtNum(total))),
     h("div", { class: "sb-scroll" },
       sbRow(t("Overview"), "#/knowledge", "overview", null, ["/knowledge"]),
+      sbRow(t("Learn from your work"), "#/learn", "learning", null, ["/learn"]),
       sbRow(t("All knowledge"), "#/knowledge/all", "knowledge", total, ["/knowledge/all", "kind", ""]),
       h("div", { class: "sb-group" }, t("Kinds")),
       kinds,
@@ -6861,6 +6870,7 @@ function paletteCommands() {
   const nav = (label, href, iconName, hint = "") => ({ group: goTo, label, hint, icon: iconName, href, run: () => go(href) });
   return [
     nav(sectionLink("home")[0], "#/", ME?.hub?.team ? "status" : "home"), { ...nav(t("Team overview"), "#/overview", "overview", t("team projects")), team: true }, nav(t("Sessions"), "#/sessions", "sessions"), nav(t("Knowledge"), "#/knowledge", "knowledge"), nav(t("All knowledge"), "#/knowledge/all", "knowledge"),
+    nav(t("Learn from your work"), "#/learn", "learning"),
     nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Systems map"), "#/systems", "systems", t("every project, its parts and links")), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
@@ -6884,7 +6894,7 @@ function paletteCommands() {
     } },
   ].filter((x) => (!x.admin || canAdmin()) && (!x.hub || ME?.hub) && (!x.team || ME?.hub?.team)
     && !(dedicated() && (DEDICATED_HIDDEN_HREFS.has(x.href) || x.run === syncNow))
-    && (!limited() || !x.href || ["#/", "#/overview", "#/sessions", "#/knowledge/all", "#/projects"].includes(x.href)));
+    && (!limited() || !x.href || ["#/", "#/overview", "#/sessions", "#/knowledge/all", "#/learn", "#/projects"].includes(x.href)));
 }
 async function paletteSearch(q) {
   const lq = q.toLowerCase();

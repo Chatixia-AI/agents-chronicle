@@ -505,13 +505,18 @@ class App:
 
     @staticmethod
     def _reason(k: dict) -> dict:
+        from .analyze import case_of
+        from .learning import topics_for
+
+        raw_case = loads(k.pop("case_json", None), k.get("case"))  # lesson material: a case file, principle, diagram
+        k["case"] = case_of({"kind": k.get("kind"), "case": raw_case}) if isinstance(raw_case, dict) else None
+        k["learning_topics"] = topics_for(k)
         if k.get("stage_reason"):
             k["stage_reason"] = reason_text(k["stage_reason"])
         if k.get("source") == "team":  # a teammate's lesson: the computers whose sessions stated it
             from .hub import team_from
 
             k["team_from"] = team_from(k)
-        k["case"] = loads(k.pop("case_json", None), None)  # a fix, gotcha or decision as a case file
         return k
 
     def _session_rows(self, where: str, params: list, order: str, limit: int, offset: int = 0) -> list[dict]:
@@ -945,7 +950,8 @@ class App:
         rows = search_knowledge(self.conn, q.get("q") or None, project=q.get("project") or None, kind=q.get("kind") or None,
                                 include_inactive=q.get("status") == "all", limit=min(int(q.get("limit") or 200), 1000),
                                 sessions=self._who_clause(q["who"]) if q.get("who") else None,
-                                source=q.get("source") or None, cases=q.get("cases") == "1")
+                                source=q.get("source") or None, cases=q.get("cases") == "1",
+                                lessons=q.get("lessons") == "1", offset=max(0, int(q.get("offset") or 0)))
         if self._whos() is not None and rows:  # each lesson's person, through the session it came from
             ids = list({r["session_id"] for r in rows if r.get("session_id")})
             machine = {}
@@ -962,9 +968,18 @@ class App:
             "SELECT kind, COUNT(*) n FROM knowledge WHERE status = 'active' GROUP BY kind")}
         sources = dict(self.conn.execute(
             "SELECT source, COUNT(*) FROM knowledge WHERE status = 'active' GROUP BY source").fetchall())
+        from .analyze import CASE_FILE_SQL
+
         cases = self.conn.execute(
-            "SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND case_json IS NOT NULL").fetchone()[0]
+            "SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND " + CASE_FILE_SQL).fetchone()[0]
         return {"items": [self._reason(r) for r in rows], "counts": counts, "sources": sources, "cases": cases}
+
+    def learning_interests(self, viewer: dict | None, q: dict) -> dict:
+        from .ingest import local_machine_id
+        from .learning import interest_profile
+
+        return interest_profile(self.conn, viewer_id=(viewer or {}).get("id"), machine_id=local_machine_id(self.cfg),
+                                project=q.get("project") or "")
 
     def search(self, q: dict) -> dict:
         query = q.get("q") or ""
@@ -1142,8 +1157,10 @@ class App:
                       "tldr": data["tldr"],
                       "stats": _stats(self.conn, row["start"], row["end"]) if row["start"] else loads(row["stats_json"], {}) or {},
                       "daily": week_glance(self.conn, row["start"], row["end"])["daily"] if row["start"] else []}
+        from .analyze import CASE_FILE_SQL
+
         cases = self.conn.execute(
-            "SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND case_json IS NOT NULL").fetchone()[0]
+            "SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND " + CASE_FILE_SQL).fetchone()[0]
         return {"knowledge": {"total": sum(counts.values()), "counts": counts, "new_week": new_week, "recent": recent,
                               "cases": cases},
                 "glossary": {"total": sum(cats.values()), "categories": cats, "top": top_terms},
@@ -2453,6 +2470,8 @@ def make_handler(app: App, port: int):
                                                        ignored=q.get("ignored") != "0"))
                 if p == "/api/knowledge":
                     return self._json(app.knowledge(q))
+                if p == "/api/learning/interests":
+                    return self._json(app.learning_interests(self.viewer, q))
                 if p == "/api/knowledge/hub":
                     return self._json(app.knowledge_hub())
                 if p == "/api/search":

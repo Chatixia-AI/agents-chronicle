@@ -22,7 +22,7 @@ import sqlite3
 
 # GET endpoints a limited person may call; /api/sessions/<id> (the summary page) is matched separately
 LIMITED_GET = frozenset({"/api/me", "/api/overview", "/api/team", "/api/team/who", "/api/team/news", "/api/sessions",
-                         "/api/projects", "/api/project", "/api/knowledge", "/api/jobs", "/api/diagram"})
+                         "/api/projects", "/api/project", "/api/knowledge", "/api/learning/interests", "/api/jobs", "/api/diagram"})
 SESSION_PAGE = re.compile(r"/api/sessions/[\w-]+")
 
 # tables whose rows are a session's content or another project's: read as empty

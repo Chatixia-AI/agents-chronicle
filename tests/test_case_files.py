@@ -4,7 +4,7 @@ the leads the session ruled out, so the dashboard can ask before it tells and th
 import json
 import sqlite3
 
-from chronicle.analyze import case_of, normalize_analysis, normalize_knowledge, store_analysis
+from chronicle.analyze import PROMPT_VERSION, case_of, normalize_analysis, normalize_knowledge, store_analysis
 from chronicle.db import SCHEMA_VERSION, connect
 
 from conftest import SECRET, SID
@@ -44,7 +44,7 @@ def test_store_analysis_keeps_the_case_and_fills_a_pinned_lesson(synced):
     rows = {r["title"]: r for r in conn.execute("SELECT * FROM knowledge WHERE session_id = ?", (SID,))}
     assert json.loads(rows[CASE["title"]]["case_json"]) == {k: CASE[k] for k in ("scene", "question", "answer", "ruled_out")}
     assert rows["A fact"]["case_json"] is None
-    assert rows[CASE["title"]]["source_ref"] == "prompt-v2"
+    assert rows[CASE["title"]]["source_ref"] == f"prompt-v{PROMPT_VERSION}"
 
     # a lesson pinned before case files existed: re-analysis keeps it as it is, and gives it its case
     conn.execute("UPDATE knowledge SET pinned = 1, case_json = NULL, body = 'pinned body' WHERE title = ?", (CASE["title"],))
