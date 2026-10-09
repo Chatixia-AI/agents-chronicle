@@ -8,3 +8,4 @@ build/
 .playwright-mcp/
 site/
 .env
+docs/images/demo.mp4

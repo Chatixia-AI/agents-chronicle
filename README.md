@@ -28,7 +28,10 @@ Your coding agents solve problems all day, and then the lesson disappears: Claud
 days, and nothing carries a fix from one session to the next. Chronicle keeps every session, uses Claude Code or Codex
 to pull out what was learned, and gives it back to you in a dashboard and to your agents through an MCP server.
 
-![Chronicle's session page: the conversation with one-line tool calls, the knowledge extracted from it, and an outline of the prompts](docs/images/session.png)
+[![Opening a session in Chronicle on demo data: its summary, a glossary term explained on hover, and the knowledge extracted from it](docs/images/demo.gif)](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4)
+
+<sub>A session on the [demo data](docs/development.md#demo-data). [Download the one-minute tour](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4) (MP4, 6 MB): Home, a
+session and its transcript, ⌘K search, the glossary Map and a weekly review.</sub>
 
 ## What it gives you
 
