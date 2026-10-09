@@ -19,20 +19,19 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import threading
 import time
 from contextlib import contextmanager
 from pathlib import Path
 
+from . import pg
 from .config import Config
+from .pg import PG_KEYS, SETTINGS, SSLMODES, driver_available  # noqa: F401 (this module's names, as before)
 from .util import fingerprint
 
 log = logging.getLogger("chronicle.team_store")
 
 ENV_FILE = "team-store.env"
-PG_KEYS = {"PGHOST": "host", "PGPORT": "port", "PGDATABASE": "dbname", "PGUSER": "user", "PGPASSWORD": "password",
-           "PGSSLMODE": "sslmode"}
 MAX_LESSONS = 2000  # sent to one computer per pull
 MAX_SOURCES = 50    # session ids per lesson sent with it (its confirmations)
 PING_AFTER_S = 60   # check an idle connection before using it again
@@ -109,7 +108,7 @@ SESSION_COLS = ("project", "project_name", "remote", "agent", "started_at", "end
                 "outcome", "analyzed_at", "analysis_model", "language")
 
 
-class TeamStoreError(Exception):
+class TeamStoreError(pg.PgError):
     pass
 
 
@@ -117,96 +116,30 @@ def env_path(cfg: Config) -> Path:
     return cfg.home / ENV_FILE
 
 
-SSLMODES = ("require", "verify-ca", "verify-full", "prefer", "disable")
-SETTINGS = ("host", "port", "dbname", "user", "sslmode")  # what the dashboard shows and edits; the password only goes in
-
-
-def _read_env(path: Path) -> dict[str, str]:
-    """PG* lines of an env file: KEY=value, a value optionally in one pair of quotes; # starts a comment line."""
-    raw: dict[str, str] = {}
-    if path.stat().st_mode & 0o077:
-        log.warning("%s can be read by other users of this computer; chmod 600 it", path)
-    for line in path.read_text().splitlines():
-        if line.strip() and not line.lstrip().startswith("#") and "=" in line:
-            k, v = line.split("=", 1)
-            v = v.strip()
-            if len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'":
-                v = v[1:-1]
-            raw[k.strip()] = v
-    return raw
-
-
 def connection_params(cfg: Config) -> dict:
     """psycopg connect() arguments from team-store.env, else the PG* environment. Never logged: it holds a password."""
-    path = env_path(cfg)
-    raw = _read_env(path) if path.exists() else {k: v for k, v in os.environ.items() if k in PG_KEYS}
-    params = {PG_KEYS[k]: v for k, v in raw.items() if k in PG_KEYS and v}
-    if not params.get("host") or not params.get("dbname"):
-        raise TeamStoreError(f"no team database configured: put PGHOST, PGDATABASE, PGUSER and PGPASSWORD in {path}")
-    params.setdefault("sslmode", "require")
+    params = pg.params_from(env_path(cfg))
+    if not params:
+        raise TeamStoreError(f"no team database configured: put PGHOST, PGDATABASE, PGUSER and PGPASSWORD in {env_path(cfg)}")
     return params
 
 
 def read_settings(cfg: Config) -> dict | None:
     """The connection as the dashboard shows it: everything but the password, which is only said to be there."""
     try:
-        params = connection_params(cfg)
+        return pg.shown(connection_params(cfg))
     except (TeamStoreError, OSError):
         return None
-    return {**{k: params.get(k) or "" for k in SETTINGS}, "password_set": bool(params.get("password"))}
 
 
 def check_settings(values: dict, saved: dict | None) -> dict:
     """psycopg connect() arguments from what the dashboard sent: a password left empty keeps the saved one."""
-    params = {}
-    for k in (*SETTINGS, "password"):
-        v = values.get(k)
-        v = "" if v is None else str(v)
-        if "\n" in v or "\r" in v or "\0" in v:
-            raise TeamStoreError(f"{k} can't contain a line break")
-        if k != "password":
-            v = v.strip()
-        if v:
-            params[k] = v
-    for k in ("host", "dbname", "user"):
-        if not params.get(k):
-            raise TeamStoreError({"host": "the database server's address is missing", "dbname": "the database name is missing",
-                                  "user": "the user name is missing"}[k])
-    port = params.get("port", "5432")
-    if not port.isdigit() or not 0 < int(port) < 65536:
-        raise TeamStoreError("the port must be a number from 1 to 65535")
-    params["port"] = port
-    params.setdefault("sslmode", "require")
-    if params["sslmode"] not in SSLMODES:
-        raise TeamStoreError(f"SSL mode must be one of: {', '.join(SSLMODES)}")
-    if "password" not in params:
-        if not saved or not saved.get("password"):
-            raise TeamStoreError("the password is missing")
-        params["password"] = saved["password"]
-    return params
+    return pg.check_settings(values, saved, TeamStoreError)
 
 
 def write_settings(cfg: Config, params: dict) -> None:
     """Write team-store.env (readable by this user only), replacing it in one step."""
-    def quoted(v: str) -> str:  # a value that reading would change keeps its exact text inside one pair of quotes
-        return f"'{v}'" if v != v.strip() or (len(v) >= 2 and v[0] == v[-1] and v[0] in "\"'") else v
-
-    keys = {v: k for k, v in PG_KEYS.items()}
-    lines = ["# The hub's team store ([hub] store = \"postgres\"). Written by the dashboard; keep it private."]
-    lines += [f"{keys[k]}={quoted(str(params[k]))}" for k in (*SETTINGS[:4], "password", "sslmode") if params.get(k)]
-    path = env_path(cfg)
-    path.parent.mkdir(parents=True, exist_ok=True)
-    tmp = path.with_name(path.name + f".tmp{os.getpid()}")
-    fd = os.open(tmp, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    with os.fdopen(fd, "w") as fh:
-        fh.write("\n".join(lines) + "\n")
-    os.replace(tmp, path)
-
-
-def driver_available() -> bool:
-    import importlib.util
-
-    return importlib.util.find_spec("psycopg") is not None
+    pg.write_settings(env_path(cfg), params, "The hub's team store ([hub] store = \"postgres\"). Written by the dashboard; keep it private.")
 
 
 def probe(params: dict, *, schema: str = "team") -> dict:
@@ -464,14 +397,7 @@ def place(remote: str | None, project: str | None) -> str | None:
     return remote or project or None
 
 
-def _iso(value) -> str | None:
-    if value is None:
-        return None
-    return value.isoformat().replace("+00:00", "Z") if hasattr(value, "isoformat") else str(value)
-
-
-def _first_line(exc: BaseException) -> str:
-    return (str(exc).strip().splitlines() or [type(exc).__name__])[0]
+_iso, _first_line = pg.iso, pg.first_line
 
 
 _stores: dict[str, tuple[tuple, TeamStore]] = {}

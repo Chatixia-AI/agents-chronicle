@@ -22,6 +22,11 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 自分で運用していないハブには `knowledge` を選んでください。tailnet 内や HTTPS のプロキシ経由なら暗号化されて届きますが、
 `http://` のままでは暗号化されません。
 
+**Postgres へのコピー**（[Postgres へのコピー](postgres.md)）は、設定しない限りオフです。設定すると、バックグラウンド実行のたびに
+選んだデータベースへアーカイブを書き込みます。`include = "knowledge"`（既定）ではセッションの詳細・要約・分析、教訓、ナレッジベース、
+使用量で、プロンプトとトランスクリプトは含みません。`"everything"` ではプロンプトとトランスクリプトも、秘密情報を伏せ字にして送ります。
+除外したプロジェクトのセッションは送りません。インターネット越しの接続は、オフにしない限り TLS（SSL モード `require`）を使います。
+
 | ローカルに保存されるもの | 場所 |
 | --- | --- |
 | データベース：セッション、イベント、ナレッジ、用語集、振り返り | `~/.claude-chronicle/chronicle.db`（SQLite） |
@@ -33,6 +38,7 @@ claude.ai や ChatGPT のエクスポートを取り込むときはチャット�
 | アプリの起動スクリプトとウインドウの保存領域 | `~/.claude-chronicle/bin/chronicle`、`~/.claude-chronicle/webview/` |
 | このコンピューターの ID と名前、ハブに示す鍵、ハブのトークン（鍵とトークンはあなただけが読めます） | `~/.claude-chronicle/machine.json`、`~/.claude-chronicle/machine-key`、`~/.claude-chronicle/hub-token` |
 | ハブで：ほかのコンピューターが送ってきたセッションファイル | `~/.claude-chronicle/machines/` |
+| ミラーの接続情報（パスワードを含む。自分だけが読める） | `~/.claude-chronicle/mirror.env` |
 
 ## 詳細
 

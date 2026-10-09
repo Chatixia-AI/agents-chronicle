@@ -315,6 +315,10 @@ JA: dict[str, str] = {
     "the user name is missing": "ユーザー名がありません",
     "the port must be a number from 1 to 65535": "ポートは 1 から 65535 までの数字にしてください",
     "the password is missing": "パスワードがありません",
+    # ---- Settings › Storage: the mirror in Postgres
+    "the schema name can have only letters, digits and _, and can't start with a digit":
+        "スキーマ名に使えるのは英字・数字・_ だけで、数字では始められません",
+    "what the mirror holds must be \"knowledge\" or \"everything\"": "ミラーに入れる内容は \"knowledge\" か \"everything\" で指定します",
     "that file is not on this computer": "そのファイルはこのコンピューターにありません",
     "that kind of file is not opened from here": "その種類のファイルはここからは開きません",
     "opening files is not supported on this system": "このシステムではファイルを開けません",

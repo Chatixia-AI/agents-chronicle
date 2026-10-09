@@ -2329,3 +2329,8 @@ td.pg-cell { width: 1%; text-align: right; }
   .learn-glance-grid, .learn-glance-grid.with-case { grid-template-columns: 1fr; }
   .learn-glance-case { grid-column: auto; grid-row: auto; }
 }
+
+/* Settings › Storage: the Docker hint under the mirror form */
+.mirror-docker { margin: 2px 0 14px; }
+.mirror-docker summary { cursor: pointer; font-size: 13px; color: var(--ink-2); }
+.mirror-docker p { margin: 8px 0 6px; }

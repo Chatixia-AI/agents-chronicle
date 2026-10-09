@@ -24,6 +24,12 @@ pasted in a prompt, a `.env` an agent read) reach the hub and its admins as they
 sends only summaries and project lessons, made from the redacted digest. Pick `knowledge` for a hub you don't run
 yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encrypted; over plain `http://` they don't.
 
+**With a copy in Postgres** ([A copy in Postgres](postgres.md)), which is off unless you set it up, Chronicle writes
+your archive to the database you chose after every background run. With `include = "knowledge"` (the default) that is
+sessions' details, summaries and analyses, lessons, knowledge bases and usage, with no prompts or transcripts. With
+`"everything"`, prompts and transcripts go too, with secrets redacted. Sessions in excluded projects never go. Over
+the internet the connection uses TLS (SSL mode `require`) unless you turn it off.
+
 | Stored locally | Where |
 | --- | --- |
 | Database: sessions, events, knowledge, glossary, reviews | `~/.claude-chronicle/chronicle.db` (SQLite) |
@@ -35,6 +41,7 @@ yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encry
 | The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
 | This computer's id and name, its key for a hub; a hub's token (the key and token readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/machine-key`, `~/.claude-chronicle/hub-token` |
 | On a hub: the session files other computers sent | `~/.claude-chronicle/machines/` |
+| The mirror's connection, password included (readable by you only) | `~/.claude-chronicle/mirror.env` |
 
 ## Details
 

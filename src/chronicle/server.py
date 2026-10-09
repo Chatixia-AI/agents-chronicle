@@ -1461,6 +1461,108 @@ class App:
         self._cfg_sig = self._config_sig()
         return {"ok": True, "store": self.team_store_info(), "status": self.team_store_status()}
 
+    # ---- Settings › Storage (mirror.py): a copy of this archive in Postgres; the password goes in, never out
+    def mirror_info(self) -> dict:
+        from . import mirror, pg
+        from .config import MIRROR_INCLUDES
+
+        return {"enabled": mirror.enabled(self.cfg), "include": self.cfg.mirror_include, "schema": self.cfg.mirror_schema,
+                "includes": list(MIRROR_INCLUDES), "driver": pg.driver_available(), "install": mirror.INSTALL,
+                "settings": mirror.read_settings(self.cfg), "file": str(mirror.env_path(self.cfg)),
+                "sslmodes": list(pg.SSLMODES), "last": mirror.last(self.cfg),
+                "running": self.jobs.snapshot().get("mirror", {}).get("state") == "running"}
+
+    def mirror_status(self) -> dict:
+        """What the mirror holds; asked for after the page shows, since the database may be far away."""
+        from . import mirror
+
+        if not mirror.enabled(self.cfg):
+            return {"enabled": False}
+        try:
+            return {"enabled": True, **mirror.status(self.cfg)}
+        except mirror.MirrorError as exc:
+            return {"enabled": True, "error": tr(str(exc))}
+
+    def _mirror_params(self, body: dict) -> dict:
+        from . import mirror
+
+        try:
+            saved = mirror.connection_params(self.cfg)
+        except (mirror.MirrorError, OSError):
+            saved = None
+        return mirror.check_settings(body, saved)
+
+    def _mirror_schema(self, body: dict) -> str:
+        from . import mirror
+
+        schema = str(body.get("schema") or self.cfg.mirror_schema).strip()
+        if not (schema.isidentifier() and schema.isascii()):
+            raise mirror.MirrorError("the schema name can have only letters, digits and _, and can't start with a digit")
+        return schema
+
+    def _mirror_check(self, params: dict, schema: str) -> dict:
+        """probe(), plus whether this computer may write there: a schema no other computer's mirror is in, and a user
+        that can create its tables."""
+        from . import mirror
+        from .hub import local_machine
+
+        found = mirror.probe(params, schema)
+        owner = found["owner"]
+        found["mine"] = bool(owner and owner["id"] == local_machine(self.cfg)["id"])
+        if owner and not found["mine"]:
+            raise mirror.MirrorError(f"schema {schema} holds the mirror of another computer ({owner['name'] or owner['id']}); "
+                                     "pick a schema of this computer's own")
+        if not owner and not found["can_create"]:
+            raise mirror.MirrorError(f"user {params['user']} can't create the mirror's tables in {found['where']}")
+        return found
+
+    def action_mirror_test(self, body: dict) -> dict:
+        from . import mirror
+
+        try:
+            return {"ok": True, **self._mirror_check(self._mirror_params(body), self._mirror_schema(body))}
+        except mirror.MirrorError as exc:
+            return {"ok": False, "error": tr(str(exc))}
+
+    def action_mirror_save(self, body: dict) -> dict:
+        """Turn the mirror on with these settings (tested first: nothing is saved if they don't work) and write it
+        now, or off. Off keeps the settings, so turning it on again needs no password, and leaves the copy as it is."""
+        from . import mirror
+        from .config import MIRROR_INCLUDES, load_config, set_config_value
+
+        if not body.get("enabled"):
+            set_config_value(self.cfg, "mirror", "to", '""')
+            self.cfg = load_config(self.cfg.home)
+            self._cfg_sig = self._config_sig()
+            return {"ok": True, "mirror": self.mirror_info()}
+        include = str(body.get("include") or self.cfg.mirror_include)
+        if include not in MIRROR_INCLUDES:
+            return {"error": tr("what the mirror holds must be \"knowledge\" or \"everything\"")}
+        try:
+            params, schema = self._mirror_params(body), self._mirror_schema(body)
+            self._mirror_check(params, schema)
+        except mirror.MirrorError as exc:
+            return {"error": tr(str(exc))}
+        mirror.write_settings(self.cfg, params)
+        for key, value in (("include", include), ("schema", schema), ("to", "postgres")):
+            set_config_value(self.cfg, "mirror", key, json.dumps(value))
+        self.cfg = load_config(self.cfg.home)
+        self._cfg_sig = self._config_sig()
+        return {"ok": True, "mirror": self.mirror_info(), "started": self.action_mirror_sync()}
+
+    def action_mirror_sync(self) -> bool:
+        from . import mirror
+
+        cfg = self.cfg
+
+        def job(progress):
+            res = mirror.sync(cfg, progress=progress)
+            if res.get("error"):
+                raise RuntimeError(res["error"])
+            return f"mirror: {res.summary()}"
+
+        return mirror.enabled(cfg) and self.jobs.start("mirror", job)
+
     # ---- Devices › People (people.py): who may send to this hub and open its dashboard; admins only
     def people_info(self) -> dict:
         from . import people
@@ -2517,6 +2619,10 @@ def make_handler(app: App, port: int):
                     return self._json({**app.devices(), "here": self._from_here(), **self._me()})
                 if p == "/api/team-store":
                     return self._json(app.team_store_status())
+                if p in ("/api/mirror", "/api/mirror/status"):
+                    if not self._can_admin():  # its address and user: at the computer itself, or an admin of a hub
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    return self._json(app.mirror_info() if p == "/api/mirror" else app.mirror_status())
                 if p == "/api/team/settings":
                     if not self._can_admin():
                         return self._json({"error": tr("only an admin of this hub can do this")}, 403)
@@ -2622,6 +2728,14 @@ def make_handler(app: App, port: int):
                     if p == "/api/team-store/test":
                         return self._json(app.action_team_store_test(body))
                     return self._json(app.action_team_store_save(body))
+                if p in ("/api/mirror/test", "/api/mirror/save", "/api/mirror/sync"):
+                    if not self._can_admin():  # a password, and where this archive goes: as for the team store
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    if p == "/api/mirror/test":
+                        return self._json(app.action_mirror_test(body))
+                    if p == "/api/mirror/sync":
+                        return self._json({"started": app.action_mirror_sync()})
+                    return self._json(app.action_mirror_save(body))
                 if p in ("/api/devices/share", "/api/devices/hub-signin"):
                     if not self._from_here():  # what leaves this computer, or its own sign-in: only from here
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)

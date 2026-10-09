@@ -2449,6 +2449,46 @@ def _hub_folders(cfg, console, args) -> int:
     return code
 
 
+def cmd_mirror(args) -> int:
+    """`chronicle mirror`: the copy of this archive in Postgres ([mirror] to = "postgres"): what it holds, or write it now."""
+    from . import mirror
+    from .util import setup_logging
+
+    cfg = _cfg()
+    console = _console()
+    path = mirror.env_path(cfg)
+    if not mirror.enabled(cfg):
+        console.print("The mirror is off. To keep a copy of this archive in Postgres (on this computer, in Docker or in "
+                      f"the cloud): put PGHOST, PGDATABASE, PGUSER and PGPASSWORD in {path} (chmod 600), install the "
+                      f"driver ({mirror.INSTALL}), then `chronicle config set mirror.to postgres` and "
+                      "`chronicle mirror sync`. Or open Settings › Storage in the dashboard.", highlight=False)
+        return 0
+    if args.action == "sync":
+        setup_logging(cfg.logs_dir)
+        res = mirror.sync(cfg, full=args.full, progress=lambda m: print(f"  {m}"))
+        if res.get("error"):
+            console.print(f"[red]{res['error']}[/]", highlight=False)
+            return 1
+        console.print(f"mirror: {res.summary()} in {res['seconds']} s", highlight=False)
+        return 0
+    try:
+        st = mirror.status(cfg)
+    except mirror.MirrorError as exc:
+        console.print(f"[red]{exc}[/]", highlight=False)
+        return 1
+    console.print(f"Mirror: [bold]{st['where']}[/] (PostgreSQL {st['server']}, schema {st['schema']}, "
+                  f"{cfg.mirror_include})", highlight=False)
+    c = st["counts"]
+    if c:
+        console.print("  " + " · ".join(f"{n:,} {t}" for t, n in c.items()), highlight=False)
+    last = mirror.last(cfg)
+    if last:
+        console.print(f"  last sync: {last['at']} · {mirror.Result(last).summary()}", highlight=False)
+    else:
+        console.print("  not written yet: `chronicle mirror sync`, or wait for the next background run", highlight=False)
+    return 0
+
+
 def cmd_tailnet(args) -> int:
     import platform
 
@@ -2762,6 +2802,11 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install` and `connect`")
     s.add_argument("--print-config", action="store_true", help="print a JSON entry to add Chronicle to any MCP client by hand")
     s.set_defaults(fn=cmd_mcp)
+
+    s = sub.add_parser("mirror", help="a copy of this archive in a Postgres database you choose: what it holds, or write it now")
+    s.add_argument("action", nargs="?", choices=["status", "sync"], default="status")
+    s.add_argument("--full", action="store_true", help="with sync: write every row again, whatever the mirror holds")
+    s.set_defaults(fn=cmd_mirror)
 
     s = sub.add_parser("tailnet", help="reach the dashboard from your phone and other computers through Tailscale")
     s.add_argument("action", nargs="?", choices=["on", "off", "status"], default="status")

@@ -60,6 +60,8 @@ Chronicle は終わったセッションを読み、残す価値のあること�
 - **VS Code で、コードのすぐ横に。** [拡張機能](docs/ja/vscode.md)が、開いているファイルの背後にあるセッションと、
   ワークスペースでエージェントが作業したすべてのファイルを表示します。
 - **ただのファイルとしても。** Obsidian 互換の Markdown 保管庫と `chronicle` CLI。
+- **必要なら Postgres にコピーも。** アーカイブのコピーを、選んだ Postgres データベース（このコンピューター、Docker、クラウド）に置いて、
+  SQL や BI ツールで使えます（[Postgres へのコピー](docs/ja/postgres.md)）。
 
 ## クイックスタート
 
@@ -158,7 +160,7 @@ Windows にはまだ対応していません。
 [インストール](docs/ja/install.md) · [ソース](docs/ja/sources.md) · [ダッシュボード・用語集・マップ](docs/ja/dashboard.md) ·
 [コマンドライン](docs/ja/cli.md) · [MCP サーバー](docs/ja/mcp.md) · [VS Code 拡張機能](docs/ja/vscode.md) ·
 [スマートフォンとほかのコンピューター](docs/ja/devices.md) · [Docker でハブを動かす](docs/ja/docker.md) ·
-[チームのハブに参加する](docs/ja/join-a-hub.md) ·
+[チームのハブに参加する](docs/ja/join-a-hub.md) · [Postgres へのコピー](docs/ja/postgres.md) ·
 [記録内容と分析の仕組み](docs/ja/analysis.md) · [設定](docs/ja/configuration.md) ·
 [データとプライバシー](docs/ja/privacy.md) · [トラブルシューティング](docs/ja/troubleshooting.md) · [開発](docs/ja/development.md)
 

@@ -149,6 +149,19 @@ name = ""
 # dashboard then leaves out what only a person's own computer needs, and its admins set up projects there by name.
 dedicated = false
 
+[mirror]
+# Keep a copy of your archive in a Postgres database you choose (on this computer, in Docker, or in the cloud), for
+# SQL, BI tools and a copy kept elsewhere: "postgres". Written after every background run; Chronicle keeps working
+# from its own database and never reads the copy back. The connection (PGHOST, PGDATABASE, PGUSER, PGPASSWORD, ...) is
+# read from mirror.env in Chronicle's folder; the driver comes with: uv tool install 'agents-chronicle[postgres]'.
+to = ""
+# What the copy holds. "knowledge": session details, summaries and analyses, lessons, knowledge bases, reviews,
+# glossary, artifacts, token usage and files touched; no prompts or transcripts. "everything": prompts and transcripts
+# too, with secrets redacted. Sessions in excluded projects never go.
+include = "knowledge"
+# The Postgres schema it writes to. One computer per schema.
+schema = "chronicle"
+
 [inject]
 # Inject a short digest of the project's knowledge base into new sessions (SessionStart hook).
 session_start = false
@@ -189,6 +202,8 @@ read_manifests = true
 LANGUAGES = {"en": "English", "ja": "日本語"}  # [analysis] language: code -> its own name, as the picker shows it
 SHARE_MODES = ("everything", "knowledge")  # [hub] share, and [hub] accept on the hub
 STORES = ("", "postgres")  # [hub] store
+MIRRORS = ("", "postgres")  # [mirror] to
+MIRROR_INCLUDES = ("knowledge", "everything")  # [mirror] include
 
 
 def chronicle_home() -> Path:
@@ -259,6 +274,9 @@ class Config:
     hub_address: str = ""
     hub_name: str = ""
     hub_dedicated: bool = False
+    mirror_to: str = ""
+    mirror_include: str = "knowledge"
+    mirror_schema: str = "chronicle"
     inject_session_start: bool = False
     inject_max_chars: int = 3000
     update_check_daily: bool = False
@@ -407,6 +425,10 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
     share = str(hub.get("share") or "everything").strip().lower()
     accept = str(hub.get("accept") or "everything").strip().lower()
     store = str(hub.get("store") or "").strip().lower()
+    mirror = _section(data, "mirror")
+    mirror_to = str(mirror.get("to") or "").strip().lower()
+    mirror_include = str(mirror.get("include") or "knowledge").strip().lower()
+    mirror_schema = str(mirror.get("schema") or "chronicle").strip()
 
     env_dirs = os.environ.get("CHRONICLE_CLAUDE_DIRS")
     raw_dirs = env_dirs.split(os.pathsep) if env_dirs else sources.get("claude_dirs", ["~/.claude"])
@@ -447,6 +469,9 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         hub_address=str(hub.get("address") or "").strip().rstrip("/"),
         hub_name=str(hub.get("name") or "").strip()[:80],
         hub_dedicated=hub.get("dedicated") is True,
+        mirror_to=mirror_to if mirror_to in MIRRORS else "",
+        mirror_include="everything" if mirror_include == "everything" else "knowledge",  # a typo never sends transcripts
+        mirror_schema=mirror_schema if mirror_schema.isidentifier() and mirror_schema.isascii() else "chronicle",
         inject_session_start=bool(inject.get("session_start", False)),
         inject_max_chars=int(inject.get("max_chars", 3000)),
         update_check_daily=bool(_section(data, "updates").get("check_daily", False)),
@@ -468,6 +493,17 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
 
         logging.getLogger("chronicle").warning("[hub] store %r is not one of: \"postgres\", or empty; keeping the "
                                                "team's record in the hub's SQLite only", store)
+    for name, value, allowed in (("to", mirror_to, MIRRORS), ("include", mirror_include, MIRROR_INCLUDES)):
+        if value not in allowed:
+            import logging
+
+            logging.getLogger("chronicle").warning("[mirror] %s %r is not one of: %s; using %r", name, value,
+                                                   ", ".join(f'"{x}"' for x in allowed), getattr(cfg, f"mirror_{name}"))
+    if cfg.mirror_schema != mirror_schema:
+        import logging
+
+        logging.getLogger("chronicle").warning("[mirror] schema %r is not a plain name (letters, digits, _); using "
+                                               "\"chronicle\"", mirror_schema)
     if accept not in SHARE_MODES:
         import logging
 

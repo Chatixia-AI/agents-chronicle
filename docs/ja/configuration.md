@@ -90,6 +90,16 @@
 | --- | --- | --- |
 | `read_manifests` | `true` | 各プロジェクトフォルダーのマニフェストを少しだけ読み取り専用で読む（パッケージのマニフェスト、compose ファイル、Dockerfile、Terraform、CI ワークフロー、vite の設定、`.env.example`、デプロイ設定）。`false`：パーツはセッションが行ったことだけから描きます |
 
+## `[mirror]`
+
+アーカイブのコピーを、選んだ Postgres データベースに置きます（[Postgres へのコピー](postgres.md)）。
+
+| キー | 既定値 | |
+| --- | --- | --- |
+| `to` | `""` | `"postgres"` でバックグラウンド実行のたびにコピーを書き込みます。接続（PGHOST、PGPORT、PGDATABASE、PGUSER、PGPASSWORD、PGSSLMODE）は Chronicle のフォルダーの `mirror.env` から読みます。**Settings › Storage** で両方を書けます。ドライバーが必要：`uv tool install 'agents-chronicle[postgres]'` |
+| `include` | `"knowledge"` | `"knowledge"`：セッションの詳細・要約・分析、教訓、ナレッジベース、振り返り、用語集、成果物、トークン使用量。プロンプトとトランスクリプトは含みません。`"everything"`：プロンプトとトランスクリプトも（秘密情報は伏せ字）。ほかの値は `"knowledge"` として扱います（[入れる内容](postgres.md#入れる内容)） |
+| `schema` | `"chronicle"` | 書き込む Postgres のスキーマ。1 台に 1 つ（[スキーマは 1 台に 1 つ](postgres.md#スキーマは-1-台に-1-つ)） |
+
 ## `[hub]`
 
 複数のコンピューターで 1 つのアーカイブ（[スマートフォンとほかのコンピューター](devices.md#ほかのコンピューター)）。
