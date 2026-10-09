@@ -428,6 +428,15 @@ def open_browser(conn: sqlite3.Connection, code: str, label: str | None = None) 
     return p, session
 
 
+LANDING_RE = re.compile(r"/[A-Za-z0-9/_.~%=&?+-]{0,500}")  # a dashboard page: a hash route, such as /project?path=%2F…
+
+
+def landing(page) -> str:
+    """Where a sign-in link opens the dashboard: the page its next asks for (a hash route), or Home. Only a route's own
+    characters pass, so the link can't lead off the dashboard or into the response's headers."""
+    return f"/#{page}" if isinstance(page, str) and LANDING_RE.fullmatch(page) else "/#/"
+
+
 # ------------------------------------------------------------------ who is asking
 def _by_token(conn: sqlite3.Connection, secret: str, kind: str) -> tuple[dict, dict] | None:
     if not secret:

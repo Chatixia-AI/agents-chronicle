@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+- **Your hub's projects in a section of their own:** on a computer that sends to a hub, the Projects sidebar and page
+  now list first the hub's projects that folders here go to, under the hub's name. Each shows the team's sessions there
+  and the projects here that go to it, which no longer sit among Other projects (one in a group stays there too). A
+  hub project opens on the hub's dashboard, signed in, at that project (an older hub opens on Home). A project here
+  that goes to a hub project now has a folder icon with a teal cloud, instead of a plain cloud, in the sidebar, search
+  and **Settings › Devices**, and the hub's projects have a stacked-folders icon.
+  [Same project, different folders](docs/devices.md#same-project-different-folders)
+
 ## 0.16.0 (2026-10-08)
 
 - **Case files: lessons that ask before they tell:** the analysis now keeps, for each fix, gotcha and decision, how it

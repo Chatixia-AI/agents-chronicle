@@ -993,8 +993,11 @@ def redeem_invite(cfg: Config, url: str, code: str, client: HubClient | None = N
     return got
 
 
-def dashboard_signin(cfg: Config, client: HubClient | None = None) -> str:
-    """A short-lived link that opens the hub's dashboard as the person this computer joined as (no password)."""
+def dashboard_signin(cfg: Config, client: HubClient | None = None, page: str | None = None) -> str:
+    """A short-lived link that opens the hub's dashboard as the person this computer joined as (no password); on page
+    (a hash route such as /project?path=…) when given. An older hub ignores it and opens on Home."""
+    from .people import LANDING_RE
+
     token = read_token(cfg)
     if not cfg.hub_url or not token:
         raise HubError("this computer has not joined a hub (`chronicle hub join`)")
@@ -1006,7 +1009,8 @@ def dashboard_signin(cfg: Config, client: HubClient | None = None) -> str:
     code = got.get("code")
     if not isinstance(code, str) or not code:
         raise HubError("the hub sent no sign-in code")
-    return f"{cfg.hub_url}/signin?code={quote(code, safe='-_')}"
+    link = f"{cfg.hub_url}/signin?code={quote(code, safe='-_')}"
+    return f"{link}&next={quote(page, safe='')}" if isinstance(page, str) and LANDING_RE.fullmatch(page) else link
 
 
 def push(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:

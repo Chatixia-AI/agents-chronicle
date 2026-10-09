@@ -731,7 +731,8 @@ class App:
 
     def project_groups(self) -> dict:
         """The groups; home: a rule typed as ~/… shows as it'll be kept; hub: on a computer that sends to a hub, the
-        hub's projects as of the last push, which a group can be shared as."""
+        hub's projects as of the last push (which a group can be shared as, and the Projects lists show this computer's
+        projects under), with the team's sessions in each and the hub's address."""
         from .groups import groups
 
         return {"groups": groups(self.conn), "home": str(Path.home()),
@@ -741,8 +742,10 @@ class App:
         from .hub import last_folders
 
         seen = last_folders(self.cfg) or {}
-        return {"name": seen.get("hub"), "projects": [{"path": p["path"], "name": p.get("name") or Path(p["path"]).name}
-                                                     for p in seen.get("projects") or [] if isinstance(p, dict) and p.get("path")]}
+        return {"name": seen.get("hub"), "url": self.cfg.hub_url or None,
+                "projects": [{"path": p["path"], "name": p.get("name") or Path(p["path"]).name,
+                              "sessions": p["sessions"] if isinstance(p.get("sessions"), int) else None}
+                             for p in seen.get("projects") or [] if isinstance(p, dict) and p.get("path")]}
 
     def action_project_groups(self, verb: str, body: dict) -> tuple[dict, int]:
         """Make, change or remove a group of projects, or move projects into one (groups.py)."""
@@ -2152,9 +2155,10 @@ def make_handler(app: App, port: int):
                 return app.cfg.hub_address
             return f"{'https' if self._proxied_https() else 'http'}://{self._host() or '127.0.0.1'}"
 
-        def _signin(self, code: str):
-            """An invite link, or a sign-in link a person's own Chronicle asked for: opens a browser session. After a
-            few unknown codes from one address, its next tries wait their turn (people.CodeAttempts)."""
+        def _signin(self, code: str, page: str | None = None):
+            """An invite link, or a sign-in link a person's own Chronicle asked for: opens a browser session, on the page
+            the link's next names (people.landing) or Home. After a few unknown codes from one address, its next tries
+            wait their turn (people.CodeAttempts)."""
             import html
 
             from . import people
@@ -2191,7 +2195,7 @@ def make_handler(app: App, port: int):
                 self.wfile.write(body)
                 return
             self.send_response(302)
-            self.send_header("Location", "/#/")
+            self.send_header("Location", people.landing(page))
             self.send_header("Set-Cookie", self._session_cookie(session, people.BROWSER_DAYS * 86400))
             self.send_header("Cache-Control", "no-store")
             self.send_header("Referrer-Policy", "no-referrer")  # the code is in this page's address
@@ -2367,7 +2371,7 @@ def make_handler(app: App, port: int):
             p = url.path
             try:
                 if p == "/signin":
-                    return self._signin(q.get("code", ""))
+                    return self._signin(q.get("code", ""), q.get("next"))
                 if p.startswith("/api/"):  # the page itself stays public, so it can show how to sign in
                     self.viewer, refused = self._viewer()
                     if refused:
@@ -2596,7 +2600,7 @@ def make_handler(app: App, port: int):
                         from .hub import HubError, dashboard_signin
 
                         try:
-                            return self._json({"url": dashboard_signin(app.cfg)})
+                            return self._json({"url": dashboard_signin(app.cfg, page=body.get("next"))})
                         except HubError as exc:
                             return self._json({"error": tr(str(exc))}, 400)
                     if "all_folders" in body:

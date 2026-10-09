@@ -925,6 +925,8 @@ table.list-table :is(.title-cell, .def-cell, .term-cell) { overflow-wrap: anywhe
 /* ------------------------------------------------------------------ icons */
 .icon { width: 16px; height: 16px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
 .icon .solid { fill: currentColor; stroke: none; }
+.icon .hub-mark { fill: var(--hub-ink); stroke: none; } /* the hub's teal: a folder here that goes to a hub project */
+.icon .hub-line { stroke: var(--hub-ink); } /* a hub project */
 .icon.spin { animation: spin 1.1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
@@ -2046,6 +2048,7 @@ table.team-projects td { vertical-align: middle; }
 .link-btn.danger { color: var(--critical-ink); }
 .link-btn:disabled { opacity: 0.5; cursor: default; text-decoration: none; }
 .mp-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.mp-head > .icon { width: 16px; height: 16px; }
 .mp-src { display: flex; align-items: baseline; gap: 6px; flex-wrap: wrap; font-size: 12.5px; min-width: 0; }
 .mp-src .icon { width: 13px; height: 13px; align-self: center; color: var(--muted); flex: none; }
 .mp-src .codeline { overflow-wrap: anywhere; max-width: calc(100% - 20px); }
@@ -2079,6 +2082,9 @@ table.team-projects td { vertical-align: middle; }
 .pg-caret { width: 15px; height: 15px; color: var(--muted); transition: transform 0.15s; }
 .pgroup[open] > summary .pg-caret { transform: rotate(90deg); }
 .pg-meta { font-size: 12.5px; color: var(--ink-2); }
+.pg-hub-ic { width: 17px; height: 17px; margin-right: -4px; }
+.badge.hub { color: var(--hub-ink); background: var(--hub-wash); border-color: color-mix(in srgb, var(--hub) 45%, transparent); }
+.badge.hub .icon { color: var(--hub-ink); }
 .pg-rules { font-size: 11.5px; color: var(--muted); max-width: 46ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .pc-wrap { position: relative; display: grid; }
 .pc-wrap > .proj-card .pfoot { padding-right: 38px; }
@@ -2094,6 +2100,13 @@ td.pg-cell { width: 1%; text-align: right; }
 .sb-fold-head:hover { color: var(--ink); }
 .sb-caret { width: 12px; height: 12px; transition: transform 0.15s; }
 .sb-fold-head[aria-expanded="true"] .sb-caret { transform: rotate(90deg); }
+/* On a computer that sends to a hub: the hub's projects, each over the folders here that go to it (projectsSidebar) */
+.sb-hub-head .sb-hub-ic { width: 13px; height: 13px; color: var(--hub-ink); }
+.sb-row.sb-hubproj { font-weight: 600; }
+.sb-row.sb-hubproj .sb-ext { display: none; width: 12px; height: 12px; }
+.sb-row.sb-hubproj:is(:hover, :focus-visible) .sb-ext { display: block; }
+.sb-row.sb-hubproj:is(:hover, :focus-visible) em { display: none; }
+.sb-row.sb-sub { padding-left: 22px; }
 .gd-back { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 16px; background: rgba(0, 0, 0, 0.45); }
 .gd { width: min(560px, 100%); max-height: calc(100vh - 32px); display: flex; flex-direction: column; gap: 8px; overflow: auto; box-shadow: 0 18px 48px rgba(0, 0, 0, 0.25); }
 .gd-head { display: flex; align-items: center; justify-content: space-between; }
