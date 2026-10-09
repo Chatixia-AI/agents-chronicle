@@ -27,7 +27,10 @@ Claude Code、Codex、GitHub Copilot、IBM Bob、Google Antigravity のセッシ
 30 日で削除し、あるセッションで見つけた修正が次のセッションに引き継がれることもありません。Chronicle はすべてのセッションを
 保存し、Claude Code または Codex を使って学んだことを取り出し、ダッシュボードであなたに、MCP サーバー経由でエージェントに返します。
 
-![Chronicle のセッションページ：1 行にまとまったツール呼び出しを含む会話、そこから抽出したナレッジ、プロンプトのアウトライン](docs/images/session.png)
+[![デモデータで Chronicle のセッションを開く：要約、ホバーで説明される用語集の用語、そこから抽出したナレッジ](docs/images/demo.gif)](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4)
+
+<sub>[デモデータ](docs/ja/development.md#デモデータ)のセッション。[1 分のツアーをダウンロード](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4)（MP4、6 MB）：ホーム、
+セッションとトランスクリプト、⌘K 検索、用語集のマップ、週次レビュー。</sub>
 
 ## 何が得られるか
 

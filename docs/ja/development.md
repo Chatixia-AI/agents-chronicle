@@ -131,3 +131,15 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 uv run python docs/demo/make_demo.py /tmp/chronicle-demo
 CHRONICLE_HOME=/tmp/chronicle-demo/home uv run python -m chronicle ui --port 8898 --open
 ```
+
+README の GIF とツアー動画もこのデータから作ります。そのダッシュボードを動かしたまま `docs/demo/record_demo.py` を実行すると、
+ヘッドレスの Chromium が決まった順にダッシュボードを巡ります（`ffmpeg` が PATH に必要です）。ツアー全体は git が無視する
+`docs/images/demo.mp4` に、その数秒は大きなファイルを止めるフックが許す 600 KB 以内で `docs/images/demo.gif` に書き出されます。
+README は動画をリリースのアセットとしてリンクするので、そこにアップロードします：
+
+```bash
+uv run --with playwright python docs/demo/record_demo.py --port 8898
+gh release upload v<latest> docs/images/demo.mp4 --clobber
+```
+
+そのあと README の 2 つのリンクをそのリリースに向けます。
