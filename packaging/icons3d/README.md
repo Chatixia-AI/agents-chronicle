@@ -1,0 +1,26 @@
+# Chronicle 3D art
+
+The 3D icons on the dashboard (page headers, Home tiles, empty states) and the app icon are rendered with the
+[Chatixia Studio](https://studio.chatixia.net) Blueprint Cast, the same characters, objects, materials and light rig as
+the studio's explainer films. The small line icons in the sidebar and on buttons stay as they are: they follow the
+theme colour and stay sharp at 14–20 px, where a render can't.
+
+- `art.json`: what to render. Keys become `src/chronicle/web/art-<key>.webp`; `app-icon` becomes
+  `packaging/macos/icon-3d.webp`. A spec names a cast object (`obj`), a character (`char`, `mood`) or one of the
+  members in `members.js` (`custom`), plus optional camera `az`, `pitch` and `pad`.
+- `members.js`: Chronicle's own members built from the cast's parts: the open book (Knowledge) and the 3D emblem.
+- `render.html`: the studio light rig on a transparent background. `render.py` drives it in headless Chromium.
+
+## Regenerate
+
+1. Put `blueprint-cast.js` (v1.0) in this folder. It is not committed: download it from the Blueprint Cast Library
+   artifact, or copy `public/downloads/blueprint-cast.js` from the Chatixia-AI/chatixia repository.
+2. Render and export:
+
+   ```sh
+   uv run --no-project --with playwright --with pillow python -m playwright install chromium
+   uv run --no-project --with playwright --with pillow python packaging/icons3d/render.py
+   uv run --group build python packaging/macos/make_icon.py
+   ```
+
+The last step turns `icon-3d.webp` into `Chronicle.icns` and the dashboard, favicon and phone icons.

@@ -9,3 +9,4 @@ build/
 site/
 .env
 docs/images/demo.mp4
+packaging/icons3d/blueprint-cast.js

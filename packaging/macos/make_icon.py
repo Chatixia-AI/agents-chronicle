@@ -1,4 +1,6 @@
-"""Export Chronicle's committed Blueprint artwork to app, dashboard, favicon and phone icons.
+"""Export Chronicle's committed 3D artwork to app, dashboard, favicon and phone icons.
+
+The artwork, icon-3d.webp, is rendered by packaging/icons3d/render.py.
 
 Pillow writes the PNGs on any platform; macOS's iconutil also writes Chronicle.icns.
 
@@ -14,7 +16,7 @@ from PIL import Image, ImageOps
 
 HERE = Path(__file__).parent
 WEB = HERE.parents[1] / "src" / "chronicle" / "web"
-SOURCE = HERE / "icon-blueprint.webp"
+SOURCE = HERE / "icon-3d.webp"
 S, M = 1024, 100  # macOS icon grid: artwork fits within an 824px square centred in 1024
 NAVY = (8, 26, 49)
 

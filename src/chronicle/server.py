@@ -69,6 +69,7 @@ TOO_MANY_CODES = "too many wrong codes from this address; try again in {seconds}
 PAGE_CSP = "default-src 'self'; script-src 'self'{eval}; object-src 'none'; base-uri 'none'; form-action 'self'"
 mimetypes.add_type("application/manifest+json", ".webmanifest")
 mimetypes.add_type("font/woff2", ".woff2")
+mimetypes.add_type("image/webp", ".webp")
 
 
 # The page is served from the files as they were when this process started, so it always matches the code

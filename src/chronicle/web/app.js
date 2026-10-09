@@ -169,6 +169,13 @@ function icon(name, cls = "") {
   return s("svg", { class: `icon ${cls}`, viewBox: "0 0 24 24", "aria-hidden": "true" },
     (ICONS[name] || ICONS.dot).map((p) => (typeof p === "string" ? s("path", { d: p }) : s(p[0], p[1]))));
 }
+// 3D art: the Chatixia Studio cast, rendered by packaging/icons3d. It marks pages, Home tiles and empty states;
+// the line icons above stay for everything small, since they follow the theme colour
+function art(name, cls = "") {
+  return h("img", { class: `art ${cls}`, src: `art-${name}.webp`, alt: "", "aria-hidden": "true", draggable: "false" });
+}
+function titled(name, ...children) { return h("div", { class: "head-title" }, art(name), h("div", null, ...children)); }
+function emptyArt(name, ...children) { return h("div", { class: "empty empty-art" }, art(name), h("div", null, ...children)); }
 
 // =====================================================================================
 // Formatting
@@ -1246,9 +1253,9 @@ function plainText(src) { // one-line excerpt of markdown
   return String(src || "").replace(/```[\s\S]*?```/g, " ").replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
     .replace(/^\s{0,3}(?:#{1,6}|>|[-*+]|\d+\.)\s+/gm, "").replace(/\*\*|__|`/g, "").replace(/\s+/g, " ").trim();
 }
-function tile(label, value, { delta, spark, title, iconName } = {}) {
-  return h("div", { class: "tile", title },
-    h("div", { class: "label" }, iconName ? icon(iconName) : null, label),
+function tile(label, value, { delta, spark, title, iconName, artName } = {}) {
+  return h("div", { class: artName ? "tile has-art" : "tile", title }, artName ? art(artName, "tile-art") : null,
+    h("div", { class: "label" }, iconName && !artName ? icon(iconName) : null, label),
     h("div", { class: "value" }, value),
     h("div", { class: "foot" }, delta != null ? h("span", { class: "delta" }, delta) : h("span")),
     spark || null);
@@ -1297,6 +1304,7 @@ async function activityView(params, own = false) {
   for (const x of daily) { run = (x.active_s || 0) > 0 || x.sessions ? run + 1 : 0; longest = Math.max(longest, run); }
   const periodName = days === "all" ? t("all time") : t("the last {n} days", { n: days });
   const hero = h("div", { class: "tile hero", title: t("Active time: the sum of gaps under 15 minutes between events") },
+    art("clock", "tile-art"),
     h("div", { class: "label" }, icon("clock"), t("Active time")),
     h("div", { class: "value" }, fmtHours(tot.active_s)),
     h("div", { class: "hero-sub" }, t("across {sessions} sessions in {projects} projects, {period}", { sessions: fmtNum(tot.sessions), projects: fmtNum(tot.projects), period: periodName })),
@@ -1306,14 +1314,14 @@ async function activityView(params, own = false) {
       fact(t("longest run"), tn(longest, "{n} day", "{n} days"))),
     sparkEl(bucket(daily.map((x) => x.active_s || 0), 24), { height: 46 }));
   const tiles = h("div", { class: "kpis" }, hero,
-    tile(t("Sessions"), fmtNum(tot.sessions), { iconName: "sessions", delta: second(tot.sessions, p.sessions, fmtRate), spark: sparkOf("sessions") }),
-    tile(t("Prompts"), fmtNum(tot.prompts), { iconName: "prompts", delta: second(tot.prompts, p.prompts, fmtRate), spark: sparkOf("prompts") }),
-    tile(t("Tool calls"), fmtCompact(tot.tool_calls), { iconName: "zap", delta: t("{n} failed · {pct}", { n: fmtNum(tot.tool_errors), pct: pctText(tot.tool_errors, tot.tool_calls) }), spark: sparkOf("tool_calls") }),
-    tile(t("Lines changed"), `+${fmtCompact(tot.lines_added)}`, { iconName: "diff", delta: t("−{n} removed", { n: fmtCompact(tot.lines_removed) }), spark: sparkOf("lines_added") }),
-    tile(t("Tokens"), fmtCompact(tot.tokens), { iconName: "tokens", delta: second(tot.tokens, p.tokens, fmtCompact), spark: sparkOf("tokens"), title: t("Input + output + cache read + cache write") }),
-    tile(t("Est. API cost"), fmtCost(tot.cost), { iconName: "cost", delta: second(tot.cost, p.cost, fmtCost), spark: sparkOf("cost"), title: t("API list-price equivalent; subscriptions are billed differently. Newer GPT models are estimated at GPT-5 rates.") }),
-    tile(t("Knowledge"), fmtNum(tot.knowledge), { iconName: "sparkles", delta: t("{n} sessions analyzed", { n: fmtNum(tot.analyzed) }) }),
-    tile(t("Projects"), fmtNum(tot.projects), { iconName: "projects", delta: data.projects[0] ? t("most time: {name}", { name: data.projects[0].label }) : null }));
+    tile(t("Sessions"), fmtNum(tot.sessions), { iconName: "sessions", artName: "log", delta: second(tot.sessions, p.sessions, fmtRate), spark: sparkOf("sessions") }),
+    tile(t("Prompts"), fmtNum(tot.prompts), { iconName: "prompts", artName: "pip", delta: second(tot.prompts, p.prompts, fmtRate), spark: sparkOf("prompts") }),
+    tile(t("Tool calls"), fmtCompact(tot.tool_calls), { iconName: "zap", artName: "gears", delta: t("{n} failed · {pct}", { n: fmtNum(tot.tool_errors), pct: pctText(tot.tool_errors, tot.tool_calls) }), spark: sparkOf("tool_calls") }),
+    tile(t("Lines changed"), `+${fmtCompact(tot.lines_added)}`, { iconName: "diff", artName: "document", delta: t("−{n} removed", { n: fmtCompact(tot.lines_removed) }), spark: sparkOf("lines_added") }),
+    tile(t("Tokens"), fmtCompact(tot.tokens), { iconName: "tokens", artName: "chip", delta: second(tot.tokens, p.tokens, fmtCompact), spark: sparkOf("tokens"), title: t("Input + output + cache read + cache write") }),
+    tile(t("Est. API cost"), fmtCost(tot.cost), { iconName: "cost", artName: "coins", delta: second(tot.cost, p.cost, fmtCost), spark: sparkOf("cost"), title: t("API list-price equivalent; subscriptions are billed differently. Newer GPT models are estimated at GPT-5 rates.") }),
+    tile(t("Knowledge"), fmtNum(tot.knowledge), { iconName: "sparkles", artName: "book", delta: t("{n} sessions analyzed", { n: fmtNum(tot.analyzed) }) }),
+    tile(t("Projects"), fmtNum(tot.projects), { iconName: "projects", artName: "folder", delta: data.projects[0] ? t("most time: {name}", { name: data.projects[0].label }) : null }));
   const metrics = {
     sessions: [t("Sessions"), (x) => x.sessions, fmtNum],
     active_s: [t("Active time"), (x) => x.active_s, fmtHours, 3600],
@@ -1354,7 +1362,7 @@ async function activityView(params, own = false) {
   const sgBox = h("div"); // filled in when the queue has something to review; Home does not wait for it
   suggestionsHomeCard(sgBox, project);
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, own ? t("Activity") : t("Home")),
+    h("div", { class: "page-head" }, titled("dashboard", h("h1", null, own ? t("Activity") : t("Home")),
       h("div", { class: "sub" }, tot.first_at ? t("{sessions} sessions across {projects} projects since {date}", counts) : t("{sessions} sessions across {projects} projects", counts))),
       h("div", { class: "head-actions" },
         segControl([["7", t("7d")], ["30", t("30d")], ["90", t("90d")], ["180", t("180d")], ["all", t("All")]], days, (v) => update({ days: v })),
@@ -1406,7 +1414,7 @@ function outcomeOf(x) { // -> [status class, icon, label] for a session row
   return [x.analysis_status === "error" ? "critical" : "", STATUS_ICON[x.analysis_status] || "dot", STATUS_LABEL[x.analysis_status] || "–"];
 }
 function sessionList(items) {
-  if (!items.length) return h("div", { class: "empty" }, t("No sessions yet"));
+  if (!items.length) return emptyArt("pip", t("No sessions yet"));
   return h("div", { class: "session-list" }, items.map((x) => {
     const [cls, ic, label] = outcomeOf(x);
     return h("a", { class: "session-item", href: `#/session/${x.id}` },
@@ -1417,7 +1425,7 @@ function sessionList(items) {
   }));
 }
 function knowledgeList(items) {
-  if (!items.length) return h("div", { class: "empty" }, t("No analyzed knowledge yet. Sessions are analyzed automatically once idle."));
+  if (!items.length) return emptyArt("lumi", t("No analyzed knowledge yet. Sessions are analyzed automatically once idle."));
   return h("div", { class: "session-list" }, items.map((k) => h("a", { class: "session-item", href: `#/knowledge?q=${encodeURIComponent(k.title.slice(0, 60))}` },
     h("span", { class: "kind-icon", title: kindLabel(k.kind) }, icon(KIND[k.kind] ? k.kind : "dot")),
     h("div", { style: { minWidth: 0 } }, h("div", { class: "t" }, k.title),
@@ -1523,7 +1531,7 @@ async function teamHome(params) {
   if (data.news) post("/api/team/news/seen", { at: data.news.now }).then(() => drawNews(0)).catch(() => {});
   const news = newsCard(fresh);
   const head = h("div", { class: "page-head" },
-    h("div", null, h("h1", null, data.hub?.name || t("Team")),
+    titled("cloud", h("h1", null, data.hub?.name || t("Team")),
       h("div", { class: "sub" }, limited() ? t("Your projects on this hub, {period}", { period }) : t("The team's projects on this hub, {period}", { period }))),
     h("div", { class: "head-actions" },
       segControl(TEAM_PERIODS.map((d) => [d, t("{n}d", { n: d })]), days, (v) => { setParams({ days: v }); render(); })));
@@ -1698,7 +1706,7 @@ route(/^\/sessions$/, async (params) => {
   })));
   await load(false);
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Sessions")), countEl), viewToggle("sessions", mode)),
+    h("div", { class: "page-head" }, titled("log", h("h1", null, t("Sessions")), countEl), viewToggle("sessions", mode)),
     h("div", { class: "filters" }, search,
       h("select", { "aria-label": t("Project"), onchange: (e) => { // a project, or every project in a group
         const v = e.target.value;
@@ -2371,7 +2379,7 @@ route(/^\/knowledge$/, async (params) => {
     ] : h("div", { class: "hub-empty" }, t("Written automatically once a week's sessions are analyzed")));
 
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Knowledge")),
+    h("div", { class: "page-head" }, titled("book", h("h1", null, t("Knowledge")),
       h("div", { class: "sub" }, t("What your sessions taught you, and how to put it to use"))),
       h("div", { class: "head-actions" },
         k.cases ? h("a", { class: "btn", href: "#/knowledge/all?cases=1", title: t("Fixes, gotchas and decisions told as cases: the scene, a question, then the answer") },
@@ -2454,7 +2462,7 @@ async function knowledgeListView(params) {
   let debounce;
   await load();
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("All knowledge")), count),
+    h("div", { class: "page-head" }, titled("book", h("h1", null, t("All knowledge")), count),
       h("div", { class: "head-actions" }, h("a", { class: "btn primary", href: `#/learn?${new URLSearchParams({ project: state.project })}` }, icon("learning"), t("Learn from your work")),
         viewToggle("knowledge", mode), h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
     h("div", { class: "filters" },
@@ -2504,7 +2512,7 @@ route(/^\/projects$/, async () => {
   const n = tn(projects.length, "{n} project", "{n} projects");
   const hubs = groupsHub ? byHubProject(projects) : []; // first, each over the projects here that go to it
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Projects")),
+    h("div", { class: "page-head" }, titled("folder", h("h1", null, t("Projects")),
       h("div", { class: "sub" }, groupsCache.length ? t("{projects} in {groups}", { projects: n, groups: tn(groupsCache.length, "{n} group", "{n} groups") }) : n)),
       h("div", { class: "head-actions" }, viewToggle("projects", mode),
         edit ? h("button", { type: "button", class: "btn", onclick: () => groupDialog(null) }, t("New group")) : null,
@@ -2750,7 +2758,7 @@ route(/^\/project$/, async (params) => {
   } }, p.kb ? t("Re-synthesize") : t("Synthesize now"));
   const kbCard = kbView(p, isGlobal);
   if (isGlobal) {
-    return h("div", null, h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Global playbook")),
+    return h("div", null, h("div", { class: "page-head" }, titled("flag", h("h1", null, t("Global playbook")),
       h("div", { class: "sub" }, t("Cross-project learnings and your working preferences, distilled from every session"))), synth), kbCard);
   }
   const st = p.stats;
@@ -2764,7 +2772,7 @@ route(/^\/project$/, async (params) => {
     h("thead", null, h("tr", null, [t("Started"), t("Session"), t("Project"), t("Agent"), t("Prompts"), t("Tools"), t("Active"), t("Tokens"), t("Est. cost"), t("Outcome")].map((c, i) => h("th", { class: i >= 4 && i <= 8 ? "num" : "" }, c)))),
     h("tbody", null, p.sessions.map((x) => sessionRow(x))))));
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/projects" }, t("Projects")), " / "),
+    h("div", { class: "page-head" }, titled("folder", h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/projects" }, t("Projects")), " / "),
       h("h1", null, p.label, p.shared ? [" ", sharedBadge()] : null, p.hub ? [" ", hubBadge(p)] : null), h("div", { class: "sub mono", style: { fontSize: "12px" } }, path, ` · ${fmtDateY(st.first)} – ${fmtDateY(st.last)}`)),
       h("div", { class: "head-actions" }, h("a", { class: "btn", href: `#/systems?system=${encodeURIComponent(path)}` }, icon("systems"), t("System map")), synth)),
     tiles,
@@ -2960,7 +2968,7 @@ route(/^\/artifacts$/, async (params) => {
   const empty = !data.total ? h("section", { class: "card empty" }, filters.q || filters.kind || filters.project
     ? t("Nothing matches these filters.") : t("No artifacts yet. They are recorded as sessions sync: files an agent creates, pages it publishes, PRs it opens and commits it makes.")) : null;
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Artifacts")),
+    h("div", { class: "page-head" }, titled("container", h("h1", null, t("Artifacts")),
       h("div", { class: "sub" }, t("What your agents made, each linked to the session that made it, and whether it is still where they left it")))),
     artifactKindChips(data.counts, filters.kind, (k) => hrefWith({ kind: k })),
     h("div", { class: "ar-tools" }, search, projectSel, hide, h("span", { class: "muted" }, t("{n} shown", { n: fmtNum(data.total) }))),
@@ -2991,7 +2999,7 @@ route(/^\/search$/, async (params) => {
   const q = params.q || "", sort = params.sort || "hits";
   const box = h("form", { class: "search-form", role: "search", onsubmit: (e) => { e.preventDefault(); const v = e.target.q.value.trim(); if (v) go(`#/search?q=${encodeURIComponent(v)}${sort !== "hits" ? "&sort=" + sort : ""}`); } },
     icon("search"), h("input", { class: "input", type: "search", name: "q", value: q, placeholder: t("Search all sessions"), "aria-label": t("Search all sessions"), autocomplete: "off" }));
-  const head = (sub) => h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Search all sessions")), h("div", { class: "sub" }, sub)));
+  const head = (sub) => h("div", { class: "page-head" }, titled("magnifier", h("h1", null, t("Search all sessions")), h("div", { class: "sub" }, sub)));
   if (!q.trim()) return h("div", null, head(t("Every session that mentions a word or phrase, each mention highlighted and a click away. Matches any 3+ character substring, in any language.")), box);
   const data = await api("/api/search", { q, sort });
   const qp = encodeURIComponent(q); // carried into each session, which keeps the mentions marked
@@ -3162,7 +3170,7 @@ route(/^\/glossary$/, async (params) => {
     h("td", { class: "nowrap" }, e.last_seen ? fmtDate(e.last_seen) : "–")), 6, () => [usage(e), related(e), foot(e)]),
   { sort: "term", group: { key: "term", of: letterOf, id: (l) => `gl-${l}` }, empty: t("No terms match."), cls: "glossary-table" }));
   const page = h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Glossary")),
+    h("div", { class: "page-head" }, titled("dex", h("h1", null, t("Glossary")),
       h("div", { class: "sub" }, data.total ? t("{a} of {b} terms from your sessions. Hover underlined terms anywhere in Chronicle.", { a: fmtNum(data.items.length), b: fmtNum(data.total) }) : t("No glossary yet"))),
       h("div", { class: "head-actions" }, viewToggle("glossary", mode), rebuild)),
     h("div", { class: "filters" },
@@ -3885,7 +3893,7 @@ route(/^\/map$/, async (params) => {
   box.append(levelBar(), legend, tools);
   const page = h("div", { class: "mm-page" },
     h("div", { class: "page-head" },
-      h("div", null, h("h1", null, t("Map")),
+      titled("globe", h("h1", null, t("Map")),
         h("div", { class: "sub" }, data.terms.length ? t("Your glossary as a mindmap: {terms} terms across {projects} projects.", { terms: fmtNum(tree.count), projects: fmtNum(data.projects.filter((p) => p.path !== "__global__").length) }) : t("No glossary yet"))),
       h("div", { class: "head-actions" },
         h("button", { type: "button", class: `chip ${withHidden ? "on" : ""}`, "aria-pressed": String(withHidden), onclick: () => refresh({ all: withHidden ? "" : "1" }) }, t("Files & commands")),
@@ -4226,7 +4234,7 @@ async function landscapeView(params) {
   cv.box.append(cv.tools(() => cv.fit(bounds)));
   const page = h("div", { class: "mm-page sy-page" },
     h("div", { class: "page-head" },
-      h("div", null, h("h1", null, t("Systems")),
+      titled("rack", h("h1", null, t("Systems")),
         h("div", { class: "sub" }, t("{systems} systems in {groups} folders, and how they connect", { systems: fmtNum(lay.cards.length), groups: fmtNum(lay.groups.length) }))),
       h("div", { class: "head-actions" },
         h("button", { type: "button", class: `chip ${showLinks ? "on" : ""}`, "aria-pressed": String(showLinks), onclick: () => refresh({ links: showLinks ? "0" : "" }) }, t("Links")),
@@ -4434,7 +4442,7 @@ async function systemView(params) {
   cv.box.append(legend, cv.tools(() => cv.fit(bounds)));
   const page = h("div", { class: "mm-page sy-page" },
     h("div", { class: "page-head" },
-      h("div", null, h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/systems" }, t("Systems")), gpath.length ? ` / ${gpath.join(" / ")}` : "", " /"),
+      titled("rack", h("div", { class: "muted", style: { fontSize: "12.5px" } }, h("a", { href: "#/systems" }, t("Systems")), gpath.length ? ` / ${gpath.join(" / ")}` : "", " /"),
         h("h1", null, x.label),
         h("div", { class: "sub" }, [tn(x.parts.filter((p) => p.role === "way_in" || p.role === "code").length, "{n} part of its own", "{n} parts of its own", { n: fmtNum(x.parts.filter((p) => p.role === "way_in" || p.role === "code").length) }),
           tn(x.parts.filter((p) => !(p.role === "way_in" || p.role === "code")).length, "{n} thing it ships to, stores in or uses", "{n} things it ships to, stores in or uses", { n: fmtNum(x.parts.filter((p) => !(p.role === "way_in" || p.role === "code")).length) }),
@@ -4592,7 +4600,7 @@ route(/^\/sources$/, async () => {
 
   const section = listSection;
   return h("div", { class: "narrow-page wide" },
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Sources")),
+    h("div", { class: "page-head" }, titled("tink", h("h1", null, t("Sources")),
       h("div", { class: "sub" }, tx("The coding agents Chronicle records. Connecting starts archiving and analyzing their sessions and gives the agent Chronicle's MCP tools. To give other tools the MCP server, see {link}.",
         { link: h("a", { href: "#/mcp" }, "MCP") })))),
     section(t("Coding agents"), t("{a} of {b} connected · click a row for its checks", { a: connected, b: sources.length }), null, sources.map(agentRow)),
@@ -4653,7 +4661,7 @@ route(/^\/mcp$/, async () => {
     h("div", null, h("code", null, t.name), t.params.length ? h("span", { class: "muted" }, ` (${t.params.map((p) => (t.required.includes(p) ? p : p + "?")).join(", ")})`) : null),
     h("div", { class: "muted" }, t.description)));
   return h("div", { class: "narrow-page wide" },
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, "MCP"),
+    h("div", { class: "page-head" }, titled("plug", h("h1", null, "MCP"),
       h("div", { class: "sub" }, t("Chronicle's MCP server lets an agent search your past sessions, knowledge and glossary while it works. It runs on your Mac, only reads, and needs no network.")))),
     listSection(t("Coding agents"), tx("Connecting an agent in {link} also gives it the MCP server.", { link: h("a", { href: "#/sources" }, t("Sources")) }), null, agentRows),
     listSection(t("Other MCP clients"), t("Not recorded: they only get the MCP server. Add writes Chronicle into the client's own config (backed up first); restart the client to load it."),
@@ -4767,7 +4775,7 @@ route(/^\/reviews$/, async (params) => {
     h("a", { class: r === pick ? "on" : "", href: `#/reviews?week=${r.period}`, role: "tab", "aria-selected": String(r === pick), title: weekRange(r) },
       h("b", null, weekShort(r.period)), h("span", null, r.start ? fmtDate(r.start) : r.period.slice(0, 4))))) : null;
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Weekly reviews")),
+    h("div", { class: "page-head" }, titled("camera", h("h1", null, t("Weekly reviews")),
       h("div", { class: "sub" }, data.auto_ready ? t("Review of {week} will be written on the next background run", { week: data.last_week })
         : has(data.last_week) ? t("A new review is written automatically each week once its sessions are analyzed")
         : t("Written automatically once a week's sessions are analyzed ({week}: {note})", { week: data.last_week, note: data.auto_note }))),
@@ -5093,7 +5101,7 @@ route(/^\/status$/, async () => {
   const row = (ok, label, detail) => h("div", { class: "status-row" }, h("span", { class: ok ? "ok" : "no" }, ok ? "✓" : "✗"), h("span", null, label), detail ? h("span", { class: "muted" }, detail) : null);
   const counts = st.counts || {};
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Status")), h("div", { class: "sub" }, `Chronicle ${st.version} · ${t("last sync {ago}", { ago: ago(st.last_sync) })}`))),
+    h("div", { class: "page-head" }, titled("gears", h("h1", null, t("Status")), h("div", { class: "sub" }, `Chronicle ${st.version} · ${t("last sync {ago}", { ago: ago(st.last_sync) })}`))),
     h("div", { class: "grid cols-2" },
       h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, t("Recording"))),
         h("div", { class: "status-list" },
@@ -5742,7 +5750,7 @@ route(/^\/devices$/, async () => {
         cmd("chronicle hub enable"),
         h("p", { class: "muted" }, t("It prints a {command} command to run on each other computer.", { command: "chronicle hub join …" }))) : null;
   return h("div", { class: "narrow-page" },
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
+    h("div", { class: "page-head" }, titled("laptop", h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
     h("div", { class: "grid" }, ...(dv.role === "spoke"
       ? [spokeHubCard(dv), spokeProjectsCard(dv), spokeSharingCard(dv), phone] : [thisCard, phone, computers])));
 });
@@ -5816,7 +5824,7 @@ async function teamPage(title, sub, card) {
       h("p", null, tx("This computer isn't a hub, so it has no team. {page} says how to make it one.", { page: h("a", { href: "#/devices" }, t("Devices")) }))));
   }
   return h("div", { class: "narrow-page" },
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, title), h("div", { class: "sub" }, sub))),
+    h("div", { class: "page-head" }, titled("gateway", h("h1", null, title), h("div", { class: "sub" }, sub))),
     h("div", { class: "grid" }, card(dv)));
 }
 route(/^\/team$/, () => teamPage(t("People"), t("Who may send to this hub and open its dashboard, with which role and projects."), (dv) => peopleCard(dv)));
@@ -5876,7 +5884,7 @@ async function hubSettingsPage() {
   const backups = h("section", { class: "card" }, cardHead(t("Back up"), { iconName: "download" }), backup,
     h("p", { class: "muted" }, t("Never copy chronicle.db itself while the hub runs: the copy can be corrupted.")));
   return h("div", { class: "narrow-page" },
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Hub settings")), h("div", { class: "sub" }, t("What this hub is called, where it's reached, and how it's kept.")))),
+    h("div", { class: "page-head" }, titled("gateway", h("h1", null, t("Hub settings")), h("div", { class: "sub" }, t("What this hub is called, where it's reached, and how it's kept.")))),
     h("div", { class: "grid" }, general, analysis, updatesCard(), backups));
 }
 route(/^\/team\/settings$/, hubSettingsPage);
@@ -6414,7 +6422,7 @@ route(/^\/suggestions$/, async (params) => {
       ? [t("Nothing to suggest yet. After a sync, Chronicle proposes a fix once a failure keeps coming back, or once knowledge is confirmed often enough to belong in an instruction file.")]
       : [cause || scope ? t("Nothing {status} here.", { status: statusName }) : t("Nothing {status}.", { status: statusName }), cause || scope ? [" ", h("a", { href: "#/suggestions" }, t("Show everything"))] : null]);
   return h("div", { class: "sg-page" },
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Suggestions")),
+    h("div", { class: "page-head" }, titled("lumi", h("h1", null, t("Suggestions")),
       h("div", { class: "sub" }, t("Fixes for what keeps going wrong, and knowledge worth telling your agents. Nothing is written until you apply it; the file is backed up first."))),
       h("div", { class: "head-actions" }, h("a", { class: "link-arrow sg-why", href: "#/friction" }, t("What goes wrong"), icon("arrow")), refreshBtn)),
     chips,
@@ -6506,7 +6514,7 @@ route(/^\/friction$/, async (params) => {
     noiseBody);
   const sgLink = h("a", { href: "#/suggestions" }, t("Suggestions"));
   return h("div", null,
-    h("div", { class: "page-head" }, h("div", null, h("h1", null, t("What goes wrong")),
+    h("div", { class: "page-head" }, titled("glitch", h("h1", null, t("What goes wrong")),
       h("div", { class: "sub" }, live ? tx("Recurring failure causes across your sessions, noise kept apart. {n} still happening; fixes wait in {link}.", { n: String(live), link: sgLink })
         : tx("Recurring failure causes across your sessions, noise kept apart. Fixes wait in {link}.", { link: sgLink }))),
       h("div", { class: "head-actions" },
