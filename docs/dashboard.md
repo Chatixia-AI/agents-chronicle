@@ -46,6 +46,12 @@ read lessons and saved notes stay listed. Your interests put relevant categories
 A lesson can sit in several categories; the library's total counts it once. Project and topic filters and a search
 help with larger archives.
 
+The **Knowledge** page opens with a band from the library, each part shown only when it has something: the latest
+lesson with a principle (else the latest case file), a case file you haven't answered to answer right there (one with
+ruled-out leads to choose from first, as in All knowledge, and only while **Ask first** is on), the topic you ask
+about most (else the one with the most lessons in the last 30 days, never Other) with its two newest lessons, and how
+many lessons are ready to revisit in this browser.
+
 A lesson reads top to bottom, each part once, with nothing to type or reveal. A [case file](analysis.md#case-files)
 starts with the scene, the question and its answer. Then come the explanation, the leads the session ruled out,
 **The principle to keep** (the idea that carries over to other work) and **Use it in your next task** (checks for
@@ -71,8 +77,8 @@ it produced up top, then **Details**, where a session opens: goal, highlights, o
 context-window chart with compactions, tools, files, subagents, and the [artifacts](#artifacts) the session made; or
 **Transcript**, where a search result opens: the conversation with one-line tool calls that expand to their input and
 output, and subagent threads; on wide windows an **Outline** of the prompts, what the session made and the changed files
-sits beside the transcript and follows your scroll), a Knowledge overview (one card each for the Map, All knowledge,
-the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
+sits beside the transcript and follows your scroll), a Knowledge overview (a **Learn from your work** band, then
+one card each for the Map, All knowledge, the Glossary and Weekly reviews, with a glance at what is inside), knowledge browser (pin/dismiss; each item shows its
 [stage](analysis.md#how-knowledge-earns-trust), and the table sorts by it; fixes, gotchas and decisions read as
 [case files](analysis.md#case-files) that ask before they tell), project knowledge
 bases and the global playbook (a TL;DR, section chips, a filter, and sections as cards of short bullets that

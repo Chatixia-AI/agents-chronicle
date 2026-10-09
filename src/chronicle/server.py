@@ -981,6 +981,13 @@ class App:
         return interest_profile(self.conn, viewer_id=(viewer or {}).get("id"), machine_id=local_machine_id(self.cfg),
                                 project=q.get("project") or "")
 
+    def learning_glance(self, viewer: dict | None, q: dict) -> dict:
+        """The Knowledge page's Learn band (learning.glance), without sending every lesson to the browser."""
+        from .learning import glance
+
+        rows = search_knowledge(self.conn, project=q.get("project") or None, lessons=True, limit=10000)
+        return glance([self._reason(r) for r in rows], self.learning_interests(viewer, q)["interests"])
+
     def search(self, q: dict) -> dict:
         query = q.get("q") or ""
         project = q.get("project") or None
@@ -2472,6 +2479,8 @@ def make_handler(app: App, port: int):
                     return self._json(app.knowledge(q))
                 if p == "/api/learning/interests":
                     return self._json(app.learning_interests(self.viewer, q))
+                if p == "/api/learning/glance":
+                    return self._json(app.learning_glance(self.viewer, q))
                 if p == "/api/knowledge/hub":
                     return self._json(app.knowledge_hub())
                 if p == "/api/search":
