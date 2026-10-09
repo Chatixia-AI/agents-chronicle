@@ -1697,6 +1697,12 @@ window.CHRONICLE_JA = {
   "On the hub": "ハブ",
   "On the hub as {name}": "ハブでは {name}",
   "Shared from this hub": "このハブから共有中",
+  "{name} on {hub}": "{hub} の {name}",
+  "{n} session from the team": "チームのセッション {n} 件",
+  "{n} sessions from the team": "チームのセッション {n} 件",
+  "Opens on the hub in a new tab": "ハブを新しいタブで開きます",
+  "The projects on {hub} that this computer's folders go to": "このコンピューターのフォルダーの送り先になっている {hub} のプロジェクト",
+  "Open on the hub": "ハブで開く",
   // A group shared as one project on the hub
   "Share on the hub": "ハブで共有",
   "Not shared": "共有しない",

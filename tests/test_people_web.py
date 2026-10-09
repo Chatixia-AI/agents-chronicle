@@ -4,6 +4,7 @@ each role may do, signing in with an invite or sign-in link, the People API, and
 import json
 import urllib.error
 import urllib.request
+from urllib.parse import quote
 
 import pytest
 
@@ -150,6 +151,36 @@ def test_signing_in_with_a_link(team):
     signin = people.signin_code(conn, team["bob"])
     status, headers, _ = _raw(url, f"/signin?code={signin}", headers={**REMOTE, "X-Forwarded-Proto": "https"})
     assert status == 302 and "Secure" not in headers["Set-Cookie"]
+
+
+def test_a_signin_link_opens_on_the_page_it_names(team):
+    url, conn, bob = team["url"], team["conn"], team["bob"]
+    page = "/project?path=%2Fdata%2Fprojects%2FCosmo-Quote-Agent"
+    status, headers, _ = _raw(url, f"/signin?code={people.signin_code(conn, bob)}&next={quote(page, safe='')}", headers=REMOTE)
+    assert status == 302 and headers["Location"] == f"/#{page}" and headers["Set-Cookie"]
+    for bad in ("https://evil.example/", "/x\r\nSet-Cookie: a=b", "javascript:alert(1)", "/a b", "/#/x", "/<p>", "/" + "a" * 600, ""):
+        status, headers, _ = _raw(url, f"/signin?code={people.signin_code(conn, bob)}&next={quote(bad, safe='')}", headers=REMOTE)
+        assert status == 302 and headers["Location"] == "/#/", bad  # Home: only a dashboard route passes
+
+
+def test_this_computer_asks_for_a_signin_link_to_a_page(tmp_path):
+    home = tmp_path / "spoke"
+    home.mkdir()
+    (home / "config.toml").write_text('[hub]\nurl = "https://hub.example.com"\n')
+    cfg = load_config(home)
+    hub.write_token(cfg, "t")
+
+    class Client:
+        def request(self, method, path, body=None, **kw):
+            return {"code": "ABCD-EFGH-JKLM"}
+
+        def close(self):
+            pass
+
+    link = "https://hub.example.com/signin?code=ABCD-EFGH-JKLM"
+    assert hub.dashboard_signin(cfg, Client()) == link
+    assert hub.dashboard_signin(cfg, Client(), page="/project?path=%2Fsrv%2FAktio") == f"{link}&next=%2Fproject%3Fpath%3D%252Fsrv%252FAktio"
+    assert hub.dashboard_signin(cfg, Client(), page="https://evil.example/") == link
 
 
 def test_company_sign_in_header(team):

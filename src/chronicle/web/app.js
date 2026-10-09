@@ -68,6 +68,12 @@ const ICONS = {
   systems: [["rect", { x: 3, y: 3, width: 7, height: 6, rx: 1.5 }], ["rect", { x: 14, y: 3, width: 7, height: 6, rx: 1.5 }],
     ["rect", { x: 8.5, y: 15, width: 7, height: 6, rx: 1.5 }], "M6.5 9v3h11V9", "M12 12v3"],
   cloud: ["M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z"],
+  // a project of a hub, which gathers folders from the team's computers; a folder here that goes to one (hub teal)
+  hubproject: [["path", { d: "M20 17a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3.9a2 2 0 0 1-1.69-.9l-.81-1.2a2 2 0 0 0-1.67-.9H8a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2Z", class: "hub-line" }],
+    ["path", { d: "M2 8v11a2 2 0 0 0 2 2h14", class: "hub-line" }]],
+  linked: ["M11 20H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v2",
+    ["path", { d: "M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9z", class: "hub-mark", transform: "translate(11.6 10.4) scale(.54)" }]],
+  external: ["M15 3h6v6", "M10 14 21 3", "M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"],
   terminal: ["m4 17 6-6-6-6", "M12 19h8"],
   glossary: ["M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20", "m8 13 4-7 4 7", "M9.1 11h5.8"],
   home: ["m3 10 9-7 9 7v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z", "M9 22V12h6v10"],
@@ -891,12 +897,30 @@ async function loadProjects(fresh = false) {
   return projectsLoading;
 }
 function refreshProjects() { projectsCache = null; shellSection = null; render(); } // the sidebar lists them too
-function byGroup(list) { // [[group, projects]]: each group A to Z, then the projects in none (group null)
+// [[group, projects]]: each group A to Z, then the projects in none (group null). hub: the rest leaves out the projects
+// listed under their hub project (byHubProject); one in a group stays in it as well.
+function byGroup(list, { hub = false } = {}) {
   const sets = new Map(groupsCache.map((g) => [g.id, []]));
   const rest = [];
-  for (const p of list) (sets.get(p.group) || rest).push(p);
+  for (const p of list) {
+    if (sets.has(p.group)) sets.get(p.group).push(p);
+    else if (!(hub && p.hub)) rest.push(p);
+  }
   return [...groupsCache.map((g) => [g, sets.get(g.id)]), [null, rest]];
 }
+// On a computer that sends to a hub: [[hub project, the projects here that go to it]], A to Z. The hub project as the
+// last push saw it (groupsHub: its name and the team's sessions there).
+function byHubProject(list) {
+  const out = new Map();
+  for (const p of list) {
+    if (!p.hub) continue;
+    if (!out.has(p.hub.path)) out.set(p.hub.path, [{ ...groupsHub?.projects.find((x) => x.path === p.hub.path), ...p.hub }, []]);
+    out.get(p.hub.path)[1].push(p);
+  }
+  return [...out.values()].sort(([a], [b]) => a.name.localeCompare(b.name));
+}
+// a project's icon: a folder here that goes to a hub project, a hub's own project (on the hub), or a folder
+const projIcon = (p) => (p.hub ? "linked" : p.shared ? "hubproject" : "projects");
 function canGroup() { return !limited() && canAdmin(); }
 async function projectOptions(selected, { groups = false } = {}) { // groups: a choice for a whole group, valued group:<id>
   const projects = await loadProjects();
@@ -1098,10 +1122,25 @@ function groupSection(g, list, body) {
       h("span", { class: "pg-meta" }, tn(list.length, "{n} project", "{n} projects"), " · ", tn(sum("sessions"), "{n} session", "{n} sessions", { n: fmtNum(sum("sessions")) }),
         " · ", t("{dur} active", { dur: fmtDur(sum("active_s")) })),
       g?.hub_project ? h("span", { class: "badge accent", title: t("Every project in this group goes to {name} on the hub, including ones that join it later", { name: hubProjectName(g.hub_project) }) },
-        icon("cloud"), t("On the hub as {name}", { name: hubProjectName(g.hub_project) })) : null,
+        icon("linked"), t("On the hub as {name}", { name: hubProjectName(g.hub_project) })) : null,
       g && g.folders.length ? h("span", { class: "pg-rules mono", title: g.folders.join("\n") }, g.folders.map((f) => shortPath(f)).join(" · ")) : null,
       g && canGroup() ? h("button", { type: "button", class: "btn small", onclick: (e) => { e.preventDefault(); groupDialog(g); } }, t("Edit")) : null),
     list.length ? body(list) : h("div", { class: "card empty" }, t("No projects in this group yet.")));
+}
+// One of the hub's projects on the Projects page (a computer that sends to a hub): the projects here that go to it,
+// totals over them, the team's sessions there as of the last push, and a way to open it on the hub, signed in
+function hubProjectSection(hp, list, body) {
+  const key = `hub:${hp.path}`, hubUrl = safeUrl(groupsHub?.url), hub = groupsHub?.name || t("Hub");
+  const sum = (k) => list.reduce((a, p) => a + (p[k] || 0), 0);
+  return h("details", { class: "pgroup", open: !groupFolded(key), ontoggle: (e) => foldGroup(key, !e.target.open) },
+    h("summary", null, icon("right", "pg-caret"), icon("hubproject", "pg-hub-ic"), h("h2", null, hp.name),
+      h("span", { class: "badge hub", title: t("The projects on {hub} that this computer's folders go to", { hub }) }, icon("cloud"), hub),
+      h("span", { class: "pg-meta" }, tn(list.length, "{n} project", "{n} projects"), " · ", tn(sum("sessions"), "{n} session", "{n} sessions", { n: fmtNum(sum("sessions")) }),
+        " · ", t("{dur} active", { dur: fmtDur(sum("active_s")) }),
+        hp.sessions != null ? [" · ", tn(hp.sessions, "{n} session from the team", "{n} sessions from the team", { n: fmtNum(hp.sessions) })] : null),
+      hubUrl ? h("a", { class: "btn small with-icon", href: `${hubUrl}/#${hubProjectPage(hp)}`, target: "_blank", rel: "noopener",
+        onclick: (e) => { e.preventDefault(); openHub(hubUrl, hubProjectPage(hp)); } }, t("Open on the hub"), icon("external")) : null),
+    body(list, { inHub: true }));
 }
 function segControl(options, value, onChange) {
   return h("div", { class: "seg", role: "group" }, options.map(([v, label]) =>
@@ -2422,7 +2461,8 @@ route(/^\/projects$/, async () => {
   const mode = viewMode("projects", "cards");
   const edit = canGroup();
   const href = projectHref;
-  const listView = (projects) => h("section", { class: "card flush" }, localTable(projects, [
+  // under its hub project, a project leaves out the badge that names it
+  const listView = (projects, { inHub = false } = {}) => h("section", { class: "card flush" }, localTable(projects, [
     { key: "label", label: t("Project"), value: (p) => p.label },
     { key: "sessions", label: t("Sessions"), num: true, desc: true, value: (p) => p.sessions },
     { key: "active", label: t("Active"), num: true, desc: true, value: (p) => p.active_s },
@@ -2433,7 +2473,7 @@ route(/^\/projects$/, async () => {
     ...(edit ? [{ key: "group", label: "" }] : []),
   ], (p) => h("tr", { class: href(p) ? "row-link" : "", onclick: (e) => { if (!e.target.closest("a, details") && href(p)) go(href(p)); } },
     h("td", { class: "title-cell" }, h("div", { class: "t" }, h("a", { href: href(p), class: "plain" }, p.label)),
-      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"), p.shared ? [" ", sharedBadge()] : null, p.hub ? [" ", hubBadge(p)] : null)),
+      h("div", { class: "s", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : t(" (not on disk)"), p.shared ? [" ", sharedBadge()] : null, p.hub && !inHub ? [" ", hubBadge(p)] : null)),
     h("td", { class: "num" }, fmtNum(p.sessions)),
     h("td", { class: "num" }, fmtDur(p.active_s)),
     h("td", { class: "num" }, fmtNum(p.knowledge)),
@@ -2441,16 +2481,21 @@ route(/^\/projects$/, async () => {
     h("td", { class: "nowrap" }, fmtDate(p.last)),
     h("td", { class: "nowrap muted" }, p.kb_updated ? t("updated {ago}", { ago: ago(p.kb_updated) }) : t("none yet")),
     edit ? h("td", { class: "pg-cell" }, groupMenu(p)) : null), { empty: t("No projects yet"), cls: "projects-table" }));
-  const cards = (list) => h("div", { class: "proj-cards" }, list.map((p) => (edit ? h("div", { class: "pc-wrap" }, projectCard(p, href(p)), groupMenu(p)) : projectCard(p, href(p)))));
+  const cards = (list, { inHub = false } = {}) => h("div", { class: "proj-cards" }, list.map((p) => {
+    const card = projectCard(p, href(p), { hubBadge: !inHub });
+    return edit ? h("div", { class: "pc-wrap" }, card, groupMenu(p)) : card;
+  }));
   const body = mode === "list" ? listView : cards;
   const n = tn(projects.length, "{n} project", "{n} projects");
+  const hubs = groupsHub ? byHubProject(projects) : []; // first, each over the projects here that go to it
   return h("div", null,
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Projects")),
       h("div", { class: "sub" }, groupsCache.length ? t("{projects} in {groups}", { projects: n, groups: tn(groupsCache.length, "{n} group", "{n} groups") }) : n)),
       h("div", { class: "head-actions" }, viewToggle("projects", mode),
         edit ? h("button", { type: "button", class: "btn", onclick: () => groupDialog(null) }, t("New group")) : null,
         h("a", { class: "btn", href: `#/project?path=${encodeURIComponent("__global__")}` }, t("Global playbook")))),
-    groupsCache.length ? byGroup(projects).filter(([g, ps]) => g || ps.length).map(([g, ps]) => groupSection(g, ps, body)) : body(projects));
+    groupsCache.length || hubs.length ? [...hubs.map(([hp, ps]) => hubProjectSection(hp, ps, body)),
+      ...byGroup(projects, { hub: true }).filter(([g, ps]) => g || ps.length).map(([g, ps]) => groupSection(g, ps, body))] : body(projects));
 });
 
 function weeklyBars(values) { // active time per week, oldest first; hover for the week
@@ -2474,11 +2519,11 @@ function miniOutcomes(outs) { // thin stacked status bar + the top labels in wor
     h("div", { class: "stackbar thin", "aria-hidden": "true" }, entries.map(([o, n]) => h("span", { class: `seg s-${cls(o)}`, style: { flexGrow: String(n) } }))),
     h("div", { class: "mo-text" }, entries.slice(0, 3).map(([o, n]) => h("span", { class: `s-${cls(o)}` }, icon(OUTCOME[o] ? o : "queued"), t("{n} {outcome}", { n, outcome: label(o) })))));
 }
-function projectCard(p, href) {
+function projectCard(p, href, { hubBadge: withHub = true } = {}) {
   return h("a", { class: "card proj-card", href },
     h("div", { class: "pc-head" },
       h("div", { style: { minWidth: 0 } },
-        h("div", { class: "pname" }, p.label, p.shared ? sharedBadge() : null, p.hub ? hubBadge(p) : null, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, tn(n, "{n} {agent} session", "{n} {agent} sessions", { agent: agentName(a) })))),
+        h("div", { class: "pname" }, p.label, p.shared ? sharedBadge() : null, p.hub && withHub ? hubBadge(p) : null, Object.entries(p.agents || {}).filter(([a]) => a !== "claude").map(([a, n]) => agentTag(a, tn(n, "{n} {agent} session", "{n} {agent} sessions", { agent: agentName(a) })))),
         h("div", { class: "ppath", title: p.project_path }, shortPath(p.project_path), p.exists ? "" : ` · ${t("not on disk")}`)),
       p.kb_updated ? h("span", { class: "badge", title: t("Knowledge base updated {when}", { when: fmtDT(p.kb_updated) }) }, icon("knowledge"), "KB")
         : h("span", { class: "badge muted-badge", title: t("No knowledge base yet") }, t("no KB"))),
@@ -5206,9 +5251,9 @@ function spokeProjectsCard(dv) {
     } }, p.left ? t("Rejoin") : t("Leave")) : null;
     return h("li", { class: `sp-row mp-row${p.left ? " is-left" : ""}` },
       h("div", { class: "sp-main" },
-        h("div", { class: "mp-head" }, h("span", { class: "sp-name" }, p.name),
+        h("div", { class: "mp-head" }, icon("hubproject"), h("span", { class: "sp-name" }, p.name),
           p.left ? h("span", { class: "badge", title: t("This computer no longer shares here or gets its lessons. What it shared stays on the hub.") }, t("Left")) : null),
-        ...p.folders.map((f) => h("div", { class: "mp-src" }, icon("projects"),
+        ...p.folders.map((f) => h("div", { class: "mp-src" }, icon(p.left ? "projects" : "linked"),
           h("span", { class: "codeline", title: f.folder }, shortPath(f.folder)),
           h("span", { class: "muted" }, f.sessions == null ? t("not shared yet") : tn(f.sessions, "{n} session shared", "{n} sessions shared", { n: fmtNum(f.sessions) })),
           removeBtn(f, p),
@@ -5356,21 +5401,26 @@ function teamStoreCard(dv) {
     result);
 }
 
-// On a computer that sends to a hub: the hub's dashboard opens signed in as this computer's person, through a
-// short-lived link the hub gives this computer's token. An older hub, or no token: the plain address.
+// On a computer that sends to a hub: the hub's dashboard opens in a new tab signed in as this computer's person,
+// through a short-lived link the hub gives this computer's token, on page (a hash route) when given. An older hub
+// opens on Home; no token: the plain address.
+async function openHub(hubUrl, page = "") {
+  let url = `${hubUrl}/${page ? `#${page}` : ""}`;
+  try {
+    const r = await post("/api/devices/hub-signin", page ? { next: page } : {});
+    if (safeUrl(r.url)) url = r.url;
+    else if (r.error) toast(t("Opening the hub's dashboard without signing in: {error}", { error: r.error }), 6000);
+  } catch (err) { /* already said, or not reachable: the plain address */ }
+  const a = h("a", { href: url, target: "_blank", rel: "noopener" });
+  document.body.append(a);
+  a.click();
+  a.remove();
+}
+// a hub project's page on the hub; one with nothing filed yet has none, and the hub's Projects page lists it
+const hubProjectPage = (hp) => (hp.sessions === 0 ? "/projects" : `/project?path=${encodeURIComponent(hp.path)}`);
 function hubDashboardLink(hubUrl, cls) {
-  const plain = `${hubUrl}/`;
-  const open = (url) => { const a = h("a", { href: url, target: "_blank", rel: "noopener" }); document.body.append(a); a.click(); a.remove(); };
-  return h("a", { href: plain, target: "_blank", rel: "noopener", class: cls || null, onclick: async (e) => {
-    e.preventDefault();
-    let url = plain;
-    try {
-      const r = await post("/api/devices/hub-signin");
-      if (safeUrl(r.url)) url = r.url;
-      else if (r.error) toast(t("Opening the hub's dashboard without signing in: {error}", { error: r.error }), 6000);
-    } catch (err) { /* already said, or not reachable: the plain address */ }
-    open(url);
-  } }, t("Open the hub's dashboard"));
+  return h("a", { href: `${hubUrl}/`, target: "_blank", rel: "noopener", class: cls || null, onclick: (e) => { e.preventDefault(); openHub(hubUrl); } },
+    t("Open the hub's dashboard"));
 }
 
 // On a hub, for an admin: the people who may send here and open this dashboard, their invites, computers and
@@ -5821,7 +5871,7 @@ route(/^\/team\/settings$/, hubSettingsPage);
 const sharedBadge = () => h("span", { class: "badge accent", title: t("Shared from this hub: its summaries and project lessons go to the people given it") }, icon("devices"), t("Shared"));
 // on a computer that sends to a hub: the hub project this one is in (p.hub), under the hub's name when it differs
 const hubTitle = (p) => t("In {name} on the hub: what it shares goes there, and teammates' lessons come back here", { name: p.hub.name });
-const hubBadge = (p) => h("span", { class: "badge accent", title: hubTitle(p) }, icon("cloud"),
+const hubBadge = (p) => h("span", { class: "badge accent", title: hubTitle(p) }, icon("linked"),
   p.hub.name === p.label ? t("On the hub") : t("On the hub as {name}", { name: p.hub.name }));
 // a project's page; one set up on a hub with nothing filed yet has none: Team › Projects, for whoever may see it
 function projectHref(p) {
@@ -6633,26 +6683,45 @@ async function knowledgeSidebar(box) {
 async function projectsSidebar(box) {
   const projects = await loadProjects();
   const list = h("div", { class: "sb-scroll" });
-  const row = (p) => {
-    const a = sbRow(p.label, projectHref(p) || "#/projects", p.hub || p.shared ? "cloud" : "projects", p.sessions, ["/project", "path", p.project_path || ""]);
+  const row = (p, sub = false) => {
+    const a = sbRow(p.label, projectHref(p) || "#/projects", projIcon(p), p.sessions, ["/project", "path", p.project_path || ""]);
+    if (sub) a.classList.add("sb-sub");
     if (p.hub) a.title = `${p.label} · ${hubTitle(p)}`;
     else if (p.shared) a.title = `${p.label} · ${p.sessions ? t("Shared from this hub") : t("Set up on the hub: no sessions yet")}`;
     return a;
   };
+  // On a computer that sends to a hub: the hub's projects this computer's folders go to, each over those folders. A
+  // hub project opens on the hub, signed in; the team's sessions there are as of the last push.
+  const hubs = groupsHub ? byHubProject(projects) : [];
+  const hubName = groupsHub?.name || t("Hub"), hubUrl = safeUrl(groupsHub?.url);
+  const hubRow = (hp) => h("a", { class: "sb-row sb-hubproj", href: hubUrl ? `${hubUrl}/#${hubProjectPage(hp)}` : "#/devices",
+    target: hubUrl ? "_blank" : null, rel: hubUrl ? "noopener" : null,
+    title: [t("{name} on {hub}", { name: hp.name, hub: hubName }),
+      hp.sessions != null ? tn(hp.sessions, "{n} session from the team", "{n} sessions from the team", { n: fmtNum(hp.sessions) }) : null,
+      hubUrl ? t("Opens on the hub in a new tab") : null].filter(Boolean).join(" · "),
+    onclick: (e) => { if (hubUrl) { e.preventDefault(); openHub(hubUrl, hubProjectPage(hp)); } } },
+    icon("hubproject"), h("span", null, hp.name), hp.sessions != null ? h("em", null, fmtNum(hp.sessions)) : null, hubUrl ? icon("external", "sb-ext") : null);
   const draw = () => {
     const q = sbState.projectQ.toLowerCase();
     const match = (p) => !q || p.label.toLowerCase().includes(q) || (p.project_path || "").toLowerCase().includes(q);
     const top = [sbRow(t("All projects"), "#/projects", "overview", projects.length, ["/projects"]),
       sbRow(t("Systems map"), "#/systems", "systems", null, ["/systems"])];
-    const parts = groupsCache.length ? byGroup(projects).map(([g, ps]) => { // a group's name matches all of it
+    const fold = (key, label, n, open, { lead = null, title = null, cls = "" } = {}) => h("button", { type: "button", class: `sb-group sb-fold-head${cls}`,
+      "aria-expanded": String(open), title, onclick: () => { foldGroup(key, open); draw(); } },
+      icon("right", "sb-caret"), lead, h("span", null, label), h("em", null, fmtNum(n)));
+    const hubShown = hubs.map(([hp, ps]) => [hp, q && hp.name.toLowerCase().includes(q) ? ps : ps.filter(match)]).filter(([, ps]) => ps.length);
+    const hubOpen = !!q || !groupFolded("hub");
+    const hubPart = hubShown.length ? h("div", { class: "sb-fold sb-hub" },
+      fold("hub", hubName, hubs.length, hubOpen, { lead: icon("cloud", "sb-hub-ic"), cls: " sb-hub-head",
+        title: t("The projects on {hub} that this computer's folders go to", { hub: hubName }) }),
+      hubOpen ? hubShown.map(([hp, ps]) => [hubRow(hp), ...ps.map((p) => row(p, true))]) : null) : null;
+    const groups = groupsCache.length || hubs.length ? byGroup(projects, { hub: true }).map(([g, ps]) => { // a group's name matches all of it
       const shown = q && g && g.name.toLowerCase().includes(q) ? ps : ps.filter(match);
       if (!shown.length && (q || !g)) return null;
       const key = g ? String(g.id) : "none", open = !!q || !groupFolded(key);
-      return h("div", { class: "sb-fold" },
-        h("button", { type: "button", class: "sb-group sb-fold-head", "aria-expanded": String(open), onclick: () => { foldGroup(key, open); draw(); } },
-          icon("right", "sb-caret"), h("span", null, g ? g.name : t("Other projects")), h("em", null, fmtNum(ps.length))),
-        open ? shown.map(row) : null);
-    }).filter(Boolean) : projects.some(match) ? [h("div", { class: "sb-group" }, t("Most recent first")), ...projects.filter(match).map(row)] : [];
+      return h("div", { class: "sb-fold" }, fold(key, g ? g.name : t("Other projects"), ps.length, open), open ? shown.map((p) => row(p)) : null);
+    }).filter(Boolean) : projects.some(match) ? [h("div", { class: "sb-group" }, t("Most recent first")), ...projects.filter(match).map((p) => row(p))] : [];
+    const parts = [hubPart, ...groups].filter(Boolean);
     list.replaceChildren(...top, ...parts,
       ...(parts.length ? [] : [h("div", { class: "sb-empty" }, t("No projects match"))])); // replaceChildren would print a null
     const { path, params } = parseHash();
@@ -6829,7 +6898,7 @@ async function paletteSearch(q) {
     hint: [x.project_name, fmtDate(x.started_at)].filter(Boolean).join(" · "), run: () => go(`#/session/${x.id}`) });
   for (const k of knowledge.items) out.push({ group: t("Knowledge"), label: k.title, icon: KIND[k.kind] ? k.kind : "knowledge",
     hint: [kindLabel(k.kind), k.project_name].filter(Boolean).join(" · "), run: () => go(`#/knowledge?q=${encodeURIComponent(k.title)}`) });
-  for (const p of (projectsCache || []).filter((p) => p.label.toLowerCase().includes(lq)).slice(0, 5)) out.push({ group: t("Projects"), label: p.label, icon: "projects",
+  for (const p of (projectsCache || []).filter((p) => p.label.toLowerCase().includes(lq)).slice(0, 5)) out.push({ group: t("Projects"), label: p.label, icon: projIcon(p),
     hint: tn(p.sessions, "{n} session", "{n} sessions", { n: fmtNum(p.sessions) }), run: () => go(`#/project?path=${encodeURIComponent(p.project_path || "")}`) });
   const terms = (glossaryTerms || []).filter((t) => t.term.toLowerCase().includes(lq) || (t.aliases || []).some((a) => a.toLowerCase().includes(lq)))
     .sort((a, b) => (b.term.toLowerCase().startsWith(lq) - a.term.toLowerCase().startsWith(lq)) || a.term.length - b.term.length).slice(0, 5);
