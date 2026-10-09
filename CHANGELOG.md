@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.18.0 (2026-10-09)
 
 - **3D icons from the Chatixia Studio cast:** the app icon, each page's title and the Home tiles now carry 3D art
   rendered with the same characters and objects as the studio's explainer films (a log scroll for Sessions, a book
