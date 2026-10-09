@@ -712,7 +712,11 @@ function sparkEl(values, { height = 30 } = {}) {
 function contextChart(container, width, calls, markers) {
   const main = calls.filter((c) => !c.agent_id);
   if (main.length < 2) { container.append(h("div", { class: "empty" }, t("Not enough API calls to chart"))); return; }
-  const m = { l: 46, r: 12, t: 16, b: 24 }, height = 210;
+  const note = t("{n} API calls · ticks mark prompts", { n: main.length });
+  const noteW = [...note].reduce((w, ch) => w + (ch.codePointAt(0) > 0x2e80 ? 11 : 6), 0);
+  // too narrow to sit between the start and end times: drop it to a second row
+  const noteRow = noteW + 130 > width - 58;
+  const m = { l: 46, r: 12, t: 16, b: noteRow ? 38 : 24 }, height = 210;
   const iw = width - m.l - m.r, ih = height - m.t - m.b;
   const ctx = main.map((c) => (c.input_tokens || 0) + (c.cache_read_tokens || 0) + (c.cache_write_tokens || 0));
   const ticks = niceTicks(Math.max(...ctx));
@@ -746,7 +750,7 @@ function contextChart(container, width, calls, markers) {
     "text-anchor": crowded ? "end" : "start" }, t("peak {n}", { n: fmtCompact(ctx[peak]) })));
   g.append(s("text", { class: "chart-label", x: 0, y: ih + 17 }, fmtTime(main[0].ts)));
   g.append(s("text", { class: "chart-label", x: iw, y: ih + 17, "text-anchor": "end" }, fmtTime(main[main.length - 1].ts)));
-  g.append(s("text", { class: "chart-label", x: iw / 2, y: ih + 17, "text-anchor": "middle" }, t("{n} API calls · ticks mark prompts", { n: main.length })));
+  g.append(s("text", { class: "chart-label", x: iw / 2, y: ih + (noteRow ? 32 : 17), "text-anchor": "middle" }, note));
   const cross = s("line", { class: "crosshair", y1: 0, y2: ih, visibility: "hidden" });
   const dot = s("circle", { class: "dot", r: 4, visibility: "hidden" });
   g.append(cross, dot);
@@ -1860,10 +1864,14 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   const toolsCard = h("section", { class: "card" }, cardHead(t("Tools"), { iconName: "zap", hint: legendKey([["accent", t("calls")], ["critical", t("failed")]]) }),
     hbars(sx.tool_stats.slice(0, 12), { label: (x) => x.name.replace(/^mcp__/, "mcp:"), value: (x) => x.n, fmt: fmtNum, part: (x) => x.errors || 0, sub: (x) => (x.errors ? `(${x.errors})` : "") }));
   const changed = sx.files.filter((f) => f.edits || f.writes);
+  // a file outside the project (a temp scratchpad, say) shows its last two parts; the tooltip keeps the full path
+  const filePath = (p) => { const sp = shortPath(p, sx.project_path); const parts = sp.split("/");
+    return sp.startsWith("/") || sp.startsWith("~/") ? (parts.length > 3 ? "…/" + parts.slice(-2).join("/") : sp) : sp; };
   const filesCard = h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, t("Files")), h("span", { class: "hint" }, t("{changed} changed · {touched} touched", { changed: changed.length, touched: sx.files.length }))),
     sx.files.length ? h("div", { class: "table-scroll" }, h("table", { class: "table-view" },
       h("thead", null, h("tr", null, h("th", null, t("File")), h("th", { class: "num" }, t("Reads")), h("th", { class: "num" }, t("Edits")), h("th", { class: "num" }, t("Lines")))),
-      h("tbody", null, sx.files.slice(0, 60).map((f) => h("tr", null, h("td", { class: "mono", title: f.path, style: { fontSize: "12px" } }, shortPath(f.path, sx.project_path)),
+      h("tbody", null, sx.files.slice(0, 60).map((f) => h("tr", null, h("td", { class: "mono", title: f.path, style: { fontSize: "12px" } },
+        filePath(f.path).split("/").flatMap((part, i) => (i ? ["/", h("wbr"), part] : [part]))),
         h("td", { class: "num" }, f.reads || ""), h("td", { class: "num" }, (f.edits + f.writes) || ""),
         h("td", { class: "num" }, f.lines_added || f.lines_removed ? `+${f.lines_added}/−${f.lines_removed}` : "")))))) : h("div", { class: "empty" }, t("No files")));
   const extras = [];

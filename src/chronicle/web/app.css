@@ -545,7 +545,9 @@ select:focus, .input:focus { outline: 2px solid var(--accent-wash-2); border-col
 .scale-legend i { width: 11px; height: 11px; border-radius: 2px; display: inline-block; }
 .table-view { width: 100%; border-collapse: collapse; font-size: 12.5px; }
 .table-view th, .table-view td { padding: 4px 8px; border-bottom: 1px solid var(--grid); text-align: left; }
-.table-view td.num, .table-view th.num { text-align: right; }
+.table-view td.num, .table-view th.num { text-align: right; white-space: nowrap; }
+/* long unbroken paths wrap anywhere instead of squeezing the number columns */
+.table-view td.mono { overflow-wrap: anywhere; }
 .table-scroll { max-height: 320px; overflow: auto; }
 
 .hbars { display: grid; gap: 7px; }
