@@ -242,6 +242,10 @@ h3 { font-size: 14px; }
 .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 14px 6px 12px; }
 .sb-head h2 { font-size: 13px; font-weight: 650; letter-spacing: 0; color: var(--vib-ink); }
 .sb-head span { font-size: 11.5px; color: var(--vib-muted); font-variant-numeric: tabular-nums; }
+.sb-head-end { display: flex; align-items: center; gap: 4px; }
+.sb-add { display: inline-grid; place-items: center; width: 22px; height: 22px; margin: -4px -5px -4px 0; border: 0; border-radius: 5px; background: transparent; color: var(--vib-muted); cursor: pointer; }
+.sb-add:hover { background: var(--hover); color: var(--vib-ink); }
+.sb-add .icon { width: 15px; height: 15px; }
 .sb-filter { margin: 2px 12px 8px 8px; display: flex; align-items: center; gap: 6px; height: 28px; padding: 0 9px; border-radius: 8px; background: var(--hover); color: var(--vib-muted); }
 .sb-filter .icon { width: 14px; height: 14px; }
 .sb-filter input { flex: 1; min-width: 0; border: 0; background: transparent; outline: none; font: inherit; color: var(--vib-ink); }
