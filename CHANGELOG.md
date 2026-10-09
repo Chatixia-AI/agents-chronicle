@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.17.1 (2026-10-09)
 
 - **Make a group from the Projects sidebar:** a folder-plus button beside the project count opens **New group**, the
   same dialog as on the Projects page, so a new group no longer means going to All projects first.
