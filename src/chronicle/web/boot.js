@@ -1,4 +1,4 @@
-// Runs in <head>, before the first paint: the app window's look, the UI language, the theme and the sidebar as
+// Runs in <head>, before the first paint: the app window's look, the UI language, the theme, animations and the sidebar as
 // they were. Its own file, not inline, so the page's Content-Security-Policy can allow scripts from 'self' only.
 (function () {
   var root = document.documentElement, q = new URLSearchParams(location.search);
@@ -13,4 +13,13 @@
     var t = localStorage.getItem("chronicle-theme"); if (t) root.dataset.theme = t;
     if (localStorage.getItem("chronicle-sidebar") === "0") root.classList.add("no-sidebar");
   } catch (e) {}
+  // animations: "on" or "off" as chosen in Appearance, else the system's Reduce motion setting; app.css keys on data-motion
+  var reduce = window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)");
+  var motion = function () {
+    var m = null;
+    try { m = localStorage.getItem("chronicle-motion"); } catch (e) {}
+    root.dataset.motion = m === "on" || m === "off" ? m : reduce && reduce.matches ? "off" : "on";
+  };
+  motion();
+  if (reduce && reduce.addEventListener) reduce.addEventListener("change", motion);
 })();

@@ -1041,6 +1041,9 @@ window.CHRONICLE_JA = {
   "Sidebar": "サイドバー",
   "The button at the top left, or ⌘B, shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away.": "左上のボタンか ⌘B で表示／非表示を切り替えます。非表示の間は、レールにポインタを合わせると一時的に表示され、離すと隠れます。",
   "Toggle sidebar": "サイドバーの表示を切り替え",
+  "Animations": "アニメーション",
+  "On": "オン",
+  "System follows your Mac's Reduce motion setting. Off stops loading shimmers, slides and fades; spinners turn slowly.": "「システム」は Mac の「視差効果を減らす」の設定に従います。オフにすると、読み込み中のきらめき、スライド、フェードが止まり、スピナーはゆっくり回ります。",
   "Settings": "設定",
   // Shell: crumbs, rail, sidebar, palette, status bar
   "Search": "検索",

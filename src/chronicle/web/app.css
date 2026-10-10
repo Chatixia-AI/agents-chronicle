@@ -18,6 +18,7 @@
   --surface: #ffffff;
   --surface-2: #e9eff7;
   --surface-3: #dde6f2;
+  --sk-glint: rgba(255, 255, 255, 0.85);
   --ink: #071629;
   --ink-2: #283f5c;
   --muted: #455f7e;
@@ -85,6 +86,7 @@
     --surface: #0e2c51;
     --surface-2: #10345e;
     --surface-3: #153d6b;
+    --sk-glint: rgba(124, 199, 255, 0.16);
     --ink: #f3f8ff;
     --ink-2: #c0d6ee;
     --muted: #9bb8da;
@@ -131,6 +133,7 @@
   --surface: #0e2c51;
   --surface-2: #10345e;
   --surface-3: #153d6b;
+  --sk-glint: rgba(124, 199, 255, 0.16);
   --ink: #f3f8ff;
   --ink-2: #c0d6ee;
   --muted: #9bb8da;
@@ -238,7 +241,7 @@ h3 { font-size: 14px; }
     animation: sb-peek 0.14s ease-out; }
 }
 @keyframes sb-peek { from { opacity: 0; transform: translateX(-10px); } }
-@media (prefers-reduced-motion: reduce) { .no-sidebar.peek-sidebar .sidebar { animation: none; } }
+:root[data-motion="off"].no-sidebar.peek-sidebar .sidebar { animation: none; }
 .sb-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; padding: 6px 14px 6px 12px; }
 .sb-head h2 { font-size: 13px; font-weight: 650; letter-spacing: 0; color: var(--vib-ink); }
 .sb-head span { font-size: 11.5px; color: var(--vib-muted); font-variant-numeric: tabular-nums; }
@@ -311,12 +314,11 @@ main.loading > :not(.skeleton) { opacity: 0.55; transition: opacity 0.15s; }
 .skeleton { animation: sk-in 0.2s 0.15s both; }
 .skeleton .tile { min-height: 132px; }
 .skeleton .card { display: grid; gap: 12px; margin-top: 16px; }
-.sk { display: block; height: 12px; border-radius: 6px; background: var(--surface-3); }
-@supports (background: color-mix(in srgb, red, blue)) {
-  .sk { background: linear-gradient(100deg, var(--surface-3) 42%, color-mix(in srgb, var(--surface-3) 45%, var(--surface)) 50%, var(--surface-3) 58%) 0 0 / 300% 100% fixed;
-    animation: sk-shimmer 1.8s linear infinite; }
-}
-@keyframes sk-shimmer { from { background-position-x: 100%; } to { background-position-x: 0%; } }
+.sk { display: block; position: relative; overflow: hidden; height: 12px; border-radius: 6px; background: var(--surface-3); }
+/* a glint sweeping each bar: moved by transform, so it runs off the main thread and keeps going while app.js starts up */
+.sk::after { content: ""; position: absolute; inset: 0; transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, var(--sk-glint), transparent); animation: sk-shimmer 1.6s ease-in-out infinite; }
+@keyframes sk-shimmer { to { transform: translateX(100%); } }
 @keyframes sk-in { from { opacity: 0; } }
 .sk-head { margin: 4px 0 18px; }
 .sk-title { height: 26px; width: 120px; border-radius: 7px; }
@@ -331,7 +333,7 @@ main.loading > :not(.skeleton) { opacity: 0.55; transition: opacity 0.15s; }
 .sk-line { width: 80%; margin-top: 14px; }
 .card .sk-line { margin-top: 0; }
 .sk-line.short { width: 50%; }
-@media (prefers-reduced-motion: reduce) { .skeleton, .sk, .glass.loadnote { animation: none; } .loadbar i { animation: none; width: 100%; opacity: 0.45; } }
+:root[data-motion="off"] .skeleton, :root[data-motion="off"] .sk::after, :root[data-motion="off"] .glass.loadnote { animation: none; } :root[data-motion="off"] .loadbar i { animation: none; width: 100%; opacity: 0.45; }
 /* the toolbar's band, as the site's header: the page shows faintly through it, ruled off below */
 .edge { position: absolute; left: 0; right: 0; top: 0; height: 52px; z-index: 2; pointer-events: none;
   background: color-mix(in srgb, var(--page) 88%, transparent);
@@ -882,7 +884,7 @@ table.data.sessions :is(th, td) { padding-left: 8px; padding-right: 8px; } /* el
   .src-body { padding-left: 18px; }
   .src-list-head { flex-direction: column; }
 }
-@media (prefers-reduced-motion: reduce) { .src-row .chev { transition: none; } }
+:root[data-motion="off"] .src-row .chev { transition: none; }
 .btn.danger { color: var(--critical-ink); }
 
 /* ------------------------------------------------------------------ cards / list layouts */
@@ -947,6 +949,12 @@ table.list-table :is(.title-cell, .def-cell, .term-cell) { overflow-wrap: anywhe
 .icon .hub-mark { fill: var(--hub-ink); stroke: none; } /* the hub's teal: a folder here that goes to a hub project */
 .icon .hub-line { stroke: var(--hub-ink); } /* a hub project */
 .icon.spin { animation: spin 1.1s linear infinite; }
+/* animations off (Appearance, or the system's Reduce motion: boot.js sets data-motion): nothing slides, fades or shimmers,
+   and a spinner turns slowly, so running work still reads as running */
+:root[data-motion="off"] *, :root[data-motion="off"] *::before, :root[data-motion="off"] *::after {
+  animation-duration: 0s !important; animation-delay: 0s !important; animation-iteration-count: 1 !important;
+  transition-duration: 0s !important; transition-delay: 0s !important; scroll-behavior: auto !important; }
+:root[data-motion="off"] .icon.spin { animation-duration: 3s !important; animation-iteration-count: infinite !important; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .small { font-size: 12px; }
@@ -1138,7 +1146,7 @@ select { max-width: 100%; text-overflow: ellipsis; }
 
 @keyframes mm-in { from { opacity: 0; } to { opacity: 1; } }
 .mm-node.enter, .mm-links path.enter { animation: mm-in 0.24s ease-out both; }
-@media (prefers-reduced-motion: reduce) { .mm-node.enter, .mm-links path.enter { animation: none; } }
+:root[data-motion="off"] .mm-node.enter, :root[data-motion="off"] .mm-links path.enter { animation: none; }
 
 /* level picker, floating top-left in the canvas */
 .mm-levels { position: absolute; left: 12px; top: 12px; display: flex; align-items: center; flex-wrap: wrap; gap: 6px;
@@ -1399,7 +1407,7 @@ mark.qhit.on { background: var(--warning); color: #1a1a1a; box-shadow: 0 0 0 2px
   .sr-hit { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "who time" "snip snip"; row-gap: 2px; }
   .sr-who { grid-area: who; } .sr-time { grid-area: time; } .sr-snip { grid-area: snip; }
 }
-@media (prefers-reduced-motion: reduce) { .shell, .titlestrip, .switch, .switch::after { transition: none; } }
+:root[data-motion="off"] .shell, :root[data-motion="off"] .titlestrip, :root[data-motion="off"] .switch, :root[data-motion="off"] .switch::after { transition: none; }
 /* the map's floating controls sit over the canvas: panels, like the toolbar */
 .mm-levels, .mm-legend, .mm-tools { background: var(--glass); border: 0; border-radius: 6px;
   box-shadow: var(--glass-shadow), inset 0 0 0 0.5px var(--glass-rim), inset 0 1px 0 var(--glass-hi); }
@@ -1450,7 +1458,7 @@ table.data a.proj { overflow-wrap: normal; word-break: normal; white-space: nowr
 :is(#update-note, #activity) .un-close { align-self: start; border: 0; background: transparent; color: var(--muted); font-size: 17px; line-height: 1; padding: 2px 5px; border-radius: 6px; cursor: pointer; }
 :is(#update-note, #activity) .un-close:hover { background: var(--hover); color: var(--ink); }
 @keyframes upd-in { from { opacity: 0; transform: translateY(8px); } }
-@media (prefers-reduced-motion: reduce) { #update-note, .card.flash, .statusbar #status-update .dot { animation: none; } }
+:root[data-motion="off"] #update-note, :root[data-motion="off"] .card.flash, :root[data-motion="off"] .statusbar #status-update .dot { animation: none; }
 /* after an update: the dashboard restarts, and the page waits for it under this cover */
 #restart-wait { position: fixed; inset: 0; z-index: 80; display: grid; place-items: center; padding: 16px; background: color-mix(in srgb, var(--page) 55%, transparent);
   -webkit-backdrop-filter: blur(4px); backdrop-filter: blur(4px); animation: sk-in 0.2s ease-out; }
@@ -1459,7 +1467,7 @@ table.data a.proj { overflow-wrap: normal; word-break: normal; white-space: nowr
 #restart-wait .rw-card > .icon { width: 22px; height: 22px; color: var(--accent); margin-bottom: 4px; }
 #restart-wait .rw-card b { font-size: 15px; }
 #restart-wait .btn { margin-top: 6px; }
-@media (prefers-reduced-motion: reduce) { #restart-wait { animation: none; } #restart-wait .icon.spin { animation-duration: 3s; } }
+:root[data-motion="off"] #restart-wait { animation: none; }
 
 /* Sessions list: pick rows, then act on them from a floating bar */
 table.data :is(th, td).pick { width: 1%; padding-right: 0; }
@@ -1507,7 +1515,7 @@ table.data tr.picked:hover td { background: color-mix(in srgb, var(--accent) 11%
 #activity .act-mark.ok { color: var(--good-ink); }
 #activity .act-mark.no { color: var(--critical-ink); }
 #activity .act-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; padding-top: 10px; border-top: 1px solid var(--grid); font-size: 12px; }
-@media (prefers-reduced-motion: reduce) { #activity, #activity .act-bar i { animation: none; transition: none; } #activity .act-bar.indeterminate i { left: 0; width: 100%; opacity: 0.4; } }
+:root[data-motion="off"] #activity, :root[data-motion="off"] #activity .act-bar i { animation: none; transition: none; } :root[data-motion="off"] #activity .act-bar.indeterminate i { left: 0; width: 100%; opacity: 0.4; }
 
 /* Export: a small menu of formats under (or, in the selection bar, above) its button */
 details.menu { position: relative; }
@@ -1642,7 +1650,7 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .rv-full summary { cursor: pointer; font-weight: 500; color: var(--accent-ink); font-size: 13px; }
 .rv-full[open] summary { margin-bottom: 10px; }
 .rv-full .md { max-width: 80ch; }
-@media (prefers-reduced-motion: reduce) { .hub-card, .hub-go { transition: none; } }
+:root[data-motion="off"] .hub-card, :root[data-motion="off"] .hub-go { transition: none; }
 
 /* Knowledge bases and the global playbook */
 .kb { display: grid; gap: 14px; }
@@ -1700,7 +1708,7 @@ details.menu .menu-list span { color: var(--muted); font-size: 12px; }
 .kbd-detail b { color: var(--ink); font-weight: 600; }
 .kbd-src { margin-top: 3px; color: var(--muted); }
 .kbd-src a { color: var(--accent-ink); }
-@media (prefers-reduced-motion: reduce) { .kbd-svg g, .kbd-svg text { transition: none; } }
+:root[data-motion="off"] .kbd-svg g, :root[data-motion="off"] .kbd-svg text { transition: none; }
 .warn-line { color: var(--warning-ink); }
 .warn-line .icon { width: 13px; height: 13px; vertical-align: -2px; }
 
