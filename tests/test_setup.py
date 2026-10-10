@@ -1,4 +1,4 @@
-"""`chronicle install`: detect the agents on this machine, ask which to record, import, point at the dashboard."""
+"""`interlatch install`: detect the agents on this machine, ask which to record, import, point at the dashboard."""
 
 import json
 import os
@@ -60,15 +60,15 @@ def test_install_asks_per_agent_and_connects_the_chosen(machine, monkeypatch, ca
     assert _install() == 0
     out = capsys.readouterr().out
     assert [q.split("?")[0] for q in asked] == ["Record Claude Code sessions", "Record Codex sessions",
-                                                 "Give Cursor Chronicle's MCP tools (search your past sessions)",
+                                                 "Give Cursor Interlatch's MCP tools (search your past sessions)",
                                                  "Analyze it now and show the progress"]
     cfg = load_config(machine["home"])
     assert hooks_installed(cfg).get("SessionEnd") and machine["mcp_calls"] == ["/opt/bin/chronicle"]
     assert cfg.codex_dirs == [] and not cfg.codex_cloud
     cursor = json.loads((machine["home_dir"] / ".cursor" / "mcp.json").read_text())
-    assert cursor["mcpServers"]["chronicle"] == {"command": "/opt/bin/chronicle", "args": ["mcp"]}
+    assert cursor["mcpServers"]["interlatch"] == {"command": "/opt/bin/chronicle", "args": ["mcp"]}
     assert connect(cfg.db_path).execute("SELECT COUNT(*) FROM sessions WHERE agent = 'claude'").fetchone()[0] >= 1
-    assert "imported: 1 new" in out and "chronicle ui --open" in out
+    assert "imported: 1 new" in out and "interlatch ui --open" in out
 
 
 def test_declining_claude_stops_scanning_it(machine, monkeypatch, capsys):
@@ -122,7 +122,7 @@ def test_asks_whether_to_run_in_the_background(machine, monkeypatch, capsys, ans
         assert calls == ["sync", "ui"] and "Dashboard: http://127.0.0.1:11524/" in out and any(q.startswith("Open") for q in asked)
     else:
         assert calls == [] and "Not running in the background: Claude Code sessions are still recorded" in out
-        assert "chronicle ui --open" in out
+        assert "interlatch ui --open" in out
 
 
 def test_background_already_running_is_kept_without_asking(machine, monkeypatch, capsys):
@@ -147,8 +147,8 @@ def test_no_launchd_no_ui_turns_background_running_off(machine, monkeypatch, cap
     _answer(monkeypatch, {"Claude Code": "y"})
     assert _install("--no-sync") == 0
     out = capsys.readouterr().out
-    assert removed == ["com.claude-chronicle.sync", "com.claude-chronicle.ui"]
-    assert "removed launchd agent com.claude-chronicle.ui" in out and "chronicle ui --open" in out
+    assert removed == ["com.interlatch.sync", "com.interlatch.ui"]
+    assert "removed launchd agent com.interlatch.ui" in out and "interlatch ui --open" in out
     assert hooks_installed(load_config(machine["home"])).get("SessionEnd")  # the rest stays connected
 
 
@@ -190,7 +190,7 @@ def test_install_without_a_terminal_leaves_analysis_for_later_and_says_how(machi
     out = " ".join(capsys.readouterr().out.split())
     assert _glossary_terms(load_config(machine["home"])) == 0
     assert "1 past session waiting" in out
-    assert "The 1 waiting session is analyzed when you run `chronicle analyze --pending` (nothing runs in the background)" in out
+    assert "The 1 waiting session is analyzed when you run `interlatch analyze --pending` (nothing runs in the background)" in out
 
 
 def test_analyze_flag_runs_it_without_asking(machine, monkeypatch, capsys):
@@ -262,7 +262,7 @@ def test_version_flag_reports_the_installed_version(capsys):
 
     with pytest.raises(SystemExit) as exit_:
         main(["--version"])
-    assert exit_.value.code == 0 and capsys.readouterr().out.strip() == f"chronicle {__version__}"
+    assert exit_.value.code == 0 and capsys.readouterr().out.strip() == f"interlatch {__version__}"
 
 
 def test_tests_never_reach_this_computers_own_agents():

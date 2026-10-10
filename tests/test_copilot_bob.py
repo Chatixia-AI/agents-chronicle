@@ -114,11 +114,11 @@ def test_connect_registers_mcp_and_keeps_other_servers(stores):
     connect(cfg, "bob", "/opt/bin/chronicle")
     cfg = load_config(cfg.home)
     assert stores["copilot"] in cfg.copilot_dirs and cfg.bob_dirs == [stores["bob"]]
-    vs = json.loads((stores["vscode"] / "mcp.json").read_text())["servers"]["chronicle"]
+    vs = json.loads((stores["vscode"] / "mcp.json").read_text())["servers"]["interlatch"]
     assert vs == {"type": "stdio", "command": "/opt/bin/chronicle", "args": ["mcp"]}
     cli = json.loads((stores["copilot"] / "mcp-config.json").read_text())["mcpServers"]
-    assert set(cli) == {"other", "chronicle"}
-    assert "chronicle" in json.loads((stores["bob"] / "settings" / "mcp_settings.json").read_text())["mcpServers"]
+    assert set(cli) == {"other", "interlatch"}
+    assert "interlatch" in json.loads((stores["bob"] / "settings" / "mcp_settings.json").read_text())["mcpServers"]
     disconnect(cfg, "copilot")
     disconnect(cfg, "bob")
     assert set(json.loads((stores["copilot"] / "mcp-config.json").read_text())["mcpServers"]) == {"other"}
@@ -137,16 +137,20 @@ def test_bob_shell_reads_mcp_json(stores):
     # No mcp.json yet: Bob's migration (mcp_settings.json → mcp.json) is done first, so other servers move over too.
     legacy.write_text(json.dumps({"mcpServers": {"other": {"command": "x"}}}))
     connect(cfg, "bob", "/opt/bin/chronicle")
-    assert servers(current) == servers(legacy) == {"other", "chronicle"} and mcp_ok()
+    assert servers(current) == servers(legacy) == {"other", "interlatch"} and mcp_ok()
     disconnect(cfg, "bob")
     assert servers(current) == servers(legacy) == {"other"} and not mcp_ok()
 
-    # mcp.json already exists (Bob Shell 2.x ran before): Bob never reads mcp_settings.json again.
-    legacy.write_text(json.dumps({"mcpServers": {"chronicle": {"command": "/opt/bin/chronicle"}}}))
+    # mcp.json already exists (Bob Shell 2.x ran before): Bob never reads mcp_settings.json again. The old file still
+    # has Chronicle's server, with a tool the user allowed: connecting renames it and keeps that.
+    legacy.write_text(json.dumps({"mcpServers": {"chronicle": {"command": "/opt/bin/chronicle", "alwaysAllow": ["x"]}}}))
     current.write_text(json.dumps({"mcpServers": {"shell-only": {"command": "y"}}}))
     assert not mcp_ok()
-    connect(cfg, "bob", "/opt/bin/chronicle")
-    assert servers(current) == {"shell-only", "chronicle"} and mcp_ok()
+    connect(cfg, "bob", "/opt/bin/interlatch")
+    assert servers(current) == {"shell-only", "interlatch"} and mcp_ok()
+    old = json.loads(legacy.read_text())["mcpServers"]
+    assert set(old) == {"interlatch"} and old["interlatch"]["alwaysAllow"] == ["x"]
+    assert old["interlatch"]["command"] == "/opt/bin/interlatch"
 
 
 def test_mcp_clients_get_the_server_and_keep_their_settings(env, monkeypatch):
@@ -171,11 +175,11 @@ def test_mcp_clients_get_the_server_and_keep_their_settings(env, monkeypatch):
     for name in ("cursor", "gemini", "claude-desktop"):
         connect(cfg, name, "/opt/bin/chronicle")
     entry = {"command": "/opt/bin/chronicle", "args": ["mcp"]}
-    assert json.loads((home / ".cursor" / "mcp.json").read_text()) == {"mcpServers": {"chronicle": entry}}
+    assert json.loads((home / ".cursor" / "mcp.json").read_text()) == {"mcpServers": {"interlatch": entry}}
     desktop = home / "Library" / "Application Support" / "Claude" / "claude_desktop_config.json"
-    assert json.loads(desktop.read_text())["mcpServers"]["chronicle"] == entry
+    assert json.loads(desktop.read_text())["mcpServers"]["interlatch"] == entry
     data = json.loads(gemini.read_text())
-    assert data["theme"] == "Dracula" and set(data["mcpServers"]) == {"other", "chronicle"}
+    assert data["theme"] == "Dracula" and set(data["mcpServers"]) == {"other", "interlatch"}
     assert {c["name"] for c in mcp_clients_status() if c["registered"]} == {"cursor", "gemini", "claude-desktop"}
     assert "already registered" in connect(cfg, "cursor", "/opt/bin/chronicle")[0]
     assert load_config(cfg.home).claude_dirs == cfg.claude_dirs  # clients are not recording sources

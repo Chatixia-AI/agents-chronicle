@@ -1,15 +1,17 @@
-"""Instruction files (CLAUDE.md, AGENTS.md): Chronicle's managed block, where lines go, and which knowledge earns one.
+"""Instruction files (CLAUDE.md, AGENTS.md): Interlatch's managed block, where lines go, and which knowledge earns one.
 
-Chronicle owns one block per file and nothing else in it:
+Interlatch owns one block per file and nothing else in it:
 
-    <!-- BEGIN chronicle -->
-    - Re-read the exact lines right before every edit. <!-- chronicle:friction:edit-stale-context -->
-    <!-- END chronicle -->
+    <!-- BEGIN interlatch -->
+    - Re-read the exact lines right before every edit. <!-- interlatch:friction:edit-stale-context -->
+    <!-- END interlatch -->
 
 The block goes at the end of the file, after any other tool's managed block (agent-ninja-START/END and the like),
 never inside one. Text outside the block is never touched; a write backs the old file up first and replaces it
 atomically. Lines are only written when the user approves a suggestion (suggest.apply). A file whose block markers
-are damaged (two BEGINs, an END without a BEGIN, ...) is refused rather than guessed at.
+are damaged (two BEGINs, an END without a BEGIN, ...) is refused rather than guessed at. A block Chronicle wrote
+before the rename (`<!-- BEGIN chronicle -->`, `<!-- chronicle:... -->` markers) is read the same, and the next write
+gives it the new markers (or `interlatch migrate` does, relabel()).
 """
 
 from __future__ import annotations
@@ -30,8 +32,10 @@ from .config import Config
 from .i18n import tr
 from .util import dumps, loads, one_line, parse_ts, utcnow
 
-BEGIN = "<!-- BEGIN chronicle -->"
-END = "<!-- END chronicle -->"
+BEGIN = "<!-- BEGIN interlatch -->"
+END = "<!-- END interlatch -->"
+LEGACY_BEGIN = "<!-- BEGIN chronicle -->"
+LEGACY_END = "<!-- END chronicle -->"
 MAX_PER_FILE = 8
 LINE_CHARS = 240
 THEME_PROJECTS = 3  # a lesson relearned in this many projects belongs in the user-level file
@@ -39,13 +43,13 @@ JACCARD_DUPLICATE = 0.5
 JACCARD_OVERLAP = 0.6
 VISIBILITY_TTL_DAYS = 7
 
-_LINE = re.compile(r"^- (.*?) <!-- chronicle:(\S+) -->\s*$")
+_LINE = re.compile(r"^- (.*?) <!-- (?:interlatch|chronicle):(\S+) -->\s*$")
 _OTHER_BLOCKS = (re.compile(r"<!--\s*BEGIN[ :]+([\w.-]+)\s*-->"), re.compile(r"<!--\s*([\w.-]+)-START\s*-->"))
 
 
 # ---------------------------------------------------------------- the managed block
 class MalformedBlock(ValueError):
-    """The file's chronicle markers are not exactly one BEGIN followed by one END."""
+    """The file's block markers are not exactly one BEGIN followed by one END."""
 
 
 def _enc(key: str) -> str:  # an HTML comment cannot contain "--", and the marker regex stops at whitespace
@@ -67,12 +71,12 @@ def _block_span(lines: list[str]) -> tuple[int, int] | None:
     Raises MalformedBlock unless there is exactly one BEGIN and one END after it: guessing where a damaged block
     ends would pull the user's own text into it.
     """
-    begins = [i for i, l in enumerate(lines) if l.strip() == BEGIN]
-    ends = [i for i, l in enumerate(lines) if l.strip() == END]
+    begins = [i for i, l in enumerate(lines) if l.strip() in (BEGIN, LEGACY_BEGIN)]
+    ends = [i for i, l in enumerate(lines) if l.strip() in (END, LEGACY_END)]
     if not begins and not ends:
         return None
     if len(begins) != 1 or len(ends) != 1 or ends[0] < begins[0]:
-        raise MalformedBlock(tr("malformed chronicle block ({begins} BEGIN and {ends} END markers, expected one BEGIN "
+        raise MalformedBlock(tr("malformed interlatch block ({begins} BEGIN and {ends} END markers, expected one BEGIN "
                                 "followed by one END)", begins=len(begins), ends=len(ends)))
     return begins[0], ends[0]
 
@@ -83,7 +87,7 @@ def _other_spans(lines: list[str]) -> list[tuple[int, int]]:
     for i, line in enumerate(lines):
         for rx in _OTHER_BLOCKS:
             m = rx.search(line)
-            if not m or m.group(1).lower() == "chronicle":
+            if not m or m.group(1).lower() in ("interlatch", "chronicle"):
                 continue
             name = re.escape(m.group(1))
             end_rx = re.compile(rf"<!--\s*(END[ :]+{name}|{name}-END)\s*-->")
@@ -94,7 +98,7 @@ def _other_spans(lines: list[str]) -> list[tuple[int, int]]:
 
 
 def parse_block(text: str) -> tuple[list[tuple[str, str]], list[str]]:
-    """(keyed lines, other lines) inside the chronicle block of this file text."""
+    """(keyed lines, other lines) inside our block of this file text."""
     lines = (text or "").splitlines()
     span = _block_span(lines)
     if not span:
@@ -110,7 +114,7 @@ def parse_block(text: str) -> tuple[list[tuple[str, str]], list[str]]:
 
 
 def render_file(old_text: str | None, entries: list[tuple[str, str]]) -> str:
-    """The file with its chronicle block holding exactly `entries` (key, text); pure.
+    """The file with its Interlatch block holding exactly `entries` (key, text); pure.
 
     An existing block is rewritten in place unless it sits inside another tool's block, in which case it moves to
     the end. Lines a person typed into the block without a marker are kept. No entries and no such lines removes
@@ -120,7 +124,7 @@ def render_file(old_text: str | None, entries: list[tuple[str, str]]) -> str:
     lines = old_text.splitlines()
     span = _block_span(lines)
     _keyed, other = parse_block(old_text)
-    body = [f"- {_clean(text)} <!-- chronicle:{_enc(key)} -->" for key, text in entries] + other
+    body = [f"- {_clean(text)} <!-- interlatch:{_enc(key)} -->" for key, text in entries] + other
     block = [BEGIN, *body, END] if body else []
     if span and not any(a < span[0] and span[1] < b for a, b in _other_spans(lines)):
         before, after = lines[:span[0]], lines[span[1] + 1:]
@@ -139,6 +143,20 @@ def render_file(old_text: str | None, entries: list[tuple[str, str]]) -> str:
     if not block:
         return ("\n".join(lines) + "\n") if lines else ""
     return "\n".join(lines + ([""] if lines else []) + block) + "\n"
+
+
+def relabel(text: str) -> str:
+    """The file text with a block Chronicle wrote given Interlatch's markers, and nothing else changed; pure. Raises
+    MalformedBlock for a damaged block."""
+    lines = (text or "").splitlines(keepends=True)
+    span = _block_span([line.rstrip("\r\n") for line in lines])
+    if not span:
+        return text
+    a, b = span
+    for i in range(a, b + 1):
+        lines[i] = (lines[i].replace(LEGACY_BEGIN, BEGIN).replace(LEGACY_END, END)
+                    .replace("<!-- chronicle:", "<!-- interlatch:"))
+    return "".join(lines)
 
 
 def read_block(path: Path) -> list[tuple[str, str]]:
@@ -216,8 +234,8 @@ def write_atomic(path: Path, text: str, *, cfg: Config | None = None, mkdir: boo
 
 
 # ---------------------------------------------------------------- where a line goes
-# Chronicle's own source settings come first, so the CLI (with your shell's environment) and the background agents
-# (with only PATH, HOME and CHRONICLE_HOME) route a user-level line to the same file.
+# Interlatch's own source settings come first, so the CLI (with your shell's environment) and the background agents
+# (with only PATH, HOME and INTERLATCH_HOME) route a user-level line to the same file.
 def claude_home(cfg: Config | None = None) -> Path:
     if cfg is not None and cfg.claude_dirs:
         return Path(cfg.claude_dirs[0]).expanduser()
@@ -295,7 +313,7 @@ def jaccard(a: set, b: set) -> float:
 
 
 def overlap(text: str, existing_file_text: str | None) -> bool:
-    """True when a line outside Chronicle's block already says this (token Jaccard >= 0.6)."""
+    """True when a line outside Interlatch's block already says this (token Jaccard >= 0.6)."""
     lines = (existing_file_text or "").splitlines()
     try:
         span = _block_span(lines)

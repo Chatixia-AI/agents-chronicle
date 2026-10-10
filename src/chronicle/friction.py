@@ -797,7 +797,7 @@ def report(conn: sqlite3.Connection, *, days: int | None = None, project: str | 
 
 def display(cause: dict) -> dict:
     """A cause as the dashboard shows it, in the viewer's language (i18n): catalog names and fix titles, and the note
-    Chronicle wrote about overlapping sessions. Notes from sessions are shown as they were written."""
+    Interlatch wrote about overlapping sessions. Notes from sessions are shown as they were written."""
     out = {**cause, "fixes": [{**f, "title": tr(f["title"])} for f in cause.get("fixes") or []],
            "examples": [{**e, "note": display_note(e.get("note"))} for e in cause.get("examples") or []]}
     if cause.get("id") in BY_ID:
@@ -806,7 +806,7 @@ def display(cause: dict) -> dict:
 
 
 def display_note(note: str | None) -> str | None:
-    """An example's note in the viewer's language, when it is Chronicle's own (CONCURRENT_NOTE)."""
+    """An example's note in the viewer's language, when it is Interlatch's own (CONCURRENT_NOTE)."""
     m = re.match(r"while session (\S+) was active here: (.*)", note or "", re.S)
     return tr(CONCURRENT_NOTE, sid=m.group(1), text=m.group(2)) if m else note
 

@@ -1,4 +1,4 @@
-"""The MIT core must work without ee/ (Chronicle Enterprise License): no module in src/chronicle may import it."""
+"""The MIT core must work without ee/ (Interlatch Enterprise License): no module in src/chronicle may import it."""
 
 import ast
 from pathlib import Path

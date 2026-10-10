@@ -55,7 +55,7 @@ def test_cli_lists_shows_applies_and_undoes(queued, capsys):
 
     assert main(["suggest", "apply", str(line["id"]), "--yes"]) == 0
     assert "applied to ~/.claude/CLAUDE.md" in capsys.readouterr().out
-    assert "<!-- chronicle:friction:zsh-nomatch -->" in target.read_text()  # a path-free marker
+    assert "<!-- interlatch:friction:zsh-nomatch -->" in target.read_text()  # a path-free marker
     assert suggest.get(queued["conn"], line["id"])["status"] == "applied"
 
     assert main(["suggest"]) == 0  # applied ones leave the default list

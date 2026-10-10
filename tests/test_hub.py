@@ -233,7 +233,7 @@ def test_hub_add_folder_files_and_moves_sessions(hubenv, monkeypatch, capsys):
 
     folder = hubenv["tmp"] / "spoke-work"  # the spoke's own folder: it has to exist there
     folder.mkdir()
-    monkeypatch.setenv("CHRONICLE_HOME", str(spoke.home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(spoke.home))
     assert main(["hub", "add-folder", str(folder), "--project", "demo-app"]) == 1  # two projects are called that
     assert "/home/test/code/demo-app" in capsys.readouterr().out
     assert main(["hub", "add-folder", str(folder), "--project", CWD]) == 0
@@ -596,9 +596,9 @@ def test_systemd_units_quote_commands(env):
     from chronicle.install import systemd_units
 
     units = systemd_units(env["cfg"], "/usr/bin/python3 -m chronicle", interval=600)
-    assert "ExecStart=/usr/bin/python3 -m chronicle sync --work --quiet" in units["chronicle-sync.service"]
-    assert "OnUnitActiveSec=600s" in units["chronicle-sync.timer"]
-    assert "ExecStart=/usr/bin/python3 -m chronicle ui" in units["chronicle-ui.service"]
-    assert "Restart=always" in units["chronicle-ui.service"]
-    spaced = systemd_units(env["cfg"], "'/opt/my apps/chronicle'")["chronicle-ui.service"]
+    assert "ExecStart=/usr/bin/python3 -m chronicle sync --work --quiet" in units["interlatch-sync.service"]
+    assert "OnUnitActiveSec=600s" in units["interlatch-sync.timer"]
+    assert "ExecStart=/usr/bin/python3 -m chronicle ui" in units["interlatch-ui.service"]
+    assert "Restart=always" in units["interlatch-ui.service"]
+    spaced = systemd_units(env["cfg"], "'/opt/my apps/chronicle'")["interlatch-ui.service"]
     assert 'ExecStart="/opt/my apps/chronicle" ui' in spaced
