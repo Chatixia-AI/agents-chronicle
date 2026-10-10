@@ -6743,7 +6743,7 @@ route(/^\/appearance$/, async () => {
         segControl([["system", t("System")], ["en", "English"], ["ja", "日本語"]], langPref(), (v) => { if (v !== langPref()) setLang(v); })),
       row(t("Animations"), t("System follows your Mac's Reduce motion setting. Off stops loading shimmers, slides and fades; spinners turn slowly."),
         segControl([["system", t("System")], ["on", t("On")], ["off", t("Off")]], motion, setMotion)),
-      row(t("Sidebar"), t("The button at the top left, or ⌘B, shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away."),
+      row(t("Sidebar"), t("The button at the top left, ⌘B, or the rail icon of the page you're on shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away."),
         h("button", { class: "btn", type: "button", onclick: toggleSidebar }, t("Toggle sidebar")))));
 });
 
@@ -6803,7 +6803,7 @@ function defaultCrumbs(path, params) {
 function renderRail() {
   const rail = $("#rail");
   const link = (sx) => h("a", { href: sx.href, "data-section": sx.key, "aria-label": sx.label,
-    onclick: () => { if (sx.key !== "search") showSidebar(); } }, icon(sx.icon || sx.key)); // search has no sidebar
+    onclick: (e) => railClick(e, sx) }, icon(sx.icon || sx.key));
   const settings = SECTIONS.find((x) => x.key === "settings");
   const shown = SECTIONS.filter((x) => (!x.team || ME?.hub?.team) && !(dedicated() && DEDICATED_HIDDEN.has(x.key)));
   if (limited()) { // no transcripts to search, no settings of this hub to see
@@ -7019,8 +7019,18 @@ function toggleSidebar() {
   peekSidebar(false);
   sidebarExpanded();
 }
-// A click on a rail icon opens a hidden sidebar for good, as the sidebar button would (wide windows: a narrow one's
-// sidebar covers the page). It was peeking already: it stays where it is, with the clicked section's lists.
+// A rail icon toggles the sidebar, as the sidebar button would (wide windows: a narrow one's sidebar covers the page):
+// a click on the page that's showing hides a shown sidebar; any other click opens a hidden one. Search has no sidebar.
+function railClick(e, sx) {
+  if (sx.key === "search") return;
+  const root = document.documentElement;
+  const here = (location.hash || "#/") === sx.href;
+  if (here && !root.classList.contains("no-sidebar") && !matchMedia("(max-width: 860px)").matches) {
+    e.preventDefault();
+    toggleSidebar();
+  } else showSidebar();
+}
+// A hidden sidebar opens for good. It was peeking already: it stays where it is, with the clicked section's lists.
 function showSidebar() {
   const root = document.documentElement;
   if (!root.classList.contains("no-sidebar") || matchMedia("(max-width: 860px)").matches) return;

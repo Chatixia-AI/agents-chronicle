@@ -1045,7 +1045,7 @@ window.CHRONICLE_JA = {
   "Language": "言語",
   "System follows your browser's language. The page reloads to switch.": "「システム」はブラウザーの言語設定に従います。切り替えるとページを再読み込みします。",
   "Sidebar": "サイドバー",
-  "The button at the top left, or ⌘B, shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away.": "左上のボタンか ⌘B で表示／非表示を切り替えます。非表示の間は、レールにポインタを合わせると一時的に表示され、離すと隠れます。",
+  "The button at the top left, ⌘B, or the rail icon of the page you're on shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away.": "左上のボタン、⌘B、または表示中のページのレールアイコンで表示／非表示を切り替えます。非表示の間は、レールにポインタを合わせると一時的に表示され、離すと隠れます。",
   "Toggle sidebar": "サイドバーの表示を切り替え",
   "Animations": "アニメーション",
   "On": "オン",
