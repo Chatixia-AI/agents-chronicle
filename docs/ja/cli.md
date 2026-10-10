@@ -4,9 +4,9 @@
 
 | コマンド | |
 | --- | --- |
-| `chronicle install [--yes] [--analyze all\|N\|later] [--[no-]notify-updates] [--dry-run]` | セットアップ：見つかったエージェントを一覧にし、記録するものを尋ね、取り込み、今すぐ進捗付きで分析するか尋ね（用語集とマップはここから作られます）、ダッシュボードを起動（[インストール](install.md#コマンドライン)） |
+| `chronicle install [--yes] [--analyze all\|N\|later] [--[no-]notify-updates] [--[no-]menu-bar] [--dry-run]` | セットアップ：見つかったエージェントを一覧にし、記録するものを尋ね、取り込み、今すぐ進捗付きで分析するか尋ね（用語集とマップはここから作られます）、ダッシュボードを起動し、macOS では[メニューバーアイコン](install.md#メニューバーアイコン)を表示するか一度だけ尋ねます（y と答えない限りオフ）（[インストール](install.md#コマンドライン)） |
 | `chronicle app` | デスクトップアプリ（ウインドウ＋メニューバー）。`app` エクストラが必要 |
-| `chronicle ui [--open]` | ダッシュボード（インストール後は :11524 で常時稼働。稼働中なら `chronicle ui` がそう表示し、`--open` でそれを開きます）。Sessions、Knowledge、Projects、Glossary は Cards と List（並べ替え可能な表。行をクリックで詳細）を切り替えられ、ページごとに記憶されます |
+| `chronicle ui [--open] [--menu-bar]` | ダッシュボード（インストール後は :11524 で常時稼働。稼働中なら `chronicle ui` がそう表示し、`--open` でそれを開きます）。macOS でログイン時に起動するものは、インストール時にオンにしていれば[メニューバーアイコン](install.md#メニューバーアイコン)も表示します。`--menu-bar`/`--no-menu-bar` で切り替えられます。Sessions、Knowledge、Projects、Glossary は Cards と List（並べ替え可能な表。行をクリックで詳細）を切り替えられ、ページごとに記憶されます |
 | `chronicle sessions [-p project] [--since 7d]` | セッションの一覧 |
 | `chronicle show <id-prefix> [--transcript\|--markdown\|--json]` | セッションの概要、または会話全体 |
 | `chronicle search <words>` | トランスクリプトとナレッジの全文検索（言語を問わず、3 文字以上） |

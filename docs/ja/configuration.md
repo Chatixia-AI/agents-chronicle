@@ -69,6 +69,7 @@
 | `server.auth_header` | `""` | 認証プロキシ経由の会社のサインイン：サインインした人のメールアドレスを運ぶリクエストヘッダー。例：`"X-Forwarded-Email"`。`trusted_proxies` からのリクエストで、ハブに追加された人の場合だけ信頼します。空の場合は招待かサインインリンクでサインインします（[会社のサインイン](devices.md#会社のサインイン)） |
 | `server.trusted_proxies` | `["127.0.0.1", "::1"]` | ダッシュボードが `auth_header`、`X-Forwarded-Proto`、`X-Forwarded-For` を信頼するプロキシのアドレス。コードを試す訪問者は、`X-Forwarded-For` の最後の項目で見分けます（[間違ったコードが続いたとき](troubleshooting.md#ハブ)）（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
 | `server.behind_proxy` | `false` | このコンピューター上のリバースプロキシがダッシュボードに転送する：それを通るリクエストはハブ自身から（常に管理者）とは見なされず、管理者はサインインするか `chronicle hub` コマンドを使う（[Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)） |
+| `server.menu_bar` | `false` | macOS：ログイン時に起動するダッシュボードが、メニューバーに Chronicle のアイコンも表示する（`app` エクストラが必要）。`chronicle install --menu-bar` でオンになります（[メニューバーアイコン](install.md#メニューバーアイコン)） |
 | `inject.session_start` / `max_chars` | `false` / `3000` | 新しいセッションにプロジェクトのナレッジベースの要約を渡す（SessionStart フック） |
 | `updates.check_daily` | `false` | ダッシュボードを開いている間、1 日 1 回 pypi.org に最新バージョンを問い合わせる（Status › Updates） |
 | `updates.notify` | `false` | バックグラウンド同期が 1 日 1 回 pypi.org に問い合わせ、新しいリリースごとに 1 回デスクトップ通知を表示する（Status › Updates、または `chronicle install --notify-updates`） |
