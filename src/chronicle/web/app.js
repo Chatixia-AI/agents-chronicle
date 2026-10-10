@@ -1043,6 +1043,10 @@ async function groupDialog(g, preset = []) {
           { n: fmtNum(members.length - away.length), name: hubProjectName(to) })
         : g?.hub_project ? t("Stops sharing from the next push. What it shared stays on the hub.") : t("Its projects go to the hub only as they would without the group."),
       to && away.length ? h("div", null, t("Not from here, being recorded on another computer: {names}", { names: away.map((p) => p.label).join(", ") })) : null,
+      // what goes: this computer's share mode, said where the choice is made (an older server sends none: transcripts)
+      to && groupsCanShare ? (groupsHub.share === "knowledge"
+        ? h("div", null, t("Each session's summary and project lessons go; transcripts stay on this computer."))
+        : h("div", { class: "warn-line", role: "note" }, icon("gotcha"), " ", t("This computer sends whole transcripts, unredacted: every session in these projects goes to the hub as recorded, with any key or password that appeared in it, and the hub's admins can read them."))) : null,
     ].filter(Boolean));
   };
   const addRule = () => {
@@ -1080,6 +1084,16 @@ async function groupDialog(g, preset = []) {
   };
   const save = async () => {
     if (folderIn.value.trim()) addRule(); // typed but not added: what was meant
+    const sharing = shareSel && groupsCanShare && shareSel.value && shareSel.value !== (g?.hub_project || "") ? shareSel.value : null;
+    if (sharing) { // starts going to a hub project, or to another one: asked before anything is saved
+      const n = projects.filter(inGroup).filter((p) => String(p.project_path || "").startsWith("/")).length;
+      const vars = { n: fmtNum(n), name: hubProjectName(sharing) };
+      if (!confirm(groupsHub.share === "knowledge"
+        ? tn(n, "Share the summaries and project lessons of {n} project with {name} on the hub, and of any project that joins the group later?",
+          "Share the summaries and project lessons of {n} projects with {name} on the hub, and of any project that joins the group later?", vars)
+        : tn(n, "Send the whole transcripts of {n} project to {name} on the hub, unredacted, and of any project that joins the group later?",
+          "Send the whole transcripts of {n} projects to {name} on the hub, unredacted, and of any project that joins the group later?", vars))) return;
+    }
     const members = projects.filter(inGroup).map((p) => p.project_path);
     const r = await post("/api/project-groups/save", { id: g?.id, name: nameIn.value, folders: rules, members });
     if (r.error) { err.textContent = r.error; return; }
@@ -1640,7 +1654,9 @@ route(/^\/sessions$/, async (params) => {
     selBar.hidden = !n;
     if (!n) return;
     const analyze = h("button", { class: "btn primary small admin-only", type: "button", onclick: async () => {
-      if (n > 25 && !confirm(t("Analyze {n} sessions now? Each one is a call on your {agent} login.", { n, agent: analyzer() }))) return;
+      if (n > 25 && !confirm(lastStatus?.analysis?.billed
+        ? t("Analyze {n} sessions now? Each one is a call to {agent}, billed to your API key.", { n, agent: analyzer() })
+        : t("Analyze {n} sessions now? Each one is a call on your {agent} login.", { n, agent: analyzer() }))) return;
       analyze.disabled = true; analyze.textContent = t("Starting…");
       const r = await post("/api/sessions/analyze", { ids: [...picked] });
       if (!r.started) { toast(r.error || t("Could not start")); analyze.disabled = false; drawSel(); return; }
@@ -4996,7 +5012,7 @@ function providerPane(apis, current, use) {
   let host = "";
   try { host = new URL(p.path).host; } catch (e) { host = p.path || ""; }
   const where = h("div", { class: "pv-where muted" }, icon(p.local ? "home" : "cloud"), " ", p.local ? t("Runs on this computer: transcripts never leave it.")
-    : t("Sends a redacted digest of each session to {host}.", { host: host || p.label }));
+    : h("span", null, t("Sends a redacted digest of each session to {host}.", { host: host || p.label }), " ", h("b", null, t("Each call is billed to your API key."))));
   const listId = `models-${p.name}`;
   const models = h("datalist", { id: listId }, (providerModels[p.name] || []).map((m) => h("option", { value: m })));
   const field = (k, label, attrs = {}, wide = false) => h("label", { class: wide ? "wide" : null }, label, h("input", { class: "input", name: k, value: s[k] ?? "",
@@ -5592,6 +5608,11 @@ function peopleCard(dv) {
     const me = ME?.viewer?.id != null && ME.viewer.id === p.id;
     const sel = h("select", { "aria-label": t("Role of {name}", { name: p.name }), onchange: async () => {
       const role = sel.value;
+      if (me && p.role === "admin" && role !== "admin"  // giving up your own admin: only another admin can give it back
+          && !confirm(t("Make yourself {role}? You stop being an admin of this hub at once, and only another admin can make you one again.", { role: ROLE_LABEL[role] || role }))) {
+        sel.value = p.role;
+        return;
+      }
       sel.disabled = true;
       const r = await send("/api/people/role", { id: p.id, role });
       sel.disabled = false;
@@ -6572,14 +6593,18 @@ function mirrorCard(mi) {
     h("label", null, t("SSL mode"), ssl),
     field("schema", t("Schema"), { value: mi.schema, placeholder: "chronicle" }));
   const holds = { knowledge: t("Each session's details, summary and analysis, your lessons, knowledge bases, weekly reviews, glossary, artifacts and token usage. No prompts, no transcripts."),
-    everything: t("All of that, plus your prompts and full transcripts, with secrets redacted as they are before analysis. Redaction goes by patterns, so it can miss a secret that looks like nothing in particular.") };
+    everything: t("All of that, plus your prompts and full transcripts, with secrets redacted as they are before analysis.") };
   const holdsNote = h("div", { class: "muted" }, holds[include]);
+  // what a full transcript can carry, said before it goes: shown while Everything is picked, and asked again on Save
+  const everythingWarn = h("div", { class: "warn-line mirror-warn", role: "note", hidden: include !== "everything" }, icon("gotcha"), " ",
+    t("Everything copies whole transcripts: your code, file contents, command output and whatever was pasted into a session. Redaction goes by patterns, so a password or key that looks like nothing in particular still goes. Pick it only for a database you run yourself or trust with all of that."));
   const includeSeg = segControl([["knowledge", t("Knowledge")], ["everything", t("Everything")]], include, (v) => {
     include = v;
     includeSeg.querySelectorAll("button").forEach((b, i) => { const on = (i === 0 ? "knowledge" : "everything") === v; b.className = on ? "on" : ""; b.setAttribute("aria-pressed", String(on)); });
     holdsNote.textContent = holds[v];
+    everythingWarn.hidden = v !== "everything";
   });
-  const what = h("div", { class: "set-row" }, h("div", null, h("b", null, t("What it holds")), holdsNote), includeSeg);
+  const what = h("div", { class: "set-row" }, h("div", null, h("b", null, t("What it holds")), holdsNote, everythingWarn), includeSeg);
   const docker = h("details", { class: "mirror-docker" }, h("summary", null, t("Postgres in Docker on this computer")),
     h("p", { class: "muted" }, t("Start one, then fill in server address 127.0.0.1, port 5432, database and user chronicle, the password you chose, and SSL mode disable.")),
     h("pre", { class: "mcp-code" }, "docker run -d --name chronicle-pg --restart unless-stopped \\\n  -e POSTGRES_USER=chronicle -e POSTGRES_DB=chronicle -e POSTGRES_PASSWORD=<a password> \\\n  -p 127.0.0.1:5432:5432 -v chronicle-pg:/var/lib/postgresql/data postgres:17"));
@@ -6596,6 +6621,8 @@ function mirrorCard(mi) {
       + (r.mine ? t("This computer's mirror is there; saving brings it up to date.") : t("Its tables are created when you save.")));
   } }, t("Test connection"));
   const save = h("button", { class: "btn primary", type: "button", onclick: async () => {
+    const turningOn = mode === "postgres" && include === "everything" && !(mi.enabled && mi.include === "everything");
+    if (turningOn && !confirm(t("Copy your prompts and full transcripts to this database? Secrets that redaction misses go with them."))) return;
     save.disabled = true;
     say(mode === "off" ? t("Saving…") : t("Connecting and saving…"));
     const r = await post("/api/mirror/save", { enabled: mode === "postgres", ...(mode === "postgres" ? values() : {}) }).catch((e) => ({ error: e.message }));

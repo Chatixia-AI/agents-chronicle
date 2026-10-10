@@ -744,11 +744,19 @@ class App:
         return {"groups": groups(self.conn), "home": str(Path.home()),
                 "hub": self._hub_choices() if self.cfg.is_spoke else None}
 
+    def _billed(self) -> bool:
+        """Analysis goes to a model provider's API with your key, which bills each call (not a local Ollama, and not a
+        coding agent's own login)."""
+        from .llm import AGENTS
+
+        backend = self.cfg.analysis.backend
+        return backend in BACKENDS and backend not in AGENTS and not make_runner(self.cfg).local()
+
     def _hub_choices(self) -> dict:
         from .hub import last_folders
 
         seen = last_folders(self.cfg) or {}
-        return {"name": seen.get("hub"), "url": self.cfg.hub_url or None,
+        return {"name": seen.get("hub"), "url": self.cfg.hub_url or None, "share": self.cfg.hub_share,
                 "projects": [{"path": p["path"], "name": p.get("name") or Path(p["path"]).name,
                               "sessions": p["sessions"] if isinstance(p.get("sessions"), int) else None}
                              for p in seen.get("projects") or [] if isinstance(p, dict) and p.get("path")]}
@@ -1206,7 +1214,8 @@ class App:
         return {
             "pending": pending,
             "analysis": {"auto": self.cfg.analysis.auto, "max_per_run": self.cfg.analysis.max_per_run,
-                         "label": BACKENDS.get(self.cfg.analysis.backend, BACKENDS["claude"])},
+                         "label": BACKENDS.get(self.cfg.analysis.backend, BACKENDS["claude"]),
+                         "billed": self._billed()},  # an API provider off this computer: every call costs
             "paused_until": kv_get(self.conn, PAUSE_KEY),
             "last_sync": kv_get(self.conn, "last_sync"),
             "jobs": self.jobs.snapshot(),
