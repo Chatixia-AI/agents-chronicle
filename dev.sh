@@ -1,22 +1,25 @@
 #!/usr/bin/env bash
-# Start Chronicle from a checkout for testing, on a sandbox copy of your archive: your live ~/.claude-chronicle and
-# the Chronicle installed from PyPI are never touched. Nothing is recorded, analyzed or sent to a hub.
+# Start Interlatch from a checkout for testing, on a sandbox copy of your archive: your live ~/.interlatch and
+# the Interlatch installed from PyPI are never touched. Nothing is recorded, analyzed or sent to a hub.
 #
 #   ./dev.sh                     dashboard in the browser, from this checkout, on a copy of your archive
 #   ./dev.sh --app               the macOS app window instead
-#   ./dev.sh --menu-bar          the browser dashboard with Chronicle's menu-bar icon, as the login item shows it
+#   ./dev.sh --menu-bar          the browser dashboard with Interlatch's menu-bar icon, as the login item shows it
 #   ./dev.sh --demo              made-up demo data instead of your archive (docs/demo/make_demo.py)
 #   ./dev.sh --fresh             re-copy the archive (or rebuild the demo) first
 #   ./dev.sh --tree ../agents-chronicle-<topic>   run another worktree's code
 #   ./dev.sh --port 8800         a fixed port (default: the first free one from 8797)
 #   ./dev.sh --no-open           don't open a browser tab
 #
-# The sandbox lives in ~/.chronicle-sandbox/dev-sh (demo: ~/.chronicle-sandbox/dev-sh-demo). The server reads the web
+# The sandbox lives in ~/.interlatch-sandbox/dev-sh (demo: ~/.interlatch-sandbox/dev-sh-demo). The server reads the web
 # files once at startup: after editing app.css or app.js, stop it (Ctrl-C), run it again and hard-reload the page.
 set -euo pipefail
 
 TREE="$(cd "$(dirname "$0")" && pwd)"
-LIVE="$HOME/.claude-chronicle"
+LIVE="$HOME/.interlatch"
+if [ ! -f "$LIVE/chronicle.db" ] && [ -f "$HOME/.claude-chronicle/chronicle.db" ]; then
+  LIVE="$HOME/.claude-chronicle"  # its name before the rename, until Interlatch moves it
+fi
 APP=0 DEMO=0 FRESH=0 OPEN=--open PORT="" MENU=0
 
 usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
@@ -36,12 +39,12 @@ while [ $# -gt 0 ]; do
   shift
 done
 
-[ -f "$TREE/pyproject.toml" ] && [ -d "$TREE/src/chronicle" ] || { echo "dev.sh: $TREE is not a Chronicle checkout" >&2; exit 1; }
+[ -f "$TREE/pyproject.toml" ] && [ -d "$TREE/src/chronicle" ] || { echo "dev.sh: $TREE is not an Interlatch checkout" >&2; exit 1; }
 
 listening() { lsof -nP -iTCP:"$1" -sTCP:LISTEN >/dev/null 2>&1; }
 
 if [ "$DEMO" = 1 ]; then
-  SANDBOX="$HOME/.chronicle-sandbox/dev-sh-demo"
+  SANDBOX="$HOME/.interlatch-sandbox/dev-sh-demo"
   if [ "$FRESH" = 1 ] || [ ! -f "$SANDBOX/home/chronicle.db" ]; then
     echo "Building the demo data in $SANDBOX ..."
     /bin/rm -rf "$SANDBOX"
@@ -49,13 +52,13 @@ if [ "$DEMO" = 1 ]; then
   fi
   HOME_DIR="$SANDBOX/home"
 else
-  HOME_DIR="$HOME/.chronicle-sandbox/dev-sh"
+  HOME_DIR="$HOME/.interlatch-sandbox/dev-sh"
   mkdir -p "$HOME_DIR/empty"
   if [ "$FRESH" = 1 ] || [ ! -f "$HOME_DIR/chronicle.db" ]; then
     [ -f "$LIVE/chronicle.db" ] || { echo "dev.sh: no archive at $LIVE/chronicle.db (try --demo)" >&2; exit 1; }
     echo "Copying your archive to $HOME_DIR ..."
     /bin/rm -f "$HOME_DIR/chronicle.db" "$HOME_DIR/chronicle.db-wal" "$HOME_DIR/chronicle.db-shm"
-    sqlite3 "$LIVE/chronicle.db" ".backup '$HOME_DIR/chronicle.db'"  # a consistent copy, even while Chronicle writes
+    sqlite3 "$LIVE/chronicle.db" ".backup '$HOME_DIR/chronicle.db'"  # a consistent copy, even while Interlatch writes
   fi
   # Written once: edit it to try other settings. Sources point at an empty folder, so Sync records nothing.
   if [ ! -f "$HOME_DIR/config.toml" ]; then
@@ -90,10 +93,12 @@ EOF
   fi
 fi
 
-export CHRONICLE_HOME="$HOME_DIR"
+# Both names: a --tree from before the rename reads only CHRONICLE_HOME, and would otherwise use the live archive.
+# Every checkout has the `chronicle` command; `interlatch` only those from the rename on.
+export INTERLATCH_HOME="$HOME_DIR" CHRONICLE_HOME="$HOME_DIR"
 cd "$TREE"
 echo "Code:    $TREE ($(git -C "$TREE" rev-parse --abbrev-ref HEAD 2>/dev/null || echo '?'))"
-echo "Data:    $CHRONICLE_HOME"
+echo "Data:    $INTERLATCH_HOME"
 
 if [ "$APP" = 1 ]; then
   echo "Opening the app window (quit it from the menu bar icon, or Ctrl-C here)"
@@ -108,7 +113,7 @@ elif listening "$PORT"; then
 fi
 echo "Open:    http://127.0.0.1:$PORT/   (Ctrl-C to stop)"
 if [ "$MENU" = 1 ]; then
-  echo "Menu bar: Chronicle's icon (quit it from its menu, or Ctrl-C here)"
+  echo "Menu bar: Interlatch's icon (quit it from its menu, or Ctrl-C here)"
   exec uv run --project "$TREE" --extra app chronicle ui --host 127.0.0.1 --port "$PORT" $OPEN --menu-bar
 fi
 exec uv run --project "$TREE" chronicle ui --host 127.0.0.1 --port "$PORT" $OPEN

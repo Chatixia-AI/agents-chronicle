@@ -1,15 +1,20 @@
-# A Chronicle hub for a team, with HTTPS and the team store (docs/docker.md):
+# An Interlatch hub for a team, with HTTPS and the team store (docs/docker.md):
 #   cp .env.example .env    # then fill it in
 #   docker compose up -d
 #   docker compose logs hub # the first admin's invite
 #
-# Caddy gets a certificate for CHRONICLE_DOMAIN (its DNS must point here, and ports 80 and 443 be open) and forwards
+# Caddy gets a certificate for INTERLATCH_DOMAIN (its DNS must point here, and ports 80 and 443 be open) and forwards
 # to the hub. The hub shares Caddy's network, so its dashboard listens on 127.0.0.1 and nothing but Caddy reaches it.
 # Postgres keeps the team store: what computers share, lessons merged across them, sent back to teammates.
 #
 # Caddy and Postgres are pinned to an exact version and digest, so the images can't change under you; Dependabot
 # moves them forward here (docs/docker.md#update). Keep your own changes in compose.override.yaml, which Compose
 # reads with this file, so a new copy of this one doesn't undo them.
+#
+# A .env written before Interlatch was renamed from Chronicle names its settings CHRONICLE_*: each one still counts
+# when its INTERLATCH_* name isn't set. The names below that stay "chronicle" (the project, so its volumes, and the
+# database and its user) are what a hub set up before the rename keeps its data under: changing them would start it
+# empty.
 name: chronicle
 
 services:
@@ -21,14 +26,16 @@ services:
       - "443:443"
       - "443:443/udp"
     environment:
-      CHRONICLE_DOMAIN: ${CHRONICLE_DOMAIN:?set CHRONICLE_DOMAIN in .env}
+      INTERLATCH_DOMAIN: ${INTERLATCH_DOMAIN:-${CHRONICLE_DOMAIN:?set INTERLATCH_DOMAIN in .env}}
+      # a Caddyfile from before the rename reads this name, and an update downloads only compose.yaml
+      CHRONICLE_DOMAIN: ${INTERLATCH_DOMAIN:-${CHRONICLE_DOMAIN:?set INTERLATCH_DOMAIN in .env}}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - caddy-data:/data
       - caddy-config:/config
 
   hub:
-    image: ghcr.io/chatixia-ai/chronicle-hub:${CHRONICLE_VERSION:-latest}
+    image: ghcr.io/chatixia-ai/interlatch-hub:${INTERLATCH_VERSION:-${CHRONICLE_VERSION:-latest}}
     restart: unless-stopped
     init: true
     network_mode: service:caddy
@@ -38,12 +45,12 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      CHRONICLE_HUB_URL: https://${CHRONICLE_DOMAIN}
-      CHRONICLE_HOST: 127.0.0.1
-      CHRONICLE_ADMIN_EMAIL: ${CHRONICLE_ADMIN_EMAIL:?set CHRONICLE_ADMIN_EMAIL in .env}
-      CHRONICLE_ADMIN_NAME: ${CHRONICLE_ADMIN_NAME:-}
-      CHRONICLE_HUB_NAME: ${CHRONICLE_HUB_NAME:-}
-      CHRONICLE_TEAM_STORE: postgres
+      INTERLATCH_HUB_URL: https://${INTERLATCH_DOMAIN:-${CHRONICLE_DOMAIN}}
+      INTERLATCH_HOST: 127.0.0.1
+      INTERLATCH_ADMIN_EMAIL: ${INTERLATCH_ADMIN_EMAIL:-${CHRONICLE_ADMIN_EMAIL:?set INTERLATCH_ADMIN_EMAIL in .env}}
+      INTERLATCH_ADMIN_NAME: ${INTERLATCH_ADMIN_NAME:-${CHRONICLE_ADMIN_NAME:-}}
+      INTERLATCH_HUB_NAME: ${INTERLATCH_HUB_NAME:-${CHRONICLE_HUB_NAME:-}}
+      INTERLATCH_TEAM_STORE: postgres
       PGHOST: postgres
       PGDATABASE: chronicle
       PGUSER: chronicle

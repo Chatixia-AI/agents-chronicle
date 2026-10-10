@@ -1,7 +1,7 @@
-"""Entry point of Chronicle.app's executable.
+"""Entry point of Interlatch.app's executable.
 
-The one binary is the app (no arguments) and the `chronicle` CLI (any arguments): Claude Code's hooks and
-MCP servers run it through ~/.claude-chronicle/bin/chronicle with a subcommand.
+The one binary is the app (no arguments) and the `interlatch` CLI (any arguments): Claude Code's hooks and
+MCP servers run it through the shim in ~/.interlatch/bin/ with a subcommand.
 """
 
 import sys
