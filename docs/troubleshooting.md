@@ -29,7 +29,8 @@ the DMG build always shows Chronicle.
 **The menu-bar icon doesn't show, though its switch is on.** The switch (**Settings › Status › Recording**) only
 puts the icon there; macOS decides where it appears:
 
-- With more than one display, look at each display's menu bar: macOS can show it on one and hide it on another.
+- Turned on from the dashboard of 0.21.0 or earlier, it can stay hidden: that version restarted the dashboard in a
+  way that left macOS hiding the icon. Restart the dashboard (last item) and it shows.
 - **System Settings › Menu Bar › Allow in the Menu Bar** lists a command-line install's dashboard by the Python it
   runs on (`python3.14`, say), not as Chronicle. Turn that entry on.
 - On a MacBook with a notch, icons that don't fit beside the notch are hidden. Quit an app with an icon you don't

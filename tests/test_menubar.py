@@ -471,3 +471,27 @@ def test_the_switch_works_only_from_this_computer(mac, monkeypatch):
         assert not r["started"] and "agents-chronicle[app]" in r["error"]
     finally:
         httpd.shutdown()
+
+
+def test_the_login_item_restarts_through_launchd(monkeypatch):
+    """Re-executed in place (same pid), the login item came back with its menu-bar icon hidden by macOS; a process
+    launchd starts afresh shows it. Elsewhere the dashboard still replaces itself in place."""
+    import os
+    import subprocess
+
+    from chronicle import install, update
+
+    started, execd = [], []
+    monkeypatch.setattr(subprocess, "Popen", lambda cmd, **kw: started.append((cmd, kw.get("start_new_session"))))
+    monkeypatch.setattr(os, "execv", lambda *a: execd.append(a))
+    monkeypatch.setattr("sys.platform", "darwin")
+    monkeypatch.setenv("XPC_SERVICE_NAME", install.UI_LABEL)
+    update.restart()
+    assert started == [(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{install.UI_LABEL}"], True)] and not execd
+    monkeypatch.delenv("XPC_SERVICE_NAME")  # a dashboard started in a terminal
+    update.restart()
+    assert len(started) == 1 and len(execd) == 1
+    monkeypatch.setenv("XPC_SERVICE_NAME", install.UI_LABEL)
+    monkeypatch.setattr("sys.platform", "linux")  # systemd: in place, as before
+    update.restart()
+    assert len(started) == 1 and len(execd) == 2

@@ -255,6 +255,15 @@ def no_real_background_agents(tmp_path_factory, monkeypatch):
         return real_run(cmd, *args, **kwargs)
 
     monkeypatch.setattr(subprocess, "run", run)
+    real_popen = subprocess.Popen
+
+    class Popen(real_popen):  # update.restart() asks launchd to restart the dashboard with a detached launchctl
+        def __init__(self, cmd, *args, **kwargs):
+            if isinstance(cmd, (list, tuple)) and cmd and Path(str(cmd[0])).name in ("launchctl", "systemctl"):
+                cmd = ["true"]
+            super().__init__(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "Popen", Popen)
 
 
 @pytest.fixture()
