@@ -195,6 +195,7 @@ line.
 | `uv tool install .` (a checkout) | `uv tool upgrade --reinstall interlatch`, offered when the checkout's files changed after the install; no network check |
 | `uv sync` / `uv run` in a checkout (editable) | Nothing: the card says **git pull to update** |
 | `pipx` or `pip` | `pipx upgrade interlatch` or `pip install --upgrade interlatch` |
+| `uv tool install agents-chronicle` or `pipx install agents-chronicle` (Chronicle's package) | Moves it to `interlatch` with the same extras, even at the same version: uv installs `interlatch` over it, uninstalls `agents-chronicle`, then installs `interlatch` again; pipx uninstalls, then installs ([Moving from Chronicle](moving-from-chronicle.md)) |
 | The desktop app | Nothing: **Download** opens the latest release to drag into Applications |
 
 Only **Check for updates** goes online (to pypi.org), or, if you turn on **Check for updates daily** on the same

@@ -33,6 +33,7 @@
 | `interlatch connect <client>` / `disconnect <client>` | `claude-desktop`、`cursor`、`windsurf`、`gemini` に MCP サーバーを追加／削除 |
 | `interlatch mcp [--print-config]` | MCP サーバーを実行（クライアントが起動します）、またはほかの MCP クライアント用の設定項目を出力 |
 | `interlatch status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
+| `interlatch migrate [--dry-run]` | Chronicle の環境を移行：`~/.claude-chronicle` を `~/.interlatch` に移し、フック、MCP サーバー、許可ルール、バックグラウンドエージェントを新しい名前にします。ダッシュボード、同期、`install`、アプリが始まるときに自動で行われます。`--dry-run` は何が変わるかを表示するだけです（[Chronicle からの移行](moving-from-chronicle.md)） |
 | `interlatch tailnet on\|off\|status [--anyone]` | Tailscale Serve でダッシュボードをスマートフォンやほかのデバイスから開けるようにする。通すのはあなたの Tailscale ログインだけ（`--anyone` で tailnet の全員）（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
 | `interlatch mirror [status]` / `mirror sync [--full]` | このアーカイブの Postgres へのコピー：書き込み先、テーブルごとの中身、最後の書き込みを表示。または今すぐ書き込む（`--full`：すべての行を書き直す）（[Postgres へのコピー](postgres.md)） |
 | `interlatch hub enable [--rotate]` | このコンピューターをほかのコンピューターのハブにする。ほかのコンピューターで実行する `interlatch hub join` のコマンドを表示 |

@@ -189,6 +189,7 @@ Browser**、**Connect Claude Code…**、**Open at Login**、**Install Command-L
 | `uv tool install .`（チェックアウトから） | インストール後にチェックアウトのファイルが変わったとき、`uv tool upgrade --reinstall interlatch`（ネットワーク確認なし） |
 | チェックアウトで `uv sync` / `uv run`（editable） | 実行しません。カードに **git pull to update** と表示されます |
 | `pipx` または `pip` | `pipx upgrade interlatch` または `pip install --upgrade interlatch` |
+| `uv tool install agents-chronicle` または `pipx install agents-chronicle`（Chronicle のパッケージ） | バージョンが同じでも、同じエクストラのまま `interlatch` に移します。uv では `interlatch` を上書きでインストールし、`agents-chronicle` をアンインストールしてから、`interlatch` をもう一度インストールします。pipx ではアンインストールしてからインストールします（[Chronicle からの移行](moving-from-chronicle.md)） |
 | デスクトップアプリ | 実行しません。**Download** で最新リリースを開き、アプリケーションフォルダにドラッグします |
 
 ネットワークに接続するのは **Check for updates**（pypi.org）だけです。同じカードの **Check for updates daily** をオンにすると、ダッシュボードを開いている間 1 日 1 回確認します。**Notify me about new versions**（`interlatch install` でも尋ねます）をオンにすると、ダッシュボードを開いていなくてもバックグラウンド同期が 1 日 1 回確認し、リリースごとに 1 回、アップデート方法を書いたデスクトップ通知を表示します（macOS は通知センター、Linux は `notify-send`）。macOS では通知を Interlatch の代わりに Script Editor が出すため、クリックすると Script Editor が開きます。アップデート先は通知の本文に書かれています。最後の結果は再起動後も残ります。アップデートが見つかると通知が表示され（リリースごと、チェックアウトなら新しいコミットごとに 1 回。**Later** で閉じられます）、Settings にドットが付き、ステータスバーに **Update to …** が出ます。チェックアウトの Updates カードには、再インストールで入るコミットと変更ファイルが並びます。

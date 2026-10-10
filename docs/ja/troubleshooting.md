@@ -99,6 +99,29 @@ ID でそのコンピューター専用の招待を作り（`interlatch hub invi
 前に置いている場合は、そのアドレスを `[server] trusted_proxies`（Docker では `INTERLATCH_TRUSTED_PROXIES`）に加えてください。
 そうしないと、ハブは訪問者を見分けられず、全員をそのプロキシとして数えます。
 
+## Chronicle からの移行
+
+移行で何が変わるかは[Chronicle からの移行](moving-from-chronicle.md)にあります。行った変更はすべて
+`~/.interlatch/logs/migrate.log` に記録され、`interlatch migrate --dry-run` でまだ残っている作業を確認できます。
+
+**データフォルダーが `~/.claude-chronicle` のまま。** 移行は、ダッシュボード、バックグラウンドの同期、`interlatch install`、
+アプリが始まるときに行われます。今すぐ行うには `interlatch migrate` を実行します。次の場合はフォルダーを移動しません。
+`CHRONICLE_HOME` か `INTERLATCH_HOME` が別のフォルダーを指しているとき（そう表示します）、`~/.interlatch` もすでにあるとき
+（Interlatch は `~/.interlatch` を使います。必要なものは自分で移してください）、マウントポイントである、別のディスクにある
+など、フォルダーの名前を変えるだけでは移せないとき。
+
+**エージェントに `mcp__chronicle__…` のツールが出る、または同じツールが 2 つずつ出る。** 1 つのプロジェクトだけに追加した
+サーバー（その `.mcp.json`、または `~/.claude.json` のプロジェクトごとのサーバー）は名前が変わりません。`chronicle` の項目の
+名前を `interlatch` に変えてください。エージェントは起動時に MCP サーバーを読み込むので、そのあと再起動します。プロジェクトで
+共有している `.claude/settings.json` の `mcp__chronicle__…` のルールも、書き換えるまでそのままです。移行は知らせるだけです。
+
+**`uv tool install interlatch` が「Executable already exists: chronicle」と言う。** `agents-chronicle` がまだ
+インストールされていて、コマンドの名前がぶつかっています。先に `uv tool uninstall agents-chronicle` を実行するか、
+両方を行う **設定 › Status › Updates** の **Update** を使ってください。
+
+**Update が `interlatch` への切り替えを提案しない。** チェックアウトや git の URL からのインストールは自動では切り替わりません。
+アンインストールしてから `interlatch` をインストールしてください（[Chronicle からの移行](moving-from-chronicle.md#アップデートする)）。
+
 ## 最初からやり直す
 
 `interlatch uninstall` はフック、バックグラウンドエージェント、MCP の登録を削除し、データは残します。

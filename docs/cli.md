@@ -33,6 +33,7 @@
 | `interlatch connect <client>` / `disconnect <client>` | Add or remove the MCP server in `claude-desktop`, `cursor`, `windsurf` or `gemini` |
 | `interlatch mcp [--print-config]` | Run the MCP server (clients start it), or print a config entry for any other MCP client |
 | `interlatch status` | Health: hooks, agents, MCP, queue, failures |
+| `interlatch migrate [--dry-run]` | Move a Chronicle setup over: `~/.claude-chronicle` to `~/.interlatch`, and hooks, MCP servers, permission rules and background agents to the new names. Runs by itself when the dashboard, the sync, `install` or the app starts; `--dry-run` shows what it would change ([Moving from Chronicle](moving-from-chronicle.md)) |
 | `interlatch tailnet on\|off\|status [--anyone]` | Open the dashboard on your phone and other devices through Tailscale Serve, to your Tailscale login only (`--anyone`: everyone in your tailnet) ([Phone and other computers](devices.md#your-phone)) |
 | `interlatch mirror [status]` / `mirror sync [--full]` | The copy of this archive in Postgres: where it is, what each table holds and the last write; or write it now (`--full`: every row again) ([A copy in Postgres](postgres.md)) |
 | `interlatch hub enable [--rotate]` | Make this computer the hub for your others; prints the `interlatch hub join` command to run on them |
