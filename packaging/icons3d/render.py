@@ -27,6 +27,11 @@ APP_ICON = ROOT / "packaging" / "macos" / "icon-3d.webp"
 ART_PX = 256  # shown at up to 112 CSS px, so 2x stays sharp
 
 
+
+class Quiet(http.server.SimpleHTTPRequestHandler):
+    def log_message(self, *args):  # no line per request
+        pass
+
 def render_all(specs: dict) -> dict[str, Image.Image]:
     if not (HERE / "blueprint-cast.js").exists():
         raise SystemExit("blueprint-cast.js is missing: see packaging/icons3d/README.md")
@@ -34,8 +39,7 @@ def render_all(specs: dict) -> dict[str, Image.Image]:
     sock.bind(("127.0.0.1", 0))
     port = sock.getsockname()[1]
     sock.close()
-    handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=str(HERE))
-    handler.log_message = lambda *a: None
+    handler = functools.partial(Quiet, directory=str(HERE))
     srv = http.server.ThreadingHTTPServer(("127.0.0.1", port), handler)
     threading.Thread(target=srv.serve_forever, daemon=True).start()
     out = {}

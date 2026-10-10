@@ -1,0 +1,205 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chronicle loading scenes</title></head>
+<body style="margin:0;background:#888">
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="blueprint-cast.js"></script>
+<script>
+// The other loops, same rig as filing.html. ?scene=sync|search|analyze|hero|team|editor. Each frame is a pure function of t in [0, LOOP).
+const Q = new URLSearchParams(location.search);
+const SCENE = Q.get('scene') || 'sync';
+const ASPECT = { hero: 1.46, team: 16 / 9 }[SCENE] || 7 / 3;
+const W = +(Q.get('w') || 1120), H = Math.round(W / ASPECT);
+THREE.ColorManagement.legacyMode = false;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight('#cfe4ff', '#0b1f3a', .8));
+const key = new THREE.DirectionalLight('#fff4e4', 1.35);
+key.position.set(3, 12, 6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: .5, far: 30 });
+scene.add(key);
+const rim = new THREE.DirectionalLight('#7cc7ff', .9); rim.position.set(-6, 5, -7); scene.add(rim);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: .2 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+const CAST = createBlueprintCast(scene, {});
+const { std, mesh, roundBox } = CAST.parts;
+const { clamp, sm, L, bump, back } = CAST.math;
+const P = (t, a, d) => sm((t - a) / d);
+const V = (x, y, z) => new THREE.Vector3(x, y, z);
+function wrap(obj) { const w = new THREE.Group(); scene.remove(obj); w.add(obj); scene.add(w); return w; }
+function place(w, [x, y, z], s, ry = 0) { w.position.set(x, y, z); w.scale.setScalar(s); w.rotation.y = ry; }
+function sparkSet(n, size = .07) {
+  const cols = ['#FFE27A', '#7CC7FF', '#FF9BC4', '#6FE3C1', '#C3A8FF'];
+  return Array.from({ length: n }, (_, i) => {
+    const s = new THREE.Mesh(new THREE.OctahedronGeometry(size), new THREE.MeshBasicMaterial({ color: cols[i % cols.length], toneMapped: false }));
+    s.userData.a = i / n * Math.PI * 2 + .3; scene.add(s); s.visible = false; return s;
+  });
+}
+function burst(sparks, t, t0, dur, at, spread = .75) { // sparkles fly out from a point and shrink away
+  const u = clamp((t - t0) / dur);
+  sparks.forEach((s, i) => {
+    const a = s.userData.a, r = .15 + sm(u) * spread;
+    s.position.set(at.x + Math.cos(a) * r, at.y + Math.sin(u * Math.PI) * .35 + Math.sin(a) * .2, at.z + Math.sin(a) * r * .5);
+    s.rotation.set(t * 4 + i, t * 3, 0);
+    const k = u > 0 && u < 1 ? Math.sin(u * Math.PI) : 0;
+    s.scale.setScalar(k * (.9 + (i % 3) * .25)); s.visible = k > .01;
+  });
+}
+function qarc(a, b, h, u) { const m = a.clone().lerp(b, .5); m.y += h; const p = a.clone().lerp(m, u), q = m.clone().lerp(b, u); return p.lerp(q, u); }
+function emissiveOf(group, pick) { const out = []; group.traverse((o) => { if (o.isMesh && o.material && !Array.isArray(o.material) && pick(o.material) && !out.includes(o.material)) out.push(o.material); }); return out; }
+
+const camera = new THREE.PerspectiveCamera(22, W / H, .1, 200);
+function aim(target, az = -6, pitch = 18, d = 8.4) {
+  const a = THREE.MathUtils.degToRad(az), p = THREE.MathUtils.degToRad(pitch);
+  camera.position.set(target[0] + d * Math.sin(a) * Math.cos(p), target[1] + d * Math.sin(p), target[2] + d * Math.cos(a) * Math.cos(p));
+  camera.lookAt(...target); camera.updateMatrixWorld();
+}
+
+const SCENES = {
+  // Sync: Pip pops out of the laptop, leaps up into the hub cloud, which puffs and glows.
+  sync() {
+    const LOOP = 3.2;
+    const laptop = wrap(CAST.object('laptop')); place(laptop, [-1.85, 0, 0], .82, .38);
+    const screenMats = emissiveOf(laptop, (m) => !!m.map);
+    screenMats.forEach((m) => { m.emissive = new THREE.Color('#7cc7ff'); m.emissiveMap = m.map; m.emissiveIntensity = 0; });
+    const cloud = wrap(CAST.object('cloud')); const CLOUD = [1.7, .5, -.55]; place(cloud, CLOUD, .62, -.3);
+    const cloudMats = emissiveOf(cloud, (m) => m.emissive && m.emissiveIntensity < .2);
+    const pip = wrap(CAST.character('pip', 'happy'));
+    const sparks = sparkSet(7);
+    const trail = sparkSet(6, .045);
+    const OUT = V(-1.75, .78, .05), DESK = V(-1.55, .17, .25), INTO = V(1.65, 1.15, -.35);
+    aim([-.05, 1.0, 0], -6, 16, 8.6);
+    return { LOOP, frame(t) {
+      // Pip comes out of the screen, lands on the desk, crouches, leaps, dives into the cloud
+      let pos, s = 1, sy = 1, tilt = 0;
+      if (t < .55) { const u = t / .55; pos = OUT.clone().lerp(DESK, sm(u)); pos.y += Math.sin(u * Math.PI) * .35; s = back(clamp(u / .7)); }
+      else if (t < .95) { pos = DESK.clone(); sy = 1 - bump(t, .55, .18) * .14 - bump(t, .72, .23) * .18; }
+      else if (t < 1.75) { const u = (t - .95) / .8; pos = qarc(DESK, INTO, .8, sm(u)); sy = 1 + Math.sin(u * Math.PI) * .1; tilt = L(.25, -.35, u); }
+      else { const u = clamp((t - 1.75) / .28); pos = INTO.clone(); pos.y -= u * .15; s = 1 - sm(u); tilt = -.35; }
+      place(pip, [pos.x, pos.y, pos.z], .62 * s, -.35);
+      pip.scale.y *= sy; pip.rotation.z = tilt; pip.visible = s > .002;
+      // a fading trail of dots along the leap
+      trail.forEach((d, i) => {
+        const tt = t - .06 * (i + 1), u = (tt - .95) / .8;
+        const on = u > 0 && u < 1 && t < 1.95;
+        d.visible = on; if (!on) return;
+        d.position.copy(qarc(DESK, INTO, .8, sm(u))).add(V(0, .3, 0));
+        d.scale.setScalar((1 - i / trail.length) * .9 * (1 - P(t, 1.7, .25)));
+      });
+      // the screen flashes as Pip leaves; the cloud squashes, glows and bobs
+      screenMats.forEach((m) => { m.emissiveIntensity = (1 - P(t, .05, .5)) * P(t, 0, .05) * .6 + bump(t, 2.9, .3) * .25; });
+      const glow = P(t, 1.8, .25) * (1 - P(t, 2.35, .6));
+      cloudMats.forEach((m) => { m.emissiveIntensity = .08 + glow * 1.1; });
+      const bob = Math.sin(t / LOOP * Math.PI * 2) * .05;
+      place(cloud, [CLOUD[0], CLOUD[1] + bob + bump(t, 1.8, .5) * .12, CLOUD[2]], .62, -.3);
+      cloud.scale.y *= 1 - bump(t, 1.76, .2) * .12 + bump(t, 1.95, .35) * .06;
+      cloud.scale.x *= 1 + bump(t, 1.76, .2) * .06;
+      burst(sparks, t, 1.82, .7, V(INTO.x, INTO.y + .2, INTO.z + .3));
+      renderer.render(scene, camera);
+    } };
+  },
+
+  // Search: a magnifier sweeps down Dex's log scroll, a line lights up, Dex cheers.
+  search() {
+    const LOOP = 3.6;
+    const scroll = wrap(CAST.object('log')); place(scroll, [-.55, 0, 0], 1.0, .12);
+    const dex = wrap(CAST.character('dex', 'happy')); const DEX = [1.65, 0, .2];
+    const mag = wrap(CAST.object('magnifier'));
+    const sparks = sparkSet(6, .06);
+    // the scroll's rows, from its own builder: sheet 1.6 tall centred at y 1.15, rows at 14 % steps
+    const rowY = (i) => 1.95 - 1.6 * (.14 + .14 * i) + .035;
+    const band = new THREE.Mesh(new THREE.PlaneGeometry(1.18, .17), new THREE.MeshBasicMaterial({ color: '#FFD23F', transparent: true, opacity: 0, depthWrite: false }));
+    band.position.set(0, rowY(2), .012); scroll.children[0].add(band);
+    const MS = .5, LX = -.1 * MS, LY = 1.8 * MS; // lens centre inside the magnifier
+    // where the lens goes: across row 0, back along row 1, onto row 2, where it stops
+    const left = -.95, right = -.15, z = .55;
+    const path = [[0, left, rowY(0)], [.55, right, rowY(0)], [.8, right, rowY(1)], [1.35, left, rowY(1)], [1.6, left, rowY(2)], [2.0, -.48, rowY(2)], [2.9, -.48, rowY(2)], [3.6, left, rowY(0)]];
+    function lensAt(t) {
+      let k = 0; while (k < path.length - 2 && t > path[k + 1][0]) k++;
+      const a = path[k], b = path[k + 1], u = sm((t - a[0]) / (b[0] - a[0]));
+      return [L(a[1], b[1], u), L(a[2], b[2], u)];
+    }
+    aim([.45, 1.0, 0], -4, 14, 7.4);
+    return { LOOP, frame(t) {
+      const [lx, ly] = lensAt(t);
+      const found = P(t, 2.0, .25) * (1 - P(t, 2.85, .45));
+      place(mag, [lx - LX, ly - LY, z], MS * (1 + bump(t, 2.0, .3) * .08), .1);
+      mag.rotation.z = Math.sin(t / LOOP * Math.PI * 4) * .04;
+      band.material.opacity = found * .5;
+      // Dex watches the lens, then hops when the line lights up
+      const look = clamp((lx + .55) * .6, -.35, .35);
+      place(dex, [DEX[0], bump(t, 2.05, .45) * .5 + bump(t, 2.5, .3) * .18, DEX[2]], .66, -.35 + look * .3);
+      dex.rotation.z = bump(t, 2.05, .45) * -.12 + bump(t, 2.5, .3) * .1;
+      dex.scale.y *= 1 - bump(t, 1.95, .14) * .12 + bump(t, 2.1, .3) * .05;
+      burst(sparks, t, 2.05, .65, V(-.45, rowY(2) - .2, .45), .6);
+      renderer.render(scene, camera);
+    } };
+  },
+
+  // Analyze: Tink tosses pages to Lumi, who catches each one and glows. Two tosses a loop.
+  analyze() {
+    const LOOP = 3.2, HALF = LOOP / 2;
+    const tink = wrap(CAST.character('tink', 'happy')); const TINK = [-1.55, 0, .1];
+    const lumi = wrap(CAST.character('lumi', 'happy')); const LUMI = [1.3, 0, -.35];
+    const orbMats = emissiveOf(lumi, (m) => m.clearcoat === 1 && m.emissive);
+    const docs = [0, 1].map(() => wrap(CAST.object('document')));
+    const sparks = [sparkSet(5, .06), sparkSet(5, .06)];
+    const HAND = V(-.9, 1.15, .35), ORB = V(1.3, .62 * 1.35 + .05, -.1);
+    aim([-.1, .95, 0], -5, 16, 7.6);
+    return { LOOP, frame(t) {
+      let tinkY = 0, tinkSq = 0, lumiY = 0, lumiSq = 0, glow = 0;
+      docs.forEach((d, i) => {
+        const ph = (t - i * HALF + LOOP) % LOOP; // this page's own clock
+        const appear = clamp(ph / .25), fly = clamp((ph - .3) / .85), gone = clamp((ph - 1.15) / .2);
+        const on = ph < 1.4;
+        d.visible = on && (1 - gone) > .002;
+        if (on) {
+          const p = fly > 0 ? qarc(HAND, ORB, 1.0, sm(fly)) : HAND.clone();
+          const s = .36 * back(appear) * (1 - sm(gone)) * (1 - fly * .3);
+          place(d, [p.x, p.y - .55 * s / .36, p.z], s, Math.sin(fly * Math.PI) * .5);
+          d.rotation.z = Math.sin(fly * Math.PI * 2) * .35 - fly * .2;
+        }
+        tinkY += bump(ph, .22, .3) * .24; tinkSq += bump(ph, .18, .16);
+        lumiY += bump(ph, 1.18, .45) * .2; lumiSq += bump(ph, 1.1, .16);
+        glow = Math.max(glow, P(ph, 1.12, .12) * (1 - P(ph, 1.3, .4)));
+        burst(sparks[i], ph, 1.15, .55, ORB.clone().add(V(0, .1, .3)), .55);
+      });
+      place(tink, [TINK[0], tinkY, TINK[2]], .66, .45);
+      tink.scale.y *= 1 - tinkSq * .1;
+      place(lumi, [LUMI[0], lumiY + Math.sin(t / LOOP * Math.PI * 4) * .05, LUMI[2]], .62, -.4);
+      lumi.scale.y *= 1 - lumiSq * .08;
+      orbMats.forEach((m) => { m.emissiveIntensity = .35 + glow * 1.6; });
+      renderer.render(scene, camera);
+    } };
+  },
+};
+
+</script>
+<script src="scenes-more.js"></script>
+<script>
+// only a scene this page defines: the name from the URL is compared, never used to call a method
+function pick(name) {
+  switch (name) {
+    case 'sync': return SCENES.sync();
+    case 'search': return SCENES.search();
+    case 'analyze': return SCENES.analyze();
+    case 'hero': return SCENES.hero();
+    case 'team': return SCENES.team();
+    case 'editor': return SCENES.editor();
+    default: throw new Error(`Unknown scene: ${name}`);
+  }
+}
+const S = pick(SCENE);
+window.LOOP = S.LOOP;
+window.renderFrame = (t) => { CAST.setTime(t); S.frame(((t % S.LOOP) + S.LOOP) % S.LOOP); return renderer.domElement.toDataURL('image/png'); };
+window.ready = true;
+if (!navigator.webdriver) { const t0 = performance.now(); (function tick() { const t = (performance.now() - t0) / 1000; CAST.setTime(t); S.frame(t % S.LOOP); requestAnimationFrame(tick); })(); }
+</script>
+</body></html>

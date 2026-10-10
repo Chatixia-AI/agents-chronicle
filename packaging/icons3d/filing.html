@@ -1,0 +1,173 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Chronicle loading animation</title></head>
+<body style="margin:0;background:#888">
+<script src="https://cdn.jsdelivr.net/npm/three@0.149.0/build/three.min.js"></script>
+<script src="blueprint-cast.js"></script>
+<script>
+// "Filing a session": Pip hops in, dives into the open Knowledge book, the pages glow and one turns, Lumi bounces.
+// Everything is a pure function of t in [0, LOOP), so frame LOOP equals frame 0.
+const LOOP = 3.2;
+const W = +(new URLSearchParams(location.search).get('w') || 1120), H = Math.round(W * 3 / 7);
+THREE.ColorManagement.legacyMode = false;
+const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(1); renderer.setSize(W, H); renderer.setClearColor(0x000000, 0);
+renderer.toneMapping = THREE.ACESFilmicToneMapping; renderer.toneMappingExposure = 1.08;
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+const scene = new THREE.Scene();
+scene.add(new THREE.HemisphereLight('#cfe4ff', '#0b1f3a', .8));
+const key = new THREE.DirectionalLight('#fff4e4', 1.35);
+key.position.set(3, 12, 6); key.castShadow = true;
+key.shadow.mapSize.set(2048, 2048); key.shadow.bias = -0.0004; key.shadow.normalBias = 0.02;
+Object.assign(key.shadow.camera, { left: -6, right: 6, top: 6, bottom: -6, near: .5, far: 30 });
+scene.add(key);
+const rim = new THREE.DirectionalLight('#7cc7ff', .9); rim.position.set(-6, 5, -7); scene.add(rim);
+const ground = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), new THREE.ShadowMaterial({ opacity: .2 }));
+ground.rotation.x = -Math.PI / 2; ground.receiveShadow = true; scene.add(ground);
+
+const CAST = createBlueprintCast(scene, {});
+const { glossy, std, mesh, roundBox } = CAST.parts;
+const { clamp, sm, L, bump } = CAST.math;
+const P = (t, a, d) => sm((t - a) / d);
+
+// ---------- the open book (same build as the Knowledge icon, with handles for the glow and the turning page)
+function linesTex(side, paper) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 358; const x = c.getContext('2d');
+  if (paper) { x.fillStyle = '#FBF6EC'; x.fillRect(0, 0, c.width, c.height); }
+  const cols = side < 0 ? ['#2F7FD0', '#5D86B6', '#5D86B6', '#E8902A', '#5D86B6', '#5D86B6', '#22A884']
+    : ['#7458E0', '#5D86B6', '#5D86B6', '#5D86B6', '#2F7FD0', '#5D86B6', '#5D86B6'];
+  const w = c.width, h = c.height;
+  cols.forEach((col, i) => {
+    x.fillStyle = col;
+    const wd = i === 0 ? .5 : [.82, .74, .86, .6, .78, .7][(i + (side > 0 ? 2 : 0)) % 6];
+    x.beginPath(); x.roundRect(w * .06, h * (.08 + i * .125), w * wd, h * (i === 0 ? .06 : .04), h * .02); x.fill();
+  });
+  const t = new THREE.CanvasTexture(c); t.encoding = THREE.sRGBEncoding; return t;
+}
+const glowMats = [];
+function glowMat(map, opts = {}) {
+  const m = new THREE.MeshStandardMaterial({ map, emissive: '#8fd0ff', emissiveMap: map, emissiveIntensity: 0, roughness: .5, ...opts });
+  glowMats.push(m); return m;
+}
+const book = new THREE.Group(); scene.add(book);
+const cover = glossy('#4FC9A8'), paper = std('#FBF6EC', { roughness: .6 });
+const SIDES = {};
+[-1, 1].forEach((side) => {
+  const half = new THREE.Group();
+  const c = mesh(roundBox(1.25, 1.7, .08, .08, .03), cover); c.rotation.x = -Math.PI / 2; c.position.set(side * .64, 0, .85); half.add(c);
+  const pages = mesh(roundBox(1.12, 1.56, .16, .03, .02), paper); pages.rotation.x = -Math.PI / 2; pages.position.set(side * .6, .1, .78); half.add(pages);
+  const tex = linesTex(side, false);
+  const lines = new THREE.Mesh(new THREE.PlaneGeometry(1.0, 1.4), glowMat(tex, { transparent: true }));
+  lines.rotation.x = -Math.PI / 2; lines.position.set(side * .6, .185, 0); half.add(lines);
+  half.rotation.z = side * .14; half.position.y = .12; book.add(half);
+  SIDES[side] = half;
+});
+const spine = mesh(new THREE.CylinderGeometry(.09, .09, 1.7, 20), cover); spine.rotation.x = Math.PI / 2; spine.position.set(0, .06, 0); book.add(spine);
+const ribbon = mesh(new THREE.BoxGeometry(.12, .02, .9), std('#FFB45E')); ribbon.position.set(.16, .2, .95); ribbon.rotation.x = .35; book.add(ribbon);
+// the turning page: hinged at the spine, right-page lines on its face and left-page lines on its back
+const hinge = new THREE.Group(); hinge.position.set(0, .12 + .19, 0); book.add(hinge);
+const pageW = 1.12, pageD = 1.5;
+const front = new THREE.Mesh(new THREE.PlaneGeometry(pageW, pageD), glowMat(linesTex(1, true)));
+front.rotation.x = -Math.PI / 2; front.position.x = pageW / 2 + .02; hinge.add(front);
+const backTex = linesTex(-1, true); backTex.wrapS = THREE.RepeatWrapping; backTex.repeat.x = -1; backTex.offset.x = 1;
+const back = new THREE.Mesh(new THREE.PlaneGeometry(pageW, pageD), glowMat(backTex));
+back.rotation.x = Math.PI / 2; back.position.x = pageW / 2 + .02; back.position.y = -.002; hinge.add(back);
+[front, back].forEach((m) => { m.castShadow = true; });
+
+// ---------- the cast
+const pip = CAST.character('pip', 'happy');
+const pipWrap = new THREE.Group(); scene.remove(pip); pipWrap.add(pip); scene.add(pipWrap);
+const lumi = CAST.character('lumi', 'happy');
+const lumiWrap = new THREE.Group(); scene.remove(lumi); lumiWrap.add(lumi); scene.add(lumiWrap);
+const PIP_S = .74, LUMI_S = .66;
+
+// sparkles where Pip lands
+const SPARK_COLS = ['#FFE27A', '#7CC7FF', '#FF9BC4', '#6FE3C1', '#C3A8FF', '#FFE27A', '#7CC7FF'];
+const sparks = SPARK_COLS.map((col, i) => {
+  const s = new THREE.Mesh(new THREE.OctahedronGeometry(.07), new THREE.MeshBasicMaterial({ color: col, toneMapped: false }));
+  s.userData.a = i / SPARK_COLS.length * Math.PI * 2 + .3; scene.add(s); return s;
+});
+
+// ---------- timeline
+const START = [-2.8, 0], RUN_END = [-1.45, 0], LAND = [-.62, .36];
+const HOPS = 3, RUN_T = [0.05, 1.3], JUMP_T = [1.3, 1.82], SINK_T = [1.82, 2.12];
+function pipAt(t) {
+  let x, y, s = 1, sy = 1, tilt = 0, ry = .55;
+  const pop = clamp((t - 0) / .35); // appears with a soft pop
+  const popS = pop < 1 ? CAST.math.back(pop) : 1;
+  if (t < RUN_T[1]) {
+    const u = clamp((t - RUN_T[0]) / (RUN_T[1] - RUN_T[0]));
+    x = L(START[0], RUN_END[0], u);
+    const hp = (u * HOPS) % 1; // each hop: crouch, lift, land
+    y = Math.sin(hp * Math.PI) * .32;
+    sy = 1 + Math.sin(hp * Math.PI) * .06 - (hp < .12 || hp > .9 ? .1 : 0);
+    tilt = -.12;
+    s = popS;
+  } else if (t < JUMP_T[1]) {
+    const u = (t - JUMP_T[0]) / (JUMP_T[1] - JUMP_T[0]), e = sm(u);
+    x = L(RUN_END[0], LAND[0], e);
+    y = L(RUN_END[1], LAND[1], e) + Math.sin(u * Math.PI) * 1.05;
+    sy = 1 + Math.sin(u * Math.PI) * .1;
+    tilt = L(-.2, .25, u);
+  } else {
+    const u = clamp((t - SINK_T[0]) / (SINK_T[1] - SINK_T[0]));
+    x = LAND[0]; y = LAND[1] - u * .25;
+    sy = 1 - bump(t, SINK_T[0], .16) * .16;
+    s = 1 - sm(u);
+    tilt = .25 * (1 - u);
+  }
+  return { x, y, s, sy, tilt, ry };
+}
+
+function frame(t) {
+  t = ((t % LOOP) + LOOP) % LOOP;
+  CAST.setTime(t);
+  // Pip
+  const p = pipAt(t);
+  pipWrap.position.set(p.x, p.y, .15);
+  pipWrap.rotation.set(0, p.ry, p.tilt * -1);
+  pipWrap.scale.set(PIP_S * p.s, PIP_S * p.s * p.sy, PIP_S * p.s);
+  pipWrap.visible = p.s > .002;
+  // sparkles burst from the landing point
+  const sp = clamp((t - 1.84) / .7);
+  sparks.forEach((s, i) => {
+    const a = s.userData.a, r = .2 + sm(sp) * .75;
+    s.position.set(LAND[0] + Math.cos(a) * r, LAND[1] + .25 + Math.sin(sp * Math.PI) * .45 + Math.sin(a) * .18, .1 + Math.sin(a) * r * .5);
+    s.rotation.set(t * 4 + i, t * 3, 0);
+    const k = sp > 0 && sp < 1 ? Math.sin(sp * Math.PI) : 0;
+    s.scale.setScalar(k * (.9 + (i % 3) * .25));
+    s.visible = k > .01;
+  });
+  // the pages glow as the session goes in, then settle
+  const glow = P(t, 1.85, .35) * (1 - P(t, 2.55, .55));
+  glowMats.forEach((m) => { m.emissiveIntensity = glow * .85; });
+  // one page turns, right to left; it lies flush on a page at both ends, so the loop never shows a jump
+  const turn = P(t, 2.08, .72);
+  hinge.rotation.z = L(.14, Math.PI - .14, turn);
+  hinge.position.y = .12 + .19 + Math.sin(turn * Math.PI) * .02;
+  // Lumi floats behind the book: a slow bob that divides the loop, and a happy bounce when the pages glow
+  const bob = Math.sin(t / LOOP * Math.PI * 4) * .06;
+  const hop = bump(t, 1.95, .5) * .28;
+  lumiWrap.position.set(1.95, bob + hop, -.75);
+  lumiWrap.rotation.set(0, -.42 + bump(t, 1.95, .7) * .12, bump(t, 1.95, .5) * .06);
+  lumiWrap.scale.set(LUMI_S, LUMI_S * (1 + bump(t, 1.88, .22) * -.08 + bump(t, 2.1, .3) * .05), LUMI_S);
+  renderer.render(scene, camera);
+}
+
+// camera: fixed three-quarter view, everything in frame
+const camera = new THREE.PerspectiveCamera(22, W / H, .1, 200);
+(function place() {
+  const az = THREE.MathUtils.degToRad(-6), pitch = THREE.MathUtils.degToRad(18), d = 8.4;
+  const c = new THREE.Vector3(-.5, .72, 0);
+  camera.position.set(c.x + d * Math.sin(az) * Math.cos(pitch), c.y + d * Math.sin(pitch), c.z + d * Math.cos(az) * Math.cos(pitch));
+  camera.lookAt(c); camera.updateMatrixWorld();
+})();
+
+window.LOOP = LOOP;
+window.renderFrame = (t) => { frame(t); return renderer.domElement.toDataURL('image/png'); };
+window.ready = true;
+if (!navigator.webdriver) { const t0 = performance.now(); (function tick() { frame((performance.now() - t0) / 1000); requestAnimationFrame(tick); })(); }
+</script>
+</body></html>
