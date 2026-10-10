@@ -184,10 +184,19 @@ const SCENES = {
 </script>
 <script src="scenes-more.js"></script>
 <script>
-// only a scene this page defines: the name from the URL picks from a Map, it is never called as a property
-const build = new Map(Object.entries(SCENES)).get(SCENE);
-if (typeof build !== 'function') throw new Error(`Unknown scene: ${SCENE}`);
-const S = build();
+// only a scene this page defines: the name from the URL is compared, never used to call a method
+function pick(name) {
+  switch (name) {
+    case 'sync': return SCENES.sync();
+    case 'search': return SCENES.search();
+    case 'analyze': return SCENES.analyze();
+    case 'hero': return SCENES.hero();
+    case 'team': return SCENES.team();
+    case 'editor': return SCENES.editor();
+    default: throw new Error(`Unknown scene: ${name}`);
+  }
+}
+const S = pick(SCENE);
 window.LOOP = S.LOOP;
 window.renderFrame = (t) => { CAST.setTime(t); S.frame(((t % S.LOOP) + S.LOOP) % S.LOOP); return renderer.domElement.toDataURL('image/png'); };
 window.ready = true;
