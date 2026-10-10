@@ -1,4 +1,4 @@
-# Chronicle 3D art
+# Interlatch 3D art
 
 The 3D icons on the dashboard (page headers, Home tiles, empty states) and the app icon are rendered with the
 [Chatixia Studio](https://studio.chatixia.net) Blueprint Cast, the same characters, objects, materials and light rig as
@@ -8,9 +8,9 @@ theme colour and stay sharp at 14–20 px, where a render can't.
 - `art.json`: what to render. Keys become `src/chronicle/web/art-<key>.webp`; `app-icon` becomes
   `packaging/macos/icon-3d.webp`. A spec names a cast object (`obj`), a character (`char`, `mood`) or one of the
   members in `members.js` (`custom`), plus optional camera `az`, `pitch` and `pad`.
-- `members.js`: Chronicle's own members built from the cast's parts: the open book (Knowledge) and the 3D emblem.
+- `members.js`: Interlatch's own members built from the cast's parts: the open book (Knowledge) and the 3D emblem.
 - `render.html`: the studio light rig on a transparent background. `render.py` drives it in headless Chromium.
-- `filing.html`, `scenes.html` and `scenes-more.js`: short looping scenes of the cast doing Chronicle's work, each a
+- `filing.html`, `scenes.html` and `scenes-more.js`: short looping scenes of the cast doing Interlatch's work, each a
   pure function of time: filing a session, syncing, searching, analyzing, the editor, the website's hero (Tink) and
   team scenes. `loops.json` lists each one's page, render size, output size and still frame; `loops.py` renders them at
   24 fps and writes `out/<scene>.webp` (16 fps, about 100–330 KB) and `out/<scene>-still.webp`. The website

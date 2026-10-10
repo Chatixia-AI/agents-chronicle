@@ -1,8 +1,8 @@
-"""Export Chronicle's committed 3D artwork to app, dashboard, favicon and phone icons.
+"""Export Interlatch's committed 3D artwork to app, dashboard, favicon and phone icons.
 
 The artwork, icon-3d.webp, is rendered by packaging/icons3d/render.py.
 
-Pillow writes the PNGs on any platform; macOS's iconutil also writes Chronicle.icns.
+Pillow writes the PNGs on any platform; macOS's iconutil also writes Chronicle.icns (Interlatch.app's icon).
 
     uv run --group build python packaging/macos/make_icon.py
 """
@@ -50,7 +50,7 @@ def write_web_icons(icon: Image.Image) -> None:
 def main() -> None:
     icon = load_icon()
     icon.save(HERE / "icon.png", optimize=True)
-    # the dashboard's touch icon, and the Dock icon when the app runs from source (Chronicle.app uses the .icns)
+    # the dashboard's touch icon, and the Dock icon when the app runs from source (Interlatch.app uses the .icns)
     icon.resize((256, 256), Image.Resampling.LANCZOS).save(WEB / "icon.png", optimize=True)
     icon.resize((32, 32), Image.Resampling.LANCZOS).save(WEB / "favicon.png", optimize=True)
     write_web_icons(icon)

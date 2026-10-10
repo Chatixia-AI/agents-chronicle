@@ -29,7 +29,8 @@ jobs:
       - run: uv run --locked pytest -q
 
   postgres:
-    # The team store and the mirror against a real Postgres: their tests skip without one (CHRONICLE_TEST_PG)
+    # The team store and the mirror against a real Postgres: their tests skip without one (INTERLATCH_TEST_PG; set
+    # under its name before the rename too, CHRONICLE_TEST_PG, which a branch from before it reads)
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -50,7 +51,8 @@ jobs:
         run: |
           printf 'PGHOST=127.0.0.1\nPGPORT=5432\nPGDATABASE=chronicle\nPGUSER=chronicle\nPGPASSWORD=chronicle\nPGSSLMODE=disable\n' > "$RUNNER_TEMP/pg.env"
           chmod 600 "$RUNNER_TEMP/pg.env"
-          CHRONICLE_TEST_PG="$RUNNER_TEMP/pg.env" uv run --locked --extra postgres pytest -q -rs tests/test_team.py tests/test_mirror.py | tee "$RUNNER_TEMP/pytest.out"
+          INTERLATCH_TEST_PG="$RUNNER_TEMP/pg.env" CHRONICLE_TEST_PG="$RUNNER_TEMP/pg.env" \
+            uv run --locked --extra postgres pytest -q -rs tests/test_team.py tests/test_mirror.py | tee "$RUNNER_TEMP/pytest.out"
           if grep -q skipped "$RUNNER_TEMP/pytest.out"; then
             echo "::error::a Postgres test was skipped"
             exit 1
@@ -87,17 +89,17 @@ jobs:
       - name: Build the hub's image from this checkout
         run: |
           uv build --wheel -o docker/wheels
-          docker build -t chronicle-hub:ci docker
+          docker build -t interlatch-hub:ci docker
       - name: It refuses to start without an admin
         run: |
-          if docker run --rm -e CHRONICLE_HUB_URL=https://hub.example.com chronicle-hub:ci; then
+          if docker run --rm -e INTERLATCH_HUB_URL=https://hub.example.com interlatch-hub:ci; then
             echo "::error::the hub started without an admin"
             exit 1
           fi
       - name: With one, it becomes healthy and asks everyone to sign in
         run: |
-          docker run -d --name hub -p 127.0.0.1:11524:11524 -e CHRONICLE_HUB_URL=https://hub.example.com \
-            -e CHRONICLE_ADMIN_EMAIL=ada@example.com chronicle-hub:ci
+          docker run -d --name hub -p 127.0.0.1:11524:11524 -e INTERLATCH_HUB_URL=https://hub.example.com \
+            -e INTERLATCH_ADMIN_EMAIL=ada@example.com interlatch-hub:ci
           for _ in $(seq 1 45); do
             [ "$(docker inspect -f '{{.State.Health.Status}}' hub)" = healthy ] && break
             sleep 2
@@ -105,7 +107,7 @@ jobs:
           docker logs hub
           docker inspect -f '{{.State.Health.Status}}' hub | grep -qx healthy
           docker logs hub | grep -q '/signin?code='
-          docker logs hub | grep -q 'Chronicle hub is up: https://hub.example.com'
+          docker logs hub | grep -q 'Interlatch hub is up: https://hub.example.com'
           if docker logs hub 2>&1 | grep -q '127.0.0.1'; then  # an editor on the server would forward it
             echo "::error::the hub's log names 127.0.0.1"
             exit 1
@@ -115,3 +117,21 @@ jobs:
             echo "::error::/api/people answered $code without a sign-in"
             exit 1
           fi
+      - name: A hub set up before the rename, with CHRONICLE_* variables, starts the same way
+        run: |
+          docker run -d --name old -e CHRONICLE_HUB_URL=https://old.example.com -e CHRONICLE_ADMIN_EMAIL=ada@example.com \
+            interlatch-hub:ci
+          for _ in $(seq 1 45); do
+            [ "$(docker inspect -f '{{.State.Health.Status}}' old)" = healthy ] && break
+            sleep 2
+          done
+          docker logs old
+          docker inspect -f '{{.State.Health.Status}}' old | grep -qx healthy
+          docker logs old | grep -q 'hub is up: https://old.example.com'
+      - name: compose.yaml reads a .env from before the rename, and keeps that hub's volumes
+        run: |
+          printf 'CHRONICLE_DOMAIN=old.example.com\nCHRONICLE_ADMIN_EMAIL=ada@example.com\nPOSTGRES_PASSWORD=x\n' > "$RUNNER_TEMP/old.env"
+          docker compose -f docker/compose.yaml --env-file "$RUNNER_TEMP/old.env" config > "$RUNNER_TEMP/compose.yaml"
+          grep -q 'INTERLATCH_HUB_URL: https://old.example.com' "$RUNNER_TEMP/compose.yaml"
+          grep -q 'CHRONICLE_DOMAIN: old.example.com' "$RUNNER_TEMP/compose.yaml"  # what that hub's Caddyfile reads
+          grep -q 'name: chronicle_hub-data' "$RUNNER_TEMP/compose.yaml"

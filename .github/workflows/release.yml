@@ -3,12 +3,17 @@ name: Release
 # Releasing is one button: Actions → Release → Run workflow on main, and pick patch, minor or major. The version
 # lives in the git tags (hatch-vcs), so nothing is committed first. The run works out the next version from the
 # latest vX.Y.Z tag, runs the tests, creates the tag and the GitHub release (its notes are the changelog.d/ files
-# added since the previous tag), publishes agents-chronicle to PyPI (trusted publishing, no token), publishes the hub's
-# image ghcr.io/chatixia-ai/chronicle-hub (docker/, built from that PyPI release), attaches Chronicle-X.Y.Z-arm64.dmg,
-# and opens a pull request that moves those files' lines into CHANGELOG.md under "## X.Y.Z (date)". The next release
-# doesn't wait for that pull request: a file merged after the tag is simply new since it.
+# added since the previous tag), publishes interlatch to PyPI (trusted publishing, no token) and then agents-chronicle
+# at the same version (its name before the rename, which installs interlatch: packaging/agents-chronicle-farewell),
+# publishes the hub's image ghcr.io/chatixia-ai/interlatch-hub (docker/, built from that PyPI release; also as
+# chronicle-hub, its name before the rename), attaches Interlatch-X.Y.Z-arm64.dmg, and opens a pull request that moves
+# those files' lines into CHANGELOG.md under "## X.Y.Z (date)". The next release doesn't wait for that pull request: a
+# file merged after the tag is simply new since it.
 # "dry run" (the default) runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
 # Publishing a release tagged vX.Y.Z on GitHub by hand runs the same tests, PyPI and DMG jobs.
+#
+# PyPI takes each package only from the trusted publisher it lists for it: this repository, release.yml and the
+# environment pypi, for interlatch and for agents-chronicle alike.
 #
 # The DMG is signed and notarized when these repository secrets exist, otherwise it is ad-hoc signed:
 #   MACOS_CERT_P12            base64 of the "Developer ID Application" certificate + key (.p12)
@@ -66,7 +71,7 @@ jobs:
             VERSION=$(python3 packaging/release.py next "$BUMP")
             echo "version=$VERSION" >> "$GITHUB_OUTPUT"
             echo "create=true" >> "$GITHUB_OUTPUT"
-            echo "Releasing Chronicle **$VERSION** ($BUMP)" >> "$GITHUB_STEP_SUMMARY"
+            echo "Releasing Interlatch **$VERSION** ($BUMP)" >> "$GITHUB_STEP_SUMMARY"
           fi
 
   test:
@@ -83,6 +88,8 @@ jobs:
         with:
           enable-cache: false  # a release never restores a cache another run could have written
       - run: uv run --locked pytest -q
+      - name: agents-chronicle builds (the farewell job publishes it)
+        run: uv build packaging/agents-chronicle-farewell -o "$RUNNER_TEMP/farewell"
 
   release:
     needs: [plan, test]
@@ -102,7 +109,7 @@ jobs:
         run: |
           python3 packaging/release.py notes "$VERSION" > "$RUNNER_TEMP/notes.md"
           gh release create "v$VERSION" --repo "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
-            --title "Chronicle $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
+            --title "Interlatch $VERSION" --notes-file "$RUNNER_TEMP/notes.md"
 
   pypi:
     needs: [plan, test, release]
@@ -130,10 +137,53 @@ jobs:
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           ls dist
+          if [ ! -f "dist/interlatch-$VERSION-py3-none-any.whl" ]; then
+            echo "::error::The build is not version $VERSION"
+            exit 1
+          fi
+      - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
+
+  farewell:
+    # agents-chronicle, Interlatch's name before the rename, at the same version: it installs interlatch, so a copy
+    # installed under that name keeps updating, and one from before the rename (which asks PyPI about agents-chronicle)
+    # sees the release. Published after interlatch, so it never names a version PyPI doesn't have.
+    needs: [plan, pypi]
+    if: ${{ !cancelled() && needs.pypi.result == 'success' }}
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      contents: read   # checkout
+      id-token: write  # OIDC for PyPI trusted publishing
+    env:
+      VERSION: ${{ needs.plan.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          ref: v${{ needs.plan.outputs.version }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+        with:
+          enable-cache: false  # a release never restores a cache another run could have written
+      - name: Build agents-chronicle at the release's version, pinned to the same interlatch
+        run: |
+          sed -i "s/0\.0\.0/$VERSION/g" packaging/agents-chronicle-farewell/pyproject.toml
+          uv build packaging/agents-chronicle-farewell -o dist
+          ls dist
           if [ ! -f "dist/agents_chronicle-$VERSION-py3-none-any.whl" ]; then
             echo "::error::The build is not version $VERSION"
             exit 1
           fi
+      - name: Wait until PyPI serves interlatch
+        run: |
+          for _ in $(seq 1 30); do
+            if python3 -m pip download --quiet --no-deps --no-cache-dir --dest "$RUNNER_TEMP/probe" \
+                "interlatch==$VERSION"; then
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "::error::PyPI does not serve interlatch $VERSION after 5 minutes"
+          exit 1
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
 
   image:
@@ -145,7 +195,10 @@ jobs:
       packages: write  # push to ghcr.io
     env:
       VERSION: ${{ needs.plan.outputs.version }}
-      IMAGE: ghcr.io/chatixia-ai/chronicle-hub
+      IMAGE: ghcr.io/chatixia-ai/interlatch-hub
+      # its name before the rename: a hub whose compose.yaml still names it keeps getting each release with
+      # `docker compose pull`, which is what the dashboard tells a container to do
+      OLD_IMAGE: ghcr.io/chatixia-ai/chronicle-hub
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
@@ -155,12 +208,12 @@ jobs:
         run: |
           for _ in $(seq 1 30); do
             if python3 -m pip download --quiet --no-deps --no-cache-dir --dest "$RUNNER_TEMP/probe" \
-                "agents-chronicle==$VERSION"; then
+                "interlatch==$VERSION"; then
               exit 0
             fi
             sleep 10
           done
-          echo "::error::PyPI does not serve agents-chronicle $VERSION after 5 minutes"
+          echo "::error::PyPI does not serve interlatch $VERSION after 5 minutes"
           exit 1
       - uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1  # v4.4.0
       - uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.4.1
@@ -173,10 +226,12 @@ jobs:
         with:
           context: docker
           platforms: linux/amd64,linux/arm64
-          build-args: CHRONICLE_VERSION=${{ needs.plan.outputs.version }}
+          build-args: INTERLATCH_VERSION=${{ needs.plan.outputs.version }}
           tags: |
             ${{ env.IMAGE }}:${{ needs.plan.outputs.version }}
             ${{ env.IMAGE }}:latest
+            ${{ env.OLD_IMAGE }}:${{ needs.plan.outputs.version }}
+            ${{ env.OLD_IMAGE }}:latest
           push: true
 
   macos-app:
@@ -217,9 +272,9 @@ jobs:
           security list-keychains -d user -s "$KC" $(security list-keychains -d user | tr -d '"')
           rm "$RUNNER_TEMP/cert.p12"
 
-      - name: Build Chronicle.app and DMG
+      - name: Build Interlatch.app and DMG
         env:
-          CHRONICLE_CODESIGN_IDENTITY: ${{ env.HAS_CERT == 'true' && secrets.MACOS_CODESIGN_IDENTITY || '' }}
+          INTERLATCH_CODESIGN_IDENTITY: ${{ env.HAS_CERT == 'true' && secrets.MACOS_CODESIGN_IDENTITY || '' }}
           APPLE_ID: ${{ secrets.APPLE_ID }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
           APPLE_APP_PASSWORD: ${{ secrets.APPLE_APP_PASSWORD }}
@@ -229,14 +284,14 @@ jobs:
         if: env.VERSION != ''
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release upload "v$VERSION" dist/Chronicle-*.dmg --repo "$GITHUB_REPOSITORY" --clobber
+        run: gh release upload "v$VERSION" dist/Interlatch-*.dmg --repo "$GITHUB_REPOSITORY" --clobber
 
       - name: Keep DMG as a workflow artifact
         if: env.VERSION == ''
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a  # v7.0.1
         with:
-          name: Chronicle-dmg
-          path: dist/Chronicle-*.dmg
+          name: Interlatch-dmg
+          path: dist/Interlatch-*.dmg
 
   changelog:
     needs: [plan, pypi]

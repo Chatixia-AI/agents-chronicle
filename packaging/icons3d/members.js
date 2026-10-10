@@ -1,4 +1,4 @@
-// Chronicle-only members, built from CAST.parts so they share the cast's materials.
+// Interlatch-only members, built from CAST.parts so they share the cast's materials.
 window.CUSTOM = {
   // Knowledge: an open book on its spine, pages printed with transcript-like lines, amber ribbon.
   book(CAST, scene) {
@@ -36,7 +36,7 @@ window.CUSTOM = {
     scene.add(g); return g;
   },
 
-  // Chronicle's emblem in 3D: two sky-blue sheets behind an amber sheet with a folded corner and two transcript strokes.
+  // Interlatch's emblem in 3D: two sky-blue sheets behind an amber sheet with a folded corner and two transcript strokes.
   stack(CAST, scene) {
     const { glossy, std, mesh, roundBox, extrudeShape } = CAST.parts;
     const g = new THREE.Group();

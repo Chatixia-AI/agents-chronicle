@@ -1,4 +1,4 @@
-"""Render Chronicle's 3D art with the Chatixia Studio Blueprint Cast and export it.
+"""Render Interlatch's 3D art with the Chatixia Studio Blueprint Cast and export it.
 
 Writes src/chronicle/web/art-<name>.webp (dashboard art) and packaging/macos/icon-3d.webp (the app icon source,
 which packaging/macos/make_icon.py turns into every app, dashboard and phone icon).

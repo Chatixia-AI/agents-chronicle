@@ -1,7 +1,7 @@
 name: Docs
 
 # Builds the documentation (docs/ and the READMEs, mkdocs.yml) so broken links and anchors fail before they reach
-# main. Chatixia-AI/chronicle-site publishes it at chronicle.chatixia.net/docs/: when the docs change on main, this
+# main. Chatixia-AI/chronicle-site publishes it at interlatch.com/docs/: when the docs change on main, this
 # asks that site to rebuild (it also rebuilds daily). The request needs the secret SITE_DISPATCH_TOKEN, a
 # fine-grained token with Contents: write on chronicle-site; without it the step is skipped.
 
