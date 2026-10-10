@@ -90,6 +90,16 @@ The [Systems map](dashboard.md#systems-map).
 | --- | --- | --- |
 | `read_manifests` | `true` | read a few manifest files in each project folder (package manifests, compose files, Dockerfiles, Terraform, CI workflows, vite configs, `.env.example`, deploy configs), read-only. `false`: parts come from what sessions did only |
 
+## `[mirror]`
+
+A copy of your archive in a Postgres database you choose ([A copy in Postgres](postgres.md)).
+
+| Key | Default | |
+| --- | --- | --- |
+| `to` | `""` | `"postgres"` writes the copy after every background run. The connection (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, PGSSLMODE) is read from `mirror.env` in Chronicle's folder; **Settings › Storage** writes both. Needs the driver: `uv tool install 'agents-chronicle[postgres]'` |
+| `include` | `"knowledge"` | `"knowledge"`: sessions' details, summaries and analyses, lessons, knowledge bases, reviews, glossary, artifacts and token usage, no prompts or transcripts. `"everything"`: prompts and transcripts too, with secrets redacted. Any other value counts as `"knowledge"` ([What it holds](postgres.md#what-it-holds)) |
+| `schema` | `"chronicle"` | the Postgres schema it writes. One computer per schema ([One computer per schema](postgres.md#one-computer-per-schema)) |
+
 ## `[hub]`
 
 One archive for several computers ([Phone and other computers](devices.md#your-other-computers)).

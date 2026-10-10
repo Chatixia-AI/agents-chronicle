@@ -34,6 +34,7 @@
 | `chronicle mcp [--print-config]` | Run the MCP server (clients start it), or print a config entry for any other MCP client |
 | `chronicle status` | Health: hooks, agents, MCP, queue, failures |
 | `chronicle tailnet on\|off\|status [--anyone]` | Open the dashboard on your phone and other devices through Tailscale Serve, to your Tailscale login only (`--anyone`: everyone in your tailnet) ([Phone and other computers](devices.md#your-phone)) |
+| `chronicle mirror [status]` / `mirror sync [--full]` | The copy of this archive in Postgres: where it is, what each table holds and the last write; or write it now (`--full`: every row again) ([A copy in Postgres](postgres.md)) |
 | `chronicle hub enable [--rotate]` | Make this computer the hub for your others; prints the `chronicle hub join` command to run on them |
 | `chronicle hub join <address> --token <token> \| --code <code> [--share knowledge] [--all-folders]` / `hub leave` | Send this computer's sessions to a hub instead of recording them here, or stop ([Your other computers](devices.md#your-other-computers)). `--code`: the invite code an admin gave you ([Joining a computer](devices.md#joining-a-computer)). `--share knowledge`: keep recording and analyzing here and send only summaries and project lessons ([Sharing knowledge only](devices.md#sharing-knowledge-only)); always the case for someone limited to projects. Sharing knowledge, it shares only sessions in the hub's projects unless `--all-folders` |
 | `chronicle hub status` / `hub disable` | The computers sending to this hub; stop accepting them |

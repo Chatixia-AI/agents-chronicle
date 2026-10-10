@@ -61,6 +61,8 @@ from the [demo data](docs/development.md#demo-data):
 - **In VS Code, next to your code.** The [extension](docs/vscode.md) lists the sessions behind the file you have
   open, and every file agents worked on in your workspace.
 - **Plain files too.** An Obsidian-compatible Markdown vault and a `chronicle` CLI.
+- **A copy in Postgres, if you want one.** Keep a copy of your archive in a Postgres database you choose, on this
+  computer, in Docker or in the cloud, for SQL and BI tools ([A copy in Postgres](docs/postgres.md)).
 
 ## Quick start
 
@@ -160,7 +162,7 @@ Something not working? See [Troubleshooting](docs/troubleshooting.md).
 [Install](docs/install.md) · [Sources](docs/sources.md) · [Dashboard, glossary and Map](docs/dashboard.md) ·
 [Command line](docs/cli.md) · [MCP server](docs/mcp.md) · [VS Code extension](docs/vscode.md) ·
 [Phone and other computers](docs/devices.md) · [A hub in Docker](docs/docker.md) ·
-[Joining your team's hub](docs/join-a-hub.md) ·
+[Joining your team's hub](docs/join-a-hub.md) · [A copy in Postgres](docs/postgres.md) ·
 [What gets recorded and how analysis works](docs/analysis.md) ·
 [Configuration](docs/configuration.md) · [Data and privacy](docs/privacy.md) ·
 [Troubleshooting](docs/troubleshooting.md) · [Development](docs/development.md)

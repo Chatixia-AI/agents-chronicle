@@ -881,6 +881,7 @@ function navKey(path) {
   if (path.startsWith("/systems")) return "systems";
   if (path.startsWith("/devices")) return "devices";
   if (path.startsWith("/appearance")) return "appearance";
+  if (path.startsWith("/storage")) return "storage";
   if (path.startsWith("/search")) return "search";
   if (path.startsWith("/suggestions")) return "suggestions";
   if (path.startsWith("/friction")) return "friction";
@@ -6525,6 +6526,109 @@ route(/^\/friction$/, async (params) => {
 });
 
 // =====================================================================================
+// Storage: a copy of the archive in a Postgres database you choose (mirror.py). The password goes in, never out.
+// =====================================================================================
+route(/^\/storage$/, async () => {
+  const mi = await api("/api/mirror");
+  return h("div", { class: "narrow-page" },
+    h("div", { class: "page-head" }, titled("rack", h("h1", null, t("Storage")),
+      h("div", { class: "sub" }, t("Chronicle keeps your archive in its own database on this computer. A copy can go to Postgres as well.")))),
+    mirrorCard(mi));
+});
+
+function mirrorCard(mi) {
+  const saved = mi.settings || {};
+  let mode = mi.enabled ? "postgres" : "off";
+  let include = mi.include;
+  const counts = (c) => [
+    c.sessions != null ? tn(c.sessions, "{n} session", "{n} sessions", { n: fmtNum(c.sessions) }) : null,
+    c.knowledge != null ? tn(c.knowledge, "{n} lesson", "{n} lessons", { n: fmtNum(c.knowledge) }) : null,
+    c.artifacts != null ? tn(c.artifacts, "{n} artifact", "{n} artifacts", { n: fmtNum(c.artifacts) }) : null,
+    c.events != null ? tn(c.events, "{n} transcript event", "{n} transcript events", { n: fmtNum(c.events) }) : null].filter(Boolean).join(" · ");
+  const last = mi.last ? (mi.last.error
+    ? h("div", { class: "warn-line" }, t("Last write failed {ago}: {error}", { ago: ago(mi.last.at), error: mi.last.error }))
+    : mi.last.at ? h("div", { class: "muted" }, t("Last written {ago}", { ago: ago(mi.last.at) }) + " · "
+      + tn(mi.last.sessions || 0, "{n} session updated", "{n} sessions updated", { n: fmtNum(mi.last.sessions || 0) })) : null) : null;
+  const status = h("div", { class: "status-list" }, h("div", { class: "muted" }, mi.enabled ? t("Checking the mirror…")
+    : t("Off: your archive is kept on this computer only.")));
+  if (mi.enabled) api("/api/mirror/status").then((s) => status.replaceChildren(...(s.error
+    ? [h("div", { class: "warn-line" }, s.error), last]
+    : [h("div", null, t("On · {where} · PostgreSQL {server} · schema {schema}", { where: s.where, server: s.server, schema: s.schema })),
+      Object.keys(s.counts || {}).length ? h("div", { class: "muted" }, counts(s.counts)) : null, last])))
+    .catch((e) => status.replaceChildren(h("div", { class: "warn-line" }, e.message)));
+  const head = [
+    h("p", null, t("Keep a copy of your archive in a Postgres database you choose: on this computer, in Docker, or in the cloud. Query it with SQL or a BI tool, or keep it as a copy somewhere else. Chronicle writes it after every background run and never reads it back.")),
+    status,
+    mi.driver ? null : h("div", { class: "warn-line" }, t("The Postgres driver isn't installed here. Run {command}, then restart the dashboard.", { command: mi.install }))];
+  const field = (key, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: key, value: saved[key] || "", autocomplete: "off", spellcheck: "false", ...attrs }));
+  const ssl = h("select", { name: "sslmode" }, mi.sslmodes.map((m) => h("option", { value: m, selected: m === (saved.sslmode || "require") }, m)));
+  const form = h("form", { class: "ts-form", onsubmit: (e) => e.preventDefault() },
+    field("host", t("Server address"), { placeholder: "127.0.0.1" }),
+    field("port", t("Port"), { inputmode: "numeric", placeholder: "5432", value: saved.port || "5432" }),
+    field("dbname", t("Database")),
+    field("user", t("User")),
+    h("label", null, t("Password"), h("input", { class: "input", name: "password", type: "password", autocomplete: "new-password",
+      placeholder: saved.password_set ? t("saved; leave empty to keep it") : "" })),
+    h("label", null, t("SSL mode"), ssl),
+    field("schema", t("Schema"), { value: mi.schema, placeholder: "chronicle" }));
+  const holds = { knowledge: t("Each session's details, summary and analysis, your lessons, knowledge bases, weekly reviews, glossary, artifacts and token usage. No prompts, no transcripts."),
+    everything: t("All of that, plus your prompts and full transcripts, with secrets redacted as they are before analysis. Redaction goes by patterns, so it can miss a secret that looks like nothing in particular.") };
+  const holdsNote = h("div", { class: "muted" }, holds[include]);
+  const includeSeg = segControl([["knowledge", t("Knowledge")], ["everything", t("Everything")]], include, (v) => {
+    include = v;
+    includeSeg.querySelectorAll("button").forEach((b, i) => { const on = (i === 0 ? "knowledge" : "everything") === v; b.className = on ? "on" : ""; b.setAttribute("aria-pressed", String(on)); });
+    holdsNote.textContent = holds[v];
+  });
+  const what = h("div", { class: "set-row" }, h("div", null, h("b", null, t("What it holds")), holdsNote), includeSeg);
+  const docker = h("details", { class: "mirror-docker" }, h("summary", null, t("Postgres in Docker on this computer")),
+    h("p", { class: "muted" }, t("Start one, then fill in server address 127.0.0.1, port 5432, database and user chronicle, the password you chose, and SSL mode disable.")),
+    h("pre", { class: "mcp-code" }, "docker run -d --name chronicle-pg --restart unless-stopped \\\n  -e POSTGRES_USER=chronicle -e POSTGRES_DB=chronicle -e POSTGRES_PASSWORD=<a password> \\\n  -p 127.0.0.1:5432:5432 -v chronicle-pg:/var/lib/postgresql/data postgres:17"));
+  const values = () => ({ ...Object.fromEntries([...form.querySelectorAll("input, select")].map((x) => [x.name, x.value])), include });
+  const result = h("div", { class: "ts-result" });
+  const say = (text, bad) => result.replaceChildren(h("div", { class: bad ? "warn-line" : "muted" }, text));
+  const test = h("button", { class: "btn", type: "button", onclick: async () => {
+    test.disabled = true;
+    say(t("Connecting…"));
+    const r = await post("/api/mirror/test", values()).catch((e) => ({ error: e.message }));
+    test.disabled = false;
+    if (!r.ok) { say(r.error || t("Could not connect"), true); return; }
+    say(t("Connected to {where} (PostgreSQL {server}).", { where: r.where, server: r.server }) + " "
+      + (r.mine ? t("This computer's mirror is there; saving brings it up to date.") : t("Its tables are created when you save.")));
+  } }, t("Test connection"));
+  const save = h("button", { class: "btn primary", type: "button", onclick: async () => {
+    save.disabled = true;
+    say(mode === "off" ? t("Saving…") : t("Connecting and saving…"));
+    const r = await post("/api/mirror/save", { enabled: mode === "postgres", ...(mode === "postgres" ? values() : {}) }).catch((e) => ({ error: e.message }));
+    save.disabled = false;
+    if (!r.ok) { say(r.error || t("Could not save"), true); return; }
+    toast(mode === "postgres" ? t("Mirror on: writing the copy now.") : t("Mirror off. Its settings and the copy in Postgres are kept."));
+    if (r.started) watchJob("mirror");
+    render();
+  } }, t("Save"));
+  const now = mi.enabled ? h("button", { class: "btn", type: "button", disabled: mi.running, onclick: async () => {
+    now.disabled = true;
+    const r = await post("/api/mirror/sync").catch((e) => ({ error: e.message }));
+    if (r.error) { now.disabled = false; say(r.error, true); return; }
+    toast(r.started ? t("Writing the mirror…") : t("Already running"));
+    watchJob("mirror");
+  } }, t("Write now")) : null;
+  const setup = h("div", { hidden: mode === "off" }, form, what, docker);
+  const modes = segControl([["off", t("Off")], ["postgres", "Postgres"]], mode, (v) => {
+    mode = v;
+    modes.querySelectorAll("button").forEach((b, i) => { const on = (i === 0 ? "off" : "postgres") === v; b.className = on ? "on" : ""; b.setAttribute("aria-pressed", String(on)); });
+    setup.hidden = test.hidden = v === "off";
+    result.replaceChildren();
+  });
+  test.hidden = mode === "off";
+  return h("section", { class: "card" }, cardHead(t("Copy in Postgres"), { iconName: "data" }), head,
+    h("div", { class: "analyzer ts-modes" }, modes), setup,
+    h("div", { class: "ts-actions" }, test, save, now,
+      h("span", { class: "muted" }, tx("Saved in {file}, readable by your user only.", { file: h("span", { class: "codeline" }, mi.file) }))),
+    result,
+    h("p", { class: "muted" }, t("Sessions in projects you excluded never go. One computer per schema: give each computer a schema of its own.")));
+}
+
+// =====================================================================================
 // Appearance: theme and language, remembered in this browser
 // =====================================================================================
 route(/^\/appearance$/, async () => {
@@ -6566,9 +6670,9 @@ const SECTIONS = [
   { key: "settings", label: t("Settings"), href: "#/status" },
 ];
 const SECTION_OF = { overview: "home", activity: "home", teamhome: "teamhome", sessions: "sessions", knowledge: "knowledge", learn: "knowledge", artifacts: "artifacts", glossary: "knowledge", map: "knowledge", reviews: "knowledge",
-  projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings",
+  projects: "projects", systems: "projects", suggestions: "suggestions", friction: "suggestions", status: "settings", sources: "settings", mcp: "settings", devices: "settings", appearance: "settings", storage: "settings",
   team: "team", teamprojects: "team", teamcomputers: "team", teamstore: "team", teamsettings: "team" };
-const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), teamsettings: t("Hub settings"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), appearance: t("Appearance") };
+const PAGE_LABEL = { activity: t("Activity"), team: t("People"), get teamprojects() { return teamProjectsLabel(); }, teamcomputers: t("Computers"), teamstore: t("Team store"), teamsettings: t("Hub settings"), friction: t("What goes wrong"), glossary: t("Glossary"), map: t("Map"), systems: t("Systems"), reviews: t("Weekly reviews"), status: t("Status"), sources: t("Sources"), mcp: "MCP", devices: t("Devices"), storage: t("Storage"), appearance: t("Appearance") };
 let shellSection = null, lastPath = null, lastHash = null, sbSeq = 0;
 let sbSection = null; // the section the sidebar shows: the page's, or while it peeks, the one under the pointer
 
@@ -6777,6 +6881,7 @@ function settingsSidebar(box) {
       own ? sbRow(t("Sources"), "#/sources", "sources", null, ["/sources"]) : null,
       own ? sbRow("MCP", "#/mcp", "mcp", null, ["/mcp"]) : null,
       own ? sbRow(t("Devices"), "#/devices", "devices", null, ["/devices"]) : null,
+      canAdmin() ? sbRow(t("Storage"), "#/storage", "data", null, ["/storage"]) : null, // a password: admins only
       sbRow(t("Appearance"), "#/appearance", "appearance", null, ["/appearance"])));
 }
 function teamSidebar(box) {
@@ -6893,7 +6998,7 @@ function paletteCommands() {
     nav(t("Glossary"), "#/glossary", "glossary"), nav(t("Map"), "#/map", "map"), nav(t("Projects"), "#/projects", "projects"), nav(t("Systems map"), "#/systems", "systems", t("every project, its parts and links")), nav(t("Artifacts"), "#/artifacts", "artifacts", t("what your agents made")),
     nav(t("Global playbook"), `#/project?path=${encodeURIComponent("__global__")}`, "playbook"), nav(t("Weekly reviews"), "#/reviews", "reviews"),
     nav(t("Suggestions"), "#/suggestions", "suggestions", t("fixes to approve")), nav(t("What goes wrong"), "#/friction", "gotcha", t("recurring failures")),
-    nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), nav(t("Appearance"), "#/appearance", "appearance"),
+    nav(t("Status"), "#/status", "status"), nav(t("Sources"), "#/sources", "sources"), nav("MCP", "#/mcp", "mcp", t("connect other agents")), nav(t("Devices"), "#/devices", "devices", t("phone, other computers")), { ...nav(t("Storage"), "#/storage", "data", t("a copy in Postgres")), admin: true }, nav(t("Appearance"), "#/appearance", "appearance"),
     ...[[t("People"), "#/team", "preference", t("team")], [teamProjectsLabel(), "#/team/projects", "projects", t("team")], [t("Computers"), "#/team/computers", "devices", t("team")],
       [t("Team store"), "#/team/store", "data", t("team")], [t("Hub settings"), "#/team/settings", "settings", t("name, address, backups")]].map((x) => ({ ...nav(...x), hub: true, admin: true })),
     { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow, admin: true },
@@ -7170,7 +7275,7 @@ function jobLabel(name) {
   const [kind, arg] = name.split(/:(.*)/);
   const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
   return {
-    sync: t("Sync"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), themes: t("Grouping glossary themes"),
+    sync: t("Sync"), mirror: t("Writing the mirror"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), themes: t("Grouping glossary themes"),
     analyze: arg === "selection" ? t("Analyzing selected sessions") : t("Analyzing session {id}", { id: (arg || "").slice(0, 8) }),
     glossary: arg ? t("Glossary: {name}", { name: tail(arg) }) : t("Glossary"), review: t("Weekly review"),
     synthesize: arg === "__global__" ? t("Global playbook") : t("Knowledge base: {name}", { name: tail(arg) }),

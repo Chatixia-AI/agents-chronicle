@@ -29,6 +29,7 @@ class WorkReport:
     exported: int = 0
     suggestions: int = 0  # new suggestions this run's refresh found
     shared: str | None = None  # [hub] share = "knowledge": what was sent to the hub
+    mirrored: str | None = None  # [mirror] to = "postgres": what was written to the mirror
     cost_usd: float = 0.0
     paused_until: str | None = None
     note: str | None = None
@@ -42,6 +43,8 @@ class WorkReport:
             parts.append(f"paused until {self.paused_until}")
         if self.shared:
             parts.append(f"hub: {self.shared}")
+        if self.mirrored:
+            parts.append(f"mirror: {self.mirrored}")
         if self.note:
             parts.append(self.note)
         return ", ".join(parts)
@@ -177,6 +180,10 @@ def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyse
             report.shared = push_knowledge(cfg).summary()
         except HubError as exc:
             report.shared = f"not sent ({exc})"
+    if cfg.mirror_to and not session_ids:  # a background or `chronicle work` run: bring the mirror up to date
+        from .mirror import sync as mirror_sync
+
+        report.mirrored = mirror_sync(cfg).summary()  # never raises; a missed write is caught up by the next run
     log.info("worker: %s", report.summary())
     return report
 

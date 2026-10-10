@@ -14,6 +14,7 @@
 | [Phone and other computers](devices.md) | The dashboard on your phone through Tailscale, and one archive for several computers (a hub) |
 | [A hub in Docker](docker.md) | Setting up a team's hub on a server, step by step: Azure, the first admin, projects, inviting the team, troubleshooting |
 | [Joining your team's hub](join-a-hub.md) | For teammates: join with the code your admin sent, add your project folder, get teammates' lessons back |
+| [A copy in Postgres](postgres.md) | Keep a copy of your archive in a Postgres database you choose (on this computer, in Docker, or in the cloud) for SQL and BI tools |
 | [What gets recorded and how analysis works](analysis.md) | Session data, knowledge kinds, the analysis pipeline and its cost |
 | [Configuration](configuration.md) | Every `config.toml` setting |
 | [Data and privacy](privacy.md) | What is stored where, and what leaves your machine |

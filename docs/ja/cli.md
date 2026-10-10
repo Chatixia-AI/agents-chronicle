@@ -34,6 +34,7 @@
 | `chronicle mcp [--print-config]` | MCP サーバーを実行（クライアントが起動します）、またはほかの MCP クライアント用の設定項目を出力 |
 | `chronicle status` | 状態確認：フック、エージェント、MCP、キュー、失敗 |
 | `chronicle tailnet on\|off\|status [--anyone]` | Tailscale Serve でダッシュボードをスマートフォンやほかのデバイスから開けるようにする。通すのはあなたの Tailscale ログインだけ（`--anyone` で tailnet の全員）（[スマートフォンとほかのコンピューター](devices.md#スマートフォン)） |
+| `chronicle mirror [status]` / `mirror sync [--full]` | このアーカイブの Postgres へのコピー：書き込み先、テーブルごとの中身、最後の書き込みを表示。または今すぐ書き込む（`--full`：すべての行を書き直す）（[Postgres へのコピー](postgres.md)） |
 | `chronicle hub enable [--rotate]` | このコンピューターをほかのコンピューターのハブにする。ほかのコンピューターで実行する `chronicle hub join` のコマンドを表示 |
 | `chronicle hub join <address> --token <token> \| --code <code> [--share knowledge] [--all-folders]` / `hub leave` | このコンピューターのセッションをここで記録せずにハブへ送る、またはやめる（[ほかのコンピューター](devices.md#ほかのコンピューター)）。`--code`：管理者から受け取った招待コード（[コンピューターを参加させる](devices.md#コンピューターを参加させる)）。`--share knowledge`：こちらで記録・分析を続け、要約とプロジェクトのナレッジだけを送る（[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)）。一部のプロジェクトに限られた人は常にこうなります。ナレッジを共有するときは、`--all-folders` を付けない限りハブのプロジェクトのセッションだけを共有します |
 | `chronicle hub status` / `hub disable` | このハブに送ってくるコンピューターの一覧／受け付けをやめる |

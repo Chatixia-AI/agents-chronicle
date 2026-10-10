@@ -1,7 +1,8 @@
 name: CI
 
-# Every pull request and every push to main: the test suite, known vulnerabilities in the locked dependencies, the
-# pre-commit hooks (.pre-commit-config.yaml), and the hub's Docker image (docker/) built from this checkout.
+# Every pull request and every push to main: the test suite, the Postgres tests against a real database, known
+# vulnerabilities in the locked dependencies, the pre-commit hooks (.pre-commit-config.yaml), and the hub's Docker image
+# (docker/) built from this checkout.
 # `test` is a required check on main.
 
 on:
@@ -26,6 +27,34 @@ jobs:
           persist-credentials: false
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
       - run: uv run --locked pytest -q
+
+  postgres:
+    # The team store and the mirror against a real Postgres: their tests skip without one (CHRONICLE_TEST_PG)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: chronicle
+          POSTGRES_PASSWORD: chronicle
+          POSTGRES_DB: chronicle
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U chronicle" --health-interval 5s --health-timeout 5s --health-retries 12
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
+      - name: The Postgres tests, none of them skipped
+        run: |
+          printf 'PGHOST=127.0.0.1\nPGPORT=5432\nPGDATABASE=chronicle\nPGUSER=chronicle\nPGPASSWORD=chronicle\nPGSSLMODE=disable\n' > "$RUNNER_TEMP/pg.env"
+          chmod 600 "$RUNNER_TEMP/pg.env"
+          CHRONICLE_TEST_PG="$RUNNER_TEMP/pg.env" uv run --locked --extra postgres pytest -q -rs tests/test_team.py tests/test_mirror.py | tee "$RUNNER_TEMP/pytest.out"
+          if grep -q skipped "$RUNNER_TEMP/pytest.out"; then
+            echo "::error::a Postgres test was skipped"
+            exit 1
+          fi
 
   lint:
     runs-on: ubuntu-latest

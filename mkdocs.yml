@@ -74,6 +74,7 @@ nav:
       - Phone and other computers: devices.md
       - A hub in Docker: docker.md
       - Joining your team's hub: join-a-hub.md
+      - A copy in Postgres: postgres.md
   - Reference:
       - What gets recorded and how analysis works: analysis.md
       - Configuration: configuration.md
@@ -92,6 +93,7 @@ nav:
       - スマートフォンとほかのコンピューター: ja/devices.md
       - Docker でハブを動かす: ja/docker.md
       - チームのハブに参加する: ja/join-a-hub.md
+      - Postgres へのコピー: ja/postgres.md
       - 記録される内容と分析の仕組み: ja/analysis.md
       - 設定: ja/configuration.md
       - データとプライバシー: ja/privacy.md

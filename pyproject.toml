@@ -37,6 +37,8 @@ app = [
 ]
 # on a hub that keeps the team's record in Postgres ([hub] store = "postgres"); members never need it
 team = ["psycopg[binary]>=3.2"]
+# a copy of this archive in a Postgres database you choose ([mirror] to = "postgres")
+postgres = ["psycopg[binary]>=3.2"]
 
 [build-system]
 requires = ["hatchling", "hatch-fancy-pypi-readme>=24", "hatch-vcs>=0.4"]

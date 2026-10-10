@@ -104,6 +104,8 @@ def test_who_may_look_and_who_may_change(team):
         assert code == 403 and "admin" in r["error"]
         assert _call(url, "/api/people", headers=_as(s[name]))[0] == 403
         assert _call(url, "/api/team-store/save", {"enabled": False}, _as(s[name]))[0] == 403
+        assert _call(url, "/api/mirror/save", {"enabled": False}, _as(s[name]))[0] == 403
+        assert _call(url, "/api/mirror", headers=_as(s[name]))[0] == 403
     code, r = _call(url, "/api/suggestions/seen", {}, _as(s["Bob"], **{"X-Chronicle-Lang": "ja"}))
     assert r["error"] == "これができるのはこのハブの管理者だけです"
 
@@ -111,6 +113,7 @@ def test_who_may_look_and_who_may_change(team):
     assert code == 200 and dv["can_admin"] and dv["viewer"]["name"] == "Ada" and not dv["here"]
     assert _call(url, "/api/suggestions/seen", {}, _as(s["Ada"])) == (200, {"ok": True})
     assert _call(url, "/api/people", headers=_as(s["Ada"]))[0] == 200
+    assert _call(url, "/api/mirror", headers=_as(s["Ada"]))[0] == 200  # an admin of the hub may set up its mirror
     assert _call(url, "/api/devices/share", {"share": "knowledge"}, _as(s["Ada"]))[0] == 403  # this computer's own
     assert _call(url, "/api/devices/hub-signin", {}, _as(s["Ada"]))[0] == 403
 
