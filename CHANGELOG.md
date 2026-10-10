@@ -1,11 +1,7 @@
 # Changelog
 
-## 0.18.0 (2026-10-09)
+## Unreleased
 
-- **3D icons from the Chatixia Studio cast:** the app icon, each page's title and the Home tiles now carry 3D art
-  rendered with the same characters and objects as the studio's explainer films (a log scroll for Sessions, a book
-  for Knowledge, a folder for Projects), and an empty Recent sessions or Latest knowledge card shows Pip or Lumi. The
-  sidebar and buttons keep their line icons. `packaging/icons3d` re-renders the art.
 - **A copy in Postgres:** Chronicle can keep a copy of your archive in a Postgres database you choose (on this
   computer, in Docker, or in the cloud) for SQL and BI tools. Set it up under **Settings › Storage** or with
   `[mirror] to = "postgres"`. After every background run it writes only what changed. By default the copy holds
@@ -13,6 +9,13 @@
   `include = "everything"` adds them, with secrets redacted. Chronicle still works from its own database and never
   reads the copy back. `chronicle mirror` shows what the copy holds, and `chronicle mirror sync` writes it now. The
   driver comes with `uv tool install 'agents-chronicle[postgres]'` ([A copy in Postgres](docs/postgres.md)).
+
+## 0.18.0 (2026-10-09)
+
+- **3D icons from the Chatixia Studio cast:** the app icon, each page's title and the Home tiles now carry 3D art
+  rendered with the same characters and objects as the studio's explainer films (a log scroll for Sessions, a book
+  for Knowledge, a folder for Projects), and an empty Recent sessions or Latest knowledge card shows Pip or Lumi. The
+  sidebar and buttons keep their line icons. `packaging/icons3d` re-renders the art.
 
 ## 0.17.1 (2026-10-09)
 
