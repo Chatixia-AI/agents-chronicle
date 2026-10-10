@@ -3,6 +3,11 @@
 <!-- Don't add lines here: a pull request puts its line in a new file in changelog.d/ (see changelog.d/README.md),
      and each release moves the files it took into a dated section below. -->
 
+## 0.21.3 (2026-10-10)
+
+- **Hide the sidebar from the rail:** a click on the rail icon of the page you're on hides the sidebar, and another
+  click brings it back. While it's hidden, pointing at the rail still brings it out.
+
 ## 0.21.2 (2026-10-10)
 
 - **Analyze the queue now:** **Status › Analysis** has an **Analyze N now** button under the queue. It analyzes the
