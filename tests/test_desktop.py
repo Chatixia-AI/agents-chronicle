@@ -96,7 +96,7 @@ def test_version_comes_from_the_package_metadata():
 
     import chronicle
 
-    assert chronicle.__version__ == version("agents-chronicle")
+    assert chronicle.__version__ == version("interlatch")
 
 
 def test_app_window_loads_the_transparent_page():
