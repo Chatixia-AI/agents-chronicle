@@ -2290,12 +2290,13 @@ function caseVerdict(c, picked) {
       picked.recalled ? null : [h("b", null, t("Ruled out in the session.")), " ", picked.why ? h("span", { html: codeSpans(picked.why) }) : null, h("br")],
       h("b", null, t("The answer:")), " ", h("span", { html: codeSpans(c.answer) })));
 }
-// a teammate's lesson, sent back by the team hub: whose computers stated it
-function teamFrom(k) {
-  return k.team_from?.length ? t("from {names}", { names: k.team_from.join(", ") }) : t("from teammates");
-}
+// a teammate's lesson, sent back by the team hub: whose computers stated it, each with its initials like your own lessons'
 function teamTag(k) {
-  return h("span", { class: "scope-tag", title: t("A teammate's lesson, sent back by the team hub. Your agent gets it too.") }, icon("team"), teamFrom(k));
+  const names = k.team_from || [];
+  const who = h("span", { class: "who-list" }, names.slice(0, 3).map((n) => whoTag(n)),
+    names.length > 3 ? h("span", { class: "muted" }, `+${names.length - 3}`) : null);
+  return h("span", { class: "scope-tag team-tag", title: t("A teammate's lesson, sent back by the team hub. Your agent gets it too.") }, icon("team"),
+    names.length ? tx("from {names}", { names: who }) : t("from teammates"));
 }
 function knowledgeActions(k, node, onDismiss) {
   const pin = h("button", { type: "button", title: k.pinned ? t("Unpin") : t("Pin (always kept in syntheses)"), "aria-pressed": String(!!k.pinned), onclick: async () => {
