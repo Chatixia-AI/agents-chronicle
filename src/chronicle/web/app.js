@@ -2170,13 +2170,14 @@ function knowledgeCard(k, { compact = false, hideSession = false, ask = false } 
     h("span", { class: "kmeta" },
       k.scope === "global" ? h("span", { class: "scope-tag", title: t("Applies across projects") }, icon("domain"), t("global")) : null,
       k.source === "memory" ? h("span", { class: "scope-tag", title: t("Imported from the agent's own memory notes") }, icon("knowledge"), t("{agent} memory", { agent: agentShort(k.agent) })) : null,
-      k.source === "team" ? teamTag(k) : null,
+      k.source === "team" ? teamTag() : null,
       stageTag(k.stage, confirmCount(k), k.stage_reason, { quiet: true }),
       confidenceMeter(k.confidence)));
   const foot = h("div", { class: "kfoot" },
     h("span", { class: "kfoot-meta" },
       k.project_name ? h("span", { class: "meta-item", title: k.project_path || "" }, icon("projects"), k.project_name) : null,
       k.who ? h("span", { class: "meta-item" }, whoTag(k.who, k.who_key, "#/knowledge/all")) : null,
+      k.source === "team" ? teamWho(k) : null,
       !hideSession && k.session_id ? h("a", { class: "meta-item session-link", href: `#/session/${k.session_id}`, title: k.session_title || "" }, icon("sessions"), h("span", { class: "ellipsis" }, k.session_title || t("session"))) : null,
       k.created_at ? h("span", { class: "meta-item" }, fmtDate(k.created_at)) : null),
     knowledgeActions(k, card, () => card.remove()));
@@ -2290,12 +2291,15 @@ function caseVerdict(c, picked) {
       picked.recalled ? null : [h("b", null, t("Ruled out in the session.")), " ", picked.why ? h("span", { html: codeSpans(picked.why) }) : null, h("br")],
       h("b", null, t("The answer:")), " ", h("span", { html: codeSpans(c.answer) })));
 }
-// a teammate's lesson, sent back by the team hub: whose computers stated it
-function teamFrom(k) {
-  return k.team_from?.length ? t("from {names}", { names: k.team_from.join(", ") }) : t("from teammates");
+// a teammate's lesson, sent back by the team hub
+function teamTag() {
+  return h("span", { class: "scope-tag", title: t("A teammate's lesson, sent back by the team hub. Your agent gets it too.") }, icon("team"), t("from teammates"));
 }
-function teamTag(k) {
-  return h("span", { class: "scope-tag", title: t("A teammate's lesson, sent back by the team hub. Your agent gets it too.") }, icon("team"), teamFrom(k));
+// whose computers stated it, each with its initials like your own lessons' computer
+function teamWho(k) {
+  const names = k.team_from || [];
+  return names.length ? h("span", { class: "who-list" }, names.slice(0, 3).map((n) => whoTag(n)),
+    names.length > 3 ? h("span", { class: "muted" }, `+${names.length - 3}`) : null) : null;
 }
 function knowledgeActions(k, node, onDismiss) {
   const pin = h("button", { type: "button", title: k.pinned ? t("Unpin") : t("Pin (always kept in syntheses)"), "aria-pressed": String(!!k.pinned), onclick: async () => {
@@ -2333,9 +2337,10 @@ function knowledgeTable(items) {
       h("td", { class: "title-cell" }, h("div", { class: "t" }, k.title), k.body ? h("div", { class: "s" }, plainText(k.body)) : null),
       h("td", { class: "nowrap" }, scopeOf(k) || "–"),
       h("td", { class: "from-cell" }, k.session_id ? h("a", { href: `#/session/${k.session_id}` }, (k.session_title || t("session")).slice(0, 44))
-        : k.source === "team" ? teamTag(k)
+        : k.source === "team" ? teamTag()
         : h("span", { class: "muted" }, k.source === "memory" ? t("{agent} memory", { agent: agentShort(k.agent) }) : "–"),
-        k.who ? h("div", { class: "who-line" }, whoTag(k.who, k.who_key, "#/knowledge/all")) : null),
+        k.who ? h("div", { class: "who-line" }, whoTag(k.who, k.who_key, "#/knowledge/all"))
+        : k.source === "team" && k.team_from?.length ? h("div", { class: "who-line" }, teamWho(k)) : null),
       h("td", { class: "nowrap" }, stageTag(k.stage, confirmCount(k), k.stage_reason) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, confidenceMeter(k.confidence) || h("span", { class: "muted" }, "–")),
       h("td", { class: "nowrap" }, fmtDate(k.created_at)));
