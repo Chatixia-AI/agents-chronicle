@@ -1,8 +1,9 @@
 name: Changelog
 
-# A pull request that changes what ships (src/, ee/src/, docker/, vscode-extension/) adds a line under
-# "## Unreleased" in CHANGELOG.md: the Release workflow publishes that section as the release notes and refuses to run
-# when it is empty. The no-changelog label skips the check for a change users won't notice.
+# A pull request that changes what ships (src/, ee/src/, docker/, vscode-extension/) adds a file to changelog.d/
+# saying what users will notice: the Release workflow publishes the files added since the last tag as the release
+# notes and refuses to run when there are none. A line under "## Unreleased" in CHANGELOG.md (the old way) fails the
+# check. The no-changelog label skips it for a change users won't notice.
 
 on:
   pull_request:

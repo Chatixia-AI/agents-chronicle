@@ -45,15 +45,20 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
 （`v0.7.0` → `0.7.0`）、その後のコミットは次のパッチの開発版（`0.7.1.dev3+g1a2b3c4`）としてビルドされ、ソースの
 チェックアウトでは Status ページにこれが表示されます。
 
-リリースするには、変更点を作業のたびに `CHANGELOG.md` の `## Unreleased` に書いておき、`main` で **Actions → Release →
+リリースするには、利用者が気づく変更を含むプルリクエストごとに、変更履歴の 1 行を書いたファイルを `changelog.d/` に
+追加しておき（[changelog.d/README.md](https://github.com/Chatixia-AI/agents-chronicle/blob/main/changelog.d/README.md)。
+**Changelog** チェック `.github/workflows/changelog.yml` は、出荷物を変えるのにこのファイルがないプルリクエストを、
+`no-changelog` ラベルがない限り失敗させます）、`main` で **Actions → Release →
 Run workflow** を実行して `patch`、`minor`、`major` のどれかを選びます。`.github/workflows/release.yml` が最新のタグから
-次のバージョンを決め、テストを実行し、タグと GitHub リリースを作成し（Unreleased の節がリリースノートになります）、
+次のバージョンを決め、テストを実行し、タグと GitHub リリースを作成し（前のタグ以降に追加された `changelog.d/` の
+ファイルがリリースノートになります）、
 `agents-chronicle` を PyPI に公開し（Trusted Publishing、環境 `pypi`）、ハブのイメージ
 `ghcr.io/chatixia-ai/chronicle-hub` を公開し（バージョンと `latest` のタグ、amd64 と arm64、その PyPI のリリースから
 ビルド）、DMG をリリースに添付します（`MACOS_*` /
-`APPLE_*` シークレットが設定されていれば署名・公証済み。詳細はワークフローの先頭を参照）。最後に、`## Unreleased` を
-`## <version> (<date>)` に変えるプルリクエストを開きます。次のリリースの前にマージしてください。マージするまでは
-リリース済みの内容が Unreleased に残っているため、次の実行は最初のステップでその旨を伝えて止まります。このリポジトリで
+`APPLE_*` シークレットが設定されていれば署名・公証済み。詳細はワークフローの先頭を参照）。最後に、それらのファイルの
+内容を `CHANGELOG.md` の `## <version> (<date>)` に移してファイルを削除するプルリクエストを開きます。マージはいつでも
+構いません。タグの後にマージされたプルリクエストのファイルはこのリリースに含まれず次のリリースに入り、次のリリースも
+このプルリクエストを待ちません。このリポジトリで
 GitHub Actions がプルリクエストを作れない設定の場合は、公開を終えたあとの最後のステップが失敗し、そのプルリクエストを
 手で開くためのリンクを示します。
 既定の `dry run` はテストを実行して DMG をワークフローの成果物として保存するだけで、何も公開しません。

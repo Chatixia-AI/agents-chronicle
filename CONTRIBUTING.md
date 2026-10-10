@@ -18,9 +18,9 @@ anywhere except the analysis calls through the user's own `claude`.
 
 Found a way in rather than a bug? [SECURITY.md](SECURITY.md) says how to report it privately.
 
-A change users will notice gets a line under `## Unreleased` in [CHANGELOG.md](CHANGELOG.md) (start the section if
-the last release dated it). The **Changelog** check fails a pull request that changes `src/`, `ee/src/`, `docker/`
-or `vscode-extension/` without one; label it `no-changelog` if nothing changes for users.
+A change users will notice gets its changelog line in a new file in [changelog.d/](changelog.d/README.md), named after
+its topic, not in CHANGELOG.md itself. The **Changelog** check fails a pull request that changes `src/`, `ee/src/`,
+`docker/` or `vscode-extension/` without one; label it `no-changelog` if nothing changes for users.
 
 Code outside `ee/` is MIT, and so are your contributions to it. `ee/` is under the
 [Chronicle Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
