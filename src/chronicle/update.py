@@ -6,7 +6,8 @@ An install from a local checkout is checked without the network: it is out of da
 files changed after the install.
 
 Interlatch was called Chronicle, and its package agents-chronicle. Each release also comes out as an agents-chronicle
-that only depends on interlatch, so an old install's own upgrade lands here; such an install is offered the move to
+that depends on interlatch and carries the same chronicle/ files (so pip's removal of the old package can't
+delete them), so an old install's own upgrade lands here; such an install is offered the move to
 the interlatch package instead of an upgrade (move_steps).
 """
 
@@ -143,7 +144,7 @@ def _steps(steps: list[list[str]] | None) -> dict:
 def move_steps(kind: str, tool: str, extras: list[str]) -> list[list[str]]:
     """The commands that replace an agents-chronicle install with interlatch, keeping its extras.
 
-    agents-chronicle (the one that only depends on interlatch) installs the same `interlatch` and `chronicle` commands.
+    agents-chronicle (the one that depends on interlatch and carries its files) installs the same `interlatch` and `chronicle` commands.
     With uv: install interlatch over them first (nothing is lost when that fails), remove agents-chronicle, which takes
     the commands with it, then install interlatch once more, which puts them back from what the first step fetched.
     pipx can't install the second package over the first's commands, so it removes agents-chronicle first. pip keeps
