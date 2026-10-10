@@ -411,6 +411,10 @@ def test_dashboard_saves_tests_and_lists(env, fake):
     assert app.provider_models("openai-compatible") == {"models": ["m-big", "m-small"]}
     assert app.action_backend("openai-compatible")["backend"] == "openai-compatible"
     assert app.status_small()["analysis"]["label"] == "OpenAI-compatible"
+    assert app.status_small()["analysis"]["billed"] is False  # its endpoint is on this computer
+    for backend, billed in (("openai", True), ("ollama", False), ("claude", False), ("codex", False)):
+        app.cfg.analysis.backend = backend
+        assert app.status_small()["analysis"]["billed"] is billed, backend  # what "Analyze N sessions" warns of
     assert "error" in app.action_provider_test("gemini")
 
 

@@ -120,7 +120,7 @@ def test_sharing_a_group_from_the_dashboard(member):
     cfg, gid = member["cfg"], member["gid"]
     app = App(cfg)
     got = app.project_groups()
-    assert got["hub"] == {"name": "Team hub", "url": "http://hub", "projects": [  # the team's sessions there, as of the last push
+    assert got["hub"] == {"name": "Team hub", "url": "http://hub", "share": "knowledge", "projects": [  # the team's sessions there, as of the last push
         {"path": PROJECT, "name": "Aktio", "sessions": 12}, {"path": "/srv/Resona", "name": "Resona", "sessions": None}]}
     assert app.action_project_groups("share", {"id": gid, "hub_project": "/srv/Nope"})[1] == 400  # not one of the hub's
     assert app.action_project_groups("share", {"id": gid, "hub_project": PROJECT}) == ({"ok": True}, 200)

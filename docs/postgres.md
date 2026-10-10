@@ -24,7 +24,8 @@ Restart the dashboard afterwards (quit and reopen the app, or `chronicle ui` aga
 ### In the dashboard
 
 Open **Settings › Storage**, switch **Copy in Postgres** to **Postgres**, and fill in the server address, port,
-database, user, password and SSL mode. **What it holds** picks how much goes ([below](#what-it-holds)). **Test
+database, user, password and SSL mode. **What it holds** picks how much goes ([below](#what-it-holds)). Picking **Everything**
+shows a warning about what transcripts carry, and **Save** asks you to confirm before transcripts start to go. **Test
 connection** checks the settings, and **Save** checks them again, saves them, and writes the copy straight away.
 Nothing is saved unless the connection works. The password goes in `mirror.env` in Chronicle's folder, readable by
 your user only, and the dashboard never shows it again.
