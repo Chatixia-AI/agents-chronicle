@@ -77,6 +77,7 @@ def _install_method() -> dict:
         cmd = [uv, "tool", "upgrade", *(["--reinstall"] if source else []), DIST] if uv else None
         return {"kind": "uv", "label": f"uv tool from {source}" if source else "uv tool from PyPI", "source": source,
                 "local": bool(req.get("directory") or req.get("path")),
+                "extras": list(req.get("extras") or []),  # e.g. app, team: a reinstall that adds one keeps the others
                 # installed files carry the install time (the receipt is not rewritten by an upgrade)
                 "installed_at": (Path(__file__).parent / "__init__.py").stat().st_mtime,
                 "command": cmd}

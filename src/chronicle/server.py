@@ -1929,6 +1929,29 @@ class App:
 
         return {"queued": queue(self.conn, source=source, maybe=maybe), "per_run": self.cfg.analysis.max_per_run}
 
+    def action_menu_bar(self, on: bool) -> dict:
+        """Status › Recording's switch: the macOS menu-bar icon on or off, adding the `app` extra when it is missing."""
+        from . import menubar
+        from .config import load_config
+
+        info = menubar.setting_info(self.cfg)
+        if not info["supported"]:
+            return {"started": False, "error": tr("The menu-bar icon is for a command-line install on macOS")}
+        if on and not info["app_extra"] and not info["can_install"]:
+            return {"started": False, "error": tr("The menu-bar icon needs the app extra: {command}", command=info["command"])}
+        restarts = menubar.restarts(on, info)
+        busy = [k for k, j in self.jobs.snapshot().items() if j["state"] == "running" and k != "menu-bar"]
+        if restarts and busy:  # the restart would cut the running job off
+            return {"started": False, "error": tr("Wait for {job} to finish first", job=busy[0])}
+
+        def job(progress):
+            out = menubar.apply_setting(self.cfg, on, progress)
+            self.cfg = load_config(self.cfg.home)
+            self._cfg_sig = self._config_sig()
+            return out
+
+        return {"started": self.jobs.start("menu-bar", job), "restarts": restarts}
+
     def action_update(self) -> dict:
         from .update import run_update
 
@@ -1951,6 +1974,9 @@ class App:
         st["ui_agent"] = launchd_status("com.claude-chronicle.ui")
         st["mcp"] = mcp_registered()
         st["statusline"] = {"installed": statusline_installed(self.cfg), "plan": plan_usage(c)}
+        from .menubar import setting_info
+
+        st["menu_bar"] = setting_info(self.cfg)
         st["db_size"] = self.cfg.db_path.stat().st_size if self.cfg.db_path.exists() else 0
         st["archive_dir"] = str(self.cfg.archive_dir)
         st["notes_dir"] = str(self.cfg.notes_dir)
@@ -2820,6 +2846,10 @@ def make_handler(app: App, port: int):
                     return self._json(app.action_update_setting("notify", bool(body.get("on"))))
                 if p == "/api/update":
                     return self._json(app.action_update())
+                if p == "/api/menu-bar":  # installs software and restarts the dashboard: only from this computer
+                    if not self._from_here():
+                        return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
+                    return self._json(app.action_menu_bar(bool(body.get("on"))))
                 if p == "/api/sessions/analyze":
                     return self._json(app.action_analyze_many(list(body.get("ids") or [])))
                 if p == "/api/screen":
