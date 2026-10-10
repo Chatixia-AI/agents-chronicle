@@ -67,6 +67,20 @@ docker` builds it from this checkout instead of PyPI ([A hub in Docker](docker.m
 same and checks that it starts.
 Publishing a release tagged `v<version>` on GitHub by hand still works too.
 
+### Checking the menu-bar icon on a real Mac
+
+Tests can't see the menu bar: macOS decides whether an icon shows, per display, and can hide it later. Before a
+release that touches `menubar.py`, the menu-bar switch or how the dashboard restarts, check by hand on a MacBook
+(with a notch), with an external display attached, from a PyPI-style install (`uv tool install`), and after each step
+confirm the icon is in the menu bar of every display:
+
+1. Turn the switch on in **Settings › Status › Recording** (once without the `app` extra, so it installs it).
+2. Run an update from **Status › Updates** (or **Reinstall**), which restarts the dashboard.
+3. Sleep the Mac and wake it; close the lid with the external display attached, then open it.
+4. Unplug the external display and plug it back in.
+5. Fill the menu bar until icons go behind the notch, and check what the Status note says.
+6. Turn the switch off: the icon goes, on every display.
+
 ### One-time setup before the first release
 
 1. On PyPI, add a *pending publisher* (Account → Publishing): project `agents-chronicle`, owner

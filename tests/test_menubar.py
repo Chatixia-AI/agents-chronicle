@@ -376,6 +376,7 @@ def test_the_extra_is_added_keeping_the_others_and_the_version(mac, monkeypatch)
                                        f"{sys.version_info[0]}.{sys.version_info[1]}", f"agents-chronicle[app,team]=={__version__}"]
     info = menubar.setting_info(mac["cfg"])
     assert info["supported"] and info["can_install"] and not info["app_extra"] and not info["on"]
+    assert info["listed_as"].startswith("python")  # what System Settings › Menu Bar calls it
     monkeypatch.setitem(update._method, "source", "/Users/me/agents-chronicle")  # a checkout: says how instead
     assert menubar.extra_command() is None and not menubar.setting_info(mac["cfg"])["can_install"]
     assert "agents-chronicle[app]" in menubar.setting_info(mac["cfg"])["command"]

@@ -5119,7 +5119,10 @@ function menuBarRow(mb) {
   if (!mb?.supported) return null;
   const on = !!(mb.on && mb.app_extra); // on without the extra shows nothing: switching it on installs the extra
   const code = (c) => h("span", { class: "codeline" }, c);
-  const note = on && mb.shown ? t("Chronicle's icon in the menu bar: what it's doing, a search and your recent sessions, a click away.")
+  // shown: this dashboard put the icon there. macOS may still hide it (on one display, or behind the notch), and the
+  // dashboard can't tell, so the note says where to look instead of promising it is visible
+  const note = on && mb.shown ? tx("On. Don't see it? Look at the menu bar on each display, and in System Settings › Menu Bar, where it is listed as {name}.",
+      { name: code(mb.listed_as || "python3") })
     : on && !mb.agent ? tx("On. It shows while the dashboard runs at login, which {command} sets up.", { command: code("chronicle install") })
     : on ? t("On. It shows the next time the dashboard that runs at login starts.")
     : !mb.app_extra && mb.can_install ? t("Turning it on installs the app extra (PyObjC, about 30 MB) with uv, then restarts the dashboard.")
