@@ -1,12 +1,14 @@
-Chronicle Enterprise License
+Interlatch Enterprise License
 
 Copyright (c) 2026 Adrian Tam. All rights reserved.
 
+This license was called the Chronicle Enterprise License until Chronicle was renamed Interlatch.
+
 This license applies to everything in the "ee/" directory of the agents-chronicle repository and to the
-agents-chronicle-enterprise package built from it (the "Enterprise Software"). Everything else in the repository is
+interlatch-enterprise package built from it (the "Enterprise Software"). Everything else in the repository is
 licensed under the MIT license in the LICENSE file at the repository's root.
 
-1. Production use. You may use the Enterprise Software in production only under a valid Chronicle Enterprise
+1. Production use. You may use the Enterprise Software in production only under a valid Interlatch Enterprise
    subscription agreement with the licensor (a "Subscription"), and only for the number of users and the period that
    the Subscription covers.
 
@@ -35,4 +37,4 @@ licensed under the MIT license in the LICENSE file at the repository's root.
    ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE ENTERPRISE SOFTWARE OR THE
    USE OR OTHER DEALINGS IN THE ENTERPRISE SOFTWARE, EXCEPT AS A SUBSCRIPTION AGREEMENT EXPRESSLY PROVIDES.
 
-For a Subscription, see https://chronicle.chatixia.net/.
+For a Subscription, see https://interlatch.com/.

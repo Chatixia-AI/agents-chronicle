@@ -127,7 +127,7 @@ from its own files only. Add no inline `<script>` or `on…=` attribute to `inde
 object (`style: { "--h": "40px" }`), never a string: a string becomes a style attribute the policy refuses.
 `tests/test_security.py` checks both.
 
-`ee/` is Chronicle Enterprise: its own package (`chronicle_ee`) under the [Chronicle Enterprise License](../ee/LICENSE),
+`ee/` is Interlatch Enterprise: its own package (`chronicle_ee`) under the [Interlatch Enterprise License](../ee/LICENSE),
 left out of the MIT wheel and sdist. The core never imports it; [ee/README.md](../ee/README.md) says what belongs there.
 
 ## Trying a change

@@ -23,5 +23,5 @@ its topic, not in CHANGELOG.md itself. The **Changelog** check fails a pull requ
 `docker/` or `vscode-extension/` without one; label it `no-changelog` if nothing changes for users.
 
 Code outside `ee/` is MIT, and so are your contributions to it. `ee/` is under the
-[Chronicle Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
+[Interlatch Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
 core must never import from `ee/` ([ee/README.md](ee/README.md)).

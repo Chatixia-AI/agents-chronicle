@@ -181,5 +181,5 @@ Issue やプルリクエストを歓迎します。テストの実行方法や�
 ## ライセンス
 
 [MIT](LICENSE)。ただし [`ee/`](ee/) ディレクトリは例外です。企業がチーム全体で Interlatch を運用するための機能
-（シングルサインオン、ポリシー、監査ログのエクスポート）は [Chronicle Enterprise License](ee/LICENSE) で提供し、本番利用には
+（シングルサインオン、ポリシー、監査ログのエクスポート）は [Interlatch Enterprise License](ee/LICENSE) で提供し、本番利用には
 サブスクリプションが必要です。PyPI の `interlatch` パッケージは MIT のみです。

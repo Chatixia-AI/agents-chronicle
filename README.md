@@ -183,5 +183,5 @@ the dashboard with demo data instead of your own sessions.
 ## License
 
 [MIT](LICENSE), except the [`ee/`](ee/) directory: the features a company needs to run Interlatch across
-its teams (single sign-on, policies, audit export) are under the [Chronicle Enterprise License](ee/LICENSE) and
+its teams (single sign-on, policies, audit export) are under the [Interlatch Enterprise License](ee/LICENSE) and
 need a subscription in production. The `interlatch` package on PyPI is MIT only.
