@@ -13,7 +13,7 @@ and Weekly reviews, projects, suggestions by status plus What goes wrong, or Sta
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
 themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
 last sync and, once one is found, an available update ([Updating](install.md#updating)).
-**Settings › Appearance** picks the theme and the language. The fonts ship with Chronicle, so the dashboard never
+**Settings › Appearance** picks the theme, the language and whether the dashboard animates (System follows macOS Reduce motion). The fonts ship with Chronicle, so the dashboard never
 calls out to a font service. **Settings › Devices** shows whether this computer is a hub or sends to
 one (then also the hub's projects it is in, to join, leave or rejoin), and how to open the dashboard on your phone. **Settings › Storage**
 sets up a copy of your archive in Postgres ([A copy in Postgres](postgres.md)). On a phone the rail becomes a tab bar at the bottom, the page takes

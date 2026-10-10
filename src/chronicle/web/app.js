@@ -1936,7 +1936,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
   };
   const onPrompt = (ev, target) => {
     if (!ev) { promptList.replaceChildren(); return; }
-    const li = h("li", { "data-seq": ev.seq, tabindex: 0, role: "link", onclick: () => { showTab("transcript"); target.scrollIntoView({ block: "start", behavior: "smooth" }); },
+    const li = h("li", { "data-seq": ev.seq, tabindex: 0, role: "link", onclick: () => { showTab("transcript"); target.scrollIntoView({ block: "start", behavior: reducedMotion() ? "auto" : "smooth" }); },
       onkeydown: (e) => { if (e.key === "Enter") li.click(); } }, h("span", null, (ev.text || "").replace(/\s+/g, " ").slice(0, 120)), h("small", null, fmtTime(ev.ts)));
     li.target = target;
     const after = [...promptList.children].find((x) => +x.dataset.seq > ev.seq);
@@ -1965,7 +1965,7 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
     h("button", { type: "button", class: `s-kchip k-${k.kind}`, title: `${kindLabel(k.kind)}: ${k.title}`, onclick: () => {
       showTab("details");
       const card = document.getElementById(`k-${k.id}`);
-      if (card) { card.scrollIntoView({ block: "center", behavior: "smooth" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600); }
+      if (card) { card.scrollIntoView({ block: "center", behavior: reducedMotion() ? "auto" : "smooth" }); card.classList.add("flash"); setTimeout(() => card.classList.remove("flash"), 1600); }
     } }, icon(KIND[k.kind] ? k.kind : "dot"), h("span", null, k.title))),
     sx.knowledge.length > 8 ? h("button", { type: "button", class: "s-kchip more", onclick: () => showTab("details") }, t("+{n} more", { n: sx.knowledge.length - 8 })) : null) : null;
   const summaryP = sx.summary ? h("p", { class: "s-summary gloss" }, sx.summary)
@@ -2612,7 +2612,7 @@ function kbView(p, isGlobal) {
 
   const filter = h("input", { class: "input", type: "search", placeholder: t("Filter {n} entries…", { n: fmtNum(bullets) }), "aria-label": t("Filter entries") });
   const nav = h("div", { class: "kb-nav" }, sections.map((sec) => h("button", { type: "button", class: `kb-chip t-${sec.tone[2]}`,
-    onclick: () => document.getElementById(sec.id)?.scrollIntoView({ behavior: "smooth", block: "start" }) },
+    onclick: () => document.getElementById(sec.id)?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth", block: "start" }) },
     icon(sec.tone[1]), sec.title, h("b", null, fmtNum(sec.items.length)))));
   const grid = h("div", { class: "kb-grid" });
   const sourceLinks = (it) => {
@@ -3057,7 +3057,7 @@ route(/^\/search$/, async (params) => {
     h("div", { class: "grid" }, data.knowledge.map((k) => knowledgeCard(k, { compact: true })))) : null;
   const sub = data.total
     ? [`${tn(data.total, "{n} session", "{n} sessions", { n: fmtNum(data.total) })} · ${tn(data.mentions, "{n} mention", "{n} mentions", { n: fmtNum(data.mentions) })}`,
-      knowledge ? [" · ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); knowledge.scrollIntoView({ behavior: "smooth" }); } }, t("{n} knowledge items", { n: data.knowledge.length }))] : null]
+      knowledge ? [" · ", h("a", { href: "#", onclick: (e) => { e.preventDefault(); knowledge.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth" }); } }, t("{n} knowledge items", { n: data.knowledge.length }))] : null]
     : knowledge ? t("No sessions mention “{q}”; {n} knowledge items do", { q, n: data.knowledge.length }) : t("No sessions mention “{q}”", { q });
   return h("div", null, head(sub),
     h("div", { class: "filters" }, box, data.total ? sortSel : null),
@@ -3198,7 +3198,7 @@ route(/^\/glossary$/, async (params) => {
       h("button", { type: "button", class: `chip ${!state.category ? "on" : ""}`, onclick: () => { state.category = ""; refresh(); } }, t("All"), h("span", { class: "count" }, data.total)),
       Object.entries(data.counts).sort((a, b) => b[1] - a[1]).map(([c, n]) =>
         h("button", { type: "button", class: `chip ${state.category === c ? "on" : ""}`, onclick: () => { state.category = c; refresh(); } }, icon(ICONS[c] ? c : "dot"), catLabel(c), h("span", { class: "count" }, n)))),
-    letters.length > 3 ? h("div", { class: "letters" }, letters.map((l) => h("a", { href: "#", onclick: (ev) => { ev.preventDefault(); document.getElementById(`gl-${l}`)?.scrollIntoView({ behavior: "smooth" }); } }, l))) : null,
+    letters.length > 3 ? h("div", { class: "letters" }, letters.map((l) => h("a", { href: "#", onclick: (ev) => { ev.preventDefault(); document.getElementById(`gl-${l}`)?.scrollIntoView({ behavior: reducedMotion() ? "auto" : "smooth" }); } }, l))) : null,
     !data.items.length ? h("div", { class: "card empty" }, data.total ? t("No terms match.") : t("The glossary is built from your knowledge items. Click Rebuild glossary to create it now."))
       : mode === "list" ? listView()
       : letters.map((l) => [h("h2", { class: "gletter", id: `gl-${l}` }, l), h("div", { class: "ggrid" }, groups[l].map(card))]));
@@ -3236,7 +3236,7 @@ const mapColor = (cat) => (MAP_HUES[cat] ? `var(--series-${MAP_HUES[cat]})` : "v
 const mapDot = (t) => (t.n_sessions >= 5 ? 5 : t.n_sessions >= 2 ? 4 : 3); // dot radius: how much it was discussed
 const mapNeutral = (kind) => kind === "project" || kind === "agent" || kind === "root";
 const mapState = { open: new Set(["root"]), pinned: new Set(), only: null, view: null }; // survives re-renders in this tab
-const reducedMotion = () => matchMedia("(prefers-reduced-motion: reduce)").matches;
+const reducedMotion = () => document.documentElement.dataset.motion === "off"; // Appearance › Animations, or the system setting (boot.js)
 
 function mapLevels(params, data) {
   if (params.levels != null) {
@@ -4860,7 +4860,7 @@ function updatesCard() {
           : tx("Runs {command}. Quit and reopen Chronicle afterwards.", { command: h("span", { class: "codeline" }, u.command) })) : null));
     if (parseHash().params.focus === "updates") { // from the notification or the status bar: show this card, once
       setParams({});
-      requestAnimationFrame(() => box.scrollIntoView({ block: "nearest", behavior: "smooth" }));
+      requestAnimationFrame(() => box.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" }));
       box.classList.add("flash");
     }
   };
@@ -6696,6 +6696,13 @@ route(/^\/appearance$/, async () => {
     themeChanged();
     render();
   };
+  let motion = "system";
+  try { const m = localStorage.getItem("chronicle-motion"); if (m === "on" || m === "off") motion = m; } catch (e) { /* private mode */ }
+  const setMotion = (v) => {
+    try { v === "system" ? localStorage.removeItem("chronicle-motion") : localStorage.setItem("chronicle-motion", v); } catch (e) { /* private mode */ }
+    root.dataset.motion = v !== "system" ? v : matchMedia("(prefers-reduced-motion: reduce)").matches ? "off" : "on";
+    render();
+  };
   const row = (label, hint, control) => h("div", { class: "set-row" }, h("div", null, h("b", null, label), hint ? h("div", { class: "muted" }, hint) : null), control);
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, h("div", null, h("h1", null, t("Appearance")), h("div", { class: "sub" }, t("Saved in this browser (and in the app window).")))),
@@ -6705,6 +6712,8 @@ route(/^\/appearance$/, async () => {
       // the language names stay in their own language, so each is findable whichever one is showing
       row(t("Language"), t("System follows your browser's language. The page reloads to switch."),
         segControl([["system", t("System")], ["en", "English"], ["ja", "日本語"]], langPref(), (v) => { if (v !== langPref()) setLang(v); })),
+      row(t("Animations"), t("System follows your Mac's Reduce motion setting. Off stops loading shimmers, slides and fades; spinners turn slowly."),
+        segControl([["system", t("System")], ["on", t("On")], ["off", t("Off")]], motion, setMotion)),
       row(t("Sidebar"), t("The button at the top left, or ⌘B, shows or hides it. While it's hidden, pointing at the rail brings it out until the pointer moves away."),
         h("button", { class: "btn", type: "button", onclick: toggleSidebar }, t("Toggle sidebar")))));
 });
