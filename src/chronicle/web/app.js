@@ -5176,10 +5176,10 @@ route(/^\/status$/, async () => {
           // the server words why the queue is stopped as a clause: a sentence in English, 「。」 in Japanese
           st.pending.block ? h("div", { class: "warn-line" }, icon("pause"), " ", LANG === "en"
             ? `${st.pending.block[0].toUpperCase()}${st.pending.block.slice(1)}.` : `${st.pending.block}。`) : null,
-          st.paused_until ? h("div", { class: "warn-line" }, t("Paused until {when} (usage limit)", { when: fmtDT(st.paused_until) })) : null,
           Object.keys(st.pending.reasons || {}).length ? h("div", { class: "tags" }, h("span", { class: "muted" }, t("Waiting because: ")),
             Object.entries(st.pending.reasons).map(([k, v]) =>
               h("span", { class: "tag", title: QUEUE_REASON_HINT[k] || "" }, `${st.pending.labels?.[k] || QUEUE_REASON_LABEL[k] || k}${t(": ")}${fmtNum(v)}`))) : null,
+          queueRunRow(st),
           h("div", { class: "tags" }, h("span", { class: "muted" }, t("Sessions: ")),
             Object.entries(counts).map(([k, v]) => h("span", { class: "tag" }, `${STATUS_LABEL[k] || k}${t(": ")}${fmtNum(v)}`))),
           h("div", { class: "muted analysis-meta" }, tx("Model {model} · auto {auto} · backfill {backfill} · {n} per run", { model: h("code", null, st.config.model),
@@ -5187,6 +5187,34 @@ route(/^\/status$/, async () => {
           knowledgeLangPicker(st.analysis))),
       st.errors.length ? [h("div", { class: "subhead" }, t("Recent failures")), h("ul", { class: "bullets" }, st.errors.map((e) => h("li", null, h("a", { href: `#/session/${e.id}` }, e.title || e.id.slice(0, 8)), h("div", { class: "muted" }, (e.analysis_reason || "").slice(0, 200)))))] : null)));
 });
+
+// The Queue's Analyze now: the sessions ready now, or (none ready) the ones that may still be going, analyzed at once
+// instead of on the background run. It runs with automatic analysis off, and through a usage-limit pause that may be over.
+function queueRunRow(st) {
+  if (st.hub_url) return null; // its sessions are analyzed on the hub
+  const ready = st.pending.ready || 0, active = st.pending.reasons?.active || 0;
+  const which = ready ? "ready" : active ? "active" : null;
+  if (!which) return null;
+  const n = which === "ready" ? ready : active;
+  const running = st.jobs?.["analyze:queue"]?.state === "running";
+  const label = running ? t("Analyzing…") : which === "ready" ? t("Analyze {n} now", { n: fmtNum(n) })
+    : tn(n, "Analyze the {n} still active", "Analyze the {n} still active", { n: fmtNum(n) });
+  const btn = h("button", { class: "btn small primary admin-only", type: "button", disabled: running || !canAdmin(), onclick: async () => {
+    if (n > 25 && !confirm(st.analysis?.billed
+      ? t("Analyze {n} sessions now? Each one is a call to {agent}, billed to your API key.", { n, agent: analyzer() })
+      : t("Analyze {n} sessions now? Each one is a call on your {agent} login.", { n, agent: analyzer() }))) return;
+    btn.disabled = true; btn.textContent = t("Starting…");
+    const r = await post("/api/analysis/run", { which }).catch((e) => ({ error: e.message }));
+    if (!r.started) { toast(r.error || t("Could not start")); btn.disabled = false; btn.textContent = label; return; }
+    toast(tn(r.count, "Analyzing {n} session; the status bar shows progress", "Analyzing {n} sessions; the status bar shows progress", { n: fmtNum(r.count) }), 7000);
+    btn.textContent = t("Analyzing…");
+    watchJob("analyze:queue");
+  } }, label);
+  const note = which === "active" ? t("Nothing is ready yet. These may still be going: one that continues is analyzed again later.")
+    : st.pending.block ? t("Runs now anyway, without waiting for the background run.")
+    : t("Without waiting for the background run (every 15 minutes).");
+  return h("div", { class: "queue-run" }, btn, h("span", { class: "muted" }, note));
+}
 
 // =====================================================================================
 // Devices: this computer as a hub or as one that sends to a hub, and the dashboard on a phone (Tailscale)
@@ -7068,6 +7096,7 @@ function paletteCommands() {
     ...[[t("People"), "#/team", "preference", t("team")], [teamProjectsLabel(), "#/team/projects", "projects", t("team")], [t("Computers"), "#/team/computers", "devices", t("team")],
       [t("Team store"), "#/team/store", "data", t("team")], [t("Hub settings"), "#/team/settings", "settings", t("name, address, backups")]].map((x) => ({ ...nav(...x), hub: true, admin: true })),
     { group: cmds, label: t("Sync now"), icon: "sync", hint: "", run: syncNow, admin: true },
+    { group: cmds, label: t("Analyze the queue now"), icon: "queued", hint: "", run: analyzeQueueNow, admin: true },
     { group: cmds, label: t("Toggle sidebar"), icon: "sidebar", hint: "⌘B", run: toggleSidebar },
     { group: cmds, label: dark ? t("Switch to light theme") : t("Switch to dark theme"), icon: dark ? "sun" : "moon", hint: "", run: flipTheme },
     // named in the language it switches to, like the status bar button
@@ -7345,7 +7374,7 @@ function jobLabel(name) {
   const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
   return {
     sync: t("Sync"), mirror: t("Writing the mirror"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), "menu-bar": t("Setting up the menu-bar icon"), themes: t("Grouping glossary themes"),
-    analyze: arg === "selection" ? t("Analyzing selected sessions") : t("Analyzing session {id}", { id: (arg || "").slice(0, 8) }),
+    analyze: arg === "selection" ? t("Analyzing selected sessions") : arg === "queue" ? t("Analyzing the queue") : t("Analyzing session {id}", { id: (arg || "").slice(0, 8) }),
     glossary: arg ? t("Glossary: {name}", { name: tail(arg) }) : t("Glossary"), review: t("Weekly review"),
     synthesize: arg === "__global__" ? t("Global playbook") : t("Knowledge base: {name}", { name: tail(arg) }),
   }[kind] || name;
@@ -7435,6 +7464,16 @@ function showUpdate(u, version) {
         h("button", { class: "btn small", type: "button", onclick: dismiss }, t("Later")))),
     h("button", { class: "un-close", type: "button", "aria-label": tc("notification", "Dismiss"), onclick: dismiss }, "×"));
   card.hidden = false;
+}
+async function analyzeQueueNow() { // the palette's way to the Queue's Analyze now: the sessions ready now
+  const n = lastStatus?.pending?.ready || 0;
+  if (n > 25 && !confirm(lastStatus?.analysis?.billed
+    ? t("Analyze {n} sessions now? Each one is a call to {agent}, billed to your API key.", { n, agent: analyzer() })
+    : t("Analyze {n} sessions now? Each one is a call on your {agent} login.", { n, agent: analyzer() }))) return;
+  const r = await post("/api/analysis/run", { which: "ready" }).catch((e) => ({ error: e.message }));
+  if (!r.started) { toast(r.error || t("Could not start")); return; }
+  toast(tn(r.count, "Analyzing {n} session; the status bar shows progress", "Analyzing {n} sessions; the status bar shows progress", { n: fmtNum(r.count) }), 7000);
+  watchJob("analyze:queue");
 }
 async function syncNow() {
   drawSyncBtn(true); // at once: the next status poll puts the sync icon back if it didn't start

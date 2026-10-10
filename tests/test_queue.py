@@ -84,3 +84,47 @@ def test_session_api_carries_the_reason(synced):
     app = App(cfg)
     s = app.session(SID)
     assert s["waiting"]["code"] == "too_short" and "fewer than" in s["waiting"]["text"]
+
+
+def test_queued_ids_follow_the_reasons(synced):
+    """The Queue's Analyze now takes exactly the sessions the reasons name: ready ones, or the ones still active."""
+    from chronicle.worker import queued_ids
+
+    conn, cfg = synced["conn"], synced["cfg"]
+    conn.execute("DELETE FROM sessions")
+    _add(conn, "ready")
+    _add(conn, "active-1", ended_flag=0, ended_at=to_iso(utcnow()))
+    _add(conn, "active-2", ended_flag=0, ended_at=to_iso(utcnow() - timedelta(minutes=1)))
+    _add(conn, "too_short", ended_flag=0, ended_at=to_iso(utcnow()), n_prompts=0)
+    conn.commit()
+    cfg = replace(cfg, analysis=replace(cfg.analysis, idle_minutes=20))
+    assert queued_ids(conn, cfg, "ready", 10) == ["ready"]
+    assert queued_ids(conn, cfg, "active", 10) == ["active-1", "active-2"]  # newest first
+    assert queued_ids(conn, cfg, "active", 1) == ["active-1"]
+
+
+def test_analyze_the_queue_now(synced):
+    """Analyze now runs the ready sessions through a usage-limit pause, and a run that gets through lifts the pause."""
+    import time
+
+    from chronicle.db import kv_get
+    from chronicle.server import App
+
+    conn, cfg = synced["conn"], synced["cfg"]
+    conn.execute("UPDATE sessions SET analysis_status = 'pending', analysis_attempts = 0, ended_flag = 1")
+    kv_set(conn, PAUSE_KEY, to_iso(utcnow() + timedelta(hours=1)))
+    conn.commit()
+    app = App(cfg)
+    assert app.action_analyze_queue("everything") == {"started": False, "error": "unknown queue"}
+    assert not app.action_analyze_queue("active")["started"]  # nothing is still going
+
+    r = app.action_analyze_queue("ready")
+    assert r["started"] and r["count"] == len(pending_sessions(conn, cfg, 1000)) >= 1
+    for _ in range(200):
+        if app.jobs.snapshot()["analyze:queue"]["state"] != "running":
+            break
+        time.sleep(0.05)
+    assert app.jobs.snapshot()["analyze:queue"]["state"] == "done", app.jobs.snapshot()["analyze:queue"]
+    assert conn.execute("SELECT analysis_status FROM sessions WHERE id = ?", (SID,)).fetchone()[0] == "done"
+    assert not kv_get(conn, PAUSE_KEY)
+    assert not app.action_analyze_queue("ready")["started"]  # nothing left

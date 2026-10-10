@@ -68,7 +68,8 @@ with npm or Homebrew is found too. A session is analyzed once it ends or has bee
 
 **Analysis stopped with "usage limit".** Chronicle pauses analysis for an hour when Claude reports a usage limit or
 an auth error, and resumes by itself. Other failures back off (30 min, 2 h, 8 h). **Analyze now** on a session
-page retries at once.
+page retries that session at once, and **Analyze N now** in **Status › Analysis** retries the whole ready queue;
+either one lifts the pause when it gets through.
 
 **I want to see what a backlog would cost first.** `chronicle analyze --pending --dry-run` sizes the queue without
 spending tokens; `analysis.max_budget_usd` caps each call, and `analysis.auto = false` stops automatic analysis.

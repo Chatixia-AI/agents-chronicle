@@ -30,7 +30,7 @@ from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__, i18n, news
 from .config import LANGUAGES, Config
-from .db import connect, kv_get
+from .db import connect, kv_get, kv_set
 from .i18n import tr
 from .ladder import reason_text
 from .ladder import refresh as refresh_stage
@@ -2088,6 +2088,38 @@ class App:
         return {"started": started, "count": len(ids), "dropped": len(refs) - len(ids),
                 **({} if started else {"error": tr("A batch analysis is already running")})}
 
+    def action_analyze_queue(self, which: str) -> dict:
+        """The Queue's Analyze now: the sessions ready now, or ("active") the ones that may still be going, analyzed
+        at once instead of on the background run. It runs with automatic analysis off and through a usage-limit
+        pause (the limit may be over by now); a run that gets through lifts the pause for the background run too."""
+        from .worker import PAUSE_KEY, queued_ids, run_worker
+
+        if which not in ("ready", "active"):
+            return {"started": False, "error": tr("unknown queue")}
+        if self.cfg.sends_files:
+            return {"started": False, "error": tr("analysis runs on the hub ({hub})", hub=self.cfg.hub_url)}
+        ids = queued_ids(self.conn, self.cfg, which, MAX_SELECTION)
+        if not ids:
+            return {"started": False, "error": tr("Nothing in the queue to analyze")}
+
+        def job(progress):
+            report = run_worker(self.cfg, session_ids=ids, synthesize=True, export=True, progress=progress, wait=True)
+            if report.analyzed and not report.paused_until:
+                conn = connect(self.cfg.db_path)
+                try:
+                    kv_set(conn, PAUSE_KEY, None)
+                    conn.commit()
+                finally:
+                    conn.close()
+            if report.paused_until and report.failed:
+                left = len(ids) - len(report.analyzed) - len(report.skipped)
+                return f"{report.summary()}; hit the usage limit again: {left} not analyzed, they stay queued"
+            return report.summary()
+
+        started = self.jobs.start("analyze:queue", job)
+        return {"started": started, "count": len(ids),
+                **({} if started else {"error": tr("The queue is already being analyzed")})}
+
     def action_synthesize(self, path: str) -> bool:
         from .synthesize import synthesize_project
 
@@ -2850,6 +2882,8 @@ def make_handler(app: App, port: int):
                     if not self._from_here():
                         return self._json({"error": tr("change this on the computer itself, not from another device")}, 403)
                     return self._json(app.action_menu_bar(bool(body.get("on"))))
+                if p == "/api/analysis/run":  # the Queue's Analyze now
+                    return self._json(app.action_analyze_queue(str(body.get("which") or "ready")))
                 if p == "/api/sessions/analyze":
                     return self._json(app.action_analyze_many(list(body.get("ids") or [])))
                 if p == "/api/screen":
