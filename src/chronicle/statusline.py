@@ -50,7 +50,7 @@ def wrapped_path() -> Path:
 
 def is_ours(status_line) -> bool:
     cmd = (status_line or {}).get("command") if isinstance(status_line, dict) else None
-    return bool(cmd) and "chronicle" in cmd and f"{COMMAND_MARKER} " in f" {cmd} "
+    return bool(cmd) and ("interlatch" in cmd or "chronicle" in cmd) and f"{COMMAND_MARKER} " in f" {cmd} "
 
 
 # ------------------------------------------------------------------ the command Claude Code runs

@@ -92,7 +92,7 @@ def test_connect_antigravity(agy):
     connect(cfg, "antigravity", "/opt/bin/chronicle")
     assert load_config(cfg.home).antigravity_dirs == [agy["agy"]]
     servers = json.loads(mcp.read_text())["mcpServers"]
-    assert set(servers) == {"unityMCP", "chronicle"} and servers["chronicle"] == {"command": "/opt/bin/chronicle", "args": ["mcp"]}
+    assert set(servers) == {"unityMCP", "interlatch"} and servers["interlatch"] == {"command": "/opt/bin/chronicle", "args": ["mcp"]}
     disconnect(cfg, "antigravity")
     assert set(json.loads(mcp.read_text())["mcpServers"]) == {"unityMCP"}
     assert load_config(cfg.home).antigravity_dirs == []

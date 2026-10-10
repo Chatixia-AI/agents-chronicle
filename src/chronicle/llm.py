@@ -26,7 +26,7 @@ from .config import Config
 
 log = logging.getLogger("chronicle.llm")
 
-INTERNAL_ENV = "CHRONICLE_INTERNAL"
+INTERNAL_ENV = "INTERLATCH_INTERNAL"  # hooks.py: the sessions of the agents this runs are not recorded
 
 
 class LLMError(RuntimeError):
@@ -91,7 +91,7 @@ JAPANESE = (
 
 
 def written_in(cfg: Config, system: str, english: str = "", note: str = "") -> str:
-    """`system` in the language Chronicle writes in ([analysis] language). English leaves it exactly as it is; Japanese
+    """`system` in the language Interlatch writes in ([analysis] language). English leaves it exactly as it is; Japanese
     swaps its English-writing sentence (`english`) for JAPANESE and `note`, or appends them when it has none."""
     if cfg.analysis.language != "ja":
         return system
@@ -386,15 +386,15 @@ class CodexRunner(Runner):
 # Bob Shell's tool groups (those its built-in modes use); every one is off for analysis.
 BOB_TOOL_GROUPS = ("artifact", "browser", "edit", "execute", "mcp", "mode", "plan", "read", "skill", "subagent",
                    "subtask", "todo")
-BOB_MODE = "chronicle-analyst"
+BOB_MODE = "interlatch-analyst"
 
 
 class BobRunner(Runner):
     """IBM Bob Shell, headless (`bob run`). Bob has no flag for a system prompt or for running without tools, so each
-    call gets a workspace of its own under workdir/bob holding a custom mode (.bob/custom_modes.yaml): Chronicle's
+    call gets a workspace of its own under workdir/bob holding a custom mode (.bob/custom_modes.yaml): Interlatch's
     instructions as the mode's role, and no tool groups. Every tool group, MCP and subagents are also switched off on
     the command line, and a reply that follows any tool call is discarded. Headless runs need a Bob API key (the
-    app's sign-in is not used); Bob saves each run as a task in its database, which Chronicle's Bob import skips."""
+    app's sign-in is not used); Bob saves each run as a task in its database, which Interlatch's Bob import skips."""
 
     name, label, cli = "bob", "IBM Bob", "bob run"
 
@@ -437,7 +437,7 @@ class BobRunner(Runner):
         ws = Path(tempfile.mkdtemp(dir=root, prefix="run-"))  # one per call: calls run in parallel
         try:
             (ws / ".bob").mkdir()
-            mode = {"customModes": [{"slug": BOB_MODE, "name": "Chronicle analyst", "roleDefinition": system, "groups": []}]}
+            mode = {"customModes": [{"slug": BOB_MODE, "name": "Interlatch analyst", "roleDefinition": system, "groups": []}]}
             (ws / ".bob" / "custom_modes.yaml").write_text(json.dumps(mode))  # JSON is YAML
             cmd = [self.bin, "run", "--format", "stream-json", "--workspace", str(ws), "--mode", BOB_MODE,
                    "--max-turns", "1", "--disable-mcp", "--disable-subagents",

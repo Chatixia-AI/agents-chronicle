@@ -1,4 +1,4 @@
-"""Sources ("connectors"): which coding agents Chronicle records, and how each one is wired up."""
+"""Sources ("connectors"): which coding agents Interlatch records, and how each one is wired up."""
 
 from __future__ import annotations
 
@@ -15,7 +15,11 @@ import tomllib
 from pathlib import Path
 
 from .config import Config, set_config_value
+from .hooks import internal_env
 from .i18n import tr
+from .install import LEGACY_MCP_NAME, MCP_NAME
+
+MCP_NAMES = (MCP_NAME, LEGACY_MCP_NAME)  # an agent that still has Chronicle's 'chronicle' server runs the same one
 
 _VERSION_CACHE: dict[str, tuple[float, str | None]] = {}
 
@@ -28,7 +32,7 @@ def _version(binary: str | None) -> str | None:
         return hit[1]
     try:
         out = subprocess.run([binary, "--version"], capture_output=True, text=True, timeout=10,
-                             env={**os.environ, "CHRONICLE_INTERNAL": "1"}).stdout.strip().splitlines()
+                             env=internal_env()).stdout.strip().splitlines()
         version = out[0] if out else None
     except (OSError, subprocess.SubprocessError):
         version = None
@@ -125,7 +129,7 @@ def codex_mcp_registered(home: Path | None = None) -> bool:
         data = tomllib.loads(((home or codex_home()) / "config.toml").read_text())
     except (OSError, tomllib.TOMLDecodeError):
         return False
-    return "chronicle" in (data.get("mcp_servers") or {})
+    return any(name in (data.get("mcp_servers") or {}) for name in MCP_NAMES)
 
 
 def _codex_notify(home: Path) -> list | None:
@@ -192,9 +196,9 @@ def connect_codex(cfg: Config, exe: str) -> list[str]:
     if not binary:
         return actions + [tr("MCP registration skipped: codex CLI not found")]
     if not codex_mcp_registered(home):
-        cmd = [binary, "mcp", "add", "chronicle", "--", *shlex.split(exe), "mcp"]
+        cmd = [binary, "mcp", "add", MCP_NAME, "--", *shlex.split(exe), "mcp"]
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-        actions.append(tr("registered MCP server 'chronicle' in Codex") if proc.returncode == 0
+        actions.append(tr("registered MCP server 'interlatch' in Codex") if proc.returncode == 0
                        else tr("Codex MCP registration failed: {error}", error=(proc.stderr or proc.stdout).strip()[:300]))
     return actions
 
@@ -203,9 +207,14 @@ def disconnect_codex(cfg: Config) -> list[str]:
     set_config_value(cfg, "sources", "codex_dirs", "[]")
     actions = [tr("stopped recording {label} (recorded sessions are kept)", label="Codex")]
     binary = cfg.codex_bin()
-    if binary and codex_mcp_registered():
-        proc = subprocess.run([binary, "mcp", "remove", "chronicle"], capture_output=True, text=True, timeout=60)
-        actions.append(tr("removed MCP server 'chronicle' from Codex") if proc.returncode == 0
+    try:
+        servers = tomllib.loads((codex_home() / "config.toml").read_text()).get("mcp_servers") or {}
+    except (OSError, tomllib.TOMLDecodeError):
+        servers = {}
+    for name in [n for n in MCP_NAMES if n in servers] if binary else []:
+        proc = subprocess.run([binary, "mcp", "remove", name], capture_output=True, text=True, timeout=60)
+        actions.append((tr("removed MCP server 'interlatch' from Codex") if name == MCP_NAME
+                       else tr("removed MCP server '{name}'", name=name)) if proc.returncode == 0
                        else tr("Codex MCP removal failed: {error}", error=(proc.stderr or proc.stdout).strip()[:200]))
     return actions
 
@@ -269,8 +278,9 @@ def disconnect_codex_cloud(cfg: Config) -> list[str]:
 # ------------------------------------------------------------------ MCP entries in other tools' JSON configs
 def _mcp_json_has(path: Path, key: str) -> bool:
     try:
-        return "chronicle" in (json.loads(path.read_text()).get(key) or {})
-    except (OSError, ValueError, AttributeError):
+        servers = json.loads(path.read_text()).get(key) or {}
+        return any(name in servers for name in MCP_NAMES)
+    except (OSError, ValueError, AttributeError, TypeError):
         return False
 
 
@@ -279,24 +289,45 @@ def _mcp_json_set(cfg: Config, path: Path, key: str, entry: dict | None, label: 
 
 
 def _mcp_json_write(cfg: Config, path: Path, key: str, entry: dict | None, label: str) -> tuple[str, bool]:
-    """Add (entry) or remove (None) the 'chronicle' server in a JSON MCP config, keeping everything else: (what happened,
-    whether the file changed). The file is backed up first; a file that is not plain JSON (comments) is left alone."""
+    """Add (entry) or remove (None) our server in a JSON MCP config, keeping everything else: (what happened, whether
+    the file changed). Adding replaces Chronicle's 'chronicle' server in its place; removing takes either. The file is
+    backed up first; a file that is not plain JSON (comments) is left alone."""
     try:
         data = json.loads(path.read_text()) if path.exists() else {}
     except (OSError, ValueError):
-        return tr("{label}: {path} is not plain JSON; add the 'chronicle' MCP server by hand", label=label,
+        return tr("{label}: {path} is not plain JSON; add the 'interlatch' MCP server by hand", label=label,
                   path=_tilde(path)), False
-    if not isinstance(data, dict):
+    if not isinstance(data, dict) or not isinstance(data.setdefault(key, {}), dict):
         return tr("{label}: unexpected {path} format; left unchanged", label=label, path=_tilde(path)), False
-    servers = data.setdefault(key, {})
+    servers = data[key]
     if entry is None:
-        if "chronicle" not in servers:
-            return tr("{label}: no chronicle MCP server to remove", label=label), False
-        servers.pop("chronicle")
+        if not any(name in servers for name in MCP_NAMES):
+            return tr("{label}: no interlatch MCP server to remove", label=label), False
+        for name in MCP_NAMES:
+            servers.pop(name, None)
     else:
-        if servers.get("chronicle") == entry:
-            return tr("{label}: chronicle MCP server already registered", label=label), False
-        servers["chronicle"] = entry
+        if servers.get(MCP_NAME) == entry and LEGACY_MCP_NAME not in servers:
+            return tr("{label}: interlatch MCP server already registered", label=label), False
+        data[key] = rename_server(servers, entry)
+    _write_json(cfg, path, data, label)
+    return (tr("{label}: removed MCP server 'interlatch' ({path})", label=label, path=_tilde(path))
+            if entry is None else
+            tr("{label}: registered MCP server 'interlatch' ({path})", label=label, path=_tilde(path))), True
+
+
+def rename_server(servers: dict, entry: dict) -> dict:
+    """The server map with ours set to `entry` and Chronicle's 'chronicle' gone; ours takes the old one's place in the
+    order, and keeps the settings the old one had besides its command (Bob's alwaysAllow, an env, ...)."""
+    old = servers.get(LEGACY_MCP_NAME)
+    merged = {**entry, **old, **{k: entry[k] for k in ("command", "args") if k in entry}} if isinstance(old, dict) else entry
+    if LEGACY_MCP_NAME not in servers:
+        return {**servers, MCP_NAME: merged}
+    return {(MCP_NAME if k == LEGACY_MCP_NAME else k): (merged if k == LEGACY_MCP_NAME else v)
+            for k, v in servers.items() if k != MCP_NAME}
+
+
+def _write_json(cfg: Config, path: Path, data: dict, label: str) -> None:
+    """Back the file up into the backups folder, then replace it."""
     if path.exists():
         backup = cfg.home / "backups" / f"{path.name}.{int(time.time())}.{re.sub(r'[^a-z]+', '-', label.lower())}.bak"
         backup.parent.mkdir(parents=True, exist_ok=True)
@@ -305,8 +336,6 @@ def _mcp_json_write(cfg: Config, path: Path, key: str, entry: dict | None, label
     tmp = path.with_name(path.name + ".tmp")
     tmp.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n")
     os.replace(tmp, path)
-    return (tr("{label}: removed MCP server 'chronicle' ({path})", label=label, path=_tilde(path)) if entry is None
-            else tr("{label}: registered MCP server 'chronicle' ({path})", label=label, path=_tilde(path))), True
 
 
 def _split_exe(exe: str) -> tuple[str, list[str]]:
@@ -424,7 +453,7 @@ def bob_status(cfg: Config, conn: sqlite3.Connection) -> dict:
     from .bob_parser import bob_db, load_tasks, task_folder
 
     home = cfg.bob_dirs[0] if cfg.bob_dirs else bob_home()
-    tasks = [t for t in load_tasks(home) if not cfg.is_internal_path(task_folder(t))]  # not Chronicle's own analyses
+    tasks = [t for t in load_tasks(home) if not cfg.is_internal_path(task_folder(t))]  # not Interlatch's own analyses
     with_prompt = sum(1 for t in tasks if t["messages"])
     connected = bool(cfg.bob_dirs)
     app = next((a for a in ("/Applications/IBM Bob.app", "/Applications/IBM Bob - Insiders.app") if Path(a).exists()), None)
@@ -559,7 +588,7 @@ def disconnect_antigravity(cfg: Config) -> list[str]:
 
 
 # ------------------------------------------------------------------ MCP-only clients
-# Tools Chronicle does not record but can give its MCP server to. Each keeps a JSON config with a server map.
+# Tools Interlatch does not record but can give its MCP server to. Each keeps a JSON config with a server map.
 APPLICATIONS = Path("/Applications")
 
 MCP_CLIENTS = {

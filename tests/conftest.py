@@ -1,4 +1,4 @@
-"""Test fixtures: an isolated Chronicle home + a fake ~/.claude with a synthetic transcript."""
+"""Test fixtures: an isolated Interlatch home + a fake ~/.claude with a synthetic transcript."""
 
 from __future__ import annotations
 
@@ -234,6 +234,18 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "re
 
 
 @pytest.fixture(autouse=True)
+def no_real_home(tmp_path_factory, monkeypatch):
+    """No test reads or writes this computer's own state: HOME is a scratch folder (so ~/.interlatch,
+    ~/.claude-chronicle, ~/.claude.json, ~/.codex and the rest are too), and no INTERLATCH_* or CHRONICLE_* variable
+    from the shell that runs the tests reaches them. A test that wants one sets it."""
+    for name in list(os.environ):
+        if name.startswith(("INTERLATCH_", "CHRONICLE_")) and name != "CHRONICLE_TEST_PG":
+            monkeypatch.delenv(name)
+    monkeypatch.delenv("XPC_SERVICE_NAME", raising=False)  # which launchd agent this process is: none
+    monkeypatch.setenv("HOME", str(tmp_path_factory.mktemp("user-home")))
+
+
+@pytest.fixture(autouse=True)
 def no_real_background_agents(tmp_path_factory, monkeypatch):
     """No test reaches this computer's own launchd or systemd agents: `chronicle install --no-ui` in a test once
     booted out the developer's real dashboard. Agent files go to a scratch folder, and launchctl and systemctl are
@@ -288,9 +300,7 @@ def env(tmp_path, monkeypatch):
         [synthesis]
         min_new_items = 1
         """))
-    monkeypatch.setenv("CHRONICLE_HOME", str(home))
-    monkeypatch.delenv("CHRONICLE_CLAUDE_DIRS", raising=False)
-    monkeypatch.delenv("CHRONICLE_INTERNAL", raising=False)
+    monkeypatch.setenv("INTERLATCH_HOME", str(home))
     monkeypatch.setenv("FAKE_CLAUDE_LOG", str(tmp_path / "fake_claude.log"))
     # never read the real Copilot / VS Code / Bob / Antigravity stores from tests
     monkeypatch.setenv("COPILOT_HOME", str(tmp_path / "no-copilot"))

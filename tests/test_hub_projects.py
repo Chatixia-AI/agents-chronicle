@@ -270,7 +270,7 @@ def test_a_limited_computer_shares_only_its_projects(tmp_path, monkeypatch):
     home.mkdir()
     (home / "config.toml").write_text('[hub]\nurl = "http://hub"\nshare = "knowledge"\n'
                                       '[hub.folders]\n"/home/bob/resona" = "/srv/Resona"\n"/home/bob/other" = "/srv/Other"\n')
-    monkeypatch.setenv("CHRONICLE_HOME", str(home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(home))
     cfg = lc(home)
     conn = connect(cfg.db_path)
     for sid, path in (("in", "/home/bob/resona/app"), ("out", "/home/bob/other/app"), ("none", "/home/bob/misc"),

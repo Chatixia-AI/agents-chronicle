@@ -41,7 +41,7 @@ def test_notifies_once_per_release(pypi, env, monkeypatch):
     cfg, conn = env["cfg"], pypi["conn"]
     assert notify.release_check(cfg, conn) == "99.0.0"
     title, message = pypi["posted"][0]
-    assert title == "Chronicle 99.0.0 is available" and "uv tool upgrade agents-chronicle" in message
+    assert title == "Chronicle 99.0.0 is available" and "uv tool upgrade interlatch" in message
     assert "#/status?focus=updates" in message
 
     assert notify.release_check(cfg, conn) is None  # the next sync, 15 minutes later
@@ -99,7 +99,7 @@ def test_post_uses_the_system_notifier(monkeypatch):
 def test_how_to_update_matches_the_install(env):
     cfg = env["cfg"]
     assert "Status › Updates" in notify.how_to_update(cfg, "app") and "run:" not in notify.how_to_update(cfg, "app")
-    assert notify.how_to_update(cfg, "pipx").endswith("run: pipx upgrade agents-chronicle")
+    assert notify.how_to_update(cfg, "pipx").endswith("run: pipx upgrade interlatch")
 
 
 # ------------------------------------------------------------------------------------------- install

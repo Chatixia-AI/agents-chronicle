@@ -8,7 +8,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-INTERNAL_ENV = "CHRONICLE_INTERNAL"
+INTERNAL_ENV = "INTERLATCH_INTERNAL"  # on the agents Interlatch runs itself (analyses), so their hooks record nothing
+INTERNAL_ENVS = (INTERNAL_ENV, "CHRONICLE_INTERNAL")  # and its name before the rename
+
+
+def internal_env() -> dict[str, str]:
+    """The environment for an agent Interlatch runs itself."""
+    return {**os.environ, INTERNAL_ENV: "1"}
 
 
 def _read_payload() -> dict:
@@ -20,7 +26,7 @@ def _read_payload() -> dict:
 
 
 def self_command() -> list[str]:
-    """argv that re-runs this program: the bundled executable inside Chronicle.app, else `python -m chronicle`."""
+    """argv that re-runs this program: the bundled executable inside Interlatch.app, else `python -m chronicle`."""
     return [sys.executable] if getattr(sys, "frozen", False) else [sys.executable, "-m", "chronicle"]
 
 
@@ -34,13 +40,13 @@ def spawn_detached(args: list[str], log_path: Path) -> None:
             stderr=log,
             start_new_session=True,
             close_fds=True,
-            env={k: v for k, v in os.environ.items() if k != INTERNAL_ENV},
+            env={k: v for k, v in os.environ.items() if k not in INTERNAL_ENVS},
         )
 
 
 def hook_main(event: str) -> int:
-    """Entry for `chronicle hook <event>`; never fails loudly (a hook error must not disturb Claude Code)."""
-    if os.environ.get(INTERNAL_ENV):
+    """Entry for `interlatch hook <event>`; never fails loudly (a hook error must not disturb Claude Code)."""
+    if any(os.environ.get(name) for name in INTERNAL_ENVS):
         return 0
     payload = _read_payload()
     try:
@@ -49,7 +55,7 @@ def hook_main(event: str) -> int:
         if event == "session-start":
             return _on_session_start(payload)
     except Exception as exc:  # pragma: no cover - defensive
-        print(f"chronicle hook {event} failed: {exc}", file=sys.stderr)
+        print(f"interlatch hook {event} failed: {exc}", file=sys.stderr)
     return 0
 
 
@@ -114,7 +120,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
         cwd = _project_here(conn, cwd)  # a folder inside a project set up on this hub belongs to that project
         lines: list[str] = []
         if kb:
-            lines.append(f"Chronicle knowledge base for {kb['project_name']} (from past coding-agent sessions, "
+            lines.append(f"Interlatch knowledge base for {kb['project_name']} (from past coding-agent sessions, "
                          f"updated {local_str(kb['updated_at'], '%Y-%m-%d')}):")
             for section in kb_sections(kb):
                 items = section.get("items") or []
@@ -133,7 +139,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
                 (cwd,),
             ).fetchall()
             if rows:
-                lines.append("Chronicle notes from past coding-agent sessions in this project:")
+                lines.append("Interlatch notes from past coding-agent sessions in this project:")
                 lines += [f"- [{r['kind']}" + (f" · {stage_label(r)}" if r["stage"] in TRUSTED else "") + f"] {one_line(r['title'], 200)}"
                           for r in rows]
         team = conn.execute(  # teammates' lessons the team hub sent (hub.apply_team_lessons)
@@ -156,7 +162,7 @@ def build_session_context(cfg, cwd: str) -> str | None:
                 for r in recent))
         if not lines:
             return None
-        lines.append("Use the chronicle MCP tools (search_sessions, search_knowledge, get_session) for details.")
+        lines.append("Use the interlatch MCP tools (search_sessions, search_knowledge, get_session) for details.")
         text = "\n".join(lines)
         return text[: cfg.inject_max_chars]
     finally:

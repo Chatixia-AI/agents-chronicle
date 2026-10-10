@@ -7,27 +7,28 @@ import json
 import os
 import shutil
 import tomllib
+from collections.abc import Mapping
 from dataclasses import dataclass, field
 from pathlib import Path
 
 DEFAULT_CONFIG_TOML = """\
-# Chronicle configuration.
+# Interlatch configuration.
 # Edit freely; changes apply on the next sync / worker run.
 
 [sources]
 # Claude Code config directories to scan (each one contains projects/).
 claude_dirs = ["~/.claude"]
 # OpenAI Codex homes to scan (sessions, memories, and the Claude sessions Codex Desktop imported).
-# Empty = not connected; `chronicle connect codex` (or the dashboard's Sources page) fills it in.
+# Empty = not connected; `interlatch connect codex` (or the dashboard's Sources page) fills it in.
 codex_dirs = []
 # Codex Cloud tasks (chatgpt.com/codex), listed through the codex CLI on every sync: title, repository, diff.
-# Off by default because it goes online; `chronicle connect codex-cloud`.
+# Off by default because it goes online; `interlatch connect codex-cloud`.
 codex_cloud = false
-# GitHub Copilot: Copilot agent homes (~/.copilot) and VS Code User directories (Copilot Chat). `chronicle connect copilot`.
+# GitHub Copilot: Copilot agent homes (~/.copilot) and VS Code User directories (Copilot Chat). `interlatch connect copilot`.
 copilot_dirs = []
-# IBM Bob homes (~/.bob). `chronicle connect bob`.
+# IBM Bob homes (~/.bob). `interlatch connect bob`.
 bob_dirs = []
-# Google Antigravity homes (~/.gemini/antigravity). `chronicle connect antigravity`.
+# Google Antigravity homes (~/.gemini/antigravity). `interlatch connect antigravity`.
 antigravity_dirs = []
 # Recover prompts of sessions whose transcripts Claude Code already deleted (from history.jsonl).
 import_history = true
@@ -56,7 +57,7 @@ min_prompts = 1
 max_per_run = 6
 # Parallel analysis processes.
 concurrency = 2
-# Also analyze sessions recorded before Chronicle was installed (newest first, within max_per_run).
+# Also analyze sessions recorded before Interlatch was installed (newest first, within max_per_run).
 backfill = true
 # Characters of condensed transcript per call; longer sessions are map-reduced.
 chunk_chars = 150000
@@ -67,11 +68,11 @@ claude_bin = ""
 codex_model = ""
 # Path to the codex executable (auto-detected when empty).
 codex_bin = ""
-# Path to IBM Bob Shell's bob executable (auto-detected when empty). Its API key: `chronicle config set-key bob`.
+# Path to IBM Bob Shell's bob executable (auto-detected when empty). Its API key: `interlatch config set-key bob`.
 bob_bin = ""
-# Model that screens imported chats (`chronicle screen`): it reads only each chat's opening.
+# Model that screens imported chats (`interlatch screen`): it reads only each chat's opening.
 screen_model = "haiku"
-# Language Chronicle writes in: summaries, knowledge, knowledge bases, the playbook, glossary definitions, weekly reviews,
+# Language Interlatch writes in: summaries, knowledge, knowledge bases, the playbook, glossary definitions, weekly reviews,
 # screening reasons, and the lines it proposes for CLAUDE.md / AGENTS.md. "en" or "ja". Applies to sessions analyzed
 # from now on.
 language = "en"
@@ -85,17 +86,17 @@ min_new_items = 3
 [export]
 # Mirror everything into an Obsidian-compatible Markdown vault.
 markdown = true
-# Where the vault lives (empty = <chronicle home>/notes).
+# Where the vault lives (empty = <interlatch home>/notes).
 notes_dir = ""
 
 [server]
 host = "127.0.0.1"
 port = 11524
 # Other names the dashboard answers to besides 127.0.0.1 and localhost, e.g. its Tailscale name
-# ("pc.tail1234.ts.net"). `chronicle tailnet on` sets this.
+# ("pc.tail1234.ts.net"). `interlatch tailnet on` sets this.
 allowed_hosts = []
 # Reached by one of those names through Tailscale Serve: only these Tailscale logins get in
-# (empty = everyone on your tailnet). `chronicle tailnet on` sets it to yours.
+# (empty = everyone on your tailnet). `interlatch tailnet on` sets it to yours.
 allowed_users = []
 # Company sign-in in front of the dashboard (an auth proxy such as oauth2-proxy or Azure's Easy Auth): the request
 # header that names the signed-in person's email, e.g. "X-Forwarded-Email". Only trusted from trusted_proxies, and
@@ -105,46 +106,46 @@ trusted_proxies = ["127.0.0.1", "::1"]
 # A reverse proxy on this computer forwards to the dashboard (HTTPS for a team hub): then no request counts as made
 # at this computer itself, so nobody is an admin just by coming through the proxy. Admins sign in, or use the CLI.
 behind_proxy = false
-# macOS: the dashboard that opens at login also shows Chronicle's icon in the menu bar (needs the `app` extra).
-# Off unless you turn it on: `chronicle install` asks, or `chronicle install --menu-bar`.
+# macOS: the dashboard that opens at login also shows Interlatch's icon in the menu bar (needs the `app` extra).
+# Off unless you turn it on: `interlatch install` asks, or `interlatch install --menu-bar`.
 menu_bar = false
 
 [hub]
-# On a computer that sends its sessions to another one (the hub): the hub's address. Set by `chronicle hub join`.
+# On a computer that sends its sessions to another one (the hub): the hub's address. Set by `interlatch hub join`.
 url = ""
 # On the hub: folders on the other computers that hold the same projects as a folder here,
 # e.g. { "/home/me/code" = "/Users/me/Projects" }. Projects are also matched by their git remote.
 path_map = {}
 # On a computer that sends to a hub: folders here whose sessions belong to a project on the hub, folder and all
-# below it. Set by `chronicle hub add-folder <folder> --project <name>`.
+# below it. Set by `interlatch hub add-folder <folder> --project <name>`.
 folders = {}
 # On a computer that sends to a hub: what it sends. "everything": its transcripts, and the hub records and analyzes
 # them. "knowledge": this computer keeps recording and analyzing with its own Claude Code (or Codex) login and sends
 # only each session's details, summary and project lessons; transcripts and personal lessons stay here.
 share = "everything"
 # On a computer that shares knowledge with a hub: false shares only sessions the hub files under one of its projects
-# (in a folder added with `chronicle hub add-folder`, or in a repository whose git remote the hub files there); the
+# (in a folder added with `interlatch hub add-folder`, or in a repository whose git remote the hub files there); the
 # rest stay here. true shares sessions from every folder. Transcripts (share = "everything") always go in full.
 all_folders = false
 # On a computer that shares knowledge with a hub: projects on the hub (their paths there) it left. It no longer shares
 # sessions filed under them or gets their teammates' lessons; what it already shared stays on the hub. Set by
-# `chronicle hub leave --project <name>`, emptied again by `chronicle hub rejoin --project <name>`.
+# `interlatch hub leave --project <name>`, emptied again by `interlatch hub rejoin --project <name>`.
 left = []
 # On the hub: what it takes from the computers that send to it. "everything": transcripts, or knowledge from those that
 # share knowledge. "knowledge": summaries and project lessons only, from every computer; one that sends transcripts is
-# turned away until it shares knowledge (`chronicle config set hub.share knowledge`). Any other value counts as
+# turned away until it shares knowledge (`interlatch config set hub.share knowledge`). Any other value counts as
 # "knowledge".
 accept = "everything"
 # On the hub: also keep the team's record in Postgres ("postgres"): what computers share with share = "knowledge",
 # lessons merged across them, and an audit log. Computers that share get their teammates' lessons for their projects
-# back. The connection (PGHOST, PGDATABASE, PGUSER, PGPASSWORD, ...) is read from team-store.env in Chronicle's
-# folder; the Postgres driver comes with the team extra: uv tool install 'agents-chronicle[team]'.
+# back. The connection (PGHOST, PGDATABASE, PGUSER, PGPASSWORD, ...) is read from team-store.env in Interlatch's
+# folder; the Postgres driver comes with the team extra: uv tool install 'interlatch[team]'.
 store = ""
-# On the hub, once it has people (`chronicle hub invite`): whether computers may still send with the hub's one shared
+# On the hub, once it has people (`interlatch hub invite`): whether computers may still send with the hub's one shared
 # token instead of a token of their own. Turn off when everyone has joined with an invite.
 shared_token = true
-# On the hub: its address as the other computers and browsers reach it (e.g. "https://chronicle.example.internal"),
-# for the join commands and sign-in links it hands out. `chronicle hub enable --url` sets it.
+# On the hub: its address as the other computers and browsers reach it (e.g. "https://interlatch.example.internal"),
+# for the join commands and sign-in links it hands out. `interlatch hub enable --url` sets it.
 address = ""
 # On the hub: the name its dashboard shows, e.g. "Resona team". Empty: this computer's name.
 name = ""
@@ -154,9 +155,9 @@ dedicated = false
 
 [mirror]
 # Keep a copy of your archive in a Postgres database you choose (on this computer, in Docker, or in the cloud), for
-# SQL, BI tools and a copy kept elsewhere: "postgres". Written after every background run; Chronicle keeps working
+# SQL, BI tools and a copy kept elsewhere: "postgres". Written after every background run; Interlatch keeps working
 # from its own database and never reads the copy back. The connection (PGHOST, PGDATABASE, PGUSER, PGPASSWORD, ...) is
-# read from mirror.env in Chronicle's folder; the driver comes with: uv tool install 'agents-chronicle[postgres]'.
+# read from mirror.env in Interlatch's folder; the driver comes with: uv tool install 'interlatch[postgres]'.
 to = ""
 # What the copy holds. "knowledge": session details, summaries and analyses, lessons, knowledge bases, reviews,
 # glossary, artifacts, token usage and files touched; no prompts or transcripts. "everything": prompts and transcripts
@@ -180,7 +181,7 @@ notify = false
 
 [suggestions]
 # Propose fixes for what keeps going wrong (lines for CLAUDE.md / AGENTS.md, config changes, setup steps), refreshed
-# after every background sync. Nothing is written until you approve a suggestion; `chronicle suggest`.
+# after every background sync. Nothing is written until you approve a suggestion; `interlatch suggest`.
 enabled = true
 # Show a desktop notification when new suggestions arrive.
 notify = false
@@ -194,7 +195,7 @@ read_manifests = true
 # Model providers for analysis.backend = "<name>". Keys: base_url, model (analysis and knowledge bases),
 # small_model (screening imported chats), max_output_tokens, chunk_chars (characters of transcript per call), and
 # region + profile (bedrock), resource (azure), num_ctx (ollama). API keys are not kept here: the dashboard
-# (Status › Analysis) or `chronicle config set-key <name>` stores them in provider-keys.json, readable by you only;
+# (Status › Analysis) or `interlatch config set-key <name>` stores them in provider-keys.json, readable by you only;
 # the provider's usual variable (OPENAI_API_KEY, ...) is read when none is stored. For example:
 # [providers.ollama]
 # model = "qwen3:30b"
@@ -209,8 +210,43 @@ MIRRORS = ("", "postgres")  # [mirror] to
 MIRROR_INCLUDES = ("knowledge", "everything")  # [mirror] include
 
 
+ENV_PREFIXES = ("INTERLATCH_", "CHRONICLE_")  # Interlatch was called Chronicle: its variables still count
+
+
+def env(name: str, default: str | None = None, *, environ: Mapping[str, str] | None = None) -> str | None:
+    """The variable INTERLATCH_<name>, else CHRONICLE_<name> (its name before the rename), else `default`. An empty one
+    counts as unset (a compose file passes INTERLATCH_X empty to a hub whose .env still says CHRONICLE_X)."""
+    environ = os.environ if environ is None else environ
+    return next((environ[p + name] for p in ENV_PREFIXES if environ.get(p + name)), default)
+
+
+def default_home() -> Path:
+    return Path("~/.interlatch").expanduser()
+
+
+def legacy_home() -> Path:
+    """Where Chronicle kept everything before the rename; `interlatch migrate` (migrate.py) moves it to default_home()."""
+    return Path("~/.claude-chronicle").expanduser()
+
+
+def home_override() -> Path | None:
+    """The folder INTERLATCH_HOME (or CHRONICLE_HOME) names, unless that is one of the two default folders: launchd
+    agents written before the rename name ~/.claude-chronicle, and that one is moved like an unset variable."""
+    raw = env("HOME")
+    if not raw:
+        return None
+    path = Path(raw).expanduser()
+    return None if os.path.abspath(path) in {str(default_home()), str(legacy_home())} else path
+
+
 def chronicle_home() -> Path:
-    return Path(os.environ.get("CHRONICLE_HOME", "~/.claude-chronicle")).expanduser()
+    """Interlatch's folder: INTERLATCH_HOME (or CHRONICLE_HOME), else ~/.interlatch, or ~/.claude-chronicle until
+    that has been moved there."""
+    override = home_override()
+    if override is not None:
+        return override
+    new, old = default_home(), legacy_home()
+    return old if not os.path.lexists(new) and old.is_dir() else new
 
 
 @dataclass
@@ -231,8 +267,8 @@ class AnalysisConfig:
     codex_model: str = ""
     codex_bin: str = ""
     bob_bin: str = ""
-    screen_model: str = "haiku"  # `chronicle screen`: sorts imported chats, reading only their openings
-    language: str = "en"  # what Chronicle writes in (LANGUAGES); codes the parser reads stay English
+    screen_model: str = "haiku"  # `interlatch screen`: sorts imported chats, reading only their openings
+    language: str = "en"  # what Interlatch writes in (LANGUAGES); codes the parser reads stay English
 
 
 @dataclass
@@ -257,7 +293,7 @@ class Config:
     analysis: AnalysisConfig = field(default_factory=AnalysisConfig)
     synthesis: SynthesisConfig = field(default_factory=SynthesisConfig)
     export_markdown: bool = True
-    notes_dir: Path = Path("~/.claude-chronicle/notes")
+    notes_dir: Path = Path("~/.interlatch/notes")
     server_host: str = "127.0.0.1"
     server_port: int = 11524
     server_allowed_hosts: list[str] = field(default_factory=list)
@@ -386,12 +422,13 @@ class Config:
         return None
 
     def is_internal_path(self, path: str | None) -> bool:
-        """`path` is in Chronicle's own working folder, where agents run its analyses: not a project of yours."""
+        """`path` is in Interlatch's own working folder, where agents run its analyses: not a project of yours. Runs from
+        before the rename name the working folder in ~/.claude-chronicle."""
         if not path:
             return False
         work = self.home / "workdir"
         return any(str(path).rstrip("/") == str(w) or str(path).startswith(f"{w}/")
-                   for w in {str(work), os.path.realpath(work)})
+                   for w in {str(work), os.path.realpath(work), str(legacy_home() / "workdir")})
 
 
 def _section(data: dict, name: str) -> dict:
@@ -434,7 +471,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
     mirror_include = str(mirror.get("include") or "knowledge").strip().lower()
     mirror_schema = str(mirror.get("schema") or "chronicle").strip()
 
-    env_dirs = os.environ.get("CHRONICLE_CLAUDE_DIRS")
+    env_dirs = env("CLAUDE_DIRS")
     raw_dirs = env_dirs.split(os.pathsep) if env_dirs else sources.get("claude_dirs", ["~/.claude"])
 
     cfg = Config(

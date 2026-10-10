@@ -7,7 +7,7 @@ requires-python = ">=3.11"
 license = "LicenseRef-Chronicle-Enterprise"
 license-files = ["LICENSE"]
 authors = [{ name = "Adrian Tam" }]
-dependencies = ["agents-chronicle"]
+dependencies = ["interlatch"]
 
 [project.urls]
 Repository = "https://github.com/Chatixia-AI/agents-chronicle/tree/main/ee"

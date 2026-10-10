@@ -258,7 +258,7 @@ def test_suggestions_are_written_in_the_language_and_switch_until_edited(archive
     applied = lines["zsh-nomatch"]
     assert suggest.apply(conn, cfg, applied["id"])["ok"]
     target = Path(applied["target_path"])
-    assert f"{nomatch['text_ja']} <!-- chronicle:friction:zsh-nomatch -->" in target.read_text()
+    assert f"{nomatch['text_ja']} <!-- interlatch:friction:zsh-nomatch -->" in target.read_text()
     cfg.analysis.language = "en"
     suggest.refresh(conn, cfg)
     assert suggest.get(conn, applied["id"])["text"] == nomatch["text_ja"]  # an applied line stays as it was written
@@ -269,7 +269,7 @@ def test_a_line_already_in_the_file_is_not_proposed_again_in_the_other_language(
     conn, cfg, home = archive["conn"], archive["cfg"], archive["home"]
     fix = friction.BY_ID["zsh-nomatch"]["fixes"][1]
     target = home / ".claude" / "CLAUDE.md"
-    target.write_text(f"# Mine\n\n{BEGIN}\n- {fix[written]} <!-- chronicle:friction:zsh-nomatch -->\n{END}\n")
+    target.write_text(f"# Mine\n\n{BEGIN}\n- {fix[written]} <!-- interlatch:friction:zsh-nomatch -->\n{END}\n")
     _causes(archive, "zsh-nomatch")
     cfg.analysis.language = now
     suggest.refresh(conn, cfg)
@@ -332,7 +332,7 @@ def test_every_translated_template_has_japanese_with_the_same_fields():
     for c in friction.CATALOG:  # translated where they are shown (friction.display, suggest.display)
         need.add(c["name"])
         need.update(f["title"] for f in c["fixes"])
-    need.update([friction.CONCURRENT_NOTE, update.PYPI_ERROR, "user level", *ladder.STAGES, "pinned by you", "added by you",
+    need.update([friction.CONCURRENT_NOTE, update.PYPI_ERROR, update.MOVE_NOTE, "user level", *ladder.STAGES, "pinned by you", "added by you",
                  ladder.MEMORY_STAGE_REASON, "one session, low confidence", "one session", *worker.QUEUE_REASON_LABEL.values(),
                  *views.ANALYSIS_REASONS, views.NOT_ANALYZED_CHAT])
     assert sorted(need - set(JA)) == []

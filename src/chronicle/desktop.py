@@ -1,8 +1,8 @@
-"""Chronicle.app (macOS): the dashboard in a native window, a menu-bar item, and the background sync.
+"""Interlatch.app (macOS): the dashboard in a native window, a menu-bar item, and the background sync.
 
-The app does what `chronicle install` sets up launchd for: it serves the dashboard and runs `sync --work`
+The app does what `interlatch install` sets up launchd for: it serves the dashboard and runs `sync --work`
 every 15 minutes while it is running (it opens at login). Claude Code's hooks and MCP registration point at
-a shim (~/.claude-chronicle/bin/chronicle) that the app rewrites on every launch, so they survive the app
+a shim (~/.interlatch/bin/interlatch) that the app rewrites on every launch, so they survive the app
 being moved or updated. Needs the `app` extra (pywebview + PyObjC).
 """
 
@@ -26,7 +26,7 @@ SYNC_INTERVAL_S = 15 * 60
 FIRST_SYNC_DELAY_S = 20
 ONBOARDED_KEY = "app_onboarded"
 EXTRA_PATH = ("/opt/homebrew/bin", "/usr/local/bin", "~/.local/bin")
-CLI_LINK = "~/.local/bin/chronicle"
+CLI_LINK = "~/.local/bin/interlatch"
 
 
 def adopt_login_path() -> None:
@@ -58,7 +58,7 @@ def reduce_transparency() -> bool:
 
 def name_process(name: str) -> None:
     """Run from source, macOS names the app after the interpreter ("python3" in the menu bar and Dock).
-    Chronicle.app gets its name from Info.plist; this covers `chronicle app` from a checkout or pip install."""
+    Interlatch.app gets its name from Info.plist; this covers `interlatch app` from a checkout or pip install."""
     try:
         import Foundation
     except ImportError:
@@ -117,7 +117,7 @@ def in_temporary_location(exe: str | None = None) -> bool:
 
 
 class Background:
-    """`chronicle sync --work` every 15 minutes, on a thread; the file locks keep it from overlapping with a
+    """`interlatch sync --work` every 15 minutes, on a thread; the file locks keep it from overlapping with a
     hook-spawned run or a launchd agent left over from a CLI install."""
 
     def __init__(self, on_change):
@@ -190,7 +190,7 @@ class DesktopApp:
     # ------------------------------------------------------------------ lifecycle
     def run(self) -> int:
         if not self.frozen:
-            name_process("Chronicle")  # before pywebview creates the NSApplication
+            name_process("Interlatch")  # before pywebview creates the NSApplication
         import webview
 
         from .install import write_shim
@@ -208,7 +208,7 @@ class DesktopApp:
         self._install_app_delegate()
         webview.settings["ALLOW_DOWNLOADS"] = True  # session exports: the window asks where to save them
         # a transparent page over native vibrancy; the page asks to drag the window from its toolbar (start_drag)
-        self.window = webview.create_window("Chronicle", app_url(self.url, reduce_transparency()), width=1440, height=920,
+        self.window = webview.create_window("Interlatch", app_url(self.url, reduce_transparency()), width=1440, height=920,
                                             min_size=(900, 600), text_select=True, zoomable=True,
                                             transparent=True, vibrancy=True, js_api=make_bridge(self))
         self.window.events.closing += self._on_closing
@@ -227,16 +227,16 @@ class DesktopApp:
         app = self
         base = BrowserView.AppDelegate
 
-        class ChronicleAppDelegate(base):
+        class InterlatchAppDelegate(base):
             def applicationShouldTerminate_(self, nsapp):
                 app.quitting = True
-                return objc.super(ChronicleAppDelegate, self).applicationShouldTerminate_(nsapp)
+                return objc.super(InterlatchAppDelegate, self).applicationShouldTerminate_(nsapp)
 
             def applicationShouldHandleReopen_hasVisibleWindows_(self, nsapp, flag):
                 app.show_window()
                 return True
 
-        BrowserView.AppDelegate = ChronicleAppDelegate
+        BrowserView.AppDelegate = InterlatchAppDelegate
 
     def _started(self) -> None:
         from PyObjCTools import AppHelper
@@ -267,7 +267,7 @@ class DesktopApp:
             win.setStyleMask_(win.styleMask() | AppKit.NSWindowStyleMaskFullSizeContentView)
             win.setTitlebarAppearsTransparent_(True)
             win.setTitleVisibility_(AppKit.NSWindowTitleHidden)
-            toolbar = AppKit.NSToolbar.alloc().initWithIdentifier_("chronicle")
+            toolbar = AppKit.NSToolbar.alloc().initWithIdentifier_("interlatch")
             toolbar.setShowsBaselineSeparator_(False)
             win.setToolbar_(toolbar)
             win.setToolbarStyle_(AppKit.NSWindowToolbarStyleUnified)
@@ -341,7 +341,7 @@ class DesktopApp:
         AppHelper.callAfter(apply)
 
     def _use_app_icon(self) -> None:
-        """From source the Dock would show Python's icon; Chronicle.app has its own .icns."""
+        """From source the Dock would show Python's icon; Interlatch.app has its own .icns."""
         import AppKit
 
         from .server import WEB_DIR
@@ -381,7 +381,7 @@ class DesktopApp:
 
         self.menu = StatusMenu(
             refresh=lambda: snapshot(self.server_app, sync_running=self.bg.running, sync_error=self.bg.error),
-            open_page=self.open_page, sync_now=self.bg.sync_now, open_title="Open Chronicle", base_url=self.url,
+            open_page=self.open_page, sync_now=self.bg.sync_now, open_title="Open Interlatch", base_url=self.url,
             quit=lambda: AppHelper.callAfter(AppKit.NSApp.terminate_, None),
             extras=[
                 Extra("browser", "Open in Browser", lambda: webbrowser.open(self.url)),
@@ -420,8 +420,8 @@ class DesktopApp:
         from .install import hooks_installed
 
         if self.frozen and in_temporary_location():
-            self.alert("Move Chronicle to Applications",
-                       "Chronicle is running from a disk image or a temporary location. Drag it into your "
+            self.alert("Move Interlatch to Applications",
+                       "Interlatch is running from a disk image or a temporary location. Drag it into your "
                        "Applications folder and open it from there, so it stays available to Claude Code.", ["OK"])
             return
         if hooks_installed(self.cfg).get("SessionEnd"):
@@ -442,24 +442,24 @@ class DesktopApp:
 
         if not self.cfg.claude_bin():
             self.alert("Claude Code not found",
-                       "Chronicle records your coding-agent sessions and analyzes them through your own Claude Code or "
+                       "Interlatch records your coding-agent sessions and analyzes them through your own Claude Code or "
                        "Codex login. To record Claude Code, install it from claude.com/claude-code and sign in, then "
-                       "choose “Connect Claude Code…” from Chronicle's menu-bar icon. Codex and the other agents are "
+                       "choose “Connect Claude Code…” from Interlatch's menu-bar icon. Codex and the other agents are "
                        "under Settings › Sources in the dashboard, and Status › Analysis picks the agent that analyzes.",
                        ["OK"])
             return
         steps = ["• add a SessionEnd hook to ~/.claude/settings.json (a backup is kept), so each session is "
                  "recorded when it ends",
-                 "• register the chronicle MCP server, so Claude can search your past sessions"]
+                 "• register the interlatch MCP server, so Claude can search your past sessions"]
         if self.frozen:
-            steps.append("• open Chronicle at login, so sessions are analyzed in the background")
+            steps.append("• open Interlatch at login, so sessions are analyzed in the background")
         from .llm import make_runner
 
         runner = make_runner(self.cfg)
         how = (f"Analysis runs on this Mac with {runner.label}." if runner.local()
                else f"Analysis runs through your {runner.label} API key or sign-in." if runner.describe()["kind"] == "api"
                else f"Analysis runs through your own {runner.label} login and counts toward your plan's usage.")
-        text = "Chronicle will:\n" + "\n".join(steps) + f"\n\n{how} Everything else stays on this Mac."
+        text = "Interlatch will:\n" + "\n".join(steps) + f"\n\n{how} Everything else stays on this Mac."
         if self.alert("Connect Claude Code?", text, ["Connect", "Not Now"]) != 0:
             return
         for action in connect(self.cfg, "claude", executable()):
@@ -470,8 +470,8 @@ class DesktopApp:
         self._menu_changed()
         if first_run:
             self.alert("Claude Code connected",
-                       "Chronicle is importing your past sessions now; analysis follows in the background. "
-                       "Chronicle stays in the menu bar when you close its window.", ["OK"])
+                       "Interlatch is importing your past sessions now; analysis follows in the background. "
+                       "Interlatch stays in the menu bar when you close its window.", ["OK"])
 
     # ------------------------------------------------------------------ login item (macOS 13+)
     def login_item_status(self) -> str:
@@ -506,7 +506,7 @@ class DesktopApp:
         shim = write_shim(sys.executable)
         link = Path(CLI_LINK).expanduser()
         if link.is_symlink() and link.resolve() == shim.resolve():
-            self.alert("Command-line tool", f"`chronicle` is already installed at {CLI_LINK}.", ["OK"])
+            self.alert("Command-line tool", f"`interlatch` is already installed at {CLI_LINK}.", ["OK"])
             return
         if link.exists() or link.is_symlink():
             self.alert("Command-line tool",
@@ -516,26 +516,28 @@ class DesktopApp:
         link.parent.mkdir(parents=True, exist_ok=True)
         link.symlink_to(shim)
         on_path = str(link.parent) in os.environ.get("PATH", "").split(os.pathsep)
-        self.alert("Command-line tool", f"Installed `chronicle` at {CLI_LINK}."
+        self.alert("Command-line tool", f"Installed `interlatch` at {CLI_LINK}."
                    + ("" if on_path else " Add ~/.local/bin to your PATH to use it."), ["OK"])
 
 
 def main(argv: list[str] | None = None) -> int:
     if sys.platform != "darwin":
-        print("The Chronicle desktop app is macOS-only for now; run `chronicle ui` for the dashboard.", file=sys.stderr)
+        print("The Interlatch desktop app is macOS-only for now; run `interlatch ui` for the dashboard.", file=sys.stderr)
         return 1
     try:
         import webview  # noqa: F401
     except ImportError:
-        print("The desktop app needs the `app` extra: uv tool install 'agents-chronicle[app]'", file=sys.stderr)
+        print("The desktop app needs the `app` extra: uv tool install 'interlatch[app]'", file=sys.stderr)
         return 1
+    from .migrate import migrate_if_due
     from .util import file_lock, setup_logging
 
+    migrate_if_due()  # Chronicle's folder becomes Interlatch's
     cfg = load_config()
     cfg.ensure_dirs()
     setup_logging(cfg.logs_dir)
     with file_lock(cfg.locks_dir / "app.lock", blocking=False) as got:
         if not got:
-            print("Chronicle is already running (see its menu-bar icon).", file=sys.stderr)
+            print("Interlatch is already running (see its menu-bar icon).", file=sys.stderr)
             return 0
         return DesktopApp(cfg).run()

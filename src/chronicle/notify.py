@@ -17,8 +17,7 @@ from .config import Config
 log = logging.getLogger("chronicle.notify")
 
 NOTIFIED_KEY = "update_notified"  # kv: the release the last notification was about
-UPGRADE = {"uv": "uv tool upgrade agents-chronicle", "pipx": "pipx upgrade agents-chronicle",
-           "pip": "pip install -U agents-chronicle"}
+UPGRADE = {"uv": "uv tool upgrade interlatch", "pipx": "pipx upgrade interlatch", "pip": "pip install -U interlatch"}
 
 
 def _applescript(text: str) -> str:
@@ -42,8 +41,11 @@ def post(title: str, message: str) -> bool:
 def how_to_update(cfg: Config, kind: str) -> str:
     if kind == "app":
         return "Open Chronicle › Status › Updates to download it."
+    from .update import check, install_method
+
     where = f"the dashboard's Status › Updates (http://127.0.0.1:{cfg.server_port}/#/status?focus=updates)"
-    return f"Update from {where}, or run: {UPGRADE[kind]}" if kind in UPGRADE else f"Update from {where}."
+    run = check()["command"] if install_method().get("move") else None  # agents-chronicle: the move to interlatch
+    return f"Update from {where}, or run: {run or UPGRADE[kind]}" if kind in UPGRADE else f"Update from {where}."
 
 
 def release_check(cfg: Config, conn) -> str | None:

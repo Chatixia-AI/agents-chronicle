@@ -1,7 +1,7 @@
 [project]
-name = "agents-chronicle"
+name = "interlatch"
 dynamic = ["readme", "version"]  # the version comes from the latest vX.Y.Z git tag (hatch-vcs)
-description = "Record, archive, analyze and explore every coding-agent session (Claude Code, Codex, Copilot, Bob, Antigravity): a local knowledge vault built with Claude Code itself."
+description = "Shared memory for your coding agents: records every session (Claude Code, Codex, Copilot, Bob, Antigravity) locally and keeps what they learned, each lesson linked to the session it came from."
 requires-python = ">=3.11"
 license = "MIT"
 license-files = ["LICENSE"]
@@ -23,12 +23,14 @@ classifiers = [
 dependencies = ["rich>=13.7"]
 
 [project.urls]
-Documentation = "https://chronicle.chatixia.net/docs/"
+Homepage = "https://interlatch.com"
+Documentation = "https://interlatch.com/docs/"
 Repository = "https://github.com/Chatixia-AI/agents-chronicle"
 Issues = "https://github.com/Chatixia-AI/agents-chronicle/issues"
 
 [project.scripts]
-chronicle = "chronicle.cli:main"
+interlatch = "chronicle.cli:main"
+chronicle = "chronicle.cli:main"  # the command's name before the rename (Chronicle), kept as an alias
 
 [project.optional-dependencies]
 app = [
@@ -72,7 +74,7 @@ replacement = '\1https://github.com/Chatixia-AI/agents-chronicle/blob/main/\2'
 [tool.hatch.build.targets.wheel]
 packages = ["src/chronicle"]
 
-# ee/ is under the Chronicle Enterprise License and builds its own package; keep it out of the MIT sdist
+# ee/ is under its own enterprise license and builds its own package; keep it out of the MIT sdist
 [tool.hatch.build.targets.sdist]
 exclude = ["/ee"]
 
