@@ -1,0 +1,9 @@
+{
+  "filing":  {"page": "filing.html",                "render": 1120, "size": [560, 240], "still": 1.25},
+  "sync":    {"page": "scenes.html?scene=sync",     "render": 1120, "size": [560, 240], "still": 1.45},
+  "search":  {"page": "scenes.html?scene=search",   "render": 1120, "size": [560, 240], "still": 2.3},
+  "analyze": {"page": "scenes.html?scene=analyze",  "render": 1120, "size": [560, 240], "still": 0.6},
+  "editor":  {"page": "scenes.html?scene=editor",   "render": 1120, "size": [560, 240], "still": 1.6},
+  "hero":    {"page": "scenes.html?scene=hero",     "render": 760,  "size": [380, 260], "still": 1.0},
+  "team":    {"page": "scenes.html?scene=team",     "render": 1280, "size": [640, 360], "still": 2.5}
+}
