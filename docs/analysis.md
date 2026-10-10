@@ -87,6 +87,10 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
    waiting to retry); *held* ones need a change first (project excluded, too few prompts, from before install
    with backfill off, failed four times). When the whole queue is stopped (paused for a usage limit, automatic
    analysis off, or the analyzer not found), that is said too.
+   **Analyze N now** under the queue analyzes the sessions ready now at once, instead of on the next background
+   run, even with automatic analysis off or during a usage-limit pause; when one gets through, the pause is lifted.
+   When nothing is ready but sessions are still active, it offers those instead: one that continues is analyzed
+   again later. The command palette (⌘K) has it too, as **Analyze the queue now**.
 
 ## Language
 

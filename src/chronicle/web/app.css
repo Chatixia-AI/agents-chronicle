@@ -2038,6 +2038,8 @@ table.team-projects td { vertical-align: middle; }
 @media (max-width: 420px) { .queue-facts { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .analysis-side .tags { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; margin: 6px 0; }
 .analysis-meta { margin: 10px 0 2px; }
+.queue-run { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 10px 0 4px; }
+
 .analysis-side .analyzer.klang { margin-top: 6px; }
 .analysis-side .analyzer.klang .subhead { margin-top: 16px; }
 @media (max-width: 900px) {

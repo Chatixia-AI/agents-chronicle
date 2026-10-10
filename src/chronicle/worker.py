@@ -150,6 +150,23 @@ def count_pending(conn, cfg: Config) -> dict:
             "labels": {code: tr(label) for code, label in QUEUE_REASON_LABEL.items()}}
 
 
+def queued_ids(conn, cfg: Config, code: str, limit: int) -> list[str]:
+    """The sessions waiting for one reason ("ready" or "active"), newest first: what the Queue's Analyze now covers."""
+    if code == "ready":
+        return pending_sessions(conn, cfg, limit)
+    ids = []
+    for s in conn.execute(
+            "SELECT id, analysis_status, source, analysis_attempts, analysis_reason, analysis_not_before, project_path, "
+            "n_prompts, started_at, ended_at, ended_flag FROM sessions WHERE source NOT IN ('history', 'remote') "
+            "AND analysis_status IN ('pending','stale','error') ORDER BY ended_at DESC"):
+        got = waiting_reason(conn, cfg, s)
+        if got and got[0] == code:
+            ids.append(s["id"])
+            if len(ids) >= limit:
+                break
+    return ids
+
+
 def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyses: int | None = None,
                analyze: bool = True, synthesize: bool = True, export: bool = True, force: bool = False,
                model: str | None = None, progress=None, wait: bool = False) -> WorkReport:
