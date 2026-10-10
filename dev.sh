@@ -4,6 +4,7 @@
 #
 #   ./dev.sh                     dashboard in the browser, from this checkout, on a copy of your archive
 #   ./dev.sh --app               the macOS app window instead
+#   ./dev.sh --menu-bar          the browser dashboard with Chronicle's menu-bar icon, as the login item shows it
 #   ./dev.sh --demo              made-up demo data instead of your archive (docs/demo/make_demo.py)
 #   ./dev.sh --fresh             re-copy the archive (or rebuild the demo) first
 #   ./dev.sh --tree ../agents-chronicle-<topic>   run another worktree's code
@@ -16,13 +17,14 @@ set -euo pipefail
 
 TREE="$(cd "$(dirname "$0")" && pwd)"
 LIVE="$HOME/.claude-chronicle"
-APP=0 DEMO=0 FRESH=0 OPEN=--open PORT=""
+APP=0 DEMO=0 FRESH=0 OPEN=--open PORT="" MENU=0
 
-usage() { sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'; }
+usage() { sed -n '2,15p' "$0" | sed 's/^# \{0,1\}//'; }
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --app) APP=1 ;;
+    --menu-bar) MENU=1 ;;
     --demo) DEMO=1 ;;
     --fresh) FRESH=1 ;;
     --no-open) OPEN="" ;;
@@ -105,4 +107,8 @@ elif listening "$PORT"; then
   echo "dev.sh: port $PORT is in use" >&2; exit 1
 fi
 echo "Open:    http://127.0.0.1:$PORT/   (Ctrl-C to stop)"
+if [ "$MENU" = 1 ]; then
+  echo "Menu bar: Chronicle's icon (quit it from its menu, or Ctrl-C here)"
+  exec uv run --project "$TREE" --extra app chronicle ui --host 127.0.0.1 --port "$PORT" $OPEN --menu-bar
+fi
 exec uv run --project "$TREE" chronicle ui --host 127.0.0.1 --port "$PORT" $OPEN

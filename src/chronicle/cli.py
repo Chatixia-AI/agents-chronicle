@@ -890,7 +890,7 @@ def cmd_serve(args) -> int:
 
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
-    serve(cfg, host=args.host, port=args.port, open_browser=args.open)
+    serve(cfg, host=args.host, port=args.port, open_browser=args.open, menu_bar=args.menu_bar)
     return 0
 
 
@@ -2689,6 +2689,8 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--host")
     s.add_argument("--port", type=int)
     s.add_argument("--open", action="store_true", help="open a browser tab")
+    s.add_argument("--menu-bar", action=argparse.BooleanOptionalAction, default=None,
+                   help="macOS: show Chronicle's menu-bar icon (default: only when it runs at login)")
     s.set_defaults(fn=cmd_serve)
 
     s = sub.add_parser("app", help="open the desktop app (macOS; needs the `app` extra)")

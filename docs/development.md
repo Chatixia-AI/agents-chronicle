@@ -120,7 +120,8 @@ left out of the MIT wheel and sdist. The core never imports it; [ee/README.md](.
 
 `./dev.sh` starts the dashboard from the checkout on a copy of your archive in `~/.chronicle-sandbox/dev-sh`, so
 your own `~/.claude-chronicle` and an installed Chronicle are never touched. Its config records, analyzes and
-shares nothing. `--app` opens the macOS app window instead, `--demo` uses the [demo data](#demo-data), `--fresh`
+shares nothing. `--app` opens the macOS app window instead, `--menu-bar` adds the [menu-bar icon](install.md#the-menu-bar-icon) to the
+browser dashboard (as the login item shows it), `--demo` uses the [demo data](#demo-data), `--fresh`
 re-copies the archive, and `--tree ../agents-chronicle-<topic>` runs another worktree's code. The server reads the
 web files once at startup, so restart it after editing `app.css` or `app.js`.
 

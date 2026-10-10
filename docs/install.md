@@ -19,12 +19,12 @@ There is no Intel build yet; on an Intel Mac use the command line install.
 Chronicle then lives in the menu bar. It serves the dashboard in its own window and does the 15-minute
 background sync itself, so it needs no launchd agents; closing the window keeps it running. The window has no
 title bar: the sidebar is native macOS glass (it blurs whatever is behind the window) with the traffic lights on
-top of it, and the window moves by its toolbar or the strip above the sidebar. The menu-bar icon has:
+top of it, and the window moves by its toolbar or the strip above the sidebar. The menu-bar icon is described under
+[The menu-bar icon](#the-menu-bar-icon); in the app, its pages open in the app window, and the menu adds:
 
 | Menu item | |
 | --- | --- |
-| Open Chronicle / Open in Browser | The dashboard, in the app window or your browser |
-| Sync Now | Archive, ingest and analyze now instead of at the next 15-minute run; the line above it shows the last sync |
+| Open in Browser | The dashboard in your browser instead of the app window |
 | Connect Claude Code… | Shown until Claude Code is connected (if you chose *Not Now* at first launch) |
 | Open at Login | On after connecting; turn it off to run Chronicle only when you open it |
 | Install Command-Line Tool | Links the app's own `chronicle` command into `~/.local/bin` (skipped if one exists) |
@@ -86,7 +86,7 @@ For Claude Code, and for the Mac itself, it sets up four things (each can be ski
 | --- | --- |
 | `SessionEnd` hook in `~/.claude/settings.json` | Hands the ended transcript to a detached process that archives, ingests and analyzes it. Returns in milliseconds; a backup of `settings.json` is kept in `~/.claude-chronicle/backups/`. |
 | launchd `com.claude-chronicle.sync` | `chronicle sync --work` every 15 minutes: catches anything the hook missed, processes the analysis queue, synthesizes knowledge bases, exports notes. |
-| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:11524/>. |
+| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:11524/>, with [Chronicle's icon in the menu bar](#the-menu-bar-icon) when the `app` extra is installed. |
 | MCP server `chronicle` (user scope) | Lets Claude Code search your past sessions and knowledge. |
 
 Optional: `chronicle install --inject-context` also adds a `SessionStart` hook that gives each new
@@ -107,6 +107,43 @@ status line if `--statusline` wrapped it.
 To use the desktop app from a command-line install, add the `app` extra and run `chronicle app`:
 `uv tool install --python 3.13 'agents-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`
 first and let the app connect Claude Code, so the launchd agents do not run alongside it (harmless, but redundant).
+
+## The menu-bar icon
+
+On macOS, Chronicle's mark (the stack of pages from its app icon) sits in the menu bar: in the app, and for a
+command-line install whose dashboard runs at login, once the `app` extra is installed
+(`uv tool install --python 3.13 'agents-chronicle[app]'`, then restart the dashboard with
+`launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`). The icon stays plain while there is nothing to report:
+
+| Icon | When |
+| --- | --- |
+| The mark | Nothing needs a look |
+| With a dot | Syncing, analyzing, or sending to the hub |
+| With a "!" | The last sync failed, the background sync agent exited with an error, or the hub refused the last push |
+| Dimmed | Analysis is paused (a usage limit was reached; it resumes by itself) |
+
+Clicking it opens a panel over the menu-bar glass, in the dashboard's blueprint style (light or dark, as the menu
+bar is):
+
+| Part | |
+| --- | --- |
+| The header | What is happening, with a picture for it: *All caught up · Synced 5 min ago*, *Syncing · 2 of 5* with a progress bar, *Sync failed* with the reason, *Analysis paused*. ⟳ syncs now (archive, ingest and analyze instead of waiting for the 15-minute run); the pulse opens the Activity page |
+| The numbers | Sessions today, sessions waiting for analysis (not on a computer whose hub analyzes them), and lessons learned in the last seven days. Each opens its page |
+| Notes | When knowledge last went to your hub, and what stops the analysis queue if something does |
+| Search | Type anywhere in the panel to search every session, as the dashboard's search does; ↵ opens all the results in the dashboard |
+| Recent sessions | The six most recent coding-agent sessions (imported chats left out) by day, each with its agent, project, outcome and time. ↑ ↓ move through them, ↵ or a click opens one |
+| Open Dashboard | The dashboard (in the app: the app window). **Update to …** sits beside it when a new version is out and opens **Status**, where the update runs |
+| ⋯ | The quick menu below |
+
+Esc clears the search, then closes the panel. A right-click (or Control-click) on the icon opens the quick menu
+instead: the status line, Search Sessions…, Open Dashboard, Sync Now, Update, the app's own items (**Open in
+Browser**, **Connect Claude Code…**, **Open at Login**, **Install Command-Line Tool**, **Open Data Folder**) and **Quit
+Chronicle**. For the login item, Quit stops the dashboard (and the icon) until you next log in or run `chronicle ui`;
+sessions are still recorded.
+
+The command-line install shows the icon only for the dashboard that runs at login, so a second `chronicle ui` in a
+terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off, set
+`[server] menu_bar = false` (`chronicle config set server.menu_bar false`) and restart the dashboard.
 
 ## Updating
 

@@ -2467,6 +2467,8 @@ def make_handler(app: App, port: int):
             if name == "index.html":
                 app_window = parse_qs(urlparse(self.path).query).get("app") == ["mac"] and self._from_here()
                 self.send_header("Content-Security-Policy", PAGE_CSP.format(eval=" 'unsafe-eval'" if app_window else ""))
+            elif name == "panel.html":  # the menu-bar panel (menubar.py): the same rules, no eval
+                self.send_header("Content-Security-Policy", PAGE_CSP.format(eval=""))
             self.end_headers()
             self.wfile.write(body)
 
@@ -2869,6 +2871,7 @@ def make_server(cfg: Config, host: str | None = None, port: int | None = None, *
         httpd = ThreadingHTTPServer((host, 0), BaseHTTPRequestHandler)
     # the handler checks Host against the bound port, so it is built once the port is known
     httpd.RequestHandlerClass = make_handler(app, httpd.server_address[1])
+    httpd.app = app  # the menu-bar item reads the same status (menubar.py)
     return httpd
 
 
@@ -2904,9 +2907,10 @@ def _already_running(cfg: Config, port: int, open_browser: bool) -> None:
 
 
 def serve(cfg: Config, host: str | None = None, port: int | None = None, open_browser: bool = False, *,
-          banner: str | None = None) -> None:
+          banner: str | None = None, menu_bar: bool | None = None) -> None:
     """`banner`: the line printed once the dashboard listens, instead of its 127.0.0.1 address (container.py prints
-    the hub's own: an editor connected to the server forwards any 127.0.0.1 address it sees in a terminal)."""
+    the hub's own: an editor connected to the server forwards any 127.0.0.1 address it sees in a terminal).
+    `menu_bar`: the macOS menu-bar item too; None shows it when this is the login item (menubar.wants_menu_bar)."""
     from . import update
 
     update.RESTARTABLE = True  # this process is only the dashboard, so an update can re-exec it
@@ -2920,6 +2924,10 @@ def serve(cfg: Config, host: str | None = None, port: int | None = None, open_br
     print(banner or f"Chronicle dashboard: {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
+    from .menubar import run_with_server, wants_menu_bar
+
+    if (wants_menu_bar(cfg) if menu_bar is None else menu_bar) and run_with_server(cfg, httpd, url):
+        return
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

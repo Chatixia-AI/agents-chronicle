@@ -12,7 +12,7 @@ agents, the MCP server and the `claude` CLI, and lists recent analysis failures.
 **System Settings → Privacy & Security**, click **Open Anyway** next to the Chronicle message, and confirm.
 
 **Status and Sources say *Background sync* is not running, but I use the app.** They only check the launchd agent
-that the command-line install sets up. The app runs its own 15-minute sync; the menu-bar menu shows when it last ran.
+that the command-line install sets up. The app runs its own 15-minute sync; the menu-bar menu's first line shows when it last ran.
 
 **`analysis.backfill = false` does nothing with the app.** The app's Connect step does not record the install date
 that `chronicle install` records, so sessions from before connecting are analyzed too. Run
