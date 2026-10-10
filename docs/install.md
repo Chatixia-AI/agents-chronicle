@@ -119,7 +119,12 @@ On macOS, Chronicle's mark (the stack of pages from its app icon) can sit in the
 shows it. A command-line install shows it only if you turn it on, and it needs two things there: the dashboard
 running at login (`chronicle install` sets that up unless you pass `--no-ui`) and the `app` extra (PyObjC).
 
-To turn it on:
+The quickest way is the **Menu-bar icon** switch under **Settings › Status › Recording**. Turning it on adds the `app`
+extra first if it is missing (for a uv install from PyPI, keeping your other extras and your version; any other
+install shows the command to run), then restarts the dashboard with the icon. Turning it off restarts it without.
+The switch works only in a browser on the computer itself, since it installs software there.
+
+To turn it on from the command line:
 
 1. Add the `app` extra. `uv tool install --force` installs exactly the extras you list, so name the ones you already
    have too (`uv tool list --show-extras` shows them), e.g. `'agents-chronicle[app,team]'`:
@@ -174,8 +179,8 @@ Chronicle**. For the login item, Quit stops the dashboard (and the icon) until y
 sessions are still recorded.
 
 The command-line install shows the icon only for the dashboard that runs at login, so a second `chronicle ui` in a
-terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off again, run
-`chronicle install --no-menu-bar`, or `chronicle config set server.menu_bar false` and the same `launchctl kickstart`
+terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off again, use the
+switch, run `chronicle install --no-menu-bar`, or `chronicle config set server.menu_bar false` and the same `launchctl kickstart`
 line.
 
 ## Updating

@@ -330,3 +330,143 @@ def test_install_does_not_ask_without_the_login_dashboard_a_terminal_or_a_mac(se
     monkeypatch.setattr("platform.system", lambda: "Darwin")
     assert main(["install", "--exe", "/opt/bin/chronicle", "--no-sync", "--yes"]) == 0
     assert load_config(setup["home"]).server_menu_bar is False
+
+
+# ------------------------------------------------------------------------------ the switch in Status › Recording
+@pytest.fixture
+def mac(env, monkeypatch):
+    """A uv tool install from PyPI with the team extra, whose dashboard is the login item, without the icon yet."""
+    import types
+
+    from chronicle import install, menubar, update
+
+    monkeypatch.setattr("sys.platform", "darwin")
+    monkeypatch.setattr(update, "_method", {"kind": "uv", "label": "uv tool from PyPI", "source": None, "local": False,
+                                            "extras": ["team"], "command": ["/opt/uv", "tool", "upgrade", "agents-chronicle"]})
+    monkeypatch.setattr(update, "RESTARTABLE", True)
+    monkeypatch.setattr(menubar, "SHOWN", False)
+    monkeypatch.setattr(menubar, "app_extra", lambda: False)
+    monkeypatch.setenv("XPC_SERVICE_NAME", install.UI_LABEL)
+    restarts, ran = [], []
+    monkeypatch.setattr("threading.Timer", lambda delay, fn: types.SimpleNamespace(start=lambda: restarts.append(fn)))
+
+    def run(cmd, **kw):
+        if cmd[0] in ("launchctl", "systemctl"):  # status checks: no agent (as conftest answers)
+            return types.SimpleNamespace(returncode=113, stdout="", stderr="")
+        ran.append(cmd)
+        return types.SimpleNamespace(returncode=env.get("uv_exit", 0), stdout="", stderr=env.get("uv_err", ""))
+
+    monkeypatch.setattr("chronicle.menubar.subprocess.run", run)
+    env.update(restarts=restarts, ran=ran)
+    return env
+
+
+def _on(env) -> bool:
+    from chronicle.config import load_config
+
+    return load_config(env["home"]).server_menu_bar
+
+
+def test_the_extra_is_added_keeping_the_others_and_the_version(mac, monkeypatch):
+    import sys
+
+    from chronicle import __version__, menubar, update
+
+    assert menubar.extra_command() == ["/opt/uv", "tool", "install", "--force", "--python",
+                                       f"{sys.version_info[0]}.{sys.version_info[1]}", f"agents-chronicle[app,team]=={__version__}"]
+    info = menubar.setting_info(mac["cfg"])
+    assert info["supported"] and info["can_install"] and not info["app_extra"] and not info["on"]
+    monkeypatch.setitem(update._method, "source", "/Users/me/agents-chronicle")  # a checkout: says how instead
+    assert menubar.extra_command() is None and not menubar.setting_info(mac["cfg"])["can_install"]
+    assert "agents-chronicle[app]" in menubar.setting_info(mac["cfg"])["command"]
+
+
+def test_no_switch_off_a_mac_or_in_the_app(mac, monkeypatch):
+    from chronicle import menubar, update
+
+    monkeypatch.setitem(update._method, "kind", "app")  # Chronicle.app always shows its icon
+    assert menubar.setting_info(mac["cfg"]) == {"supported": False}
+    monkeypatch.setitem(update._method, "kind", "uv")
+    monkeypatch.setattr("sys.platform", "linux")
+    assert menubar.setting_info(mac["cfg"]) == {"supported": False}
+
+
+def test_turning_it_on_installs_the_missing_extra_then_restarts(mac):
+    from chronicle import menubar, update
+
+    said, expected = [], menubar.extra_command()
+    out = menubar.apply_setting(mac["cfg"], True, said.append)
+    assert mac["ran"] == [expected] and "agents-chronicle[app,team]" in expected[-1]
+    assert said == ["installing the app extra…"] and "restarting" in out
+    assert _on(mac) and mac["restarts"] == [update.restart]
+
+
+def test_a_failed_install_leaves_it_off(mac):
+    from chronicle import menubar
+
+    mac.update(uv_exit=2, uv_err="resolving…\nerror: no network")
+    with pytest.raises(RuntimeError, match="error: no network"):
+        menubar.apply_setting(mac["cfg"], True, lambda m: None)
+    assert not _on(mac) and mac["restarts"] == []
+
+
+def test_the_dashboard_restarts_only_when_the_icon_has_to_show_or_go(mac, monkeypatch):
+    from chronicle import menubar
+
+    monkeypatch.setattr(menubar, "app_extra", lambda: True)
+    monkeypatch.setattr(menubar, "SHOWN", True)  # shown: turning it on changes nothing here
+    assert menubar.apply_setting(mac["cfg"], True, lambda m: None) == "The menu-bar icon is on"
+    assert mac["restarts"] == [] and mac["ran"] == []
+    assert "restarting" in menubar.apply_setting(mac["cfg"], False, lambda m: None)  # shown: it has to go
+    assert not _on(mac) and len(mac["restarts"]) == 1
+    monkeypatch.delenv("XPC_SERVICE_NAME")  # a dashboard started in a terminal never shows it: just saved
+    monkeypatch.setattr(menubar, "SHOWN", False)
+    out = menubar.apply_setting(mac["cfg"], True, lambda m: None)
+    assert out == "The menu-bar icon is on; it shows while the dashboard runs at login"
+    assert _on(mac) and len(mac["restarts"]) == 1
+
+
+def test_the_switch_works_only_from_this_computer(mac, monkeypatch):
+    import json
+    import threading
+    import time
+    import urllib.error
+    import urllib.request
+    from http.server import ThreadingHTTPServer
+
+    from chronicle import menubar, update
+    from chronicle.server import App, make_handler
+
+    app = App(mac["cfg"])
+    assert app.status()["menu_bar"]["supported"]
+    httpd = ThreadingHTTPServer(("127.0.0.1", 0), None)
+    port = httpd.server_address[1]
+    httpd.RequestHandlerClass = make_handler(app, port)
+    threading.Thread(target=httpd.serve_forever, daemon=True).start()
+
+    def post(body, **headers):
+        req = urllib.request.Request(f"http://127.0.0.1:{port}/api/menu-bar", data=json.dumps(body).encode(),
+                                     headers={"X-Chronicle": "1", "Content-Type": "application/json", **headers})
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.load(r)
+        except urllib.error.HTTPError as e:
+            return e.code, json.load(e)
+
+    try:
+        assert post({"on": True}, **{"X-Forwarded-For": "100.64.0.7"})[0] == 403  # installs software: not from afar
+        assert mac["ran"] == []
+        code, r = post({"on": True})
+        assert code == 200 and r == {"started": True, "restarts": True}
+        for _ in range(100):
+            if app.jobs.snapshot()["menu-bar"]["state"] != "running":
+                break
+            time.sleep(0.05)
+        assert app.jobs.snapshot()["menu-bar"]["state"] == "done" and app.cfg.server_menu_bar
+        assert mac["restarts"] == [update.restart]
+        monkeypatch.setattr(update, "_method", {"kind": "pip", "label": "pip", "command": None})
+        monkeypatch.setattr(menubar, "app_extra", lambda: False)
+        code, r = post({"on": True})  # nothing it can install with: it says how instead
+        assert not r["started"] and "agents-chronicle[app]" in r["error"]
+    finally:
+        httpd.shutdown()

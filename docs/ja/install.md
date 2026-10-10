@@ -114,7 +114,12 @@ macOS では、Chronicle のマーク（アプリアイコンの重なったペ�
 コマンドライン版では、オンにしたときだけ表示され、次の 2 つが必要です：ログイン時に起動するダッシュボード（`--no-ui` を付けない限り
 `chronicle install` が設定します）と、`app` エクストラ（PyObjC）。
 
-オンにするには：
+いちばん手軽なのは、**Settings › Status › Recording** の **Menu-bar icon** スイッチです。オンにすると、`app` エクストラが
+なければ先に追加し（PyPI からの uv のインストールの場合。ほかのエクストラとバージョンはそのまま。それ以外のインストールでは
+実行するコマンドを表示）、アイコン付きでダッシュボードを再起動します。オフにするとアイコンなしで再起動します。ソフトウェアを
+インストールするため、このスイッチはそのコンピューター上のブラウザーからだけ使えます。
+
+コマンドラインでオンにするには：
 
 1. `app` エクストラを追加します。`uv tool install --force` は指定したエクストラだけをインストールするため、すでに使っている
    エクストラも並べてください（`uv tool list --show-extras` で確認できます）。例：`'agents-chronicle[app,team]'`
@@ -169,7 +174,7 @@ Browser**、**Connect Claude Code…**、**Open at Login**、**Install Command-L
 
 コマンドライン版は、ログイン時に起動するダッシュボードにだけアイコンを表示するため、ターミナルで 2 つ目の `chronicle ui` を
 起動してもアイコンは増えません（`--menu-bar` で表示、`--no-menu-bar` で非表示にできます）。オフに戻すには
-`chronicle install --no-menu-bar` を実行するか、`chronicle config set server.menu_bar false` を実行して同じ `launchctl kickstart`
+スイッチを使うか、`chronicle install --no-menu-bar` を実行するか、`chronicle config set server.menu_bar false` を実行して同じ `launchctl kickstart`
 の行を実行します。
 
 ## アップデート

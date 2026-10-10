@@ -35,7 +35,7 @@ RECENT_SKIP = ("history", "chatgpt-export", "claude-ai-export")
 JOB_LABELS = {"sync": "Syncing", "push": "Sending to the hub", "import": "Importing chats",
               "screen": "Screening imported chats", "update": "Updating Chronicle", "themes": "Grouping glossary themes",
               "analyze": "Analyzing", "glossary": "Updating the glossary", "review": "Writing the weekly review",
-              "synthesize": "Updating knowledge"}
+              "synthesize": "Updating knowledge", "menu-bar": "Setting up the menu-bar icon"}
 # the panel's picture for each state, from the dashboard's 3D cast (web/art-*.webp)
 ART = {OK: "art-book.webp", WORKING: "art-gears.webp", ATTENTION: "art-glitch.webp", PAUSED: "art-clock.webp"}
 
@@ -223,6 +223,81 @@ def agent_sync_error() -> str | None:
     if not info.get("loaded") or code in ("0", "(never exited)"):
         return None
     return f"the background sync exited with code {code} (see sync.err.log)"
+
+
+SHOWN = False  # this process shows the icon (run_with_server started it)
+
+
+def app_extra() -> bool:
+    """The `app` extra (PyObjC) is installed: the icon can show."""
+    import importlib.util
+
+    return importlib.util.find_spec("AppKit") is not None
+
+
+def extra_command() -> list[str] | None:
+    """The command that adds the `app` extra to a uv tool install from PyPI, keeping its other extras and its version;
+    None for any other install (a checkout, pip, pipx, the app), which Status › Recording explains instead."""
+    from . import __version__
+    from .update import DIST, install_method
+
+    m = install_method()
+    if m["kind"] != "uv" or m.get("source") or not m.get("command"):
+        return None
+    extras = ",".join(sorted({*m.get("extras", []), "app"}))
+    return [m["command"][0], "tool", "install", "--force", "--python", f"{sys.version_info[0]}.{sys.version_info[1]}",
+            f"{DIST}[{extras}]=={__version__}"]
+
+
+def setting_info(cfg: Config) -> dict:
+    """Status › Recording's menu-bar switch: whether it applies here, and what turning it on takes."""
+    import shlex
+
+    from .install import UI_LABEL, launchd_status
+    from .update import install_method
+
+    if sys.platform != "darwin" or install_method()["kind"] in ("app", "container"):  # the app always shows it
+        return {"supported": False}
+    cmd = extra_command()
+    return {"supported": True, "on": cfg.server_menu_bar, "shown": SHOWN, "app_extra": app_extra(),
+            "login_item": os.environ.get("XPC_SERVICE_NAME") == UI_LABEL,  # this dashboard is the one that shows it
+            "agent": bool(launchd_status(UI_LABEL).get("loaded")), "can_install": cmd is not None,
+            "command": shlex.join(cmd) if cmd else "uv tool install --force --python 3.13 'agents-chronicle[app]'"}
+
+
+def restarts(on: bool, info: dict) -> bool:
+    """Whether turning the icon on or off restarts this dashboard: only the login item shows it, and only a fresh
+    process picks up the setting (and an `app` extra just installed)."""
+    from . import update
+
+    return bool(update.RESTARTABLE and info.get("login_item") and (on != info.get("shown") or (on and not info.get("app_extra"))))
+
+
+def apply_setting(cfg: Config, on: bool, progress) -> str:
+    """Turn the icon on or off ([server] menu_bar), adding the `app` extra first when it is missing, then restart the
+    dashboard so it shows or goes. A job (Status › Recording); its result is the line the UI shows."""
+    from . import update
+    from .config import set_config_value
+    from .i18n import tr
+
+    info = setting_info(cfg)
+    if on and not info.get("app_extra"):
+        cmd = extra_command()
+        if not cmd:
+            raise RuntimeError(tr("The menu-bar icon needs the app extra: {command}", command=info.get("command", "")))
+        progress(tr("installing the app extra…"))
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900, stdin=subprocess.DEVNULL)
+        update._method.clear()  # the reinstall rewrote the receipt
+        if r.returncode:
+            out = (r.stdout + r.stderr).strip()
+            raise RuntimeError(out.splitlines()[-1] if out else f"{cmd[0]} exited with {r.returncode}")
+    set_config_value(cfg, "server", "menu_bar", "true" if on else "false")
+    if restarts(on, info):
+        threading.Timer(3.0, update.restart).start()  # after the next status poll has seen this job finish
+        return tr("The menu-bar icon is on; the dashboard is restarting") if on else tr("The menu-bar icon is off; the dashboard is restarting")
+    if not on:
+        return tr("The menu-bar icon is off")
+    return tr("The menu-bar icon is on") if info.get("shown") else tr("The menu-bar icon is on; it shows while the dashboard runs at login")
 
 
 def wants_menu_bar(cfg: Config) -> bool:
@@ -670,6 +745,8 @@ def run_with_server(cfg: Config, httpd, url: str) -> bool:
         return False
     from .install import UI_LABEL
 
+    global SHOWN
+    SHOWN = True
     app = httpd.app
     AppKit.NSApplication.sharedApplication().setActivationPolicy_(AppKit.NSApplicationActivationPolicyAccessory)
     threading.Thread(target=httpd.serve_forever, name="chronicle-ui", daemon=True).start()

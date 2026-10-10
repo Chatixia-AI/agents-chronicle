@@ -4828,7 +4828,7 @@ function updatesCard() {
       if (!r.started) { toast(r.error || t("An update is already running")); run.disabled = false; run.textContent = label; return; }
       try { sessionStorage.setItem("chronicle-updating", u.current); } catch (e) { /* private mode */ }
       toast(u.restartable ? t("Updating Chronicle; the dashboard restarts when it is done") : t("Updating Chronicle…"), 6000);
-      restartAfterUpdate = !!u.restartable;
+      if (u.restartable) restartAfter.add("update");
       watchJob("update");
     } }, label) : null;
     const setting = (key, path, label) => {
@@ -5113,6 +5113,31 @@ function knowledgeLangPicker(a) {
         disabled: !canAdmin() && l.code !== a.language, onclick: () => pick(l.code) }, l.label))),
     h("div", { class: "muted" }, t("Language of summaries, knowledge, reviews and the lines proposed for CLAUDE.md and AGENTS.md. Applies to sessions analyzed from now on.")));
 }
+// Status › Recording: the macOS menu-bar icon on or off, adding the app extra (PyObjC) first when it is missing.
+// An older server sends no menu_bar, and the app (which always shows the icon) sends supported: false.
+function menuBarRow(mb) {
+  if (!mb?.supported) return null;
+  const on = !!(mb.on && mb.app_extra); // on without the extra shows nothing: switching it on installs the extra
+  const code = (c) => h("span", { class: "codeline" }, c);
+  const note = on && mb.shown ? t("Chronicle's icon in the menu bar: what it's doing, a search and your recent sessions, a click away.")
+    : on && !mb.agent ? tx("On. It shows while the dashboard runs at login, which {command} sets up.", { command: code("chronicle install") })
+    : on ? t("On. It shows the next time the dashboard that runs at login starts.")
+    : !mb.app_extra && mb.can_install ? t("Turning it on installs the app extra (PyObjC, about 30 MB) with uv, then restarts the dashboard.")
+    : !mb.app_extra ? tx("Needs the app extra: {command}", { command: code(mb.command) })
+    : t("Chronicle's icon in the menu bar: what it's doing, a search and your recent sessions, a click away.");
+  const sw = h("button", { class: "switch admin-only", type: "button", role: "switch", "aria-checked": String(on), "aria-label": t("Menu-bar icon"),
+    disabled: !canAdmin() || (!on && !mb.app_extra && !mb.can_install), onclick: async () => {
+      sw.disabled = true;
+      const r = await post("/api/menu-bar", { on: !on });
+      if (!r.started) { toast(r.error || t("The menu-bar icon is already changing")); sw.disabled = false; return; }
+      sw.setAttribute("aria-checked", String(!on));
+      if (!on && !mb.app_extra) toast(t("Installing the app extra; the dashboard restarts when it is done"), 6000);
+      else if (r.restarts) toast(t("The dashboard restarts to show or hide the icon"), 6000);
+      if (r.restarts) restartAfter.add("menu-bar");
+      watchJob("menu-bar");
+    } });
+  return h("div", { class: "set-row upd-daily" }, h("div", null, h("b", null, t("Menu-bar icon")), h("div", { class: "muted" }, note)), sw);
+}
 route(/^\/status$/, async () => {
   const st = await api("/api/status");
   const row = (ok, label, detail) => h("div", { class: "status-row" }, h("span", { class: ok ? "ok" : "no" }, ok ? "✓" : "✗"), h("span", null, label), detail ? h("span", { class: "muted" }, detail) : null);
@@ -5128,6 +5153,7 @@ route(/^\/status$/, async () => {
           row(!!st.hooks?.SessionStart, t("SessionStart knowledge injection"), t("optional: {command}", { command: "chronicle install --inject-context" })),
           row(!!st.statusline?.installed, t("Status-line usage collector"), !st.statusline?.installed ? t("optional: {command}", { command: "chronicle install --statusline" })
             : planLine(st.statusline.plan) || t("no plan limits seen yet (Pro and Max plans only)"))),
+        menuBarRow(st.menu_bar),
         h("div", { class: "subhead" }, t("Storage")),
         h("div", null, h("span", { class: "codeline" }, st.archive_dir), t(" raw transcripts (kept forever, gzip)")),
         h("div", { style: { marginTop: "6px" } }, h("span", { class: "codeline" }, st.notes_dir), t(" Markdown vault")),
@@ -7227,7 +7253,8 @@ function showSignin(note) {
 }
 
 // ------------------------------------------------------------------ jobs, status bar, theme
-let watched = new Set(), pollTimer, uiBuild = null, restartAfterUpdate = false;
+let watched = new Set(), pollTimer, uiBuild = null;
+const restartAfter = new Set(); // jobs that end by restarting the dashboard: an update, the menu-bar switch
 function watchJob(name) { watched.add(name); pollStatus(); }
 async function pollStatus() {
   clearTimeout(pollTimer);
@@ -7258,10 +7285,11 @@ async function pollStatus() {
     pollNews();
     for (const name of [...watched]) {
       const j = jobs[name];
-      if (name === "update" && restartAfterUpdate && (!j || j.state === "done")) {
+      if (restartAfter.has(name) && (!j || j.state === "done")) {
         watched.delete(name);
-        if (!j) { location.reload(); return; } // the restart came before this poll: a fresh process knows no update job
-        awaitRestart();
+        restartAfter.delete(name);
+        if (!j) { location.reload(); return; } // the restart came before this poll: a fresh process knows no such job
+        awaitRestart(name);
         continue;
       }
       if (j && j.state !== "running") {
@@ -7276,15 +7304,16 @@ async function pollStatus() {
 }
 
 // after an update the dashboard restarts itself on the new code: cover the page, and reload it once the new process answers
-function awaitRestart() {
-  const note = h("div", { class: "muted" }, t("The update is installed. This page reloads by itself when the dashboard is back."));
+function awaitRestart(job = "update") {
+  const note = h("div", { class: "muted" }, job === "update" ? t("The update is installed. This page reloads by itself when the dashboard is back.")
+    : t("This page reloads by itself when the dashboard is back."));
   document.body.append(h("div", { id: "restart-wait", role: "alertdialog", "aria-modal": "true", "aria-label": t("Restarting Chronicle") },
     h("div", { class: "rw-card" }, icon("sync", "spin"), h("b", null, t("Restarting Chronicle…")), note)));
   const since = Date.now();
   const tick = async () => {
     try {
       const res = await fetch("/api/jobs", { cache: "no-store", headers: { "X-Chronicle-Lang": LANG } });
-      if (res.ok && !(await res.json()).jobs?.update) { location.reload(); return; } // a fresh process: it has no record of the update
+      if (res.ok && !(await res.json()).jobs?.[job]) { location.reload(); return; } // a fresh process: it has no record of the job
     } catch (e) { /* down while it restarts */ }
     if (Date.now() - since > 60000 && !note.dataset.late) {
       note.dataset.late = "1";
@@ -7302,7 +7331,7 @@ function jobLabel(name) {
   const [kind, arg] = name.split(/:(.*)/);
   const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
   return {
-    sync: t("Sync"), mirror: t("Writing the mirror"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), themes: t("Grouping glossary themes"),
+    sync: t("Sync"), mirror: t("Writing the mirror"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), "menu-bar": t("Setting up the menu-bar icon"), themes: t("Grouping glossary themes"),
     analyze: arg === "selection" ? t("Analyzing selected sessions") : t("Analyzing session {id}", { id: (arg || "").slice(0, 8) }),
     glossary: arg ? t("Glossary: {name}", { name: tail(arg) }) : t("Glossary"), review: t("Weekly review"),
     synthesize: arg === "__global__" ? t("Global playbook") : t("Knowledge base: {name}", { name: tail(arg) }),
