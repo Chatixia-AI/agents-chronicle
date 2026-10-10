@@ -379,7 +379,7 @@ def test_the_extra_is_added_keeping_the_others_and_the_version(mac, monkeypatch)
     assert info["listed_as"].startswith("python")  # what System Settings › Menu Bar calls it
     monkeypatch.setitem(update._method, "source", "/Users/me/agents-chronicle")  # a checkout: says how instead
     assert menubar.extra_command() is None and not menubar.setting_info(mac["cfg"])["can_install"]
-    assert "agents-chronicle[app]" in menubar.setting_info(mac["cfg"])["command"]
+    assert "interlatch[app]" in menubar.setting_info(mac["cfg"])["command"]
 
 
 def test_no_switch_off_a_mac_or_in_the_app(mac, monkeypatch):
@@ -468,7 +468,7 @@ def test_the_switch_works_only_from_this_computer(mac, monkeypatch):
         monkeypatch.setattr(update, "_method", {"kind": "pip", "label": "pip", "command": None})
         monkeypatch.setattr(menubar, "app_extra", lambda: False)
         code, r = post({"on": True})  # nothing it can install with: it says how instead
-        assert not r["started"] and "agents-chronicle[app]" in r["error"]
+        assert not r["started"] and "interlatch[app]" in r["error"]
     finally:
         httpd.shutdown()
 

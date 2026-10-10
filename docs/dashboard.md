@@ -1,10 +1,10 @@
 # Dashboard, glossary and Map
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
 ![The session page: transcript with one-line tool calls, the knowledge it produced, and the outline of prompts](images/session.png)
 
-**Dashboard:** a simplified VS Code layout, drawn in the same blueprint style as [chronicle.chatixia.net](https://chronicle.chatixia.net/):
+**Dashboard:** a simplified VS Code layout, drawn in the same blueprint style as [interlatch.com](https://interlatch.com):
 navy blueprint paper in the dark theme, a whiteprint in the light one, IBM Plex type. An icon rail on the left switches between
 **Home**, **Sessions**, **Knowledge**, **Projects**, **Suggestions** and **Settings** (point at an icon, or tab to it, for its name and what
 it holds), and the sidebar beside it lists that section:
@@ -13,7 +13,7 @@ and Weekly reviews, projects, suggestions by status plus What goes wrong, or Sta
 to any session, knowledge item, project, glossary term or page and runs commands (sync, rebuild the glossary, group
 themes, switch theme); **⌘B** hides the sidebar. The status bar shows background work, the analysis queue, the
 last sync and, once one is found, an available update ([Updating](install.md#updating)).
-**Settings › Appearance** picks the theme, the language and whether the dashboard animates (System follows macOS Reduce motion). The fonts ship with Chronicle, so the dashboard never
+**Settings › Appearance** picks the theme, the language and whether the dashboard animates (System follows macOS Reduce motion). The fonts ship with Interlatch, so the dashboard never
 calls out to a font service. **Settings › Devices** shows whether this computer is a hub or sends to
 one (then also the hub's projects it is in, to join, leave or rejoin), and how to open the dashboard on your phone. **Settings › Storage**
 sets up a copy of your archive in Postgres ([A copy in Postgres](postgres.md)). On a phone the rail becomes a tab bar at the bottom, the page takes
@@ -101,7 +101,7 @@ its sidebar. Groups are one level deep, and only change how projects are listed:
 sessions, knowledge base and hub sharing.
 
 - **Make one:** **New group** on the Projects page, or **New group…** in a project's group menu (the folder button on
-  its card, or at the end of its row in the list). Tick the projects that belong. Chronicle offers a folder rule for
+  its card, or at the end of its row in the list). Tick the projects that belong. Interlatch offers a folder rule for
   the folder they share (one per computer, so `~/Projects/Work/AI-BPO/Aktio` and `aktio-vm:/root/Aktio` both), and
   names the group after it. Remove the rule or add your own before you save.
 - **Folder rules:** a project anywhere under a rule's folder joins the group, including ones you start later. When
@@ -122,7 +122,7 @@ shared there as one project: see [A group as one project on the hub](devices.md#
 ## Suggestions and What goes wrong
 
 **Suggestions** (the lightbulb in the rail; its badge counts suggestions you haven't seen yet) is the queue of fixes
-Chronicle proposes: lines for your `CLAUDE.md` or `AGENTS.md`, a change to the Playwright MCP server in
+Interlatch proposes: lines for your `CLAUDE.md` or `AGENTS.md`, a change to the Playwright MCP server in
 `~/.claude.json`, and setup steps for you to run. A status switch moves between **To review**, **Applied**, **Done**,
 **Stale** and **Dismissed**, and a menu narrows to user-level suggestions or one project. Cards are grouped by the
 file they change; each shows its evidence ("seen in 31 sessions across 17 projects · still happening · last
@@ -130,7 +130,7 @@ file they change; each shows its evidence ("seen in 31 sessions across 17 projec
 which you can edit. **Preview** shows the diff, **Apply** writes it (the file is backed up first), **Dismiss** drops
 it for good, and an applied card has **Undo**. **Move to every project** puts a project's line in your user-level file
 instead, and a user-level card can move back to its projects ([Moving a line](suggestions.md#moving-a-line)). Setup steps show their command with **Copy** and **Mark done**;
-Chronicle never runs them. **Check again** looks at the latest sessions now. When something is waiting, **Home**
+Interlatch never runs them. **Check again** looks at the latest sessions now. When something is waiting, **Home**
 shows the top 3 with **Approve** and **Dismiss**.
 
 **What goes wrong** lists the failures that keep coming back across your sessions, for 30, 90 or 180 days or all
@@ -164,14 +164,14 @@ says where it stands: **on disk** as the agent wrote it, **changed since**, **go
 holds what was written), **in the chat** for claude.ai, or a link. Filter by kind, project or words, hide what is
 gone, or open the session at the tool call that made it. **Open** (or a click on the title) shows the file in a new tab:
 as it is on disk, or, once it is gone, as the agent wrote it, rebuilt from the archived transcript (for files Claude
-Code or Codex wrote whole). An HTML page keeps its own scripts but runs in a sandbox, with no way into Chronicle's data
+Code or Codex wrote whole). An HTML page keeps its own scripts but runs in a sandbox, with no way into Interlatch's data
 or API; Markdown and CSV show as text, PDFs in the browser, and office files download. The **⋯** menu opens a file still on disk in its own
 app (**Open on this Mac**: Keynote or PowerPoint for a deck, your editor for Markdown), shows it in Finder, or copies
-its path. Those two appear only in a browser on the computer Chronicle runs on, never through Tailscale from another
+its path. Those two appear only in a browser on the computer Interlatch runs on, never through Tailscale from another
 device. Images and SVG diagrams still on disk
 show a thumbnail, and so, on a Mac, do decks, documents, spreadsheets and PDFs (their first page, drawn by Quick
 Look); **Images**, **Diagrams** and **Decks** lay them out as a grid, and a click shows one full size. A file made in a
-claude.ai chat stays in claude.ai, since the export leaves it out: **claude.ai ↗** opens the chat to download it. Chronicle
+claude.ai chat stays in claude.ai, since the export leaves it out: **claude.ai ↗** opens the chat to download it. Interlatch
 serves only files it recorded as artifacts, by their id, and an SVG opened on its own runs in a sandbox, so a script
 inside it cannot run. A file that is gone has no preview yet: the transcript records that it was written, not its
 pixels. A project page lists its latest
@@ -184,7 +184,7 @@ When a project's knowledge base is synthesized, the model also draws the project
 such as a CLI, UI, API or MCP server, data it keeps, external services) and how they connect. Every part and
 connection must cite the knowledge items that state it: a connection with no valid source is dropped, and so is a
 part left with no connection, so the sketch shows only what your sessions established. The project page draws it in a
-hand-drawn style ([rough.js](https://roughjs.com), shipped with Chronicle). Hover a part for what it is, click a part
+hand-drawn style ([rough.js](https://roughjs.com), shipped with Interlatch). Hover a part for what it is, click a part
 or a connection to see the knowledge it comes from, and switch to **Table** for the connections as a list.
 **Excalidraw** downloads it as an `.excalidraw` file laid out the same way, to edit in excalidraw.com or the
 Excalidraw VS Code extension. The Markdown knowledge base (notes export, `project_knowledge` over MCP) carries it as a
@@ -221,7 +221,7 @@ The same thing found twice is one part: the App Service Terraform declares and t
 PostgreSQL a dependency names and the one compose runs. Click a part for **Why it is here**: the manifest lines and the
 commands behind it, each command linked to its session. Worktrees count as their repository, a folder that only
 holds other projects is a group, and a project that also ran on another machine (`host:/path`) shows it under **Also
-runs on**. `chronicle systems` prints the same map in the terminal, `chronicle systems NAME --evidence` one system with
+runs on**. `interlatch systems` prints the same map in the terminal, `interlatch systems NAME --evidence` one system with
 its example commands. To use sessions only, set `[systems] read_manifests = false` ([Configuration](configuration.md#systems)).
 
 ## Glossary
@@ -260,6 +260,6 @@ on the map (*on the map →*).
 The analysis model splits each glossary category with 25 or more terms into 4–10 named themes (for example concept →
 "Cloud infra, auth & integrations", "Agent dev workflow & tooling"), one call per category, so no level of
 the map is a long list. Themes are rebuilt after glossary rebuilds, only for categories whose terms changed; terms
-added since then show as *Not grouped yet*. Run it by hand with `chronicle glossary --themes [--force]` or the
+added since then show as *Not grouped yet*. Run it by hand with `interlatch glossary --themes [--force]` or the
 **Group into themes** button in the map's side panel. On a 1,360-term glossary, the ten big categories cost about
 $1.40 API-equivalent in total.

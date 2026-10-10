@@ -1,9 +1,9 @@
 # The documentation site, built from docs/ and the READMEs as they are (see docs/_site/hooks.py).
-# Preview: uv run --only-group docs mkdocs serve. Published under /docs/ of chronicle.chatixia.net by
+# Preview: uv run --only-group docs mkdocs serve. Published under /docs/ of interlatch.com by
 # Chatixia-AI/chronicle-site, which builds this as it is.
-site_name: Chronicle
-site_description: A searchable memory of every coding-agent session you run.
-site_url: https://chronicle.chatixia.net/docs/
+site_name: Interlatch
+site_description: Shared memory for your coding agents. Different agents, knowledge that stays.
+site_url: https://interlatch.com/docs/
 repo_url: https://github.com/Chatixia-AI/agents-chronicle
 repo_name: agents-chronicle
 edit_uri: edit/main/docs/
@@ -80,6 +80,7 @@ nav:
       - Configuration: configuration.md
       - Data and privacy: privacy.md
       - Troubleshooting: troubleshooting.md
+      - Moving from Chronicle: moving-from-chronicle.md
       - Development: development.md
   - 日本語:
       - ホーム: ja/index.md
@@ -98,4 +99,5 @@ nav:
       - 設定: ja/configuration.md
       - データとプライバシー: ja/privacy.md
       - トラブルシューティング: ja/troubleshooting.md
+      - Chronicle からの移行: ja/moving-from-chronicle.md
       - 開発: ja/development.md

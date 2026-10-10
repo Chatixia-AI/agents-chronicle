@@ -1,4 +1,4 @@
-/* Chronicle dashboard: the UI language (English or Japanese). Loaded after ja.js, before app.js. */
+/* Interlatch dashboard: the UI language (English or Japanese). Loaded after ja.js, before app.js. */
 "use strict";
 
 // Resolved once: the stored choice (Settings › Appearance, the statusbar button), else the browser's first language.

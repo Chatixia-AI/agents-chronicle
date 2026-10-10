@@ -1,4 +1,4 @@
-/* Chronicle dashboard: vanilla JS, no build step. */
+/* Interlatch dashboard: vanilla JS, no build step. */
 "use strict";
 
 // =====================================================================================
@@ -295,7 +295,7 @@ function agentCell(x) { // the Agent column: the Sources page's colour dot and t
 function agentTag(a, title) { return a && a !== "claude" ? h("span", { class: `agent-tag a-${a}`, title: title || t("{agent} session", { agent: agentName(a) }) }, agentShort(a)) : null; }
 
 function outcomeBadge(outcome, status, source) {
-  if (source === "history") return h("span", { class: "badge", title: t("Recovered from prompt history; transcript was deleted before Chronicle") }, icon("history"), t("history"));
+  if (source === "history") return h("span", { class: "badge", title: t("Recovered from prompt history; transcript was deleted before Interlatch") }, icon("history"), t("history"));
   if (outcome && OUTCOME[outcome]) {
     const [cls, label] = OUTCOME[outcome];
     return h("span", { class: `badge ${cls}` }, icon(outcome), label);
@@ -1557,7 +1557,7 @@ async function teamHome(params) {
         : dedicated() ? h("p", null, tx("A project shows up here once an admin makes it in {projects}, or a computer sends sessions to it.",
           { projects: h("a", { href: "#/team/projects" }, t("Team › Projects")) }))
         : h("p", null, tx("A project shows up here once it is set up on the hub with {command}, or another computer sends sessions to it. Projects only this computer works on stay under {activity}.",
-          { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>"), activity: h("a", { href: "#/" }, t("Activity")) }))));
+          { command: h("span", { class: "codeline" }, "interlatch hub project add <folder>"), activity: h("a", { href: "#/" }, t("Activity")) }))));
   }
   const tiles = h("div", { class: "kpis team-kpis" },
     tile(t("Sessions"), fmtNum(tot.sessions), { iconName: "sessions", delta: period }),
@@ -1835,9 +1835,9 @@ route(/^\/session\/([\w-]+)$/, async (params, id) => {
         sx.git_branch ? h("span", null, tx("branch {branch}", { branch: h("code", null, sx.git_branch) })) : null,
         sx.primary_model ? h("span", null, h("code", null, sx.primary_model)) : null,
         sx.cc_version ? h("span", { class: "muted" }, `${agentName(sx.agent)} ${sx.cc_version}`) : null,
-        sx.source_present === 0 && sx.source !== "history" && !sx.limited ? h("span", { class: "badge", title: t("The agent deleted the original; Chronicle's archive keeps it") }, t("original deleted · archived")) : null,
+        sx.source_present === 0 && sx.source !== "history" && !sx.limited ? h("span", { class: "badge", title: t("The agent deleted the original; Interlatch's archive keeps it") }, t("original deleted · archived")) : null,
         sx.source === "remote" ? h("span", { class: "badge", title: t("Analyzed on the computer it ran on, which keeps its transcript") }, t("transcript on {machine}", { machine: sx.machine_name || t("another machine") })) : null,
-        sx.source === "codex-import" ? h("span", { class: "badge accent", title: t("Claude Code deleted this transcript; Chronicle recovered it from the copy Codex Desktop imported") }, h("span", { class: "sdot" }), t("recovered via Codex")) : null)),
+        sx.source === "codex-import" ? h("span", { class: "badge accent", title: t("Claude Code deleted this transcript; Interlatch recovered it from the copy Codex Desktop imported") }, h("span", { class: "sdot" }), t("recovered via Codex")) : null)),
     h("div", { style: { display: "flex", gap: "8px", alignItems: "center" } }, outcomeBadge(sx.outcome, sx.analysis_status, sx.source),
       sx.limited ? null : exportMenu(() => [sx.id], { raw: RAW_SOURCES.includes(sx.source) }), analyzing));
   setCrumbs([[t("Sessions"), "#/sessions"], [sx.project_name || "–", `#/project?path=${encodeURIComponent(sx.project_path || "")}`], [sx.title || t("(untitled session)")]], token);
@@ -2817,7 +2817,7 @@ const ART_KINDS = [["doc", t("Documents"), t("document")], ["page", t("Pages"), 
   ["deck", t("Decks"), t("deck")], ["sheet", t("Sheets"), t("sheet")], ["image", t("Images"), t("image")],
   ["published", t("Published"), t("published link")], ["pr", t("Pull requests"), t("pull request")], ["commit", t("Commits"), t("commit")]];
 const ART_KIND = Object.fromEntries(ART_KINDS.map(([k, plural, one]) => [k, { plural, one }]));
-let ART_LOCAL = null; // "mac" or "linux" when this browser is on the computer Chronicle runs on (files can open there)
+let ART_LOCAL = null; // "mac" or "linux" when this browser is on the computer Interlatch runs on (files can open there)
 const ART_STATUS = { present: [t("on disk"), "good", t("The file is on disk as the agent wrote it")],
   changed: [t("changed since"), "warning", t("The file is on disk, but changed after the agent wrote it")],
   gone: [t("gone"), "muted", t("The file is no longer on disk; the session's transcript still holds what was written")],
@@ -3189,7 +3189,7 @@ route(/^\/glossary$/, async (params) => {
   { sort: "term", group: { key: "term", of: letterOf, id: (l) => `gl-${l}` }, empty: t("No terms match."), cls: "glossary-table" }));
   const page = h("div", null,
     h("div", { class: "page-head" }, titled("dex", h("h1", null, t("Glossary")),
-      h("div", { class: "sub" }, data.total ? t("{a} of {b} terms from your sessions. Hover underlined terms anywhere in Chronicle.", { a: fmtNum(data.items.length), b: fmtNum(data.total) }) : t("No glossary yet"))),
+      h("div", { class: "sub" }, data.total ? t("{a} of {b} terms from your sessions. Hover underlined terms anywhere in Interlatch.", { a: fmtNum(data.items.length), b: fmtNum(data.total) }) : t("No glossary yet"))),
       h("div", { class: "head-actions" }, viewToggle("glossary", mode), rebuild)),
     h("div", { class: "filters" },
       h("input", { class: "input", type: "search", placeholder: t("Search terms and definitions…"), value: state.q, style: { minWidth: "280px" },
@@ -4609,7 +4609,7 @@ route(/^\/sources$/, async () => {
         verdict("analyze", sc.analyze, t("worth analyzing")), verdict("maybe", sc.maybe, t("maybe")), verdict("skip", sc.skip, t("not worth it")),
         sc.unscreened ? verdict("none", sc.unscreened, t("not screened")) : null) : null,
       h("div", { class: "src-note" }, tx("Export from {where}; the email's link downloads a .zip to import here or with {command}. Import newer exports any time: only new and changed chats are added.",
-        { where: h("b", null, HOW[f.agent] || f.label), command: h("code", null, "chronicle import <zip>") })),
+        { where: h("b", null, HOW[f.agent] || f.label), command: h("code", null, "interlatch import <zip>") })),
       h("div", { class: "src-foot" }, h("span", { class: "muted" }, t("Not analyzed automatically. Screening reads only each chat's opening (title, first and last prompt) to sort out the ones worth analyzing; nothing is analyzed until you queue them.")),
         h("div", { class: "src-actions" }, f.sessions ? h("a", { class: "btn small", href: `#/sessions?agent=${f.agent}` }, t("Sessions")) : null,
           sc.unscreened ? screenBtn : null, sc.to_queue ? queueBtn : null))];
@@ -4619,7 +4619,7 @@ route(/^\/sources$/, async () => {
   const section = listSection;
   return h("div", { class: "narrow-page wide" },
     h("div", { class: "page-head" }, titled("tink", h("h1", null, t("Sources")),
-      h("div", { class: "sub" }, tx("The coding agents Chronicle records. Connecting starts archiving and analyzing their sessions and gives the agent Chronicle's MCP tools. To give other tools the MCP server, see {link}.",
+      h("div", { class: "sub" }, tx("The coding agents Interlatch records. Connecting starts archiving and analyzing their sessions and gives the agent Interlatch's MCP tools. To give other tools the MCP server, see {link}.",
         { link: h("a", { href: "#/mcp" }, "MCP") })))),
     section(t("Coding agents"), t("{a} of {b} connected · click a row for its checks", { a: connected, b: sources.length }), null, sources.map(agentRow)),
     section(t("Chat exports"), t("Chats on claude.ai and chatgpt.com are not stored on your Mac, so they come in from a data export."),
@@ -4628,7 +4628,7 @@ route(/^\/sources$/, async () => {
 });
 
 // =====================================================================================
-// MCP: which agents can search Chronicle, and how to add it to any other
+// MCP: which agents can search Interlatch, and how to add it to any other
 // =====================================================================================
 const MCP_SETUPS = [ // [key, tab label, where it goes, snippet key]
   ["json", t("Most clients"), t("Claude Desktop, Cursor, Windsurf, Gemini CLI, Cline, Zed and most others: add to the client's MCP config (an mcpServers object)."), "json"],
@@ -4680,14 +4680,14 @@ route(/^\/mcp$/, async () => {
     h("div", { class: "muted" }, t.description)));
   return h("div", { class: "narrow-page wide" },
     h("div", { class: "page-head" }, titled("plug", h("h1", null, "MCP"),
-      h("div", { class: "sub" }, t("Chronicle's MCP server lets an agent search your past sessions, knowledge and glossary while it works. It runs on your Mac, only reads, and needs no network.")))),
+      h("div", { class: "sub" }, t("Interlatch's MCP server lets an agent search your past sessions, knowledge and glossary while it works. It runs on your Mac, only reads, and needs no network.")))),
     listSection(t("Coding agents"), tx("Connecting an agent in {link} also gives it the MCP server.", { link: h("a", { href: "#/sources" }, t("Sources")) }), null, agentRows),
-    listSection(t("Other MCP clients"), t("Not recorded: they only get the MCP server. Add writes Chronicle into the client's own config (backed up first); restart the client to load it."),
+    listSection(t("Other MCP clients"), t("Not recorded: they only get the MCP server. Add writes Interlatch into the client's own config (backed up first); restart the client to load it."),
       null, clients.map(mcpClientRow)),
     h("section", { class: "card mcp-card" },
       h("div", { class: "card-head" }, h("h2", null, t("Add it to any other client")), copyBtn),
       h("div", { class: "muted", style: { fontSize: "12.5px", marginBottom: "10px" } },
-        tx("Chronicle speaks MCP over stdio: the client starts {command} and talks to it. No port, token or environment variable is needed.",
+        tx("Interlatch speaks MCP over stdio: the client starts {command} and talks to it. No port, token or environment variable is needed.",
           { command: h("span", { class: "codeline" }, [info.command, ...info.args].join(" ")) })),
       tabs, where, code),
     h("section", { class: "card mcp-card" },
@@ -4812,7 +4812,7 @@ function updatesCard() {
     const online = !u.source && u.kind !== "source"; // PyPI installs and the app compare against the latest release
     box.classList.toggle("update-ready", !!u.available);
     const state = u.error ? h("div", { style: { color: "var(--critical-ink)" } }, u.error)
-      : u.available ? h("div", { class: "upd-headline" }, icon("sync"), h("b", null, u.local ? checkoutHeadline(u) : t("Chronicle {version} is available", { version: u.latest })),
+      : u.available ? h("div", { class: "upd-headline" }, icon("sync"), h("b", null, u.local ? checkoutHeadline(u) : t("Interlatch {version} is available", { version: u.latest })),
         u.notes_url ? h("a", { href: u.notes_url, target: "_blank", rel: "noopener" }, t("What's new")) : null)
       : online && !u.checked_at ? h("div", { class: "muted" }, u.check_daily ? t("Checking pypi.org for the latest version…") : t("Not checked yet. Checking asks pypi.org for the latest version."))
       : online ? h("div", null, t("You're on the latest version (checked {ago})", { ago: ago(new Date(u.checked_at * 1000).toISOString()) })) : null;
@@ -4828,7 +4828,7 @@ function updatesCard() {
       const r = await post("/api/update");
       if (!r.started) { toast(r.error || t("An update is already running")); run.disabled = false; run.textContent = label; return; }
       try { sessionStorage.setItem("chronicle-updating", u.current); } catch (e) { /* private mode */ }
-      toast(u.restartable ? t("Updating Chronicle; the dashboard restarts when it is done") : t("Updating Chronicle…"), 6000);
+      toast(u.restartable ? t("Updating Interlatch; the dashboard restarts when it is done") : t("Updating Interlatch…"), 6000);
       if (u.restartable) restartAfter.add("update");
       watchJob("update");
     } }, label) : null;
@@ -4848,17 +4848,17 @@ function updatesCard() {
     const download = u.kind === "app" && u.available ? h("a", { class: "btn primary", href: u.releases_url, target: "_blank", rel: "noopener" }, t("Download {version}", { version: u.latest })) : null;
     box.replaceChildren(h("div", { class: "card-head" }, h("h2", null, t("Updates")), h("div", { class: "tools" }, check, run, download)),
       h("div", { class: "status-list" },
-        h("div", null, `Chronicle ${u.current} · ${u.method}`, u.installed_at ? h("span", { class: "muted" }, ` · ${t("installed {ago}", { ago: ago(new Date(u.installed_at * 1000).toISOString()) })}`) : null),
+        h("div", null, `Interlatch ${u.current} · ${u.method}`, u.installed_at ? h("span", { class: "muted" }, ` · ${t("installed {ago}", { ago: ago(new Date(u.installed_at * 1000).toISOString()) })}`) : null),
         state,
         u.changes ? changesList(u.changes) : null,
         u.note ? h("div", { class: "muted" }, u.note) : null,
         daily ? h("div", { class: "set-row upd-daily" }, h("div", null, h("b", null, t("Check for updates daily")),
-          h("div", { class: "muted" }, t("Asks pypi.org for the latest version number once a day while Chronicle is open. Sends nothing about you."))), daily) : null,
+          h("div", { class: "muted" }, t("Asks pypi.org for the latest version number once a day while Interlatch is open. Sends nothing about you."))), daily) : null,
         notify ? h("div", { class: "set-row upd-daily" }, h("div", null, h("b", null, t("Notify me about new versions")),
           h("div", { class: "muted" }, t("A desktop notification when a new version is out, even with the dashboard closed: the background sync asks pypi.org once a day. Sends nothing about you."))), notify) : null,
         u.command && (u.available || u.source) ? h("div", { class: "muted" }, u.restartable
           ? tx("Runs {command}, then restarts the dashboard.", { command: h("span", { class: "codeline" }, u.command) })
-          : tx("Runs {command}. Quit and reopen Chronicle afterwards.", { command: h("span", { class: "codeline" }, u.command) })) : null));
+          : tx("Runs {command}. Quit and reopen Interlatch afterwards.", { command: h("span", { class: "codeline" }, u.command) })) : null));
     if (parseHash().params.focus === "updates") { // from the notification or the status bar: show this card, once
       setParams({});
       requestAnimationFrame(() => box.scrollIntoView({ block: "nearest", behavior: reducedMotion() ? "auto" : "smooth" }));
@@ -4999,7 +4999,7 @@ function agentPane(c, current, use) {
     form,
     result,
     h("div", { class: "pv-actions" }, testBtn, saveBtn, h("span", { class: "grow" }), useBtn),
-    c.name === "bob" ? h("div", { class: "pv-foot muted" }, t("Bob keeps each analysis in its own task list; Chronicle doesn't record them as sessions.")) : null);
+    c.name === "bob" ? h("div", { class: "pv-foot muted" }, t("Bob keeps each analysis in its own task list; Interlatch doesn't record them as sessions.")) : null);
 }
 function providerPane(apis, current, use) {
   const name = apiPane || (current?.kind === "api" ? current.name : apis[0].name);
@@ -5096,7 +5096,7 @@ function providerPane(apis, current, use) {
     h("div", { class: "pv-foot muted" }, tx("Saved in config.toml under {section}. The key goes in provider-keys.json, which only you can read.",
       { section: h("span", { class: "codeline" }, `[providers.${p.name}]`) })));
 }
-// What Chronicle writes its knowledge in (analysis.language); an older server sends no languages, so no control
+// What Interlatch writes its knowledge in (analysis.language); an older server sends no languages, so no control
 function knowledgeLangPicker(a) {
   const langs = a?.languages;
   if (!Array.isArray(langs) || !langs.length) return null;
@@ -5124,11 +5124,11 @@ function menuBarRow(mb) {
   // notch), and the dashboard can't tell, so the note says where to look instead of promising it is visible
   const note = on && mb.shown ? tx("On. Don't see it? Check System Settings › Menu Bar, where it is listed as {name}, and on a MacBook whether the notch hides it.",
       { name: code(mb.listed_as || "python3") })
-    : on && !mb.agent ? tx("On. It shows while the dashboard runs at login, which {command} sets up.", { command: code("chronicle install") })
+    : on && !mb.agent ? tx("On. It shows while the dashboard runs at login, which {command} sets up.", { command: code("interlatch install") })
     : on ? t("On. It shows the next time the dashboard that runs at login starts.")
     : !mb.app_extra && mb.can_install ? t("Turning it on installs the app extra (PyObjC, about 30 MB) with uv, then restarts the dashboard.")
     : !mb.app_extra ? tx("Needs the app extra: {command}", { command: code(mb.command) })
-    : t("Chronicle's icon in the menu bar: what it's doing, a search and your recent sessions, a click away.");
+    : t("Interlatch's icon in the menu bar: what it's doing, a search and your recent sessions, a click away.");
   const sw = h("button", { class: "switch admin-only", type: "button", role: "switch", "aria-checked": String(on), "aria-label": t("Menu-bar icon"),
     disabled: !canAdmin() || (!on && !mb.app_extra && !mb.can_install), onclick: async () => {
       sw.disabled = true;
@@ -5147,15 +5147,15 @@ route(/^\/status$/, async () => {
   const row = (ok, label, detail) => h("div", { class: "status-row" }, h("span", { class: ok ? "ok" : "no" }, ok ? "✓" : "✗"), h("span", null, label), detail ? h("span", { class: "muted" }, detail) : null);
   const counts = st.counts || {};
   return h("div", null,
-    h("div", { class: "page-head" }, titled("gears", h("h1", null, t("Status")), h("div", { class: "sub" }, `Chronicle ${st.version} · ${t("last sync {ago}", { ago: ago(st.last_sync) })}`))),
+    h("div", { class: "page-head" }, titled("gears", h("h1", null, t("Status")), h("div", { class: "sub" }, `Interlatch ${st.version} · ${t("last sync {ago}", { ago: ago(st.last_sync) })}`))),
     h("div", { class: "grid cols-2" },
       h("section", { class: "card" }, h("div", { class: "card-head" }, h("h2", null, t("Recording"))),
         h("div", { class: "status-list" },
           row(st.hooks?.SessionEnd, t("SessionEnd hook"), t("archives + ingests each session as it ends")),
           row(st.launchd?.loaded, t("Background agent"), st.launchd?.loaded ? t("runs every 15 min · {n} runs · last exit {code}", { n: st.launchd.runs || 0, code: st.launchd.last_exit ?? "-" }) : t("not loaded")),
           row(st.mcp, t("MCP server registered"), t("Claude Code can search this vault")),
-          row(!!st.hooks?.SessionStart, t("SessionStart knowledge injection"), t("optional: {command}", { command: "chronicle install --inject-context" })),
-          row(!!st.statusline?.installed, t("Status-line usage collector"), !st.statusline?.installed ? t("optional: {command}", { command: "chronicle install --statusline" })
+          row(!!st.hooks?.SessionStart, t("SessionStart knowledge injection"), t("optional: {command}", { command: "interlatch install --inject-context" })),
+          row(!!st.statusline?.installed, t("Status-line usage collector"), !st.statusline?.installed ? t("optional: {command}", { command: "interlatch install --statusline" })
             : planLine(st.statusline.plan) || t("no plan limits seen yet (Pro and Max plans only)"))),
         menuBarRow(st.menu_bar),
         h("div", { class: "subhead" }, t("Storage")),
@@ -5448,7 +5448,7 @@ function teamStoreCard(dv) {
   const head = [
     h("p", null, t("Keep what your team's computers share in a Postgres database as well, and send each computer that shares knowledge its teammates' lessons. Only this hub connects to the database; the other computers never get its address or password.")),
     status,
-    st.driver ? null : h("div", { class: "warn-line" }, t("The Postgres driver isn't installed here. Run {command}, then restart the dashboard.", { command: "uv tool install 'agents-chronicle[team]'" }))];
+    st.driver ? null : h("div", { class: "warn-line" }, t("The Postgres driver isn't installed here. Run {command}, then restart the dashboard.", { command: "uv tool install 'interlatch[team]'" }))];
   if (!(dv.can_admin ?? dv.here)) { // an older server sends only "here"
     return h("section", { class: "card" }, cardHead(t("Team store"), { iconName: "data" }), head,
       st.settings ? h("div", { class: "muted" }, tx("Database {db} on {host}, as {user}", { db: h("span", { class: "codeline" }, saved.dbname), host: h("span", { class: "codeline" }, saved.host), user: h("span", { class: "codeline" }, saved.user) })) : null,
@@ -5644,7 +5644,7 @@ function peopleCard(dv) {
       h("label", { class: "pp-proj" }, only, h("span", null, t("Only these projects: their summaries and project lessons, never transcripts"))),
       search ? h("div", { class: "pp-tools" }, search, count) : null,
       h("div", { class: "pp-projs" }, boxes.length ? [...boxes, none] : h("span", { class: "muted" }, tx("No projects yet: set one up on the hub with {command}.",
-        { command: h("span", { class: "codeline" }, "chronicle hub project add <folder>") }))));
+        { command: h("span", { class: "codeline" }, "interlatch hub project add <folder>") }))));
     refresh();
     // refresh: after the form around it was reset, show every project again
     return { el, refresh, value: () => (every.checked ? "all" : ticked().map((i) => i.value)) };
@@ -5796,7 +5796,7 @@ function peopleCard(dv) {
       slot,
       inviteForm(roles, !people.length),
       data.address ? null : h("div", { class: "muted pp-note" }, tx("This hub has no address set, so invites use the one this page was opened with ({host}). Set the address others reach it at with {command}.",
-        { host: h("span", { class: "codeline" }, location.host), command: h("span", { class: "codeline" }, "chronicle hub enable --url <address>") })),
+        { host: h("span", { class: "codeline" }, location.host), command: h("span", { class: "codeline" }, "interlatch hub enable --url <address>") })),
       people.length ? sharedToken(data) : null,
       data.audit?.length ? auditList(data.audit) : null]);
   };
@@ -5820,17 +5820,17 @@ route(/^\/devices$/, async () => {
         { url: extLink(`https://${ts}/`, `https://${ts}/`) })),
       h("div", { class: "muted" }, dv.allowed_users.length ? t("Only {users} can open it. Nothing is reachable from the internet.", { users: dv.allowed_users.join(", ") })
         : t("Anyone in your tailnet can open it. Nothing is reachable from the internet.")),
-      h("div", { class: "muted", style: { marginTop: "6px" } }, t("{command} takes it off the tailnet.", { command: "chronicle tailnet off" }))]
+      h("div", { class: "muted", style: { marginTop: "6px" } }, t("{command} takes it off the tailnet.", { command: "interlatch tailnet off" }))]
     : [
       h("p", null, t("Open this dashboard on your phone through Tailscale, a private network between your own devices: nothing is opened to the internet, and only your Tailscale login gets in. Install Tailscale on this computer and your phone, sign both in to the same account, then run here:")),
-      cmd("chronicle tailnet on")]);
+      cmd("interlatch tailnet on")]);
   const computers = dv.role === "hub" ? teamPointer()
     : dv.role === "single" ? h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices" }),
         h("p", null, t("Keep the sessions of your other computers here too. This computer becomes the hub, the only one that records and analyzes (so each session is analyzed once); the others send it their Claude Code and Codex sessions over your tailnet. Run here:")),
-        cmd("chronicle hub enable"),
-        h("p", { class: "muted" }, t("It prints a {command} command to run on each other computer.", { command: "chronicle hub join …" }))) : null;
+        cmd("interlatch hub enable"),
+        h("p", { class: "muted" }, t("It prints a {command} command to run on each other computer.", { command: "interlatch hub join …" }))) : null;
   return h("div", { class: "narrow-page" },
-    h("div", { class: "page-head" }, titled("laptop", h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Chronicle for your computers and your phone.")))),
+    h("div", { class: "page-head" }, titled("laptop", h("h1", null, t("Devices")), h("div", { class: "sub" }, t("One Interlatch for your computers and your phone.")))),
     h("div", { class: "grid" }, ...(dv.role === "spoke"
       ? [spokeHubCard(dv), spokeProjectsCard(dv), spokeSharingCard(dv), phone] : [thisCard, phone, computers])));
 });
@@ -5879,7 +5879,7 @@ function computersCard(dv) {
     h("tbody", null, ...dv.machines.map((m) => h("tr", null,
       h("td", null, h("b", null, m.name || m.id.slice(0, 8)), m.this ? h("span", { class: "muted" }, t(" (this one)")) : null,
         m.share === "knowledge" ? h("span", { class: "muted", title: t("Analyzes its own sessions and sends only summaries and project lessons") }, t(" · knowledge only")) : null,
-        refused(m) ? h("span", { class: "warn-line", title: t("Run {command} on it, then {push}.", { command: "chronicle config set hub.share knowledge", push: "chronicle push" }) }, t(" · sends transcripts: turned away")) : null,
+        refused(m) ? h("span", { class: "warn-line", title: t("Run {command} on it, then {push}.", { command: "interlatch config set hub.share knowledge", push: "interlatch push" }) }, t(" · sends transcripts: turned away")) : null,
         m.platform ? h("div", { class: "muted" }, m.platform) : null),
       h("td", null, m.person || h("span", { class: "muted" }, "–")),
       h("td", { class: "num" }, fmtNum(m.sessions)),
@@ -5887,7 +5887,7 @@ function computersCard(dv) {
       h("td", { title: m.last_seen ? t("Last heard from {ago}", { ago: ago(m.last_seen) }) : "" }, m.this ? "–" : m.last_push ? ago(m.last_push) : t("nothing yet")))))));
   return h("section", { class: "card" }, cardHead(t("Computers"), { iconName: "devices", hint: t("{n} sending here", { n: others.length }) }),
     table,
-    h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "chronicle hub enable" })),
+    h("p", { class: "muted" }, t("To add a computer, run {command} here: it prints the command to run on the other one. Sessions from each computer are matched to the same projects here by their git remote.", { command: "interlatch hub enable" })),
     maps.length ? [h("div", { class: "subhead" }, t("Folders mapped ([hub] path_map)")), h("ul", { class: "bullets" }, maps.map(([a, b]) => h("li", null, h("span", { class: "codeline" }, a), " → ", h("span", { class: "codeline" }, b))))] : null,
     added.length ? [h("div", { class: "subhead" }, t("Folders added on other computers")),
       h("ul", { class: "bullets" }, added.map(([m, f]) => h("li", null, h("b", null, m.name || m.id.slice(0, 8)), ": ",
@@ -5944,9 +5944,9 @@ async function hubSettingsPage() {
   }
   const cmd = (text) => h("pre", { class: "mcp-code" }, text);
   const general = h("section", { class: "card" }, cardHead(t("This hub"), { iconName: "organization" }),
-    hubTextRow({ label: t("Name"), field: "name", value: hs.name, placeholder: hs.default_name, managed: hs.managed.name, managedBy: "CHRONICLE_HUB_NAME",
+    hubTextRow({ label: t("Name"), field: "name", value: hs.name, placeholder: hs.default_name, managed: hs.managed.name, managedBy: "INTERLATCH_HUB_NAME",
       hint: t("Shown in the band at the top of every page, in invites and on members' computers."), saved: t("The hub's name is saved.") }),
-    hubTextRow({ label: t("Address"), field: "address", value: hs.address, placeholder: "https://chronicle.example.com", managed: hs.managed.address, managedBy: "CHRONICLE_HUB_URL",
+    hubTextRow({ label: t("Address"), field: "address", value: hs.address, placeholder: "https://interlatch.example.com", managed: hs.managed.address, managedBy: "INTERLATCH_HUB_URL",
       hint: t("Where computers and browsers reach this hub. Invites and sign-in links use it."), saved: t("The hub's address is saved. New invites use it.") }),
     acceptRow({ accept: hs.accept }));
   const analysis = h("section", { class: "card" }, cardHead(t("Analysis"), { iconName: "sparkles" }),
@@ -5956,10 +5956,10 @@ async function hubSettingsPage() {
     analyzerPicker(st.analysis));
   const backup = hs.container ? [
     h("p", null, t("Copy the database while the hub runs, then download the copy. Run these where the hub's compose.yaml is:")),
-    cmd(`docker compose exec hub python -c "import sqlite3; sqlite3.connect('/data/chronicle.db').backup(sqlite3.connect('/data/backup.db'))"\ndocker compose cp hub:/data/backup.db ./chronicle-backup.db`),
+    cmd(`docker compose exec hub python -c "import sqlite3; sqlite3.connect('/data/chronicle.db').backup(sqlite3.connect('/data/backup.db'))"\ndocker compose cp hub:/data/backup.db ./interlatch-backup.db`),
     hs.store === "postgres" ? [h("p", null, t("And the team store:")), cmd("docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql")] : null]
     : [h("p", null, t("Copy the database while the hub runs:")),
-      cmd(`sqlite3 ${/^[\w@%+=:,./-]+$/.test(hs.db) ? hs.db : `'${hs.db.replace(/'/g, "'\\''")}'`} ".backup chronicle-backup.db"`),
+      cmd(`sqlite3 ${/^[\w@%+=:,./-]+$/.test(hs.db) ? hs.db : `'${hs.db.replace(/'/g, "'\\''")}'`} ".backup interlatch-backup.db"`),
       hs.store === "postgres" ? h("p", { class: "muted" }, t("Back up the team store's Postgres database with your usual tools, such as pg_dump.")) : null];
   const backups = h("section", { class: "card" }, cardHead(t("Back up"), { iconName: "download" }), backup,
     h("p", { class: "muted" }, t("Never copy chronicle.db itself while the hub runs: the copy can be corrupted.")));
@@ -6102,7 +6102,7 @@ function sharedProjectsCard() {
     } }, h("div", { class: "sp-fields" }, name), go2);
     return [h("div", { class: "subhead" }, t("New project")), form,
       h("p", { class: "muted" }, tx("Each computer adds its own folder for the project with {command}. Once one computer has sent sessions from a git repository, other clones of it go there on their own.",
-        { command: h("span", { class: "codeline" }, "chronicle hub add-folder <folder> --project <name>") }))];
+        { command: h("span", { class: "codeline" }, "interlatch hub add-folder <folder> --project <name>") }))];
   };
   const draw = (data) => {
     const here = data.here !== false, dedicatedHub = !!data.dedicated;
@@ -6143,7 +6143,7 @@ function sgTarget(x) { // where a suggestion goes, in a few words
   return `${baseName(x.project_path)}/${baseName(x.target_path)}`;
 }
 function sgGroupOf(x) { // [key, title, subtitle] of the file a suggestion changes
-  if (x.kind === "environment") return ["__env__", t("Setup steps"), t("Chronicle shows the command; you run it and mark it done")];
+  if (x.kind === "environment") return ["__env__", t("Setup steps"), t("Interlatch shows the command; you run it and mark it done")];
   if (x.kind === "config") return [x.target_path, homePath(x.target_path), t("Claude Code's MCP servers")];
   const reader = /AGENTS\.md$/.test(x.target_path) ? t("Codex and other agents that read AGENTS.md") : "Claude Code";
   if (!x.project_path) return [x.target_path, homePath(x.target_path), t("Read by every {reader} session", { reader })];
@@ -6499,7 +6499,7 @@ route(/^\/suggestions$/, async (params) => {
   const statusName = SG_STATUS.find(([v]) => v === status)?.[1].toLowerCase() || status;
   const empty = h("div", { class: "card empty sg-empty" },
     !counts.new && !counts.applied && !counts.dismissed && !counts.done && !counts.stale
-      ? [t("Nothing to suggest yet. After a sync, Chronicle proposes a fix once a failure keeps coming back, or once knowledge is confirmed often enough to belong in an instruction file.")]
+      ? [t("Nothing to suggest yet. After a sync, Interlatch proposes a fix once a failure keeps coming back, or once knowledge is confirmed often enough to belong in an instruction file.")]
       : [cause || scope ? t("Nothing {status} here.", { status: statusName }) : t("Nothing {status}.", { status: statusName }), cause || scope ? [" ", h("a", { href: "#/suggestions" }, t("Show everything"))] : null]);
   return h("div", { class: "sg-page" },
     h("div", { class: "page-head" }, titled("lumi", h("h1", null, t("Suggestions")),
@@ -6611,7 +6611,7 @@ route(/^\/storage$/, async () => {
   const mi = await api("/api/mirror");
   return h("div", { class: "narrow-page" },
     h("div", { class: "page-head" }, titled("rack", h("h1", null, t("Storage")),
-      h("div", { class: "sub" }, t("Chronicle keeps your archive in its own database on this computer. A copy can go to Postgres as well.")))),
+      h("div", { class: "sub" }, t("Interlatch keeps your archive in its own database on this computer. A copy can go to Postgres as well.")))),
     mirrorCard(mi));
 });
 
@@ -6636,7 +6636,7 @@ function mirrorCard(mi) {
       Object.keys(s.counts || {}).length ? h("div", { class: "muted" }, counts(s.counts)) : null, last])))
     .catch((e) => status.replaceChildren(h("div", { class: "warn-line" }, e.message)));
   const head = [
-    h("p", null, t("Keep a copy of your archive in a Postgres database you choose: on this computer, in Docker, or in the cloud. Query it with SQL or a BI tool, or keep it as a copy somewhere else. Chronicle writes it after every background run and never reads it back.")),
+    h("p", null, t("Keep a copy of your archive in a Postgres database you choose: on this computer, in Docker, or in the cloud. Query it with SQL or a BI tool, or keep it as a copy somewhere else. Interlatch writes it after every background run and never reads it back.")),
     status,
     mi.driver ? null : h("div", { class: "warn-line" }, t("The Postgres driver isn't installed here. Run {command}, then restart the dashboard.", { command: mi.install }))];
   const field = (key, label, attrs = {}) => h("label", null, label, h("input", { class: "input", name: key, value: saved[key] || "", autocomplete: "off", spellcheck: "false", ...attrs }));
@@ -6776,11 +6776,11 @@ function sectionOf(path, params) {
   if (path.startsWith("/session/") && ["home", "teamhome"].includes(shellSection)) return shellSection; // opened from Home's list: keep that list
   return SECTION_OF[key] || null; // search and unknown pages: no section lit, the sidebar stays as it was
 }
-function sectionLink(key) { const sx = SECTIONS.find((x) => x.key === key); return sx ? [sx.label, sx.href] : ["Chronicle", "#/"]; }
+function sectionLink(key) { const sx = SECTIONS.find((x) => x.key === key); return sx ? [sx.label, sx.href] : ["Interlatch", "#/"]; }
 function setCrumbs(items, token = renderSeq) { // [[label, href?], ...]; the last is the current page
   if (token !== renderSeq) return; // a view that finished after the user moved on
   const page = items.length ? items[items.length - 1][0] : "";
-  document.title = newsPrefix() + (page && page !== t("Home") ? `${page} — Chronicle` : "Chronicle");
+  document.title = newsPrefix() + (page && page !== t("Home") ? `${page} — Interlatch` : "Interlatch");
   $("#crumbs").replaceChildren(...items.flatMap(([label, href], i) => [
     i ? h("span", { class: "sep" }, "›") : null,
     href && i < items.length - 1 ? h("a", { href }, label) : h("b", { title: label }, label)]).filter(Boolean));
@@ -7271,7 +7271,7 @@ function renderHubFrame() {
   foot.title = notes.join(" · ");
 }
 // A hub with people answered 401: nothing shows until this browser signs in, with a link from the person's own
-// Chronicle or an invite code (GET /signin?code=… sets the session cookie and comes back here).
+// Interlatch or an invite code (GET /signin?code=… sets the session cookie and comes back here).
 function showSignin(note) {
   if (signinShown) return;
   signinShown = true;
@@ -7290,12 +7290,12 @@ function showSignin(note) {
   const lang = h("button", { class: "btn small", type: "button", lang: other, onclick: () => setLang(other) }, other === "ja" ? "日本語" : "English");
   document.body.append(h("div", { class: "signin-screen", id: "signin", role: "dialog", "aria-modal": "true", "aria-labelledby": "signin-title" },
     h("div", { class: "card signin-card" },
-      h("div", { class: "signin-brand" }, h("img", { src: "icon.png", width: "26", height: "26", alt: "" }), "Chronicle"),
+      h("div", { class: "signin-brand" }, h("img", { src: "icon.png", width: "26", height: "26", alt: "" }), "Interlatch"),
       h("h1", { id: "signin-title" }, t("Sign in to this hub")),
       note ? h("p", { class: "signin-note" }, note) : null,
-      h("p", null, t("This hub's dashboard opens only for people an admin has added. There is no password: you sign in from your own Chronicle, or with an invite code.")),
+      h("p", null, t("This hub's dashboard opens only for people an admin has added. There is no password: you sign in from your own Interlatch, or with an invite code.")),
       h("div", { class: "subhead" }, t("From your own computer")),
-      h("p", null, tx("If your computer already sends to this hub, open Chronicle there and choose {path}.",
+      h("p", null, tx("If your computer already sends to this hub, open Interlatch there and choose {path}.",
         { path: h("b", null, [t("Settings"), t("Devices"), t("Open the hub's dashboard")].join(" › ")) })),
       h("div", { class: "subhead" }, t("With an invite code")),
       form,
@@ -7331,7 +7331,7 @@ async function pollStatus() {
     $("#status-sync").textContent = dedicated() ? "" // nothing of its own to sync: the status bar's hub line says what it is
       : st.hub_url ? t("Sends its sessions to {host}", { host: st.hub_url.replace(/^https?:\/\//, "") })
       : st.last_sync ? t("Synced {ago}", { ago: ago(st.last_sync) }) : t("Not synced yet");
-    $("#status-version").textContent = st.version ? `Chronicle ${st.version}` : "";
+    $("#status-version").textContent = st.version ? `Interlatch ${st.version}` : "";
     showUpdate(st.update, st.version);
     pollUnseen();
     pollNews();
@@ -7359,8 +7359,8 @@ async function pollStatus() {
 function awaitRestart(job = "update") {
   const note = h("div", { class: "muted" }, job === "update" ? t("The update is installed. This page reloads by itself when the dashboard is back.")
     : t("This page reloads by itself when the dashboard is back."));
-  document.body.append(h("div", { id: "restart-wait", role: "alertdialog", "aria-modal": "true", "aria-label": t("Restarting Chronicle") },
-    h("div", { class: "rw-card" }, icon("sync", "spin"), h("b", null, t("Restarting Chronicle…")), note)));
+  document.body.append(h("div", { id: "restart-wait", role: "alertdialog", "aria-modal": "true", "aria-label": t("Restarting Interlatch") },
+    h("div", { class: "rw-card" }, icon("sync", "spin"), h("b", null, t("Restarting Interlatch…")), note)));
   const since = Date.now();
   const tick = async () => {
     try {
@@ -7383,7 +7383,7 @@ function jobLabel(name) {
   const [kind, arg] = name.split(/:(.*)/);
   const tail = (p) => (p || "").replace(/\/+$/, "").split("/").pop();
   return {
-    sync: t("Sync"), mirror: t("Writing the mirror"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Chronicle"), "menu-bar": t("Setting up the menu-bar icon"), themes: t("Grouping glossary themes"),
+    sync: t("Sync"), mirror: t("Writing the mirror"), push: t("Sending to the hub"), import: t("Importing chats"), screen: t("Screening imported chats"), update: t("Updating Interlatch"), "menu-bar": t("Setting up the menu-bar icon"), themes: t("Grouping glossary themes"),
     analyze: arg === "selection" ? t("Analyzing selected sessions") : arg === "queue" ? t("Analyzing the queue") : t("Analyzing session {id}", { id: (arg || "").slice(0, 8) }),
     glossary: arg ? t("Glossary: {name}", { name: tail(arg) }) : t("Glossary"), review: t("Weekly review"),
     synthesize: arg === "__global__" ? t("Global playbook") : t("Knowledge base: {name}", { name: tail(arg) }),
@@ -7450,12 +7450,12 @@ function showUpdate(u, version) {
   const upd = $("#status-update");
   upd.hidden = !u;
   document.documentElement.classList.toggle("has-update", !!u);
-  if (u) { upd.replaceChildren(h("span", { class: "dot" }), u.to === "build" ? t("Update available") : t("Update to {version}", { version: u.to })); upd.title = t("Open Status to update Chronicle"); }
+  if (u) { upd.replaceChildren(h("span", { class: "dot" }), u.to === "build" ? t("Update available") : t("Update to {version}", { version: u.to })); upd.title = t("Open Status to update Interlatch"); }
   let from = null;
   try { from = sessionStorage.getItem("chronicle-updating"); } catch (e) { /* private mode */ }
   if (from && !u) { // back after an update ran: say so once
     try { sessionStorage.removeItem("chronicle-updating"); } catch (e) { /* private mode */ }
-    toast(version && version !== from ? t("Chronicle updated to {version}", { version }) : t("Chronicle updated"), 6000);
+    toast(version && version !== from ? t("Interlatch updated to {version}", { version }) : t("Interlatch updated"), 6000);
   }
   let seen = null;
   try { seen = localStorage.getItem("chronicle-update-seen"); } catch (e) { /* private mode */ }
@@ -7467,7 +7467,7 @@ function showUpdate(u, version) {
   card.replaceChildren(
     h("div", { class: "un-icon" }, icon("sync")),
     h("div", { class: "un-body" },
-      h("b", null, u.to === "build" ? t("Your checkout has new changes") : t("Chronicle {version} is available", { version: u.to })),
+      h("b", null, u.to === "build" ? t("Your checkout has new changes") : t("Interlatch {version} is available", { version: u.to })),
       h("div", null, u.to === "build" ? t("Reinstall to run them in the dashboard.") : t("You're on {version}. Update from Settings › Status.", { version })),
       h("div", { class: "un-actions" },
         h("button", { class: "btn primary small", type: "button", onclick: () => { dismiss(); go("#/status?focus=updates"); } }, t("View update")),
@@ -7519,7 +7519,7 @@ function flipTheme() {
 // index.html's own text, in the page's language (before the icons are added to those elements)
 function translateStatic() {
   const set = (sel, attrs) => { const el = $(sel); if (el) for (const [k, v] of Object.entries(attrs)) k === "text" ? (el.textContent = v) : el.setAttribute(k, v); };
-  set(".brand", { "aria-label": t("Chronicle home") });
+  set(".brand", { "aria-label": t("Interlatch home") });
   set("#rail", { "aria-label": t("Sections") });
   set("#sidebar-btn", { title: t("Toggle sidebar (⌘B)"), "aria-label": t("Toggle sidebar") });
   set("#back-btn", { title: t("Back"), "aria-label": t("Back") });

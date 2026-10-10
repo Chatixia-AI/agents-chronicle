@@ -1,6 +1,6 @@
 # Security
 
-Chronicle keeps every coding-agent session you run, and a hub keeps a team's. A hole in it can expose transcripts, so
+Interlatch keeps every coding-agent session you run, and a hub keeps a team's. A hole in it can expose transcripts, so
 reports are welcome and taken seriously.
 
 ## Reporting a vulnerability
@@ -16,10 +16,10 @@ Say what you found, where in the code, and how it could be reached, in enough de
 back within a week. Once a fix is released, the change is described in [CHANGELOG.md](CHANGELOG.md) and the report
 is credited there if you want it to be.
 
-Only the latest release on [PyPI](https://pypi.org/project/agents-chronicle/) and the hub image that matches it get
+Only the latest release on [PyPI](https://pypi.org/project/interlatch/) and the hub image that matches it get
 fixes.
 
-## What Chronicle promises
+## What Interlatch promises
 
 - Everything stays on your computer unless you set up a hub or an API provider yourself
   ([Data and privacy](docs/privacy.md)).
@@ -28,12 +28,12 @@ fixes.
 - On a hub, each computer's sessions stay its own: another computer can neither replace nor take them back.
 - The dashboard page runs only the dashboard's own script files (a Content-Security-Policy). Files agents made open
   under a sandboxing content policy; links a transcript recorded open only as `http(s)`.
-- The analyses Chronicle runs with `claude` or `codex` disable every tool, so a transcript can't make the analyzer
+- The analyses Interlatch runs with `claude` or `codex` disable every tool, so a transcript can't make the analyzer
   act on your computer.
 
 ## Reviews
 
-Chronicle is reviewed with the same coding agents it records.
+Interlatch is reviewed with the same coding agents it records.
 
 - **October 2026**: a review of the hub and the dashboard with Claude Code (Claude Mythos 5.1), covering
   authentication and authorization between a hub's computers and people, uploads, file serving, the analyzers'

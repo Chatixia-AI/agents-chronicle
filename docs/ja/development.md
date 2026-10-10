@@ -1,22 +1,22 @@
 # 開発
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
 ## テストとローカルへのインストール
 
 ```bash
 uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot, Bob and Antigravity stores
 # redeploy: --reinstall picks up uncommitted edits too (uv rebuilds on its own only when pyproject.toml, the commit or a tag changes)
-uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
+uv tool install --force --reinstall --python 3.13 . && interlatch install   # install restarts the agents
 ```
 
 ## macOS アプリ
 
-`uv run --extra app chronicle app` でチェックアウトから起動できます（Open at Login など、バンドルでしか意味のない
-メニュー項目は非表示）。`./packaging/macos/build.sh` は `dist/Chronicle.app` と
-`dist/Chronicle-<version>-<arch>.dmg` をビルドします（PyInstaller、約 30 秒。`packaging/macos/Chronicle.spec`）。1 つのバイナリが、
+`uv run --extra app interlatch app` でチェックアウトから起動できます（Open at Login など、バンドルでしか意味のない
+メニュー項目は非表示）。`./packaging/macos/build.sh` は `dist/Interlatch.app` と
+`dist/Interlatch-<version>-<arch>.dmg` をビルドします（PyInstaller、約 30 秒。`packaging/macos/Interlatch.spec`）。1 つのバイナリが、
 引数なしではアプリとして、引数ありでは CLI として動き、フックと MCP サーバーはこれを CLI として実行します。署名なしのビルドはアドホック
-署名となり、ビルドした Mac でのみ動きます。配布するには `CHRONICLE_CODESIGN_IDENTITY`（Developer ID
+署名となり、ビルドした Mac でのみ動きます。配布するには `INTERLATCH_CODESIGN_IDENTITY`（Developer ID
 Application 証明書）と `NOTARY_KEYCHAIN_PROFILE`（`xcrun notarytool store-credentials` で作成）を設定すると、スクリプトが
 DMG の署名・公証・ステープルまで行います。`uv run --group build python packaging/macos/make_icon.py` で、
 コミット済みの `packaging/macos/icon-3d.webp`（`packaging/icons3d/render.py` で描画）から macOS の `.icns`、README のアイコン、ダッシュボードのロゴ、
@@ -52,8 +52,8 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
 Run workflow** を実行して `patch`、`minor`、`major` のどれかを選びます。`.github/workflows/release.yml` が最新のタグから
 次のバージョンを決め、テストを実行し、タグと GitHub リリースを作成し（前のタグ以降に追加された `changelog.d/` の
 ファイルがリリースノートになります）、
-`agents-chronicle` を PyPI に公開し（Trusted Publishing、環境 `pypi`）、ハブのイメージ
-`ghcr.io/chatixia-ai/chronicle-hub` を公開し（バージョンと `latest` のタグ、amd64 と arm64、その PyPI のリリースから
+`interlatch` を PyPI に公開し（Trusted Publishing、環境 `pypi`）、ハブのイメージ
+`ghcr.io/chatixia-ai/interlatch-hub` を公開し（バージョンと `latest` のタグ、amd64 と arm64、その PyPI のリリースから
 ビルド）、DMG をリリースに添付します（`MACOS_*` /
 `APPLE_*` シークレットが設定されていれば署名・公証済み。詳細はワークフローの先頭を参照）。最後に、それらのファイルの
 内容を `CHANGELOG.md` の `## <version> (<date>)` に移してファイルを削除するプルリクエストを開きます。マージはいつでも
@@ -62,7 +62,7 @@ Run workflow** を実行して `patch`、`minor`、`major` のどれかを選び
 GitHub Actions がプルリクエストを作れない設定の場合は、公開を終えたあとの最後のステップが失敗し、そのプルリクエストを
 手で開くためのリンクを示します。
 既定の `dry run` はテストを実行して DMG をワークフローの成果物として保存するだけで、何も公開しません。
-リリース前にハブのイメージを試すには、`uv build --wheel -o docker/wheels && docker build -t chronicle-hub docker`
+リリース前にハブのイメージを試すには、`uv build --wheel -o docker/wheels && docker build -t interlatch-hub docker`
 で PyPI の代わりにこのチェックアウトからビルドします（[Docker でハブを動かす](docker.md)）。CI の `docker` ジョブも
 同じようにビルドし、起動することを確かめます。
 GitHub で `v<version>` タグのリリースを手動で公開する方法も引き続き使えます。
@@ -83,7 +83,7 @@ GitHub で `v<version>` タグのリリースを手動で公開する方法も�
 
 ### 最初のリリースの前に一度だけ必要な設定
 
-1. PyPI で *pending publisher* を追加します（Account → Publishing）：プロジェクト `agents-chronicle`、オーナー
+1. PyPI で *pending publisher* を追加します（Account → Publishing）：プロジェクト `interlatch`、オーナー
    `Chatixia-AI`、リポジトリ `agents-chronicle`、ワークフロー `release.yml`、環境 `pypi`。
 2. GitHub リポジトリで `pypi` という名前の環境を作成します（Settings → Environments）。
 3. 署名・公証済みの DMG を配布するには（Apple Developer Program への加入が必要）：*Developer ID Application*
@@ -97,7 +97,7 @@ GitHub で `v<version>` タグのリリースを手動で公開する方法も�
 
 ## ドキュメントサイト
 
-<https://chronicle.chatixia.net/docs/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と
+<https://interlatch.com/docs/> は `docs/` と README から MkDocs Material でそのまま生成されます。`README.md` と
 `README.ja.md` がホームページになり、`docs/` の外を指すリンクは `docs/_site/hooks.py` が GitHub へのリンクに書き換えます。
 ランディングページを含むサイト全体は [Chatixia-AI/chronicle-site](https://github.com/Chatixia-AI/chronicle-site) にあり、
 このドキュメントをそのままビルドしてすべてを公開します。`.github/workflows/docs.yml` はプルリクエストごとにビルドを確認し、
@@ -128,8 +128,8 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 
 ## 変更を試す
 
-`./dev.sh` は、チェックアウトのコードでダッシュボードを起動します。データは `~/.chronicle-sandbox/dev-sh` にコピーした
-アーカイブを使うため、自分の `~/.claude-chronicle` やインストール済みの Chronicle には触れません。設定は、記録・分析・共有を
+`./dev.sh` は、チェックアウトのコードでダッシュボードを起動します。データは `~/.interlatch-sandbox/dev-sh` にコピーした
+アーカイブを使うため、自分の `~/.interlatch` やインストール済みの Interlatch には触れません。設定は、記録・分析・共有を
 一切しないものです。`--app` で macOS アプリのウィンドウを開き、`--menu-bar` でブラウザのダッシュボードに[メニューバーアイコン](install.md#メニューバーアイコン)を
 加え（ログイン項目と同じ表示）、`--demo` で[デモデータ](#デモデータ)を使い、`--fresh` で
 アーカイブをコピーし直し、`--tree ../agents-chronicle-<topic>` でほかのワークツリーのコードを動かします。サーバーは起動時に
@@ -142,14 +142,14 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 
 ## デモデータ
 
-`docs/demo/make_demo.py` は、架空のセッションから Chronicle のホームを作ります：5 つのプロジェクトと約 6 週間分の作業を持つ
+`docs/demo/make_demo.py` は、架空のセッションから Interlatch のホームを作ります：5 つのプロジェクトと約 6 週間分の作業を持つ
 架空の開発者です。合成した Claude Code のトランスクリプトを書き出し、それに対して実際の処理（同期、分析、ナレッジベース、用語集、
 週次の振り返り）を実行します。代役の `claude` が、手書きの要約とナレッジで各分析に答えるため、費用はかからず、ログインも不要です。
 `docs/images/` のスクリーンショットはこのデータから作られています。
 
 ```bash
-uv run python docs/demo/make_demo.py /tmp/chronicle-demo
-CHRONICLE_HOME=/tmp/chronicle-demo/home uv run python -m chronicle ui --port 8898 --open
+uv run python docs/demo/make_demo.py /tmp/interlatch-demo
+INTERLATCH_HOME=/tmp/interlatch-demo/home uv run python -m chronicle ui --port 8898 --open
 ```
 
 README の GIF とツアー動画もこのデータから作ります。そのダッシュボードを動かしたまま `docs/demo/record_demo.py` を実行すると、

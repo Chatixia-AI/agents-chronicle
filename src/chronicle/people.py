@@ -5,14 +5,14 @@ Roles:
     member    their computers send to the hub and get teammates' lessons back; sees the hub's dashboard
     readonly  sees the hub's dashboard; sends nothing, changes nothing
 
-Projects: a member or read-only person sees the projects they were given (`chronicle hub invite … --project`), or
+Projects: a member or read-only person sees the projects they were given (`interlatch hub invite … --project`), or
 every project (`--all-projects`). Someone limited to projects sees only those projects' session summaries and project
 lessons on the dashboard (access.py), and their computers share knowledge only, only for those projects (hub.py).
 Admins always see everything. People added before projects existed see every project, as they did.
 
 Everything starts with an invite. An admin adds a person with a role and gets a one-time code (expires after
 INVITE_DAYS) to pass on by chat; the hub sends no email. The code is redeemed once, either by a computer
-(`chronicle hub join <hub> --code …`: it becomes a push token for that person and that computer) or by a browser
+(`interlatch hub join <hub> --code …`: it becomes a push token for that person and that computer) or by a browser
 (the invite link: it becomes a dashboard session). A person's own computer can later ask for a short sign-in link
 (SIGNIN_MINUTES) to open the hub's dashboard without a password.
 
@@ -289,7 +289,7 @@ def listing(conn: sqlite3.Connection) -> list[dict]:
 # ------------------------------------------------------------------ one-time codes
 def invite(conn: sqlite3.Connection, person_id: int, *, by: dict | None = None, days: int = INVITE_DAYS,
            machine: str | None = None) -> str:
-    """A one-time code for this person: redeemed by `chronicle hub join … --code` (a computer) or the invite link
+    """A one-time code for this person: redeemed by `interlatch hub join … --code` (a computer) or the invite link
     (a browser). Returns the code; only its hash is kept. With `machine`, the invite is for that one computer the hub
     already knows: an admin's word that it is this person's, for a computer that can't show its key (may_claim)."""
     p = get(conn, person_id)
@@ -360,7 +360,7 @@ def record_key(conn: sqlite3.Connection, machine_id: str, key) -> None:
 
 
 def invite_machine(conn: sqlite3.Connection, code: str) -> str | None:
-    """The one computer an invite was made for (`chronicle hub invite --computer`), if it was."""
+    """The one computer an invite was made for (`interlatch hub invite --computer`), if it was."""
     r = conn.execute("SELECT machine_id FROM people_codes WHERE kind = 'invite' AND code_hash IN (?, ?)",
                      (_hash(normalize_code(code)), _hash(code or ""))).fetchone()
     return r["machine_id"] if r else None
@@ -381,7 +381,7 @@ def may_claim(conn: sqlite3.Connection, code: str, machine_id: str, key) -> bool
 
 
 NOT_THAT_COMPUTER = ("this hub already knows a computer with this id ({machine}) and can't tell this is it: an admin "
-                     "makes an invite for that computer (`chronicle hub invite <name> --computer {machine}`), and you "
+                     "makes an invite for that computer (`interlatch hub invite <name> --computer {machine}`), and you "
                      "join with that code")
 
 

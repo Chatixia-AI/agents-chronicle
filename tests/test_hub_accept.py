@@ -60,7 +60,7 @@ def test_a_knowledge_only_hub_keeps_no_transcripts(hubenv):  # noqa: F811
     status, r = _hello(hubenv, "knowledge")  # sharing knowledge goes on as before
     assert status == 200 and "error" not in r
     status, r = _hello(hubenv, "everything")
-    assert status == 400 and "chronicle config set hub.share knowledge" in r["error"]
+    assert status == 400 and "interlatch config set hub.share knowledge" in r["error"]
 
 
 def test_a_hub_that_takes_everything_still_does(hubenv):  # noqa: F811

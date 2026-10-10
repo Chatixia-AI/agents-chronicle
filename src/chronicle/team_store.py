@@ -11,7 +11,7 @@ match (after normalizing case and punctuation); each keeps the sessions and comp
 (lesson_sources): how many confirm it, and whom to ask.
 
 The connection is read from PG* lines (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, PGSSLMODE) in
-<chronicle home>/team-store.env, else from the PG* environment. It needs the Postgres driver, which the `team` extra
+<interlatch home>/team-store.env, else from the PG* environment. It needs the Postgres driver, which the `team` extra
 installs on the hub only.
 """
 
@@ -148,11 +148,11 @@ def probe(params: dict, *, schema: str = "team") -> dict:
     try:
         import psycopg
     except ImportError:
-        raise TeamStoreError("the team store needs the Postgres driver on the hub: install Chronicle with the team "
-                             "extra (uv tool install 'agents-chronicle[team]'), then restart the dashboard") from None
+        raise TeamStoreError("the team store needs the Postgres driver on the hub: install Interlatch with the team "
+                             "extra (uv tool install 'interlatch[team]'), then restart the dashboard") from None
     where = f"{params.get('dbname')} on {params.get('host')}"
     try:
-        with psycopg.connect(**params, connect_timeout=15, autocommit=True, application_name="chronicle-hub") as c:
+        with psycopg.connect(**params, connect_timeout=15, autocommit=True, application_name="interlatch-hub") as c:
             server = c.execute("SHOW server_version").fetchone()[0]
             exists = c.execute("SELECT to_regclass(%s) IS NOT NULL", (f"{schema}.migrations",)).fetchone()[0]
             steps = [r[0] for r in c.execute(f"SELECT name FROM {schema}.migrations ORDER BY name")] if exists else []
@@ -186,10 +186,10 @@ class TeamStore:
         try:
             import psycopg
         except ImportError:
-            raise TeamStoreError("the team store needs the Postgres driver on the hub: install Chronicle with the "
-                                 "team extra (uv tool install 'agents-chronicle[team]')") from None
+            raise TeamStoreError("the team store needs the Postgres driver on the hub: install Interlatch with the "
+                                 "team extra (uv tool install 'interlatch[team]')") from None
         try:
-            conn = psycopg.connect(**self.params, connect_timeout=15, autocommit=True, application_name="chronicle-hub")
+            conn = psycopg.connect(**self.params, connect_timeout=15, autocommit=True, application_name="interlatch-hub")
         except psycopg.Error as exc:
             raise TeamStoreError(f"can't reach the team store ({self.where()}): {_first_line(exc)}") from None
         if not self.migrated:
@@ -308,7 +308,7 @@ class TeamStore:
         return {"sessions": len(sessions), "lessons": n_lessons}
 
     def forget_sessions(self, session_ids: list[str], computer_id: str | None = None) -> int:
-        """Remove sessions (a hub's `chronicle hub purge`) and the lessons only they stated; returns how many went.
+        """Remove sessions (a hub's `interlatch hub purge`) and the lessons only they stated; returns how many went.
         With `computer_id` (a computer taking back what it shared), only the sessions that computer sent."""
         from psycopg.types.json import Jsonb
 

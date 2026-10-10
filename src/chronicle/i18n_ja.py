@@ -85,20 +85,20 @@ JA: dict[str, str] = {
     "it is already there": "すでにそこにあります",
     'expected: mcpServers.<name>.args += ["--flag", ...]': '次の形で書いてください：mcpServers.<name>.args += ["--flag", ...]',
     "the arguments must be a JSON list of strings": "引数は文字列の JSON リストにしてください",
-    "Chronicle only changes the Playwright MCP server's arguments": "Chronicle が変更するのは Playwright MCP サーバーの引数だけです",
-    "Chronicle does not set {arg!r}; only {flags}": "Chronicle は {arg!r} を設定しません。設定できるのは {flags} だけです",
+    "Interlatch only changes the Playwright MCP server's arguments": "Interlatch が変更するのは Playwright MCP サーバーの引数だけです",
+    "Interlatch does not set {arg!r}; only {flags}": "Interlatch は {arg!r} を設定しません。設定できるのは {flags} だけです",
     "{flag} needs an absolute path": "{flag} には絶対パスが必要です",
     "{path} is not a JSON object": "{path} は JSON オブジェクトではありません",
     "no MCP server named {name!r} in {path}": "{path} に {name!r} という MCP サーバーはありません",
     "the project {path} no longer exists": "プロジェクト {path} はもうありません",
-    "{kind} suggestions are not written by Chronicle": "{kind} の提案は Chronicle が書き込むものではありません",
-    "Chronicle does not run setup steps: run the command yourself, then mark it done":
-        "Chronicle はセットアップ手順を実行しません。コマンドを自分で実行してから、完了にしてください",
+    "{kind} suggestions are not written by Interlatch": "{kind} の提案は Interlatch が書き込むものではありません",
+    "Interlatch does not run setup steps: run the command yourself, then mark it done":
+        "Interlatch はセットアップ手順を実行しません。コマンドを自分で実行してから、完了にしてください",
     "empty text": "テキストが空です",
     "this one is applied: undo it first, so its line leaves the file": "この提案は適用済みです。先に元に戻して、行をファイルから取り除いてください",
     "only environment steps are marked done": "完了にできるのはセットアップ手順だけです",
-    "malformed chronicle block ({begins} BEGIN and {ends} END markers, expected one BEGIN followed by one END)":
-        "Chronicle のブロックが壊れています（BEGIN が {begins} 個、END が {ends} 個。BEGIN 1 個のあとに END 1 個が必要です）",
+    "malformed interlatch block ({begins} BEGIN and {ends} END markers, expected one BEGIN followed by one END)":
+        "Interlatch のブロックが壊れています（BEGIN が {begins} 個、END が {ends} 個。BEGIN 1 個のあとに END 1 個が必要です）",
     "{error} in {path}; fix it by hand": "{path}：{error}。手で直してください",
     "{path} no longer exists": "{path} はもうありません",
 
@@ -129,7 +129,7 @@ JA: dict[str, str] = {
     "excluded project": "除外したプロジェクト",
     "session continued during analysis": "分析中にセッションが続いた",
     "session continued after analysis": "分析のあとにセッションが続いた",
-    "history only (transcript deleted before Chronicle)": "履歴のみ（Chronicle を入れる前にトランスクリプトが削除された）",
+    "history only (transcript deleted before Interlatch)": "履歴のみ（Interlatch を入れる前にトランスクリプトが削除された）",
     "imported {label} chat: not analyzed automatically (Analyze now, or import with --analyze)":
         "取り込んだ {label} のチャット：自動では分析しません（今すぐ分析するか、--analyze を付けて取り込みます）",
     "analysis failed {n}; it will not be retried automatically ({reason})": "分析に {n} 回失敗したため、自動では再試行しません（{reason}）",
@@ -137,8 +137,8 @@ JA: dict[str, str] = {
         "再試行しても解決しない失敗のため、自動では再試行しません（{reason}）",
     "its project is excluded from analysis (sources.exclude_projects)": "プロジェクトが分析の対象から除外されています（sources.exclude_projects）",
     "fewer than {n} prompts (analysis.min_prompts)": "プロンプトが {n} 件未満です（analysis.min_prompts）",
-    "it started before Chronicle was installed, and analysis.backfill is off":
-        "Chronicle をインストールする前に始まったセッションで、analysis.backfill がオフです",
+    "it started before Interlatch was installed, and analysis.backfill is off":
+        "Interlatch をインストールする前に始まったセッションで、analysis.backfill がオフです",
     "retrying at {when} after a failed attempt ({reason})": "失敗したため、{when} に再試行します（{reason}）",
     "the session may still be going; it is analyzed once idle for {minutes} minutes (around {at})":
         "セッションがまだ続いている可能性があります。{minutes} 分間アイドルになったら分析します（{at} ごろ）",
@@ -147,8 +147,8 @@ JA: dict[str, str] = {
         "準備完了：バックグラウンドの処理が次の実行（15 分ごと）で分析します",
     "ready to re-analyze: the session continued after it was analyzed": "再分析の準備完了：分析のあとにセッションが続きました",
     "analysis is paused until {when} (usage limit); it resumes by itself": "使用量の上限のため、分析は {when} まで一時停止しています。自動で再開します",
-    "automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`":
-        "自動分析がオフです（analysis.auto）。セッションのページか `chronicle analyze` で分析してください",
+    "automatic analysis is off (analysis.auto); analyze it from its page or with `interlatch analyze`":
+        "自動分析がオフです（analysis.auto）。セッションのページか `interlatch analyze` で分析してください",
     "not saved: {keys}": "保存されませんでした：{keys}",
     "{reason}, so nothing can be analyzed": "{reason}ため、何も分析できません",
     "{label} (`{cli}`) was not found": "{label}（`{cli}`）が見つかりません",
@@ -294,17 +294,17 @@ JA: dict[str, str] = {
     "stopped recording Codex Cloud (recorded tasks are kept)": "Codex Cloud の記録を止めました（記録済みのタスクは残ります）",
     "codex CLI not found: install Codex and run `codex login`": "codex CLI が見つかりません。Codex をインストールして `codex login` を実行してください",
     "MCP registration skipped: codex CLI not found": "codex CLI が見つからないため、MCP の登録を省きました",
-    "registered MCP server 'chronicle' in Codex": "Codex に MCP サーバー「chronicle」を登録しました",
+    "registered MCP server 'interlatch' in Codex": "Codex に MCP サーバー「interlatch」を登録しました",
     "Codex MCP registration failed: {error}": "Codex への MCP の登録に失敗しました：{error}",
-    "removed MCP server 'chronicle' from Codex": "Codex から MCP サーバー「chronicle」を削除しました",
+    "removed MCP server 'interlatch' from Codex": "Codex から MCP サーバー「interlatch」を削除しました",
     "Codex MCP removal failed: {error}": "Codex からの MCP の削除に失敗しました：{error}",
-    "{label}: {path} is not plain JSON; add the 'chronicle' MCP server by hand":
-        "{label}：{path} は素の JSON ではありません。MCP サーバー「chronicle」は手で追加してください",
+    "{label}: {path} is not plain JSON; add the 'interlatch' MCP server by hand":
+        "{label}：{path} は素の JSON ではありません。MCP サーバー「interlatch」は手で追加してください",
     "{label}: unexpected {path} format; left unchanged": "{label}：{path} の形式が想定と違うため、変更していません",
-    "{label}: no chronicle MCP server to remove": "{label}：削除する MCP サーバー「chronicle」がありません",
-    "{label}: chronicle MCP server already registered": "{label}：MCP サーバー「chronicle」は登録済みです",
-    "{label}: removed MCP server 'chronicle' ({path})": "{label}：MCP サーバー「chronicle」を削除しました（{path}）",
-    "{label}: registered MCP server 'chronicle' ({path})": "{label}：MCP サーバー「chronicle」を登録しました（{path}）",
+    "{label}: no interlatch MCP server to remove": "{label}：削除する MCP サーバー「interlatch」がありません",
+    "{label}: interlatch MCP server already registered": "{label}：MCP サーバー「interlatch」は登録済みです",
+    "{label}: removed MCP server 'interlatch' ({path})": "{label}：MCP サーバー「interlatch」を削除しました（{path}）",
+    "{label}: registered MCP server 'interlatch' ({path})": "{label}：MCP サーバー「interlatch」を登録しました（{path}）",
     "{label} not found on this Mac; nothing changed": "この Mac に {label} が見つかりません。何も変更していません",
     "; restart {label} to load it": "。読み込むには {label} を再起動してください",
     "registered MCP server '{name}' (user scope)": "MCP サーバー「{name}」を登録しました（ユーザースコープ）",
@@ -316,7 +316,7 @@ JA: dict[str, str] = {
     "backed up {path} -> {backup}": "{path} を {backup} にバックアップしました",
     # ---- artifacts: opening a file
     "this file can no longer be opened": "このファイルはもう開けません",
-    "files open only on the computer Chronicle runs on": "ファイルは Chronicle が動いているコンピューターでだけ開けます",
+    "files open only on the computer Interlatch runs on": "ファイルは Interlatch が動いているコンピューターでだけ開けます",
     # ---- Devices: what this computer sends, the team store
     "change this on the computer itself, not from another device": "ほかのデバイスからではなく、そのコンピューター自身で変更してください",
     "this computer sends to a hub: the team store is set up on the hub": "このコンピューターはハブに送っています。チームストアはハブで設定します",
@@ -339,23 +339,23 @@ JA: dict[str, str] = {
     "not available": "利用できません",
     # ---- people on a hub: signing in, roles, invites
     "sign in to this hub": "このハブにサインインしてください",
-    "this dashboard has no people yet, so only this computer may open it. At the hub, run `chronicle hub invite <your "
+    "this dashboard has no people yet, so only this computer may open it. At the hub, run `interlatch hub invite <your "
     "name> --email <email> --role admin` and open the invite link it prints":
         "このダッシュボードにはまだ人が登録されていないため、開けるのはこのコンピューター自身だけです。ハブで "
-        "`chronicle hub invite <名前> --email <メール> --role admin` を実行し、表示される招待リンクを開いてください",
+        "`interlatch hub invite <名前> --email <メール> --role admin` を実行し、表示される招待リンクを開いてください",
     "you're not on this hub; ask an admin to add you": "あなたはこのハブに登録されていません。管理者に追加を頼んでください",
     "only an admin of this hub can do this": "これができるのはこのハブの管理者だけです",
     "this computer is not a hub": "このコンピューターはハブではありません",
     "Could not sign in": "サインインできませんでした",
-    "Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
+    "Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Interlatch "
     "(Settings › Devices).":
-        "このハブの管理者に新しい招待を頼むか、自分の Chronicle（「設定」›「デバイス」）からハブのダッシュボードを開き直してください。",
+        "このハブの管理者に新しい招待を頼むか、自分の Interlatch（「設定」›「デバイス」）からハブのダッシュボードを開き直してください。",
     "Open the dashboard": "ダッシュボードを開く",
     "no such computer or browser session": "そのコンピューターまたはブラウザーのセッションはありません",
     "this hub has no address set ([hub] address), so these use the address this page was opened at; set it with "
-    "`chronicle hub enable --url`":
+    "`interlatch hub enable --url`":
         "このハブにはアドレスが設定されていない（[hub] address）ため、このページを開いたアドレスを使っています。"
-        "`chronicle hub enable --url` で設定してください",
+        "`interlatch hub enable --url` で設定してください",
     "a name is needed": "名前が必要です",
     "role must be one of: {roles}": "役割は {roles} のいずれかにしてください",
     "{email} is not an email address": "{email} はメールアドレスではありません",
@@ -378,25 +378,25 @@ JA: dict[str, str] = {
     "that person is no longer on this hub": "その人はもうこのハブにいません",
     "this computer already joined this hub as someone else; an admin removes it from that person first (Team › People)":
         "このコンピューターは別の人としてこのハブに参加済みです。先に管理者がその人からこのコンピューターを外してください（チーム › 利用者）",
-    "this hub already knows a computer with this id ({machine}) and can't tell this is it: an admin makes an invite for that computer (`chronicle hub invite <name> --computer {machine}`), and you join with that code":
-        "このハブは同じ ID のコンピューター（{machine}）をすでに知っていて、これがそのコンピューターだと確かめられません。管理者がそのコンピューター用の招待を作り（`chronicle hub invite <名前> --computer {machine}`）、そのコードで参加してください",
+    "this hub already knows a computer with this id ({machine}) and can't tell this is it: an admin makes an invite for that computer (`interlatch hub invite <name> --computer {machine}`), and you join with that code":
+        "このハブは同じ ID のコンピューター（{machine}）をすでに知っていて、これがそのコンピューターだと確かめられません。管理者がそのコンピューター用の招待を作り（`interlatch hub invite <名前> --computer {machine}`）、そのコードで参加してください",
     "this invite is for another computer ({machine}); join from that one":
         "この招待は別のコンピューター（{machine}）のものです。そのコンピューターから参加してください",
     "this hub doesn't know a computer {machine}": "このハブはコンピューター {machine} を知りません",
-    "this computer has not joined a hub (`chronicle hub join`)": "このコンピューターはハブに参加していません（`chronicle hub join`）",
+    "this computer has not joined a hub (`interlatch hub join`)": "このコンピューターはハブに参加していません（`interlatch hub join`）",
     "the hub sent no sign-in code": "ハブからサインインのコードが届きませんでした",
     "Can't reach the hub: {error}": "ハブにつながりません: {error}",
     "Give the folder's full path, such as /Users/you/code/app.": "/Users/you/code/app のように、フォルダーのフルパスを入力してください。",
     "The hub has no such project, or you don't see it.": "ハブにそのプロジェクトがないか、あなたには見えません。",
     "Which project?": "どのプロジェクトですか？",
-    "CHRONICLE_HUB_NAME in the hub's .env sets its name: change it there.":
-        "ハブの名前はハブの .env の CHRONICLE_HUB_NAME で決まります。そちらで変更してください。",
+    "INTERLATCH_HUB_NAME in the hub's .env sets its name: change it there.":
+        "ハブの名前はハブの .env の INTERLATCH_HUB_NAME で決まります。そちらで変更してください。",
     "A hub's name is up to 80 characters.": "ハブの名前は 80 文字以内にしてください。",
     "Give the hub a name.": "ハブに名前を付けてください。",
-    "CHRONICLE_HUB_URL in the hub's .env sets its address: change it there.":
-        "ハブのアドレスはハブの .env の CHRONICLE_HUB_URL で決まります。そちらで変更してください。",
-    "An address is like https://chronicle.example.com: http or https and a host name, with a port if needed.":
-        "アドレスは https://chronicle.example.com のように、http か https とホスト名で指定します（必要ならポートも）。",
+    "INTERLATCH_HUB_URL in the hub's .env sets its address: change it there.":
+        "ハブのアドレスはハブの .env の INTERLATCH_HUB_URL で決まります。そちらで変更してください。",
+    "An address is like https://interlatch.example.com: http or https and a host name, with a port if needed.":
+        "アドレスは https://interlatch.example.com のように、http か https とホスト名で指定します（必要ならポートも）。",
     "Nothing to change.": "変更するものがありません。",
     "{folder} is not a folder.": "{folder} はフォルダーではありません。",
     "{folder} is in the git repository {remote}, which the hub files under {owner}. A repository belongs to one project, "
@@ -404,8 +404,8 @@ JA: dict[str, str] = {
         "{folder} は git リポジトリ {remote} の中にあり、ハブはこれを {owner} に振り分けています。リポジトリは 1 つのプロジェクト"
         "に属するため、そのセッションを {name} に送ることはできません。",
     "{folder} was not added.": "{folder} は追加されていません。",
-    "The hub runs an older Chronicle that can't take back what this computer shared. Update the hub first.":
-        "ハブの Chronicle が古いため、このコンピューターが共有したものを取り消せません。先にハブを更新してください。",
+    "The hub runs an older version that can't take back what this computer shared. Update the hub first.":
+        "ハブのバージョンが古いため、このコンピューターが共有したものを取り消せません。先にハブを更新してください。",
     "Only a computer that shares knowledge can leave a project: one that sends its transcripts sends them all.":
         "プロジェクトから抜けられるのは、ナレッジだけを共有するコンピューターです。トランスクリプトを送るコンピューターはすべてを送ります。",
     # ---- your own groups of projects (groups.py)
@@ -417,19 +417,5 @@ JA: dict[str, str] = {
     "A folder rule can't be empty or the whole disk.": "フォルダーのルールを空やディスク全体にすることはできません。",
     "Pick a project to move.": "移動するプロジェクトを選んでください。",
     "This computer doesn't send to a hub.": "このコンピューターはハブに送っていません。",
-    "An address is like https://interlatch.example.com: http or https and a host name, with a port if needed.": "アドレスは https://interlatch.example.com のように、http か https とホスト名で指定します（必要ならポートも）。",
     "Chronicle is now Interlatch. Updating moves this install from the agents-chronicle package to interlatch; the chronicle command keeps working.": "Chronicle は Interlatch になりました。更新すると、このインストールは agents-chronicle パッケージから interlatch に移ります。chronicle コマンドはそのまま使えます。",
-    "INTERLATCH_HUB_NAME in the hub's .env sets its name: change it there.": "ハブの名前はハブの .env の INTERLATCH_HUB_NAME で決まります。そちらで変更してください。",
-    "INTERLATCH_HUB_URL in the hub's .env sets its address: change it there.": "ハブのアドレスはハブの .env の INTERLATCH_HUB_URL で決まります。そちらで変更してください。",
-    "files open only on the computer Interlatch runs on": "ファイルは Interlatch が動いているコンピューターでだけ開けます",
-    "malformed interlatch block ({begins} BEGIN and {ends} END markers, expected one BEGIN followed by one END)": "Interlatch のブロックが壊れています（BEGIN が {begins} 個、END が {ends} 個。BEGIN 1 個のあとに END 1 個が必要です）",
-    "registered MCP server 'interlatch' in Codex": "Codex に MCP サーバー「interlatch」を登録しました",
-    "removed MCP server 'interlatch' from Codex": "Codex から MCP サーバー「interlatch」を削除しました",
-    "this dashboard has no people yet, so only this computer may open it. At the hub, run `interlatch hub invite <your name> --email <email> --role admin` and open the invite link it prints": "このダッシュボードにはまだ人が登録されていないため、開けるのはこのコンピューター自身だけです。ハブで `interlatch hub invite <名前> --email <メール> --role admin` を実行し、表示される招待リンクを開いてください",
-    "this hub has no address set ([hub] address), so these use the address this page was opened at; set it with `interlatch hub enable --url`": "このハブにはアドレスが設定されていない（[hub] address）ため、このページを開いたアドレスを使っています。`interlatch hub enable --url` で設定してください",
-    "{label}: interlatch MCP server already registered": "{label}：MCP サーバー「interlatch」は登録済みです",
-    "{label}: no interlatch MCP server to remove": "{label}：削除する MCP サーバー「interlatch」がありません",
-    "{label}: registered MCP server 'interlatch' ({path})": "{label}：MCP サーバー「interlatch」を登録しました（{path}）",
-    "{label}: removed MCP server 'interlatch' ({path})": "{label}：MCP サーバー「interlatch」を削除しました（{path}）",
-    "{label}: {path} is not plain JSON; add the 'interlatch' MCP server by hand": "{label}：{path} は素の JSON ではありません。MCP サーバー「interlatch」は手で追加してください",
 }

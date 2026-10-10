@@ -853,7 +853,7 @@ def _sync_bob(cfg: Config, conn, archiver: Archiver, root: Path, report: SyncRep
     snapshot_sqlite(conn, db, snap)
     for task in load_tasks(root):
         if cfg.is_internal_path(task_folder(task)):
-            continue  # Chronicle's own analysis, run through Bob (analysis.backend = "bob")
+            continue  # Interlatch's own analysis, run through Bob (analysis.backend = "bob")
         sid = task["id"]
         sig = hashlib.sha1(f"{task_signature(task)}|v{BOB_PARSER_VERSION}".encode()).hexdigest()
         if sid in skip or _unchanged(conn, sid, sig, force):
@@ -1093,7 +1093,7 @@ def import_history(conn: sqlite3.Connection, cfg: Config, path: Path) -> int:
             "WHERE sessions.source = 'history'",
             (sid, "history", str(path.parent), project, project_name_for(project), 0, one_line(first, 90), first,
              prompts[-1][1], started, ended, dur, min(dur, len(prompts) * 300.0), len(real), len(prompts), "skipped",
-             "history only (transcript deleted before Chronicle)", utcnow_iso(), PARSER_VERSION,
+             "history only (transcript deleted before Interlatch)", utcnow_iso(), PARSER_VERSION,
              machine or me),
         )
         created += 1

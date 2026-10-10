@@ -1,8 +1,8 @@
-"""The menu-bar item on macOS: Chronicle's mark, which says at a glance whether it is working or needs a look; a click
+"""The menu-bar item on macOS: Interlatch's mark, which says at a glance whether it is working or needs a look; a click
 opens a panel (web/panel.html in a popover: the status, numbers, search and recent sessions), a right-click a quick
 native menu.
 
-`chronicle ui` shows it when launchd runs it as the login item (or with --menu-bar), and Chronicle.app (desktop.py)
+`interlatch ui` shows it when launchd runs it as the login item (or with --menu-bar), and Interlatch.app (desktop.py)
 shows the same with its own menu items added. What it says is worked out without AppKit (snapshot(), summarize());
 StatusMenu draws it.
 """
@@ -33,7 +33,7 @@ TITLE_MAX = 48
 # imported chats are not work done on this computer; the hub's copies of other computers' sessions are ("remote")
 RECENT_SKIP = ("history", "chatgpt-export", "claude-ai-export")
 JOB_LABELS = {"sync": "Syncing", "push": "Sending to the hub", "import": "Importing chats",
-              "screen": "Screening imported chats", "update": "Updating Chronicle", "themes": "Grouping glossary themes",
+              "screen": "Screening imported chats", "update": "Updating Interlatch", "themes": "Grouping glossary themes",
               "analyze": "Analyzing", "glossary": "Updating the glossary", "review": "Writing the weekly review",
               "synthesize": "Updating knowledge", "menu-bar": "Setting up the menu-bar icon"}
 # the panel's picture for each state, from the dashboard's 3D cast (web/art-*.webp)
@@ -262,8 +262,8 @@ def setting_info(cfg: Config) -> dict:
     return {"supported": True, "on": cfg.server_menu_bar, "shown": SHOWN, "app_extra": app_extra(),
             "login_item": os.environ.get("XPC_SERVICE_NAME") == UI_LABEL,  # this dashboard is the one that shows it
             "agent": bool(launchd_status(UI_LABEL).get("loaded")), "can_install": cmd is not None,
-            "command": shlex.join(cmd) if cmd else "uv tool install --force --python 3.13 'agents-chronicle[app]'",
-            # what System Settings › Menu Bar calls it: the Python it runs on (python3.14), not Chronicle
+            "command": shlex.join(cmd) if cmd else "uv tool install --force --python 3.13 'interlatch[app]'",
+            # what System Settings › Menu Bar calls it: the Python it runs on (python3.14), not Interlatch
             "listed_as": os.path.basename(os.path.realpath(sys.executable))}
 
 
@@ -303,7 +303,7 @@ def apply_setting(cfg: Config, on: bool, progress) -> str:
 
 
 def wants_menu_bar(cfg: Config) -> bool:
-    """`chronicle ui` shows the icon by itself only as the login item, so a second dashboard run from a terminal
+    """`interlatch ui` shows the icon by itself only as the login item, so a second dashboard run from a terminal
     (or a checkout's dev server) adds no second icon."""
     from .install import UI_LABEL
 
@@ -337,7 +337,7 @@ def alert(title: str, text: str, buttons: list[str]) -> int:
 
 
 def mark(state: str = OK, size: float = 18.0):
-    """Chronicle's mark as a template image (macOS tints it for the menu bar): the stack of pages from the app icon,
+    """Interlatch's mark as a template image (macOS tints it for the menu bar): the stack of pages from the app icon,
     with a dot while it works, a "!" when it needs a look, and dimmed while analysis is paused."""
     import AppKit
 
@@ -409,7 +409,7 @@ def mark(state: str = OK, size: float = 18.0):
 
 @dataclass
 class Extra:
-    """An item an embedding app adds above Quit (Chronicle.app: Connect Claude Code, Open at Login, …)."""
+    """An item an embedding app adds above Quit (Interlatch.app: Connect Claude Code, Open at Login, …)."""
     key: str
     title: str
     action: object  # a callable, run on a background thread
@@ -511,12 +511,12 @@ class StatusMenu:
         add("open", self.open_title)
         add("sync", "Sync Now")
         menu.addItem_(AppKit.NSMenuItem.separatorItem())
-        add("update", "Update Chronicle…").setHidden_(True)
+        add("update", "Update Interlatch…").setHidden_(True)
         for extra in self.extras:
             add(f"extra:{extra.key}", extra.title)
         if self.extras:
             menu.addItem_(AppKit.NSMenuItem.separatorItem())
-        add("quit", "Quit Chronicle", quit_key="q")
+        add("quit", "Quit Interlatch", quit_key="q")
 
         self.status_item = AppKit.NSStatusBar.systemStatusBar().statusItemWithLength_(
             AppKit.NSVariableStatusItemLength)
@@ -528,7 +528,7 @@ class StatusMenu:
         else:
             self.status_item.setMenu_(menu)
         self.status_item.button().setImage_(self._image(OK))
-        self.status_item.button().setToolTip_("Chronicle")
+        self.status_item.button().setToolTip_("Interlatch")
         if self.base_url:
             self._build_panel()  # loaded and filled in before the first click
         self.will_open()
@@ -565,8 +565,8 @@ class StatusMenu:
         self.snap = snap
         button = self.status_item.button()
         button.setImage_(self._image(snap.state))
-        button.setToolTip_(f"Chronicle: {snap.headline}")
-        button.setAccessibilityLabel_(f"Chronicle, {snap.headline}")
+        button.setToolTip_(f"Interlatch: {snap.headline}")
+        button.setAccessibilityLabel_(f"Interlatch, {snap.headline}")
         self.items["headline"].setTitle_(snap.headline)
         self.items["detail"].setTitle_(snap.detail)
         self.items["detail"].setHidden_(not snap.detail or bool(self.base_url))
@@ -735,15 +735,15 @@ class StatusMenu:
         self.poke()
 
 
-# ---------------------------------------------------------------------------------------------- `chronicle ui`
+# ---------------------------------------------------------------------------------------------- `interlatch ui`
 def run_with_server(cfg: Config, httpd, url: str) -> bool:
-    """`chronicle ui` with the menu-bar item: the dashboard serves on a thread, AppKit runs on this (main) thread
+    """`interlatch ui` with the menu-bar item: the dashboard serves on a thread, AppKit runs on this (main) thread
     until Quit or Ctrl+C. False, with nothing started, when the `app` extra (PyObjC) is not installed."""
     try:
         import AppKit
         from PyObjCTools import AppHelper
     except ImportError:
-        log.info("no menu-bar icon: it needs the `app` extra (uv tool install 'agents-chronicle[app]')")
+        log.info("no menu-bar icon: it needs the `app` extra (uv tool install 'interlatch[app]')")
         return False
     from .install import UI_LABEL
 
@@ -755,8 +755,8 @@ def run_with_server(cfg: Config, httpd, url: str) -> bool:
 
     def quit_() -> None:
         if os.environ.get("XPC_SERVICE_NAME") == UI_LABEL:  # launchd would start a KeepAlive agent right back up
-            if alert("Quit Chronicle?",
-                     "The dashboard and this icon stop until you next log in, or until you run `chronicle ui`. "
+            if alert("Quit Interlatch?",
+                     "The dashboard and this icon stop until you next log in, or until you run `interlatch ui`. "
                      "Your sessions are still recorded.", ["Quit", "Cancel"]) != 0:
                 return
             subprocess.run(["launchctl", "bootout", f"gui/{os.getuid()}/{UI_LABEL}"], capture_output=True)

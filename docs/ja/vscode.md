@@ -1,10 +1,12 @@
 # VS Code 拡張機能
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
 Chronicle 拡張機能は、VS Code のエクスプローラーに 2 つのセクションを追加し、ファイルの背後にあるコーディング
 エージェントのセッションを表示します。「このコードはなぜこうなっているのか」がワンクリックで
 わかります。書いたセッション、その要約と結果、ダッシュボードでの全文の記録です。
+
+拡張機能の名前は Chronicle のままですが、Interlatch でそのまま使えます。セクションと設定も `Chronicle` と `chronicle.*` の名前のままです。
 
 - **Chronicle: This File** は、開いているファイルを読んだり変更したりしたセッションを新しい順に表示します。アクティブな
   エディターに追従し、VS Code のウィンドウごとにそれぞれのファイルを表示します。
@@ -21,7 +23,7 @@ Chronicle 拡張機能は、VS Code のエクスプローラーに 2 つのセ�
 `edited 2×`、`read 4×`）、結果、要約です。詳細の最後の **Open in Chronicle**、または行のボタンで、ダッシュボードで
 そのセッションが開きます。
 
-データは、すでに動いているダッシュボード（`chronicle ui`、または `chronicle install` が設定するバックグラウンド
+データは、すでに動いているダッシュボード（`interlatch ui`、または `interlatch install` が設定するバックグラウンド
 サービス）から `http://127.0.0.1:11524`（以前のインストールでは `:8765`）経由で読み込みます。ほかの場所には何も送らず、アカウントも不要です。
 
 ## インストール
@@ -34,14 +36,14 @@ npx @vscode/vsce package          # chronicle-sessions-0.2.0.vsix を作成
 code --install-extension chronicle-sessions-0.2.0.vsix
 ```
 
-一覧が読み込む `/api/file` と `/api/files` エンドポイントは、0.6.1 より新しい Chronicle で追加されます。
+一覧が読み込む `/api/file` と `/api/files` エンドポイントは、Interlatch と 0.6.1 より新しい Chronicle にあります。
 古いバージョンでは、一覧にアップデートするよう表示されます。
 
 ## 設定
 
 | 設定 | 既定値 | 内容 |
 | --- | --- | --- |
-| `chronicle.url` | 空：`http://127.0.0.1:11524`、なければ `:8765` | ダッシュボードのアドレス。Chronicle の[設定](configuration.md)で `[server] port` を変えた場合は合わせて変更します。 |
+| `chronicle.url` | 空：`http://127.0.0.1:11524`、なければ `:8765` | ダッシュボードのアドレス。Interlatch の[設定](configuration.md)で `[server] port` を変えた場合は合わせて変更します。 |
 | `chronicle.includeReads` | `true` | 読んだだけのセッションとファイルも表示します。オフにすると、セッションが変更したものだけになります。 |
 | `chronicle.showIgnoredFiles` | `false` | git が無視するファイル（スクリーンショット、ビルド出力、キャッシュ）も **Chronicle: Files in Workspace** に表示します。 |
 

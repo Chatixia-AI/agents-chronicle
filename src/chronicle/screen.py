@@ -1,4 +1,4 @@
-"""Screen imported chats: which ones are worth a full analysis (`chronicle screen`, Sources › Chat exports).
+"""Screen imported chats: which ones are worth a full analysis (`interlatch screen`, Sources › Chat exports).
 
 Years of claude.ai and ChatGPT chats are mostly lookups, rewrites and everyday questions that analysis turns into
 nothing, and analyzing them all would take the plan's limits for days. Screening reads only each chat's opening
@@ -10,7 +10,7 @@ nothing, and analyzing them all would take the plan's limits for days. Screening
    analyze / maybe / skip with a topic and a one-line reason. It is told what analysis keeps and which projects the
    developer works on, from their recorded sessions.
 
-Screening analyzes nothing: `queue()` (`chronicle screen --queue`, **Queue for analysis**) puts the chats worth it in
+Screening analyzes nothing: `queue()` (`interlatch screen --queue`, **Queue for analysis**) puts the chats worth it in
 the background queue. A chat is screened once, and again when a newer export changes it.
 """
 
@@ -91,7 +91,7 @@ chore; between analyze and maybe, choose maybe when unsure. Chats over two years
 (compare the projects below) are at most maybe, unless they record a decision about ongoing work. Chats are in any \
 language; write topic and reason in English. Return one entry per chat number, each number exactly once."""
 WRITE_ENGLISH = "Chats are in any language; write topic and reason in English."
-# a rule's (topic, reason) when Chronicle writes in Japanese
+# a rule's (topic, reason) when Interlatch writes in Japanese
 RULES_JA = {"no reply": ("返信なし", "エクスポートにこのチャットの返信がない"),
             "too short": ("短すぎる", "分析できる内容がほとんどない"),
             "text chore": ("テキストの作業", "貼り付けたテキストの翻訳、要約、校正")}

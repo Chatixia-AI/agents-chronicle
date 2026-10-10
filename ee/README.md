@@ -1,7 +1,7 @@
-# Chronicle Enterprise
+# Interlatch Enterprise
 
-This directory holds the features a company needs to run Chronicle for its engineering teams. It is licensed under
-the [Chronicle Enterprise License](LICENSE), not MIT: you can read it, change it and try it out for free, but running
+This directory holds the features a company needs to run Interlatch for its engineering teams. It is licensed under
+the [Interlatch Enterprise License](LICENSE), not MIT: you can read it, change it and try it out for free, but running
 it in production needs a subscription. Everything outside `ee/` stays [MIT](../LICENSE).
 
 ## What goes here, and what doesn't
@@ -12,7 +12,7 @@ The line follows who asks for the feature.
   agent or any model provider's API (Anthropic, Bedrock, OpenAI, Azure OpenAI, OpenRouter, Ollama), the dashboard,
   the MCP server, and the hub, with its computers, people and roles, invites, shared projects, team store and
   team Home. Everything released before `ee/` existed stays MIT too.
-- **Enterprise, in `ee/`:** what the company's IT, security or engineering leadership needs before rolling Chronicle
+- **Enterprise, in `ee/`:** what the company's IT, security or engineering leadership needs before rolling Interlatch
   out across teams:
   - single sign-on (OIDC, SAML) and user provisioning (SCIM) for the hub
   - policies: retention, redaction rules, folders that are never recorded
@@ -25,8 +25,8 @@ The MIT core never imports from `ee/` and works on its own. When an enterprise f
 
 ## How it ships
 
-`ee/` builds its own package, `agents-chronicle-enterprise` (import name `chronicle_ee`), which depends on
-`agents-chronicle`. The `agents-chronicle` wheel and source distribution on PyPI don't contain `ee/`, so they remain
+`ee/` builds its own package, `interlatch-enterprise` (import name `chronicle_ee`), which depends on
+`interlatch`. The `interlatch` wheel and source distribution on PyPI don't contain `ee/`, so they remain
 MIT only.
 
 ```bash
