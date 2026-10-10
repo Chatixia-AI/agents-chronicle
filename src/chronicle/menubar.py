@@ -262,7 +262,9 @@ def setting_info(cfg: Config) -> dict:
     return {"supported": True, "on": cfg.server_menu_bar, "shown": SHOWN, "app_extra": app_extra(),
             "login_item": os.environ.get("XPC_SERVICE_NAME") == UI_LABEL,  # this dashboard is the one that shows it
             "agent": bool(launchd_status(UI_LABEL).get("loaded")), "can_install": cmd is not None,
-            "command": shlex.join(cmd) if cmd else "uv tool install --force --python 3.13 'agents-chronicle[app]'"}
+            "command": shlex.join(cmd) if cmd else "uv tool install --force --python 3.13 'agents-chronicle[app]'",
+            # what System Settings › Menu Bar calls it: the Python it runs on (python3.14), not Chronicle
+            "listed_as": os.path.basename(os.path.realpath(sys.executable))}
 
 
 def restarts(on: bool, info: dict) -> bool:

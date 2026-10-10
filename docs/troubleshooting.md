@@ -26,6 +26,16 @@ checkout.
 **The menu bar says "python3" instead of Chronicle.** Only when running the app from source with an old checkout;
 the DMG build always shows Chronicle.
 
+**The menu-bar icon doesn't show, though its switch is on.** The switch (**Settings › Status › Recording**) only
+puts the icon there; macOS decides where it appears:
+
+- With more than one display, look at each display's menu bar: macOS can show it on one and hide it on another.
+- **System Settings › Menu Bar › Allow in the Menu Bar** lists a command-line install's dashboard by the Python it
+  runs on (`python3.14`, say), not as Chronicle. Turn that entry on.
+- On a MacBook with a notch, icons that don't fit beside the notch are hidden. Quit an app with an icon you don't
+  need, or hold ⌘ and drag icons to the right to make room.
+- Restart the dashboard: `launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`.
+
 **The dashboard isn't at :11524.** The app uses a free port when 11524 is taken (for example by the command-line
 install's dashboard agent). **Open in Browser** in the menu-bar menu opens the right one. Installs made before
 11524 became the default stay on :8765 (`[server] port` in `config.toml`).

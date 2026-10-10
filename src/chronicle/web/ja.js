@@ -813,6 +813,7 @@ window.CHRONICLE_JA = {
   "Notify me about new versions": "新しいバージョンを通知",
   "Download {version}": "{version} をダウンロード",
   "Menu-bar icon": "メニューバーアイコン",
+  "On. Don't see it? Look at the menu bar on each display, and in System Settings › Menu Bar, where it is listed as {name}.": "オン。見当たらない場合は、各ディスプレイのメニューバーと、システム設定 › メニューバー（{name} という名前で表示されます）を確認してください。",
   "Chronicle's icon in the menu bar: what it's doing, a search and your recent sessions, a click away.": "メニューバーの Chronicle のアイコン：いまの状態、検索、最近のセッションにワンクリックで届きます。",
   "On. It shows while the dashboard runs at login, which {command} sets up.": "オン。ログイン時に起動するダッシュボードが動いている間に表示されます（{command} で設定します）。",
   "On. It shows the next time the dashboard that runs at login starts.": "オン。ログイン時に起動するダッシュボードが次に起動したときに表示されます。",
