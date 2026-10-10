@@ -3,6 +3,24 @@
 <!-- Don't add lines here: a pull request puts its line in a new file in changelog.d/ (see changelog.d/README.md),
      and each release moves the files it took into a dated section below. -->
 
+## 0.22.0 (2026-10-10)
+
+- **Your Chronicle setup moves over by itself:** the first time the dashboard or the background sync starts,
+  Interlatch moves `~/.claude-chronicle` to `~/.interlatch` (a link stays at the old path, so nothing that still names
+  it breaks) and updates everything that ran Chronicle: the Claude Code hooks and status line, the MCP server in each
+  agent (now named `interlatch`, with permission rules for `mcp__chronicle__` tools renamed), the block in your
+  `CLAUDE.md` / `AGENTS.md` files and the login items. `chronicle` keeps working as another name for the
+  `interlatch` command, and `interlatch migrate --dry-run` shows what the move changes. An install of the
+  `agents-chronicle` package offers the move to `interlatch` under **Status › Updates**.
+- **Chronicle is now Interlatch:** the same program under a new name. Install it with `uv tool install interlatch`
+  (the app is `Interlatch-<version>-arm64.dmg`) and run it as `interlatch`; `chronicle` still works. An existing
+  install moves over by itself: the data folder becomes `~/.interlatch`, the MCP server `interlatch` in every agent,
+  and hooks, login items and permissions follow; `CHRONICLE_*` variables are still read. The docs are at
+  [interlatch.com/docs](https://interlatch.com/docs/) ([Moving from Chronicle](docs/moving-from-chronicle.md)).
+- **The hub's image is now `ghcr.io/chatixia-ai/interlatch-hub`:** download `compose.yaml` again to move to it
+  ([Update](docs/docker.md#update)); a `.env` with the `CHRONICLE_*` names, the data and the volumes stay as they are,
+  and `chronicle-hub` gets the same image for now, so a hub that only runs `docker compose pull` keeps updating.
+
 ## 0.21.3 (2026-10-10)
 
 - **Hide the sidebar from the rail:** a click on the rail icon of the page you're on hides the sidebar, and another
