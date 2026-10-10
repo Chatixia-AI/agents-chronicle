@@ -6,7 +6,7 @@
 | --- | --- |
 | `chronicle install [--yes] [--analyze all\|N\|later] [--[no-]notify-updates] [--dry-run]` | Setup: lists the agents found, asks which to record, imports them, offers to analyze them now with progress (which builds the Glossary and the Map), starts the dashboard ([Install](install.md#command-line)) |
 | `chronicle app` | The desktop app (window + menu bar); needs the `app` extra |
-| `chronicle ui [--open]` | Dashboard (also always running at :11524 after install; if it is, `chronicle ui` says so and `--open` opens it). Sessions, Knowledge, Projects and Glossary switch between Cards and List (a sortable table; click a row for details), remembered per page |
+| `chronicle ui [--open] [--menu-bar]` | Dashboard (also always running at :11524 after install; if it is, `chronicle ui` says so and `--open` opens it). On macOS the one that runs at login also shows [the menu-bar icon](install.md#the-menu-bar-icon); `--menu-bar`/`--no-menu-bar` overrides that. Sessions, Knowledge, Projects and Glossary switch between Cards and List (a sortable table; click a row for details), remembered per page |
 | `chronicle sessions [-p project] [--since 7d]` | List sessions |
 | `chronicle show <id-prefix> [--transcript\|--markdown\|--json]` | Session overview or full conversation |
 | `chronicle search <words>` | Full-text search over transcripts + knowledge (any language, 3+ chars) |

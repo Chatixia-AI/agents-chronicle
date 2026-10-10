@@ -8,12 +8,12 @@ being moved or updated. Needs the `app` extra (pywebview + PyObjC).
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
 import sys
 import threading
-import time
 import types
 import webbrowser
 from pathlib import Path
@@ -124,7 +124,6 @@ class Background:
         self.on_change = on_change
         self.wake = threading.Event()
         self.running = False
-        self.last: float | None = None
         self.error: str | None = None
 
     def start(self) -> None:
@@ -171,58 +170,7 @@ class Background:
             self.error = str(exc)
         finally:
             self.running = False
-            self.last = time.time()
             self.on_change()
-
-    def describe(self) -> str:
-        if self.running:
-            return "Syncing…"
-        if self.error:
-            return f"Last sync failed: {self.error[:60]}"
-        if self.last:
-            return "Last sync " + time.strftime("%H:%M", time.localtime(self.last))
-        return "First sync starts shortly"
-
-
-_TARGET_CLASS = None
-
-
-def _menu_target_class():
-    """NSObject subclass receiving the menu-bar actions (ObjC classes can only be defined once per process)."""
-    global _TARGET_CLASS
-    if _TARGET_CLASS is None:
-        import AppKit
-
-        class ChronicleMenuTarget(AppKit.NSObject):
-            def openWindow_(self, sender):
-                self.app.show_window()
-
-            def openInBrowser_(self, sender):
-                webbrowser.open(self.app.url)
-
-            def syncNow_(self, sender):
-                self.app.bg.sync_now()
-
-            def connectClaude_(self, sender):
-                self.app.in_background(self.app.connect_claude)
-
-            def toggleLoginItem_(self, sender):
-                self.app.in_background(self.app.toggle_login_item)
-
-            def installCLI_(self, sender):
-                self.app.in_background(self.app.install_cli)
-
-            def openDataFolder_(self, sender):
-                subprocess.Popen(["open", str(self.app.cfg.home)])
-
-            def quit_(self, sender):
-                AppKit.NSApp.terminate_(None)
-
-            def menuWillOpen_(self, menu):
-                self.app.update_menu()
-
-        _TARGET_CLASS = ChronicleMenuTarget
-    return _TARGET_CLASS
 
 
 class DesktopApp:
@@ -232,7 +180,8 @@ class DesktopApp:
         self.quitting = False
         self.window = None
         self.url = ""
-        self.items: dict = {}
+        self.menu = None
+        self.server_app = None
         self.styled = False
         self.last_mouse_down = None
         self.mouse_monitor = None
@@ -251,6 +200,7 @@ class DesktopApp:
         if self.frozen:
             write_shim(sys.executable)
         httpd = make_server(self.cfg, any_port=True)
+        self.server_app = httpd.app
         self.url = f"http://127.0.0.1:{httpd.server_address[1]}/"
         threading.Thread(target=httpd.serve_forever, name="chronicle-ui", daemon=True).start()
         log.info("app started (%s), dashboard at %s", sys.executable, self.url)
@@ -420,97 +370,48 @@ class DesktopApp:
 
         AppHelper.callAfter(show)
 
-    def in_background(self, fn) -> None:
-        """Menu actions run on the main thread; anything that may show an alert or wait goes to a thread."""
-        threading.Thread(target=fn, daemon=True).start()
-
     # ------------------------------------------------------------------ menu bar
     def _build_status_item(self) -> None:
+        """The same menu as the login item's (menubar.py), opening pages in this window, plus the app's own items."""
         import AppKit
-
-        target = _menu_target_class().alloc().init()
-        target.app = self
-        menu = AppKit.NSMenu.alloc().init()
-        menu.setAutoenablesItems_(False)
-        menu.setDelegate_(target)
-
-        def add(key, title, action=None, key_equiv=""):
-            item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, action, key_equiv)
-            if action:
-                item.setTarget_(target)
-            else:
-                item.setEnabled_(False)
-            menu.addItem_(item)
-            self.items[key] = item
-
-        add("open", "Open Chronicle", "openWindow:")
-        add("browser", "Open in Browser", "openInBrowser:")
-        menu.addItem_(AppKit.NSMenuItem.separatorItem())
-        add("status", self.bg.describe())
-        add("sync", "Sync Now", "syncNow:")
-        menu.addItem_(AppKit.NSMenuItem.separatorItem())
-        add("connect", "Connect Claude Code…", "connectClaude:")
-        add("login", "Open at Login", "toggleLoginItem:")
-        add("cli", "Install Command-Line Tool", "installCLI:")
-        add("data", "Open Data Folder", "openDataFolder:")
-        menu.addItem_(AppKit.NSMenuItem.separatorItem())
-        add("quit", "Quit Chronicle", "quit:", "q")
-
-        item = AppKit.NSStatusBar.systemStatusBar().statusItemWithLength_(AppKit.NSVariableStatusItemLength)
-        image = AppKit.NSImage.imageWithSystemSymbolName_accessibilityDescription_("books.vertical", "Chronicle")
-        if image is not None:
-            image.setTemplate_(True)
-            item.button().setImage_(image)
-        else:
-            item.button().setTitle_("Chronicle")
-        item.setMenu_(menu)
-        self._status_item, self._menu_target = item, target  # keep references alive
-        self.update_menu()
-
-    def _menu_changed(self) -> None:
-        if self.items:
-            from PyObjCTools import AppHelper
-
-            AppHelper.callAfter(self.update_menu)
-
-    def update_menu(self) -> None:
-        """Main thread only (menuWillOpen: and callAfter)."""
-        import AppKit
+        from PyObjCTools import AppHelper
 
         from .install import hooks_installed
+        from .menubar import Extra, StatusMenu, snapshot
 
-        self.items["status"].setTitle_(self.bg.describe())
-        self.items["sync"].setEnabled_(not self.bg.running)
-        self.items["connect"].setHidden_(bool(hooks_installed(self.cfg).get("SessionEnd")))
-        self.items["login"].setHidden_(not self.frozen)
-        self.items["cli"].setHidden_(not self.frozen)
-        if self.frozen:
-            on = self.login_item_status() == "enabled"
-            self.items["login"].setState_(AppKit.NSControlStateValueOn if on else AppKit.NSControlStateValueOff)
+        self.menu = StatusMenu(
+            refresh=lambda: snapshot(self.server_app, sync_running=self.bg.running, sync_error=self.bg.error),
+            open_page=self.open_page, sync_now=self.bg.sync_now, open_title="Open Chronicle",
+            quit=lambda: AppHelper.callAfter(AppKit.NSApp.terminate_, None),
+            extras=[
+                Extra("browser", "Open in Browser", lambda: webbrowser.open(self.url)),
+                Extra("connect", "Connect Claude Code…", self.connect_claude,
+                      visible=lambda: not hooks_installed(self.cfg).get("SessionEnd")),
+                Extra("login", "Open at Login", self.toggle_login_item, visible=lambda: self.frozen,
+                      checked=lambda: self.login_item_status() == "enabled"),
+                Extra("cli", "Install Command-Line Tool", self.install_cli, visible=lambda: self.frozen),
+                Extra("data", "Open Data Folder", lambda: subprocess.Popen(["open", str(self.cfg.home)])),
+            ])
+        self.menu.install()
+
+    def _menu_changed(self) -> None:
+        if self.menu is not None:
+            self.menu.poke()
+
+    def open_page(self, page: str) -> None:
+        """A dashboard page in the app window ("#/session/<id>"), brought to the front."""
+        try:
+            self.window.evaluate_js(f"location.hash = {json.dumps(page)}")
+        except Exception:
+            log.exception("could not open %s in the window", page)
+        self.show_window()
 
     # ------------------------------------------------------------------ dialogs
     def alert(self, title: str, text: str, buttons: list[str]) -> int:
         """Modal alert from a background thread; returns the index of the button pressed."""
-        import AppKit
-        from PyObjCTools import AppHelper
+        from .menubar import alert
 
-        done, result = threading.Event(), [0]
-
-        def run():
-            try:
-                a = AppKit.NSAlert.alloc().init()
-                a.setMessageText_(title)
-                a.setInformativeText_(text)
-                for b in buttons:
-                    a.addButtonWithTitle_(b)
-                AppKit.NSApp.activateIgnoringOtherApps_(True)
-                result[0] = int(a.runModal()) - AppKit.NSAlertFirstButtonReturn
-            finally:
-                done.set()
-
-        AppHelper.callAfter(run)
-        done.wait()
-        return result[0]
+        return alert(title, text, buttons)
 
     # ------------------------------------------------------------------ setup
     def onboard(self) -> None:
