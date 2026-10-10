@@ -116,7 +116,8 @@ uv run --only-group docs mkdocs build --strict     # CI と同じ：リンクや
 
 `./dev.sh` は、チェックアウトのコードでダッシュボードを起動します。データは `~/.chronicle-sandbox/dev-sh` にコピーした
 アーカイブを使うため、自分の `~/.claude-chronicle` やインストール済みの Chronicle には触れません。設定は、記録・分析・共有を
-一切しないものです。`--app` で macOS アプリのウィンドウを開き、`--demo` で[デモデータ](#デモデータ)を使い、`--fresh` で
+一切しないものです。`--app` で macOS アプリのウィンドウを開き、`--menu-bar` でブラウザのダッシュボードに[メニューバーアイコン](install.md#メニューバーアイコン)を
+加え（ログイン項目と同じ表示）、`--demo` で[デモデータ](#デモデータ)を使い、`--fresh` で
 アーカイブをコピーし直し、`--tree ../agents-chronicle-<topic>` でほかのワークツリーのコードを動かします。サーバーは起動時に
 一度だけ web のファイルを読むため、`app.css` や `app.js` を編集したら再起動してください。
 

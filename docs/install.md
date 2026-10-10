@@ -101,20 +101,51 @@ shows model, context and limits, and Claude Code then hides most of its footer k
 session's numbers into the database (the session page and **Status**). `chronicle uninstall` puts your own status
 line back.
 
+Optional (macOS): `chronicle install --menu-bar` puts Chronicle's icon in the menu bar while the dashboard runs, with
+its status, a search and your recent sessions a click away. It needs the `app` extra
+([The menu-bar icon](#the-menu-bar-icon)).
+
 Remove everything with `chronicle uninstall` (data is kept; `--purge` deletes it too). It also restores your own
 status line if `--statusline` wrapped it.
 
 To use the desktop app from a command-line install, add the `app` extra and run `chronicle app`:
-`uv tool install --python 3.13 'agents-chronicle[app]'`. If you switch to the app for good, `chronicle uninstall`
-first and let the app connect Claude Code, so the launchd agents do not run alongside it (harmless, but redundant).
+`uv tool install --force --python 3.13 'agents-chronicle[app]'` (list any other extras you have in the brackets
+too). If you switch to the app for good, `chronicle uninstall` first and let the app connect Claude Code, so the
+launchd agents do not run alongside it (harmless, but redundant).
 
 ## The menu-bar icon
 
-On macOS, Chronicle's mark (the stack of pages from its app icon) can sit in the menu bar. The app always shows it.
-A command-line install shows it only if you turn it on: `chronicle install` asks once (No unless you say yes), and
-`chronicle install --menu-bar` turns it on without asking. It needs the dashboard running at login and the `app`
-extra (`uv tool install --force --python 3.13 'agents-chronicle[app]'`, then `chronicle install --menu-bar` again,
-which restarts the dashboard). The icon stays plain while there is nothing to report:
+On macOS, Chronicle's mark (the stack of pages from its app icon) can sit in the menu bar. The desktop app always
+shows it. A command-line install shows it only if you turn it on, and it needs two things there: the dashboard
+running at login (`chronicle install` sets that up unless you pass `--no-ui`) and the `app` extra (PyObjC).
+
+To turn it on:
+
+1. Add the `app` extra. `uv tool install --force` installs exactly the extras you list, so name the ones you already
+   have too (`uv tool list --show-extras` shows them), e.g. `'agents-chronicle[app,team]'`:
+
+    ```sh
+    uv tool install --force --python 3.13 'agents-chronicle[app]'
+    ```
+
+2. Turn it on, which restarts the dashboard with the icon:
+
+    ```sh
+    chronicle install --menu-bar
+    ```
+
+    That runs the usual setup again (agents already connected are updated without asking). To skip it, set the
+    option and restart the dashboard yourself:
+
+    ```sh
+    chronicle config set server.menu_bar true
+    launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui
+    ```
+
+On a first install, `chronicle install` asks *Show Chronicle's icon in the menu bar?* once instead, and the answer is
+No unless you type `y`. Turned on without the `app` extra, it says so and prints the command for step 1.
+
+The icon stays plain while there is nothing to report:
 
 | Icon | When |
 | --- | --- |
@@ -144,7 +175,8 @@ sessions are still recorded.
 
 The command-line install shows the icon only for the dashboard that runs at login, so a second `chronicle ui` in a
 terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off again, run
-`chronicle install --no-menu-bar` (or set `[server] menu_bar = false` and restart the dashboard).
+`chronicle install --no-menu-bar`, or `chronicle config set server.menu_bar false` and the same `launchctl kickstart`
+line.
 
 ## Updating
 
