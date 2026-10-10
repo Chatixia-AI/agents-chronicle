@@ -464,7 +464,7 @@ def to_excalidraw(d: dict, title: str = "") -> dict:
                roundness={"type": 3} if kind in ("interface", "store") else None)
             t = text(lx + 44, ly + 1, _KIND_NAME[kind], 15, color=_MUTED)
             lx += 44 + t["width"] + 32
-    return {"type": "excalidraw", "version": 2, "source": "https://chronicle.chatixia.net", "elements": els,
+    return {"type": "excalidraw", "version": 2, "source": "https://interlatch.com", "elements": els,
             "appState": {"gridSize": None, "viewBackgroundColor": "#ffffff"}, "files": {}}
 
 

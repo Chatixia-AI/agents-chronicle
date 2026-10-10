@@ -1,10 +1,13 @@
 # VS Code extension
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
 The Chronicle extension adds two sections to VS Code's Explorer that list the coding-agent sessions behind your
 files. *"Why is this code like this?"* is one click away: the session that wrote it, its summary and outcome, and its
 full transcript in the dashboard.
+
+The extension still has its Chronicle name: it works with Interlatch as it is, and its sections and settings keep
+the `Chronicle` and `chronicle.*` names.
 
 - **Chronicle: This File** shows the sessions that read or changed the file you have open, newest first. It follows
   the active editor, and every VS Code window shows its own file.
@@ -21,7 +24,7 @@ narrow sidebar: the date and time, the agent and project, the branch, what it di
 `edited 2×` or `read 4×`), the outcome and the summary. **Open in Chronicle**, at the end of the details or as the
 button on the row, opens the session in the dashboard.
 
-It reads from the dashboard you already run (`chronicle ui`, or the background service `chronicle install` sets up),
+It reads from the dashboard you already run (`interlatch ui`, or the background service `interlatch install` sets up),
 over `http://127.0.0.1:11524` (or `:8765`, where older installs run it). It sends nothing anywhere else and needs no account.
 
 ## Install
@@ -34,14 +37,14 @@ npx @vscode/vsce package          # writes chronicle-sessions-0.2.0.vsix
 code --install-extension chronicle-sessions-0.2.0.vsix
 ```
 
-It needs a Chronicle newer than 0.6.1, which adds the `/api/file` and `/api/files` endpoints the lists read. With an older one,
+It needs Interlatch, or a Chronicle newer than 0.6.1, which adds the `/api/file` and `/api/files` endpoints the lists read. With an older one,
 the lists say to update.
 
 ## Settings
 
 | Setting | Default | What it does |
 | --- | --- | --- |
-| `chronicle.url` | empty: `http://127.0.0.1:11524`, else `:8765` | Where the dashboard runs. Change it if you set `[server] port` in Chronicle's [configuration](configuration.md). |
+| `chronicle.url` | empty: `http://127.0.0.1:11524`, else `:8765` | Where the dashboard runs. Change it if you set `[server] port` in Interlatch's [configuration](configuration.md). |
 | `chronicle.includeReads` | `true` | Also list sessions, and files, that were only read. Turn it off to see only what sessions changed. |
 | `chronicle.showIgnoredFiles` | `false` | Also show files git ignores (screenshots, build output, caches) in **Chronicle: Files in Workspace**. |
 

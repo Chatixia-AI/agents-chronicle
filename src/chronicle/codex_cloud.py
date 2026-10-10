@@ -2,7 +2,7 @@
 
 `codex cloud list --json` gives each task's title, environment (the repository), status, change counts and last
 update; `codex cloud diff <id>` gives its diff. The CLI does not give a task's conversation, so a cloud task becomes
-a session without prompts: the title, the files it changed and the diff, with a link to the task. Chronicle never
+a session without prompts: the title, the files it changed and the diff, with a link to the task. Interlatch never
 reads Codex's login state itself; the CLI does the talking.
 """
 
@@ -10,12 +10,12 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 import re
 import subprocess
 import time
 
 from .copilot_parser import _Builder, finish_session
+from .hooks import internal_env
 from .parser import FileStat, ParsedSession
 from .util import safe_text
 
@@ -34,7 +34,7 @@ class CloudError(Exception):
 def _run(binary: str, *args: str, timeout: float = 120) -> str:
     try:
         proc = subprocess.run([binary, "cloud", *args], capture_output=True, text=True, timeout=timeout,
-                              stdin=subprocess.DEVNULL, env={**os.environ, "CHRONICLE_INTERNAL": "1"})
+                              stdin=subprocess.DEVNULL, env=internal_env())
     except subprocess.TimeoutExpired as exc:
         raise CloudError(f"codex cloud {args[0]} timed out") from exc
     except OSError as exc:
@@ -88,7 +88,7 @@ def diff_files(diff: str | None) -> dict[str, tuple[int, int]]:
 
 
 def _ms(ts: str | None) -> str | None:
-    """Codex Cloud times have nanoseconds; the rest of Chronicle stores milliseconds ("…:28.652Z")."""
+    """Codex Cloud times have nanoseconds; the rest of Interlatch stores milliseconds ("…:28.652Z")."""
     return re.sub(r"(\.\d{3})\d+", r"\1", ts) if ts else None
 
 

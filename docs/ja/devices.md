@@ -1,8 +1,8 @@
 # スマートフォンとほかのコンピューター
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-Chronicle は 1 台のコンピューターにアーカイブを置きます。そのダッシュボードをスマートフォンで開いたり、ほかのコンピューターの
+Interlatch は 1 台のコンピューターにアーカイブを置きます。そのダッシュボードをスマートフォンで開いたり、ほかのコンピューターの
 セッションも同じアーカイブにまとめたりできます。どちらも [Tailscale](https://tailscale.com)（自分のデバイスどうしの
 プライベートなネットワーク）を通るので、インターネットには何も公開されません。
 
@@ -21,7 +21,7 @@ Tailscale の代わりに社内ネットワークを使うこともできます�
 2. ハブで次を実行します。
 
    ```bash
-   chronicle tailnet on
+   interlatch tailnet on
    ```
 
    初回は、tailnet で Serve と HTTPS 証明書を有効にするためのリンクを Tailscale が表示することがあります。開いて有効にし、
@@ -34,25 +34,25 @@ Tailscale の代わりに社内ネットワークを使うこともできます�
 
 仕組み：Tailscale Serve がこの HTTPS アドレスをダッシュボードに転送します。ダッシュボード自体は引き続き 127.0.0.1 だけで
 待ち受けます。ダッシュボードはこの名前（`[server] allowed_hosts`）に応答し、Serve が伝えるあなたの Tailscale ログイン
-（`[server] allowed_users`）だけを通します。`chronicle tailnet on --anyone` で、Tailscale ログインを持つ tailnet の全員を通します。
+（`[server] allowed_users`）だけを通します。`interlatch tailnet on --anyone` で、Tailscale ログインを持つ tailnet の全員を通します。
 タグ付きのデバイスや Tailscale Funnel からの訪問者には Serve がログインを伝えないため、ハブに利用者ができてサインインするまで
-入れません。`chronicle tailnet status`
-で設定を確認し、`chronicle tailnet off` で tailnet から外します。ハブではダッシュボードが動いている必要があります。
-`chronicle install` がバックグラウンドで動かし続けます。
+入れません。`interlatch tailnet status`
+で設定を確認し、`interlatch tailnet off` で tailnet から外します。ハブではダッシュボードが動いている必要があります。
+`interlatch install` がバックグラウンドで動かし続けます。
 
 ## ほかのコンピューター
 
-ハブで `chronicle tailnet on` のあと、次を実行します。
+ハブで `interlatch tailnet on` のあと、次を実行します。
 
 ```bash
-chronicle hub enable
+interlatch hub enable
 ```
 
-ハブのアドレスとトークンの入ったコマンドが表示されます。ほかのコンピューターに [Chronicle をインストール](install.md)し、
+ハブのアドレスとトークンの入ったコマンドが表示されます。ほかのコンピューターに [Interlatch をインストール](install.md)し、
 そこでそのコマンドを実行します。
 
 ```bash
-chronicle hub join https://pc.tail1234.ts.net --token …
+interlatch hub join https://pc.tail1234.ts.net --token …
 ```
 
 このトークンはハブの共有トークンで、自分のコンピューターどうしならこれで十分です。ほかの人のコンピューターは、代わりに
@@ -60,12 +60,12 @@ chronicle hub join https://pc.tail1234.ts.net --token …
 
 そのコンピューターにある Claude Code と Codex のセッションがすべてハブに送られ、ハブが記録して分析します。以後は次のとおりです。
 
-- **新しいセッションはハブへ送られます。** そのコンピューターで `chronicle install` がフックとバックグラウンド同期を設定していれば、
-  セッションが終わるたび（SessionEnd フック）と 15 分ごと（バックグラウンド同期）に送ります。`chronicle push` ですぐに送れます。
+- **新しいセッションはハブへ送られます。** そのコンピューターで `interlatch install` がフックとバックグラウンド同期を設定していれば、
+  セッションが終わるたび（SessionEnd フック）と 15 分ごと（バックグラウンド同期）に送ります。`interlatch push` ですぐに送れます。
 - **ハブは各セッションをどこで実行したか知っています。** セッションのページにどのコンピューターのものかが表示され、
   **Team › Computers** にコンピューターと、その持ち主、それぞれのセッション数、最後に送ってきた時刻が並びます（ターミナルでは
-  `chronicle hub status`）。
-- **分析はハブだけで行います。** そのコンピューターが自分の Chronicle ですでに分析していたセッションは、参加するときにその結果を
+  `interlatch hub status`）。
+- **分析はハブだけで行います。** そのコンピューターが自分の Interlatch ですでに分析していたセッションは、参加するときにその結果を
   ハブに引き渡すので、ハブがもう一度費用をかけて分析することはありません。
 - **そのコンピューター自身のダッシュボードと MCP ツールは更新されなくなります。** それまでの内容は残ります。代わりにハブの
   ダッシュボードを開いてください（**Settings › Devices** にリンクがあります）。
@@ -81,15 +81,15 @@ chronicle hub join https://pc.tail1234.ts.net --token …
    セッションをハブのプロジェクトに入れたいフォルダー向けです。そのコンピューターで次を実行します。
 
    ```bash
-   chronicle hub add-folder ~/work/client-notes --project demo-app
+   interlatch hub add-folder ~/work/client-notes --project demo-app
    ```
 
-   `--project` にはハブのプロジェクト名かパスを指定します（`chronicle hub folders --list` で一覧できます）。まだ誰も
+   `--project` にはハブのプロジェクト名かパスを指定します（`interlatch hub folders --list` で一覧できます）。まだ誰も
    送っていないプロジェクトは、先にハブで用意しておけます（[見えるプロジェクトを人ごとに決める](#見えるプロジェクトを人ごとに決める)）。
    フォルダーとその下のすべてのセッションがそのプロジェクトに入ります。ハブにすでにあるセッションも、ナレッジごと移り、
    両方のプロジェクトのナレッジベースが作り直されます。より具体的な指定が優先されるので、フォルダーの中にあってもハブが
    git リモートを知っているリポジトリはそのリモートに従います。ハブが別のプロジェクトに入れているリポジトリの中のフォルダーは追加できません
-   （1 つのリポジトリは 1 つのプロジェクトに属します）。`chronicle hub folders` でどこに入るかを確認できます。
+   （1 つのリポジトリは 1 つのプロジェクトに属します）。`interlatch hub folders` でどこに入るかを確認できます。
    ダッシュボードの **Settings › Devices › Projects on the hub** でも同じことができ、**Join a project** でハブの
    プロジェクトとこのコンピューターのフォルダーを選びます。間違えて追加したフォルダーを外すには[やめるとき](#やめるとき)を
    見てください。ハブの **Team › Computers** に、各コンピューターが追加したフォルダーが表示されます。
@@ -133,22 +133,22 @@ chronicle hub join https://pc.tail1234.ts.net --token …
 - `sources.exclude_projects` にあるプロジェクトは送りません。
 - GitHub Copilot、IBM Bob、Google Antigravity、Codex Cloud、チャットのエクスポートは送りません。これらはハブで接続または取り込みます。
 - ファイルは HTTPS（tailnet 内、またはハブの前に置いた HTTPS のプロキシ経由）で圧縮して送られ、到着時に SHA-256 で照合
-  されます。送るのはハブにないファイルか、ハブのものが古いファイルだけです。各コンピューターは `~/.claude-chronicle/hub-token`
+  されます。送るのはハブにないファイルか、ハブのものが古いファイルだけです。各コンピューターは `~/.interlatch/hub-token`
   にあるトークンで認証します。このファイルはあなたのユーザーだけが読めます。トークンはハブの共有トークンか、招待で参加した
-  場合はそのコンピューター専用のものです。`chronicle hub enable --rotate` で共有トークンを作り直すと、それを使っている
+  場合はそのコンピューター専用のものです。`interlatch hub enable --rotate` で共有トークンを作り直すと、それを使っている
   コンピューターは参加し直す必要があります。
-- ハブは受け取ったものを `~/.claude-chronicle/machines/<コンピューター>/` に置き、自分のものと同じようにアーカイブします。
+- ハブは受け取ったものを `~/.interlatch/machines/<コンピューター>/` に置き、自分のものと同じようにアーカイブします。
 
 ### ナレッジだけを共有する
 
 トランスクリプトを手元に残したまま、ハブのナレッジに加わることもできます。`--share knowledge` を付けて参加します。
 
 ```bash
-chronicle hub join https://pc.tail1234.ts.net --token … --share knowledge
+interlatch hub join https://pc.tail1234.ts.net --token … --share knowledge
 ```
 
-（参加済みのコンピューターでは `chronicle config set hub.share knowledge`、またはそのダッシュボードの **Settings › Devices ›
-What this computer sends**）。そのコンピューターは単独の Chronicle と同じように
+（参加済みのコンピューターでは `interlatch config set hub.share knowledge`、またはそのダッシュボードの **Settings › Devices ›
+What this computer sends**）。そのコンピューターは単独の Interlatch と同じように
 動きます。自分のセッションを記録し、自分の Claude Code または Codex のログインで分析し、ダッシュボードと MCP ツールも更新され
 続けます。分析のたびにハブへ送るのは次のものだけです。
 
@@ -156,12 +156,12 @@ What this computer sends**）。そのコンピューターは単独の Chronicl
 - 分析結果：タイトル、要約、結果、ハイライト、うまくいかなかったこと
 - そのセッションから得た、プロジェクトについてのナレッジ
 
-送るのは、ハブがいずれかのプロジェクトに入れるセッションだけです。`chronicle hub add-folder` で追加したフォルダーのセッションと、
+送るのは、ハブがいずれかのプロジェクトに入れるセッションだけです。`interlatch hub add-folder` で追加したフォルダーのセッションと、
 ハブがすでにプロジェクトに入れている git リモートのリポジトリのセッションです（[同じプロジェクト、別のフォルダー](#同じプロジェクト別のフォルダー)）。
 それ以外のフォルダーのセッションはコンピューターに残り、送信の結果には「kept here」として数えられます。Docker やサーバー上の
 ハブのように、ハブ自身がそのリポジトリでセッションを実行したことがなければ、ハブはその git リモートを知りません。その場合は
 プロジェクトごとに自分のフォルダーを追加してください。すべてのフォルダーのセッションを共有するには、`--all-folders` を付けて
-参加するか、`chronicle config set hub.all_folders true` を実行するか、**Settings › Devices › What this computer sends** で
+参加するか、`interlatch config set hub.all_folders true` を実行するか、**Settings › Devices › What this computer sends** で
 **すべてのフォルダー** を選びます。
 
 プロンプト、シェルのコマンド、ファイルのパス、トランスクリプト、あなた自身についてのナレッジ（全体のものと好み）は
@@ -181,14 +181,14 @@ What this computer sends**）。そのコンピューターは単独の Chronicl
 誰のコンピューターであってもトランスクリプトをハブに置かないなら、ハブがナレッジだけを受け付けるようにします。ハブで：
 
 ```bash
-chronicle config set hub.accept knowledge
+interlatch config set hub.accept knowledge
 ```
 
 または、管理者が **Team › Hub settings** の **ナレッジのみ** をオンにします。するとハブは、共有トークンでも本人のトークンでも、
-トランスクリプトを送るコンピューターを受け付けず、実行すべきこと（`chronicle config set hub.share knowledge` のあと
-`chronicle push`）を伝えます。**Team › Computers** ではそのようなコンピューターに **トランスクリプトを送信：受け付けていません**
-と表示され、`chronicle hub` でも同じように示されます。招待で参加するコンピューターは、自動でナレッジのみの共有になります。
-ハブにすでにあるトランスクリプトは残ります。完全に消すには `chronicle forget` を使います。`"everything"` と `"knowledge"`
+トランスクリプトを送るコンピューターを受け付けず、実行すべきこと（`interlatch config set hub.share knowledge` のあと
+`interlatch push`）を伝えます。**Team › Computers** ではそのようなコンピューターに **トランスクリプトを送信：受け付けていません**
+と表示され、`interlatch hub` でも同じように示されます。招待で参加するコンピューターは、自動でナレッジのみの共有になります。
+ハブにすでにあるトランスクリプトは残ります。完全に消すには `interlatch forget` を使います。`"everything"` と `"knowledge"`
 以外の値は `"knowledge"` として扱うので、打ち間違えてもトランスクリプトが入ることはありません。誰が変更したかは監査ログに
 残ります。
 
@@ -198,11 +198,11 @@ chronicle config set hub.accept knowledge
 返せます。ハブで次を実行します。
 
 ```bash
-uv tool install 'agents-chronicle[team]'    # Postgres のドライバー。必要なのはハブだけ
+uv tool install 'interlatch[team]'    # Postgres のドライバー。必要なのはハブだけ
 # PGHOST、PGPORT、PGDATABASE、PGUSER、PGPASSWORD（と PGSSLMODE。既定は require）を 1 行ずつ：
-$EDITOR ~/.claude-chronicle/team-store.env && chmod 600 ~/.claude-chronicle/team-store.env
-chronicle config set hub.store postgres
-chronicle hub store                          # 接続し、テーブルを用意して、中身を表示します
+$EDITOR ~/.interlatch/team-store.env && chmod 600 ~/.interlatch/team-store.env
+interlatch config set hub.store postgres
+interlatch hub store                          # 接続し、テーブルを用意して、中身を表示します
 ```
 
 そのあと、セッションを受け取るダッシュボードを再起動します。ドライバーを入れたあとは、ハブ自身で **Team › Team store** を
@@ -217,13 +217,13 @@ chronicle hub store                          # 接続し、テーブルを用意
   同じナレッジ（種類とタイトルが同じもの）が届くと一つの項目になり、どのセッションが述べたかを覚えています。
 - **チームメイトのナレッジが戻ってきます。** ナレッジを共有しているコンピューターは、共有するたびに、クローンを持っている
   リポジトリ、セッションを共有したプロジェクト、フォルダーを追加したプロジェクトについて、チームメイトのナレッジを受け取り
-  ます。共有するのは分析のたび（セッションが終わったとき、`chronicle install` のバックグラウンドエージェントがあれば
-  15 分ごと）と、`chronicle push` または **Settings › Devices** の **Share now** を使ったときです。自分のデータベースに読み取り専用で、そのリポジトリの自分のフォルダーの下に保存されます。MCP ツールはそれも
+  ます。共有するのは分析のたび（セッションが終わったとき、`interlatch install` のバックグラウンドエージェントがあれば
+  15 分ごと）と、`interlatch push` または **Settings › Devices** の **Share now** を使ったときです。自分のデータベースに読み取り専用で、そのリポジトリの自分のフォルダーの下に保存されます。MCP ツールはそれも
   （チームメイトのものと示して）答えに使い、セッション開始時のメモは **From teammates' sessions** の下に並べます。
   ダッシュボードでも、プロジェクトのページと **All knowledge** に、それを述べたセッションのコンピューター名を **from** で
   示して表示します。そこで取得元に **From teammates** を選ぶとそれだけが並び、**Settings › Devices** の **Read them** で
   その一覧が開きます。自分が述べたナレッジは返ってきません。却下したものは却下されたまま残り、チームから消えたものは消えます。持っている数は
-  `chronicle hub status` とそのコンピューターの **Settings › Devices** で分かり、そこの **Share now** ですぐに
+  `interlatch hub status` とそのコンピューターの **Settings › Devices** で分かり、そこの **Share now** ですぐに
   プッシュできます。
 - **データベースにつなぐのはハブだけです。** 各コンピューターはそのアドレスもパスワードも知らないので、ハブだけが届く
   ネットワークに置けます。テーブルはスキーマ `team` にあり、プッシュとプルごとの監査ログ（件数のみ）も残ります。更新の
@@ -240,16 +240,16 @@ Projects on the hub** で、プロジェクトごとに次のボタンがあり�
 
 - **Leave**：このコンピューターはそこへのセッションの共有と、そのプロジェクトのチームメイトのナレッジの受け取りを
   やめます。すでに共有したものはチームのためにハブのそのプロジェクトに残ります。**Rejoin** で元に戻せます。コマンドでは
-  `chronicle hub leave --project <name>` と `chronicle hub rejoin --project <name>` です。コンピューターの
+  `interlatch hub leave --project <name>` と `interlatch hub rejoin --project <name>` です。コンピューターの
   [設定](configuration.md#hub)の `[hub] left` に残ります。ハブの **Team › Projects** には、抜けたコンピューターが示されます。
 - フォルダーの横の **Remove**：間違ったプロジェクトに追加したフォルダー用です。そのセッションは送られなくなり、
   このコンピューターがそのフォルダーから共有したものを、ハブがナレッジごとデータベースとチームストアから削除します。
-  `chronicle hub purge` と違い、あとでそのフォルダーを正しいプロジェクトに追加すれば、ハブは再び受け取ります。コマンドでは
-  `chronicle hub remove-folder <folder>` です。トランスクリプトを送るコンピューターでは、ハブにトランスクリプトが残り、
+  `interlatch hub purge` と違い、あとでそのフォルダーを正しいプロジェクトに追加すれば、ハブは再び受け取ります。コマンドでは
+  `interlatch hub remove-folder <folder>` です。トランスクリプトを送るコンピューターでは、ハブにトランスクリプトが残り、
   ハブは git リモートか元のフォルダーで振り分け直します。
 
-`chronicle hub leave`、または **Settings › Devices** の **Leave the hub…** で、そのコンピューターは再び自分でセッションを
-記録・分析します。ハブは受け取ったものを残します。再び参加するには新しい招待が必要です。ハブで `chronicle hub disable` を
+`interlatch hub leave`、または **Settings › Devices** の **Leave the hub…** で、そのコンピューターは再び自分でセッションを
+記録・分析します。ハブは受け取ったものを残します。再び参加するには新しい招待が必要です。ハブで `interlatch hub disable` を
 実行すると、セッションを受け付けなくなります。
 
 ## 利用者とロール
@@ -265,18 +265,18 @@ Projects on the hub** で、プロジェクトごとに次のボタンがあり�
 
 メンバーと閲覧のみの人に見えるのは、与えられたプロジェクト（すべてか一部）です（[見えるプロジェクトを人ごとに決める](#見えるプロジェクトを人ごとに決める)）。
 管理者には常にすべてのプロジェクトが見えます。ハブのダッシュボードで何かを変えられるのは管理者だけです。設定、Sync、
-分析、ピン留めや非表示も管理者だけです。メンバー自身の Chronicle はこれまでどおり使えます。
+分析、ピン留めや非表示も管理者だけです。メンバー自身の Interlatch はこれまでどおり使えます。
 
 最初の利用者を追加するまで、コンピューターは共有トークンで送ります。ハブのダッシュボードにはサインインがないため、開けるのは
-ハブ自身と、`chronicle tailnet on` が通す Tailscale ログインだけです（[スマートフォン](#スマートフォン)）。それ以外の人は、
+ハブ自身と、`interlatch tailnet on` が通す Tailscale ログインだけです（[スマートフォン](#スマートフォン)）。それ以外の人は、
 ほかのデバイスからでもリバースプロキシ経由でも入れず、最初の管理者の追加方法が表示されます。利用者がいるハブでは、ほかのデバイスから
 ダッシュボードを開く人は全員サインインします。Tailscale 経由でも同じです。
 
 ### ハブのコンピューターにいる人は常に管理者
 
-ハブのコンピューターそのものにいる人は、常に管理者です。そこで実行する `chronicle hub` コマンドも、そのコンピューターで
+ハブのコンピューターそのものにいる人は、常に管理者です。そこで実行する `interlatch hub` コマンドも、そのコンピューターで
 開いたダッシュボードも管理者として動きます。最初の利用者はこうして追加します。管理者がいなくなったハブを元に戻すのも同じで、
-ハブで `chronicle hub role ana@example.com admin` を実行します。管理者ロールの人は、ハブの最後の管理者のロールを下げたり
+ハブで `interlatch hub role ana@example.com admin` を実行します。管理者ロールの人は、ハブの最後の管理者のロールを下げたり
 外したりできません。ハブのコンピューターでは可能です。
 
 ### 招待する
@@ -284,7 +284,7 @@ Projects on the hub** で、プロジェクトごとに次のボタンがあり�
 ハブで次を実行します。
 
 ```bash
-chronicle hub invite "Ana Lima" --email ana@example.com --role member --all-projects
+interlatch hub invite "Ana Lima" --email ana@example.com --role member --all-projects
 ```
 
 ハブのダッシュボードの **Team › People › Invite someone** でも招待できます。`--role` を省くと `member` に
@@ -294,45 +294,45 @@ chronicle hub invite "Ana Lima" --email ana@example.com --role member --all-proj
 どちらもなければ新しい人は招待できません。管理者には常にすべてのプロジェクトが見えます。表示されるのは次のものです。
 
 - コード（例：`K7PQ-M2XD-9HNA`）
-- Ana のコンピューターで実行するコマンド：`chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge`
-- ブラウザーで開くリンク：`https://chronicle.example.internal/signin?code=K7PQ-M2XD-9HNA`
+- Ana のコンピューターで実行するコマンド：`interlatch hub join https://interlatch.example.internal --code K7PQ-M2XD-9HNA --share knowledge`
+- ブラウザーで開くリンク：`https://interlatch.example.internal/signin?code=K7PQ-M2XD-9HNA`
 - コードの有効期限
 
 コードは 1 回だけ、7 日間使えます。ハブはメールを送らないので、チャットなどで渡してください。ハブはコードのハッシュしか
 残さないため、コードが表示されるのは一度だけです。なくしたときや期限が切れたときは、同じメールアドレスでもう一度
-`chronicle hub invite` を実行するか、その人の横の **New invite** で作り直します。1 つのコードで参加できるコンピューター、
+`interlatch hub invite` を実行するか、その人の横の **New invite** で作り直します。1 つのコードで参加できるコンピューター、
 またはサインインできるブラウザーは 1 つだけなので、ノートパソコンとスマートフォンを使う人には 2 つ必要です。コードを
 入力するとき、大文字・小文字とハイフンは区別しません。
 
-コマンドとリンクにはハブのアドレス `[hub] address` が入ります。これは `chronicle hub enable --url <アドレス>` で設定します。
-`chronicle hub people` で全員のロール、見えるプロジェクト、コンピューターを一覧できます。
+コマンドとリンクにはハブのアドレス `[hub] address` が入ります。これは `interlatch hub enable --url <アドレス>` で設定します。
+`interlatch hub people` で全員のロール、見えるプロジェクト、コンピューターを一覧できます。
 
 ### コンピューターを参加させる
 
-その人のコンピューターに [Chronicle をインストール](install.md)し、次を実行します。その人に送る手順書として
+その人のコンピューターに [Interlatch をインストール](install.md)し、次を実行します。その人に送る手順書として
 [チームのハブに参加する](join-a-hub.md)があります。
 
 ```bash
-chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge
+interlatch hub join https://interlatch.example.internal --code K7PQ-M2XD-9HNA --share knowledge
 ```
 
-ハブはコードと引き換えに、その人のそのコンピューター専用のトークンを渡します。トークンは `~/.claude-chronicle/hub-token`
+ハブはコードと引き換えに、その人のそのコンピューター専用のトークンを渡します。トークンは `~/.interlatch/hub-token`
 に保存され、そのコンピューターからしか使えません。以後、そのコンピューターはほかのコンピューターと同じようにセッションを
 送ります（[ほかのコンピューター](#ほかのコンピューター)）。`--share knowledge` を付けるとトランスクリプトは手元に残ります
 （[ナレッジだけを共有する](#ナレッジだけを共有する)）。付けなければすべて送ります。同じ人の新しいコードで参加し直すと、そのコンピューターの
 古いトークンは置き換わります。別の人として参加したままのコンピューターに、ほかの人のコードは使えません（招待でコンピューターを
 乗っ取れないようにするためです）。先に管理者がその横の **Revoke** を押してから（[利用者を外す](#利用者を外す)）、新しいコードで参加します。
 
-ハブがすでに知っているコンピューター（共有トークンで送ってきたもの）は、そのコンピューター自身からしか参加できません。Chronicle は
-`~/.claude-chronicle/machine-key` に鍵を保存し、ハブはそのコンピューターが最初にあいさつしたときにそれを記録します。`hub join --code`
+ハブがすでに知っているコンピューター（共有トークンで送ってきたもの）は、そのコンピューター自身からしか参加できません。Interlatch は
+`~/.interlatch/machine-key` に鍵を保存し、ハブはそのコンピューターが最初にあいさつしたときにそれを記録します。`hub join --code`
 はその鍵を示します（共有トークンをまだ持っていれば、先にそれであいさつします）。ほかの人の招待をそのコンピューターの ID で使っても
-拒否されるので、コンピューターとそのセッションを横取りできません。鍵を示せないコンピューター（最後に古い Chronicle で送り、今は
-共有トークンがオフ）には、管理者がそのコンピューター専用の招待を作ります：`chronicle hub invite <名前> --computer <名前または ID>`。
+拒否されるので、コンピューターとそのセッションを横取りできません。鍵を示せないコンピューター（最後に古い Interlatch で送り、今は
+共有トークンがオフ）には、管理者がそのコンピューター専用の招待を作ります：`interlatch hub invite <名前> --computer <名前または ID>`。
 名前は **チーム › コンピューター** に出ているもの、ID は拒否された参加が表示したものです。そのコードはそのコンピューターでしか使えません。
 
 ### ハブのダッシュボードを開く
 
-- **自分の Chronicle から。** 参加したコンピューターで **Settings › Devices › Open the hub's dashboard** を押すと、ハブから
+- **自分の Interlatch から。** 参加したコンピューターで **Settings › Devices › Open the hub's dashboard** を押すと、ハブから
   5 分間有効なサインインリンクを受け取り、ブラウザーで開きます。パスワードはありません。
 - **招待リンクで。** `…/signin?code=…` を開くと、そのブラウザーがサインインします。ハブのサインイン画面にコードを貼り付けても
   同じです。スマートフォンや、ハブに参加したコンピューターを持たない人はこちらを使います。
@@ -353,7 +353,7 @@ chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --sh
 自分のプロジェクトだけが表示されます。
 
 **新着。** ほかのコンピューターがハブにまだないセッションや教訓を共有したとき、またはコンピューターが参加したとき、
-**チームの概要** のアイコンに件数が付き、ブラウザーのタブにも出ます（`(3) Team overview — Chronicle`）。ダッシュボードを
+**チームの概要** のアイコンに件数が付き、ブラウザーのタブにも出ます（`(3) Team overview — Interlatch`）。ダッシュボードを
 開いていれば、届いた内容を知らせます（*AI-BPO-Resona に Yuma から新着: 2 セッション, 4 件の教訓*）。チームの概要を開くと、
 前回からの新着が並び、そのプロジェクトのセッションと教訓に **+2** のように付き、件数は消えます。続きがあって送り直された
 セッションは新着になりません。新しい分析で見つかった教訓は新着になります。何を見たかは人ごとにハブに記録されるので、
@@ -364,7 +364,7 @@ chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --sh
 **Hub settings**（ハブの名前とアドレス、**ナレッジのみ**、ナレッジベースを書くモデル、更新、バックアップ）です。
 ハブのダッシュボードは、自分のダッシュボードと取り違えないよう、どのページでもハブであることを示します。上端の緑の帯に
 ハブの名前、アドレス、ハブの種類が、ステータスバーに **Hub** の行が表示され、全体が緑がかった色になります。名前は、設定
-しなければハブのコンピューターの名前です。ハブで `chronicle config set hub.name "Resona team"` と実行すると設定できます。
+しなければハブのコンピューターの名前です。ハブで `interlatch config set hub.name "Resona team"` と実行すると設定できます。
 
 **専用のハブ**（`[hub] dedicated = true`。[Docker のイメージ](docker.md)が設定します）は、自分のセッションを持たない
 チームのためのサーバーです。そのダッシュボードはチームの Home から始まり、個人のコンピューターにだけ必要なものを省きます。
@@ -393,33 +393,33 @@ Shared projects の代わりに **Projects** があり、管理者はどのブ�
 置いていて、Aki と Ben には Resona だけを見せたいとします。ハブで次を実行します。
 
 ```bash
-chronicle hub project add ~/Projects/Work/Resona
-chronicle hub invite Aki --email aki@example.com --project Resona
-chronicle hub invite Ben --email ben@example.com --project Resona
+interlatch hub project add ~/Projects/Work/Resona
+interlatch hub invite Aki --email aki@example.com --project Resona
+interlatch hub invite Ben --email ben@example.com --project Resona
 ```
 
 Aki のコンピューターで次を実行します（Ben のコンピューターでも、Ben のコードで同じようにします）。
 
 ```bash
-chronicle hub join https://chronicle.example.internal --code XXXX-XXXX-XXXX
-chronicle hub add-folder ~/work/Resona --project Resona
+interlatch hub join https://interlatch.example.internal --code XXXX-XXXX-XXXX
+interlatch hub add-folder ~/work/Resona --project Resona
 ```
 
 - **ハブで用意したプロジェクト**は、ハブのコンピューター上のフォルダーとその下のすべてで、フォルダーの名前が付きます。
   そこにあるハブ自身のセッションはすぐにナレッジごとそのプロジェクトに入り、新しいセッションも入ります。ほかの
   コンピューターは、まだ何も送っていなくても、すぐにそこへフォルダーを追加できます。フォルダーはハブに存在するか、そこで
   実行されたセッションがある必要があります。`/`、ホームフォルダー、その上のフォルダーは指定できず、こうして用意した
-  ほかのプロジェクトの中や外側のフォルダーも指定できません。`chronicle hub project list` でハブのプロジェクトを一覧でき、ここで用意したものには
-  印が付きます。`chronicle hub project remove <folder>` で取り消せます。ハブ自身のセッションはそれぞれのフォルダーに戻り、
+  ほかのプロジェクトの中や外側のフォルダーも指定できません。`interlatch hub project list` でハブのプロジェクトを一覧でき、ここで用意したものには
+  印が付きます。`interlatch hub project remove <folder>` で取り消せます。ハブ自身のセッションはそれぞれのフォルダーに戻り、
   ほかのコンピューターが送ったものは、もう一度送られるまで今の場所に残ります。ダッシュボードでは
   **Team › Shared projects**（共有プロジェクト）に同じ一覧が、見える人と送ってくるコンピューターとともに
   表示され、**Projects** では **共有中** のバッジが付きます。ハブのコンピューター自身なら、このカードからプロジェクトの共有の開始と停止もできます。
 - **見えるプロジェクト。** `--project` には、ここで用意したかどうかにかかわらず、ハブのどのプロジェクトの名前かパスでも
   指定でき、繰り返せます。`--all-projects` ならすべてのプロジェクトです。あとから変えるには
-  `chronicle hub access <email|id> --project <name>`（または `--all-projects`）を使います。その人の次のリクエストから
+  `interlatch hub access <email|id> --project <name>`（または `--all-projects`）を使います。その人の次のリクエストから
   反映され、その人のコンピューターがすでに送ったものは残ります。一覧はまるごと置き換わるので、残すプロジェクトもすべて
   指定します。`--project Resona --project Website` なら、Ben に Website を加えて Resona も残します。
-  `chronicle hub people` で各自に見えるものを確認できます。
+  `interlatch hub people` で各自に見えるものを確認できます。
   ハブのダッシュボードでは、管理者が **Team › People** で、招待するときにプロジェクトを選び、あとから変えられます。
   プロジェクトが 7 つ以上あるハブでは、検索ボックスで名前やフォルダーから探せます。
 - **新しいプロジェクトは、一部のプロジェクトに限られた人にはまだ見えません。** 見えるプロジェクトを決めたあとに作った
@@ -427,7 +427,7 @@ chronicle hub add-folder ~/work/Resona --project Resona
   なり、`add-folder` はハブにそのプロジェクトがないと答えます。見るべき人それぞれに、上のとおりに加えてください。
   管理者と、すべてのプロジェクトが見える人には、すぐに見えます。
 - **参加。** 一部のプロジェクトに限られた人として参加したコンピューターは、`--share knowledge` の有無にかかわらずナレッジ
-  だけを共有し（[ナレッジだけを共有する](#ナレッジだけを共有する)）、`chronicle hub join` が共有するプロジェクトを表示します。
+  だけを共有し（[ナレッジだけを共有する](#ナレッジだけを共有する)）、`interlatch hub join` が共有するプロジェクトを表示します。
   続く `add-folder` で、`~/work/Resona` のセッションが Resona に入ります。ハブがすでに Resona に入れている git リモートの
   リポジトリは、フォルダーを追加しなくてもそこに入ります。
 - **その人のコンピューターが送るもの。** ハブがその人のプロジェクトに入れるセッションだけです。つまり、そのプロジェクトに
@@ -451,8 +451,8 @@ chronicle hub add-folder ~/work/Resona --project Resona
 - **プロジェクトの中のメモ。** ハブのコンピューターでは、そこで用意したプロジェクトの中のどのフォルダーでも、セッション
   開始時のメモと MCP ツール `project_knowledge` がそのプロジェクトのナレッジを使います。
 - **共有トークンは限られません。** ハブの共有トークンで送るコンピューターは特定の誰でもないので、プロジェクトの制限は
-  かかりません。全員が招待で参加し終えたら `chronicle hub shared-token off` でオフにしてください（[後述](#共有トークン)）。
-  オンの間は `chronicle hub access` がそのことを知らせます。
+  かかりません。全員が招待で参加し終えたら `interlatch hub shared-token off` でオフにしてください（[後述](#共有トークン)）。
+  オンの間は `interlatch hub access` がそのことを知らせます。
 
 ### 共有トークン
 
@@ -462,24 +462,24 @@ chronicle hub add-folder ~/work/Resona --project Resona
 全員が招待で参加し終えたら、ハブで共有トークンをオフにします。
 
 ```bash
-chronicle hub shared-token off
+interlatch hub shared-token off
 ```
 
 **Team › People** のスイッチでもオフにできます。以後ハブは共有トークンを受け付けず、それを使っている
-コンピューターはコードで参加し直す必要があります。`chronicle hub shared-token on` で元に戻せます。共有トークンでダッシュボードを
+コンピューターはコードで参加し直す必要があります。`interlatch hub shared-token on` で元に戻せます。共有トークンでダッシュボードを
 開くことはできません。共有トークンは特定の誰のものでもないので、それで送るコンピューターには
 [プロジェクトの制限](#見えるプロジェクトを人ごとに決める)がかかりません。
 
 ### 利用者を外す
 
-`chronicle hub remove ana@example.com`、または **Team › People** でその人の横の **Remove** を押すと、その人を
+`interlatch hub remove ana@example.com`、または **Team › People** でその人の横の **Remove** を押すと、その人を
 ハブから外します。使っていないコード、コンピューターのトークン、ブラウザーのセッションは、次のリクエストから使えなくなります。
 その人のコンピューターが送ったものはハブに残ります。
 
 なくしたノートパソコンなど、コンピューターやブラウザーを 1 つだけ止めて人は残すときは、同じ一覧でその横の **Revoke** を
-押します。そのコンピューターは新しいコードで、同じ人としても別の人としてもまた参加できます。ロールは `chronicle hub role ana@example.com readonly` で、
-見えるプロジェクトは `chronicle hub access ana@example.com --project demo-app` で変えます。これらのコマンドには、
-メールアドレスか `chronicle hub people` に表示される ID を指定します。
+押します。そのコンピューターは新しいコードで、同じ人としても別の人としてもまた参加できます。ロールは `interlatch hub role ana@example.com readonly` で、
+見えるプロジェクトは `interlatch hub access ana@example.com --project demo-app` で変えます。これらのコマンドには、
+メールアドレスか `interlatch hub people` に表示される ID を指定します。
 
 ### コンピューターが送ったものを取り消す
 
@@ -487,9 +487,9 @@ chronicle hub shared-token off
 ハブで次を実行します。
 
 ```bash
-chronicle hub purge ana@example.com --outside-access      # Ana のコンピューターが、Ana に見えるプロジェクトの外に送ったもの
-chronicle hub purge ana@example.com --project demo-app    # demo-app に送ったもの
-chronicle hub purge "Ana's laptop" --project demo-app     # 1 台のコンピューター：名前か `chronicle hub status` の ID
+interlatch hub purge ana@example.com --outside-access      # Ana のコンピューターが、Ana に見えるプロジェクトの外に送ったもの
+interlatch hub purge ana@example.com --project demo-app    # demo-app に送ったもの
+interlatch hub purge "Ana's laptop" --project demo-app     # 1 台のコンピューター：名前か `interlatch hub status` の ID
 ```
 
 プロジェクトごとにセッションを一覧にし、取り除く前に確認します（`--yes` で確認しません）。取り除いたものは戻りません。
@@ -497,7 +497,7 @@ chronicle hub purge "Ana's laptop" --project demo-app     # 1 台のコンピュ
 ナレッジ、そしてそこから作ったナレッジベースです。ナレッジベースは次の同期で残りから作り直されます。コンピューター側の
 コピーは残り、同じセッションがまた送られてきてもハブは受け付けません。書き終えた週次レビューは変わりません。チームメイトの
 コンピューターがすでに受け取ったナレッジは、次に受け取るまで残ります。取り消しは監査ログに残ります。ハブ自身のセッションは
-取り消せません。1 件ずつなら `chronicle forget <id>` を使います。
+取り消せません。1 件ずつなら `interlatch forget <id>` を使います。
 
 ### 監査ログ
 
@@ -508,9 +508,9 @@ chronicle hub purge "Ana's laptop" --project demo-app     # 1 台のコンピュ
 ## Tailscale を使わずにハブにつなぐ
 
 Tailscale はハブにつなぐ方法の一つにすぎません。Tailscale を許可していない会社も多く、ハブは社内ネットワークや会社の VPN
-経由でも同じように使えます。ここでは `https://chronicle.example.internal` でハブにつなぐとします。
+経由でも同じように使えます。ここでは `https://interlatch.example.internal` でハブにつなぐとします。
 
-1. **先にアドレスを設定し、利用者を追加します。** ハブで `chronicle hub enable --url https://chronicle.example.internal`
+1. **先にアドレスを設定し、利用者を追加します。** ハブで `interlatch hub enable --url https://interlatch.example.internal`
    を実行すると `[hub] address` が設定され、参加コマンドとサインインリンクに使われます。続いて自分とチームを招待します
    （[招待する](#招待する)）。利用者のいないハブのダッシュボードにはサインインがなく、ハブ自身にしか応答しません。
    プロキシ経由やほかのデバイスからの人は、誰も入れません。
@@ -534,17 +534,17 @@ Tailscale はハブにつなぐ方法の一つにすぎません。Tailscale を
    ```toml
    [server]
    host = "0.0.0.0"                                # プロキシが別のコンピューターで動くときだけ
-   allowed_hosts = ["chronicle.example.internal"]
+   allowed_hosts = ["interlatch.example.internal"]
    trusted_proxies = ["10.0.4.12"]                 # そのコンピューター。その X-Forwarded-Proto を信頼する
    ```
 
    プロキシがハブ自身で動くときは、`host = "127.0.0.1"` と既定の `trusted_proxies` のままにし、`behind_proxy = true` を
    加えます。プロキシを通ったリクエストは、常に管理者として扱われるハブ自身からのリクエストと見分けがつかないことがある
    ためです。これを設定すると、ダッシュボードへのリクエストはどれもハブ自身からとは見なされず、管理者もほかの人と同じように
-   サインインするか、ハブで `chronicle hub` コマンドを使います。`0.0.0.0` にする場合は、ファイアウォールでダッシュボードのポート（11524）には
+   サインインするか、ハブで `interlatch hub` コマンドを使います。`0.0.0.0` にする場合は、ファイアウォールでダッシュボードのポート（11524）には
    プロキシだけが届くようにしてください。設定したら、ダッシュボードを再起動します。
 
-Tailscale を使う場合は、`chronicle tailnet on --anyone` で tailnet の全員が HTTPS でハブにつなげます
+Tailscale を使う場合は、`interlatch tailnet on --anyone` で tailnet の全員が HTTPS でハブにつなげます
 （[スマートフォン](#スマートフォン)）。ハブに利用者がいれば、その場合もサインインが必要です。
 
 ### 会社のサインイン
@@ -568,13 +568,13 @@ trusted_proxies = ["127.0.0.1", "::1"]     # 認証プロキシの接続元
 
 ## Linux のハブ
 
-Linux では `chronicle install` が launchd エージェントの代わりに systemd のユーザーユニットを設定します。
-`chronicle-sync.timer`（15 分ごとの同期）と `chronicle-ui.service`（ダッシュボード）です。無人で動かすハブには、
+Linux では `interlatch install` が launchd エージェントの代わりに systemd のユーザーユニットを設定します。
+`interlatch-sync.timer`（15 分ごとの同期）と `interlatch-ui.service`（ダッシュボード）です。無人で動かすハブには、
 次の 2 つを一度だけ実行しておくと便利です。
 
 ```bash
 loginctl enable-linger $USER             # 誰もログインしていなくても動かし続ける
-sudo tailscale set --operator=$USER      # `chronicle tailnet on` が Tailscale Serve を設定できるようにする
+sudo tailscale set --operator=$USER      # `interlatch tailnet on` が Tailscale Serve を設定できるようにする
 ```
 
 デスクトップアプリは macOS 専用です。コマンドラインとダッシュボードは同じように動きます。
@@ -586,16 +586,16 @@ sudo tailscale set --operator=$USER      # `chronicle tailnet on` が Tailscale 
 ハブを動かしたくない場合は、[Syncthing](https://syncthing.net)（または rsync）でほかのコンピューターのセッションをメインの
 コンピューターにコピーできます。`~/.claude/projects` を `~/sessions/laptop/claude/projects` のようなフォルダーに、
 `~/.codex/sessions` を `~/sessions/laptop/codex/sessions` に同期し、`~/sessions/laptop/claude` を `claude_dirs` に、
-`~/sessions/laptop/codex` を `codex_dirs` に加えます。Chronicle はこれを自分のセッションとして記録します。コンピューター名、
+`~/sessions/laptop/codex` を `codex_dirs` に加えます。Interlatch はこれを自分のセッションとして記録します。コンピューター名、
 プロジェクトの対応付け、それまでの分析の引き継ぎはありません。
 
-`~/.claude-chronicle` そのものをコンピューター間で同期しないでください。使用中にコピーされた SQLite データベースは壊れることが
+`~/.interlatch` そのものをコンピューター間で同期しないでください。使用中にコピーされた SQLite データベースは壊れることが
 あります。
 
 ## まだできないこと
 
 - **スマートフォンの Claude アプリ。** Claude のカスタムコネクターはスマートフォンからではなく Anthropic のクラウドから MCP サーバーに
   接続するので、ハブの tailnet 内のアドレスには届きません。スマートフォンから Claude Code の Remote Control でハブのセッションを
-  操作すれば、Chronicle のツールを使えます。
+  操作すれば、Interlatch のツールを使えます。
 - **ほかのコンピューターでオフラインで読めるコピー。**
 - **Windows。**

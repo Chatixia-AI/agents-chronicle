@@ -1,10 +1,10 @@
 # ソース：Claude Code、Codex、GitHub Copilot、IBM Bob、Google Antigravity
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-`chronicle sources`（またはダッシュボードの **Sources** タブ）で、各コーディングエージェントについて次の情報を確認できます：
+`interlatch sources`（またはダッシュボードの **Sources** タブ）で、各コーディングエージェントについて次の情報を確認できます：
 検出されたかどうか、バージョン、ディスク上のセッション数と記録・分析済みの数、記録方法、フックと MCP サーバーが設定されているか。
-接続と切断はダッシュボード、または `chronicle connect <agent>` / `chronicle disconnect <agent>` で行います
+接続と切断はダッシュボード、または `interlatch connect <agent>` / `interlatch disconnect <agent>` で行います
 （`claude`、`codex`、`codex-cloud`、`copilot`、`bob`、`antigravity`。記録済みのセッションは常に残ります）。どのソースも同じセッションモデルに変換されるため、
 すべてのエージェントのセッションがダッシュボード、分析、ナレッジベース、用語集、MCP ツールを共有します。
 
@@ -15,7 +15,7 @@
   応答、ツール呼び出し（`exec_command`、`apply_patch`、`write_stdin`、Web、MCP、サブエージェント。コードモードの `exec` スクリプトは
   呼び出したツール名で表示）、ファイル編集（`FileChange` 項目またはパッチ）、実際の終了コード（結果チャンク、`CommandExecution` 項目、
   `wait` で完了した長時間実行セル）、応答ごとのトークン使用量、コンパクション、中断。
-- Codex に MCP サーバーを登録します（`codex mcp add chronicle`）。これで Codex も、Claude のものを含むすべてのセッションを検索できます。
+- Codex に MCP サーバーを登録します（`codex mcp add interlatch`）。これで Codex も、Claude のものを含むすべてのセッションを検索できます。
 - Codex Desktop が取り込んだ **Claude Code のセッションを復元します**：Claude Code が元のトランスクリプトをすでに削除していた場合、
   Codex 側のコピーが完全なセッションになります（`source = codex-import`）。重複はスキップされます。
 
@@ -23,14 +23,14 @@ Codex にはセッション終了フックがなく（唯一の `notify` 枠も�
 15 分ごとのバックグラウンド同期で取り込まれます。GPT のトークン費用は OpenAI の定価で計算し、価格が公開されていない新しい GPT モデルは
 GPT-5 の料金で見積もります。
 
-**Codex Cloud**（chatgpt.com/codex のタスク）は、ネットワークに接続するため別に接続します（`chronicle connect codex-cloud`）。
+**Codex Cloud**（chatgpt.com/codex のタスク）は、ネットワークに接続するため別に接続します（`interlatch connect codex-cloud`）。
 同期のたびに Codex のログイン（`codex login`）で `codex cloud list` を実行し、新しいタスクや変わったタスクには `codex cloud diff` を実行します。
 各タスクは Codex のセッション（`source = codex-cloud`）になり、タイトル、リポジトリ、状態、変更ファイルと行数、差分、タスクへのリンクが入ります。
 リポジトリ名がローカルのプロジェクトと一致すれば、そのプロジェクトにまとまります。Codex CLI はクラウドタスクの会話を返さないため、
-これらのセッションにはプロンプトがなく、分析もされません。タスクと差分は `~/.claude-chronicle/archive/codex-cloud/` にアーカイブされ、
+これらのセッションにはプロンプトがなく、分析もされません。タスクと差分は `~/.interlatch/archive/codex-cloud/` にアーカイブされ、
 クラウド側でタスクが消えても残ります。一覧の取得に失敗した場合（未ログイン、オフライン）は Sources のカードに理由が出て、次の同期で再試行します。
 
-**GitHub Copilot** は任意で接続します（`chronicle connect copilot`）。2 つの保存先を記録します：
+**GitHub Copilot** は任意で接続します（`interlatch connect copilot`）。2 つの保存先を記録します：
 
 - `~/.copilot/session-state/<id>/events.jsonl` の Copilot エージェントセッション（Copilot CLI と VS Code の Copilot エージェントホスト）：
   プロンプト、応答、推論、結果と所要時間付きのツール呼び出し、行数の合計。呼び出しごとのトークン使用量（キャッシュの内訳付き）は
@@ -40,19 +40,19 @@ GPT-5 の料金で見積もります。
   それ以外を区別しないため、トークン数はありますが費用の見積もりはありません。
 
 接続すると、VS Code（`User/mcp.json`）と Copilot CLI（`~/.copilot/mcp-config.json`）にも MCP サーバーが登録されます。
-どちらのファイルも事前に `~/.claude-chronicle/backups/` にバックアップされ、ファイル内の他のサーバー設定はそのまま残ります。
+どちらのファイルも事前に `~/.interlatch/backups/` にバックアップされ、ファイル内の他のサーバー設定はそのまま残ります。
 
-**IBM Bob** は任意で接続します（`chronicle connect bob`）。`~/.bob/db/bob.db` からタスクとメッセージを読み取り専用で読み込み、
+**IBM Bob** は任意で接続します（`interlatch connect bob`）。`~/.bob/db/bob.db` からタスクとメッセージを読み取り専用で読み込み、
 そのデータベースの SQLite スナップショットをアーカイブします。`~/.bob` 内のそれ以外（ログイン状態など）は読みません。
 Bob IDE と Bob Shell（`bob` コマンド）はどちらもこのデータベースにタスクを保存するため、両方のタスクが記録されます。
 IDE はそれ以外の会話ファイルをローカルに保存しません。接続すると、Bob 2.x と Bob Shell が読む
 `~/.bob/settings/mcp.json` と、古い Bob IDE 向けの `~/.bob/settings/mcp_settings.json` に MCP サーバーが登録されます。
 `mcp.json` がまだない場合は、Bob 自身と同じように先に `mcp_settings.json` からコピーするので、ほかの MCP サーバーも引き継がれます。
 
-**Google Antigravity** は任意で接続します（`chronicle connect antigravity`）。Antigravity は各会話を
+**Google Antigravity** は任意で接続します（`interlatch connect antigravity`）。Antigravity は各会話を
 `~/.gemini/antigravity/conversations/` に独自の形式（古いバージョンでは暗号化、新しいバージョンでは SQLite データベース）で
 保存し、それとは別に、エージェントの成果物の隣へ平文のステップログ `brain/<id>/.system_generated/logs/transcript_full.jsonl`
-（古いバージョンでは `transcript.jsonl`）を書き出します。Chronicle はこのログから、プロンプト（成果物の承認を含む）、返答、
+（古いバージョンでは `transcript.jsonl`）を書き出します。Interlatch はこのログから、プロンプト（成果物の承認を含む）、返答、
 思考、ツール呼び出しとその結果・所要時間、バックグラウンドタスクの通知、モデル呼び出しごとのトークン数を読み込みます。
 新しいバージョンの会話データベース（読み取り専用で開きます）からはワークスペースのフォルダー、git のブランチとリモート、
 モデルを、`annotations/<id>.pbtxt` からはタイトルを加えます。ログと、タスク・計画・ウォークスルーの Markdown ファイルを
@@ -62,7 +62,7 @@ IDE はそれ以外の会話ファイルをローカルに保存しません。�
 
 **claude.ai と ChatGPT のチャット**は Mac に保存されないため、データのエクスポートから取り込みます。claude.ai は
 **設定 › プライバシー › データをエクスポート**、ChatGPT は **設定 › データコントロール › データをエクスポート** を開くと、届いたメールのリンクから
-`.zip` をダウンロードできます。Sources ページの **Import export…**（カード *Chat exports*）、または `chronicle import <zip>` で取り込みます
+`.zip` をダウンロードできます。Sources ページの **Import export…**（カード *Chat exports*）、または `interlatch import <zip>` で取り込みます
 （展開したフォルダーや `conversations.json` も使えます）。どちらのサービスのものかは中身から判別します。各チャットはセッション（エージェント
 `claude-ai` または `chatgpt`、`source = claude-ai-export` または `chatgpt-export`）になり、プロンプト、応答、思考、ツール呼び出し
 （claude.ai のアーティファクト、ChatGPT の Python・ブラウズ・画像生成とその出力）、添付ファイルや画像の注記が入ります。claude.ai のプロジェクト内の
@@ -80,7 +80,7 @@ IDE はそれ以外の会話ファイルをローカルに保存しません。�
 チャット履歴の大半は、調べもの、文章の書き直し、日常の質問で、分析しても何も残りません。選別はチャットを
 **分析する価値あり**（worth analyzing）、**たぶん**（maybe）、**価値なし**（not worth it）に分け、それぞれにトピックと
 一行の理由を付けます。これで分析を役に立つチャットに回せます。エクスポートのカード（Sources › Chat exports）で
-**Screen N chats** を選ぶか、`chronicle screen` を実行します（`--sample 200` でまず無作為の 200 件で試す、
+**Screen N chats** を選ぶか、`interlatch screen` を実行します（`--sample 200` でまず無作為の 200 件で試す、
 `--dry-run` は件数を数えるだけ）。
 
 - 読むのは各チャットの冒頭だけです：タイトル、日付、最初と最後のプロンプト、最初の返答の書き出し。分析に送るものと
@@ -94,10 +94,10 @@ IDE はそれ以外の会話ファイルをローカルに保存しません。�
 - ChatGPT のチャット約 3,400 件で 60 回ほどの呼び出しです。Claude の場合、表示される費用は API 定価換算で数ドルで、
   プランから差し引かれます。
 
-選別では何も分析しません。**Queue N worth analyzing**（または `chronicle screen --queue`、「たぶん」も含めるなら
+選別では何も分析しません。**Queue N worth analyzing**（または `interlatch screen --queue`、「たぶん」も含めるなら
 `--maybe`）で背景の分析待ちに入り、15 分ごとに数件ずつ新しい順に分析されます。選別結果の件数は Sessions の一覧
 （フィルター *Screening*）にリンクしており、分析されるまで各チャットに結果と理由が表示されます。「たぶん」はそこで
-見直して、必要なものを **Analyze** してください。コマンドラインでは `chronicle screen --list analyze|maybe|skip`
+見直して、必要なものを **Analyze** してください。コマンドラインでは `interlatch screen --list analyze|maybe|skip`
 で同じものを表示します。チャットの選別は一度だけで、新しいエクスポートで変わったときにやり直します。分析待ちに
 入れたチャットは分析待ちのままです。
 

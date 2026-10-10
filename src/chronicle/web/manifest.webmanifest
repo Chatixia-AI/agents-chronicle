@@ -1,6 +1,6 @@
 {
-  "name": "Chronicle",
-  "short_name": "Chronicle",
+  "name": "Interlatch",
+  "short_name": "Interlatch",
   "description": "A searchable memory of every coding-agent session you run.",
   "start_url": "./#/",
   "scope": "./",

@@ -159,7 +159,7 @@ def test_a_computer_takes_back_only_its_own(teamenv):  # noqa: F811
 
 def test_the_command_line_leaves_and_rejoins(teamenv, monkeypatch, capsys):  # noqa: F811
     spoke = _in_project(teamenv)
-    monkeypatch.setenv("CHRONICLE_HOME", str(spoke.home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(spoke.home))
     assert main(["hub", "leave", "--project", "nope", "--no-push"]) == 1
     assert main(["hub", "leave", "--project", CWD, "--no-push"]) == 0
     assert "What it already shared stays on the hub" in " ".join(capsys.readouterr().out.split())
@@ -245,9 +245,9 @@ def test_a_containers_variables_set_its_name_and_address(team, monkeypatch):  # 
     hs = _call(url, "/api/team/settings", headers=_as(s["Ada"]))[1]
     assert hs["container"] and hs["managed"] == {"address": True, "name": True}
     code, r = _call(url, "/api/team/settings", {"address": "https://other.example.com"}, _as(s["Ada"]))
-    assert code == 400 and "CHRONICLE_HUB_URL" in r["error"]
+    assert code == 400 and "INTERLATCH_HUB_URL" in r["error"]
     code, r = _call(url, "/api/team/settings", {"name": "Other"}, _as(s["Ada"]))
-    assert code == 400 and "CHRONICLE_HUB_NAME" in r["error"]
+    assert code == 400 and "INTERLATCH_HUB_NAME" in r["error"]
     monkeypatch.delenv("CHRONICLE_HUB_NAME")
     assert _call(url, "/api/team/settings", {"name": ""}, _as(s["Ada"]))[0] == 400  # not the container's host name
     assert _call(url, "/api/team/settings", {"name": "Other"}, _as(s["Ada"]))[0] == 200

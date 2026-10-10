@@ -54,7 +54,7 @@
 }
 
 html, body { margin: 0; background: transparent; }
-/* a tint of the blueprint paper over the popover's glass, so the panel reads as Chronicle's */
+/* a tint of the blueprint paper over the popover's glass, so the panel reads as Interlatch's */
 body { background: var(--tint); }
 body { font: 13px/1.4 var(--sans); color: var(--ink); -webkit-user-select: none; user-select: none; cursor: default;
   -webkit-font-smoothing: antialiased; }

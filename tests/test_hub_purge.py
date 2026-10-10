@@ -18,7 +18,7 @@ def test_only_the_hubs_projects_by_default(tmp_path, monkeypatch):
     home.mkdir()
     (home / "config.toml").write_text('[hub]\nurl = "http://hub"\nshare = "knowledge"\n'
                                       '[hub.folders]\n"/home/yuma/resona" = "/srv/Resona"\n')
-    monkeypatch.setenv("CHRONICLE_HOME", str(home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(home))
     cfg = load_config(home)
     assert cfg.hub_all_folders is False
     conn = connect(cfg.db_path)
@@ -44,7 +44,7 @@ def test_only_the_hubs_projects_by_default(tmp_path, monkeypatch):
 
 def test_join_keeps_to_the_hubs_projects_unless_asked(teamenv, monkeypatch, capsys):  # noqa: F811
     spoke = teamenv["spoke"]
-    monkeypatch.setenv("CHRONICLE_HOME", str(spoke.home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(spoke.home))
     token = hub.read_token(spoke)
     assert main(["hub", "join", teamenv["url"], f"--token={token}", "--share", "knowledge", "--no-push"]) == 0
     assert "Only sessions in the hub's projects are shared" in capsys.readouterr().out

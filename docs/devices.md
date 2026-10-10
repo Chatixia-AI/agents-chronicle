@@ -1,8 +1,8 @@
 # Phone and other computers
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
-Chronicle keeps its archive on one computer. You can also open its dashboard on your phone, and keep the sessions
+Interlatch keeps its archive on one computer. You can also open its dashboard on your phone, and keep the sessions
 of your other computers in the same archive. Both go through [Tailscale](https://tailscale.com), a private network
 between your own devices: nothing is opened to the internet.
 
@@ -21,7 +21,7 @@ can take the place of Tailscale ([Reaching the hub without Tailscale](#reaching-
 2. On the hub, run:
 
    ```bash
-   chronicle tailnet on
+   interlatch tailnet on
    ```
 
    The first time, Tailscale may print a link to turn on Serve and HTTPS certificates for your tailnet: open it,
@@ -35,24 +35,24 @@ cards. Everything works as on the computer: search, knowledge, reviews, pinning 
 
 How it works: Tailscale Serve forwards that HTTPS address to the dashboard, which still listens on 127.0.0.1 only.
 The dashboard answers to that name (`[server] allowed_hosts`) and lets in only your Tailscale login
-(`[server] allowed_users`), which Serve passes along. `chronicle tailnet on --anyone` lets in everyone in your
+(`[server] allowed_users`), which Serve passes along. `interlatch tailnet on --anyone` lets in everyone in your
 tailnet who has a Tailscale login. Serve names no login for a tagged device or a Tailscale Funnel visitor, so
-those get in only once the hub has people and they sign in. `chronicle tailnet status` shows the setup; `chronicle tailnet off` takes the dashboard off the tailnet.
-The dashboard has to be running on the hub: `chronicle install` keeps it running in the background.
+those get in only once the hub has people and they sign in. `interlatch tailnet status` shows the setup; `interlatch tailnet off` takes the dashboard off the tailnet.
+The dashboard has to be running on the hub: `interlatch install` keeps it running in the background.
 
 ## Your other computers
 
-On the hub, after `chronicle tailnet on`:
+On the hub, after `interlatch tailnet on`:
 
 ```bash
-chronicle hub enable
+interlatch hub enable
 ```
 
-It prints a command with the hub's address and a token. [Install Chronicle](install.md) on each other computer,
+It prints a command with the hub's address and a token. [Install Interlatch](install.md) on each other computer,
 then run that command there:
 
 ```bash
-chronicle hub join https://pc.tail1234.ts.net --token …
+interlatch hub join https://pc.tail1234.ts.net --token …
 ```
 
 That token is the hub's shared token, which suits your own computers. For other people's computers, invite each
@@ -62,11 +62,11 @@ It sends every Claude Code and Codex session on that computer to the hub, which 
 then on:
 
 - **New sessions go to the hub** as each one ends (the SessionEnd hook) and every 15 minutes (the background sync),
-  once `chronicle install` has set those up on that computer. `chronicle push` sends them right away.
+  once `interlatch install` has set those up on that computer. `interlatch push` sends them right away.
 - **The hub knows where each session ran.** A session's page says which computer it came from, and **Team ›
-  Computers** lists the computers, whose each is, their sessions and when each last sent something (`chronicle hub
+  Computers** lists the computers, whose each is, their sessions and when each last sent something (`interlatch hub
   status` in a terminal).
-- **Analysis runs only on the hub.** If the computer already analyzed sessions with its own Chronicle, it hands
+- **Analysis runs only on the hub.** If the computer already analyzed sessions with its own Interlatch, it hands
   those analyses over when it joins, so the hub does not pay to analyze them again.
 - **That computer's own dashboard and MCP tools stop updating.** They keep what they had; open the hub's dashboard
   instead (**Settings › Devices** has a link).
@@ -82,16 +82,16 @@ matching project of its own:
    folder, a scratch folder, or a repository the hub doesn't know. On that computer, run:
 
    ```bash
-   chronicle hub add-folder ~/work/client-notes --project demo-app
+   interlatch hub add-folder ~/work/client-notes --project demo-app
    ```
 
-   `--project` takes a project's name or its path on the hub; `chronicle hub folders --list` lists them. A project
+   `--project` takes a project's name or its path on the hub; `interlatch hub folders --list` lists them. A project
    nobody has sent to yet can be set up on the hub first ([Projects and who sees
    them](#projects-and-who-sees-them)). The folder and everything below it go to that project, including sessions
    already on the hub: they move with their knowledge, and both projects' knowledge bases are rebuilt. The more
    specific match wins, so a repository inside the folder whose git remote the hub knows still follows its remote. A
    folder inside a repository the hub files under another project is refused, because a repository belongs to one
-   project. `chronicle hub folders` shows what goes where. **Settings › Devices › Projects on the hub** does the same
+   project. `interlatch hub folders` shows what goes where. **Settings › Devices › Projects on the hub** does the same
    from the dashboard: **Join a project** picks one of the hub's projects and a folder here. To take back a folder
    added by mistake, see [Leaving](#leaving). The hub's **Team › Computers** lists the folders each computer added.
    On this computer's **Projects** page and sidebar, the hub's projects that folders here go to come first, under
@@ -135,22 +135,22 @@ the Projects page and sidebar list the group's projects under that project as we
 - GitHub Copilot, IBM Bob, Google Antigravity, Codex Cloud and chat exports are not sent: connect or import those on the hub.
 - Files travel over HTTPS (inside your tailnet, or through the HTTPS proxy in front of the hub), compressed, and are
   checked against a SHA-256 on arrival. Only files the hub lacks, or has an older copy of, are sent. Each computer
-  proves itself with a token kept in `~/.claude-chronicle/hub-token`, readable by your user only: the hub's shared
-  token, or a token of its own when it joined with an invite. `chronicle hub enable --rotate` replaces the shared
+  proves itself with a token kept in `~/.interlatch/hub-token`, readable by your user only: the hub's shared
+  token, or a token of its own when it joined with an invite. `interlatch hub enable --rotate` replaces the shared
   token; the computers that use it then have to join again.
-- The hub keeps what it receives under `~/.claude-chronicle/machines/<computer>/` and archives it like its own.
+- The hub keeps what it receives under `~/.interlatch/machines/<computer>/` and archives it like its own.
 
 ### Sharing knowledge only
 
 A computer can keep its transcripts and still add to the hub's knowledge. Join with `--share knowledge`:
 
 ```bash
-chronicle hub join https://pc.tail1234.ts.net --token … --share knowledge
+interlatch hub join https://pc.tail1234.ts.net --token … --share knowledge
 ```
 
-(or, on a computer that already joined, `chronicle config set hub.share knowledge`, or **Settings › Devices › What this
+(or, on a computer that already joined, `interlatch config set hub.share knowledge`, or **Settings › Devices › What this
 computer sends** in its dashboard). That computer then works like a
-standalone Chronicle: it records its own sessions, analyzes them with its own Claude Code or Codex login, and keeps
+standalone Interlatch: it records its own sessions, analyzes them with its own Claude Code or Codex login, and keeps
 its dashboard and MCP tools up to date. After each analysis it sends the hub only:
 
 - each analyzed session's details: when it ran, agent, model, branch, tokens and cost, which tools it used;
@@ -158,11 +158,11 @@ its dashboard and MCP tools up to date. After each analysis it sends the hub onl
 - the lessons it produced about the project.
 
 It does that only for sessions the hub files under one of its projects: those in a folder added with
-`chronicle hub add-folder`, and those in a repository whose git remote the hub already files under a project
+`interlatch hub add-folder`, and those in a repository whose git remote the hub already files under a project
 ([Same project, different folders](#same-project-different-folders)). Sessions in any other folder stay on the
 computer, and its push counts them as "kept here". A hub that has never run a session in a repository itself doesn't
 know its remote, as with a hub in Docker or on a server, so add your folder for each project there. To share
-sessions from every folder, join with `--all-folders`, run `chronicle config set hub.all_folders true`, or choose
+sessions from every folder, join with `--all-folders`, run `interlatch config set hub.all_folders true`, or choose
 **Every folder** under **Settings › Devices › What this computer sends**.
 
 Prompts, shell commands, file paths, transcripts and lessons about you (global ones and preferences) never leave
@@ -180,14 +180,14 @@ Each computer chooses what it sends, so one that joined without `--share knowled
 every transcript off the hub, whoever's computer it is, make the hub take knowledge only. At the hub:
 
 ```bash
-chronicle config set hub.accept knowledge
+interlatch config set hub.accept knowledge
 ```
 
 or, as an admin, switch on **Knowledge only** in **Team › Hub settings**. The hub then turns away any computer that sends
-transcripts, with the shared token or a person's own token, and tells it what to run: `chronicle config set hub.share
-knowledge`, then `chronicle push`. **Team › Computers** marks such a computer **sends transcripts: turned away**, and
-`chronicle hub` lists it the same way. A computer that joins with an invite is set to share knowledge on its own.
-Transcripts the hub already has stay; `chronicle forget` removes a session for good. Any value other than
+transcripts, with the shared token or a person's own token, and tells it what to run: `interlatch config set hub.share
+knowledge`, then `interlatch push`. **Team › Computers** marks such a computer **sends transcripts: turned away**, and
+`interlatch hub` lists it the same way. A computer that joins with an invite is set to share knowledge on its own.
+Transcripts the hub already has stay; `interlatch forget` removes a session for good. Any value other than
 `"everything"` or `"knowledge"` counts as `"knowledge"`, so a typo never lets transcripts in. The audit log records who
 changed it.
 
@@ -197,11 +197,11 @@ A hub that several people share can keep the team's record in Postgres, and send
 knowledge what its teammates learned. On the hub:
 
 ```bash
-uv tool install 'agents-chronicle[team]'    # the Postgres driver, needed on the hub only
+uv tool install 'interlatch[team]'    # the Postgres driver, needed on the hub only
 # PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD (and PGSSLMODE, require by default), one per line:
-$EDITOR ~/.claude-chronicle/team-store.env && chmod 600 ~/.claude-chronicle/team-store.env
-chronicle config set hub.store postgres
-chronicle hub store                          # connects, sets up its tables, and shows what it holds
+$EDITOR ~/.interlatch/team-store.env && chmod 600 ~/.interlatch/team-store.env
+interlatch config set hub.store postgres
+interlatch hub store                          # connects, sets up its tables, and shows what it holds
 ```
 
 Then restart the dashboard, which is what receives the sessions. Or, once the driver is installed, open **Team › Team
@@ -218,14 +218,14 @@ unless the connection works, the password is never shown again, and only an admi
   it.
 - **Teammates' lessons come back.** Each time it shares, a computer that shares knowledge gets its teammates' lessons
   for the repositories it has clones of, the projects it shared sessions in, and those it added folders to. It shares
-  after each analysis (when a session ends, and every 15 minutes with the background agent from `chronicle install`),
-  and at once with `chronicle push` or **Share now** in **Settings › Devices**. They are
+  after each analysis (when a session ends, and every 15 minutes with the background agent from `interlatch install`),
+  and at once with `interlatch push` or **Share now** in **Settings › Devices**. They are
   kept read-only in its own database, under its own folder for that repository, where its MCP tools answer with them
   (marked as teammates') and the start-of-session notes list them under **From teammates' sessions**. Its dashboard
   shows them on project pages and in **All knowledge**, marked **from** the computers whose sessions stated them;
   the source **From teammates** there lists only them, and **Read them** in **Settings › Devices** opens that list.
   Lessons it stated itself are not sent back. One it dismisses stays dismissed; one the team no longer has disappears.
-  `chronicle hub status` and its **Settings › Devices** show how many it holds; **Share now** there
+  `interlatch hub status` and its **Settings › Devices** show how many it holds; **Share now** there
   pushes at once.
 - **Only the hub connects to the database.** Computers never get its address or password, so it can sit on a
   network only the hub reaches. Its tables live in the schema `team`, with an audit log of every push and pull
@@ -242,16 +242,16 @@ Devices › Projects on the hub**, each project has these buttons:
 
 - **Leave**: this computer stops sharing its sessions there and stops getting the project's teammates' lessons.
   What it already shared stays on the hub, in the project, for the team. **Rejoin** undoes it. On the command line:
-  `chronicle hub leave --project <name>` and `chronicle hub rejoin --project <name>`. They are kept as `[hub] left`
+  `interlatch hub leave --project <name>` and `interlatch hub rejoin --project <name>`. They are kept as `[hub] left`
   in the computer's [configuration](configuration.md#hub). The hub's **Team › Projects** marks a computer that left.
 - **Remove** next to a folder: for a folder added to the wrong project. Its sessions stop going there, and the hub
   deletes what this computer shared from that folder, with its lessons, from its database and its team store.
-  Unlike `chronicle hub purge`, the hub takes them again if the folder is later added to the right project. On the
-  command line: `chronicle hub remove-folder <folder>`. A computer that sends transcripts keeps them on the hub: the
+  Unlike `interlatch hub purge`, the hub takes them again if the folder is later added to the right project. On the
+  command line: `interlatch hub remove-folder <folder>`. A computer that sends transcripts keeps them on the hub: the
   hub files them by their git remote or their own folder again.
 
-`chronicle hub leave`, or **Leave the hub…** in **Settings › Devices**, makes the computer record and analyze its own
-sessions again; the hub keeps what it was sent. Joining again takes a new invite. `chronicle hub disable` on the hub
+`interlatch hub leave`, or **Leave the hub…** in **Settings › Devices**, makes the computer record and analyze its own
+sessions again; the hub keeps what it was sent. Joining again takes a new invite. `interlatch hub disable` on the hub
 stops it accepting sessions.
 
 ## People and roles
@@ -268,18 +268,18 @@ Tailscale.
 
 Members and read-only people see the projects they were given, every project or only some ([Projects and who sees
 them](#projects-and-who-sees-them)); admins always see every project. Only admins change anything on the hub's
-dashboard: settings, Sync, analyses, pinning and dismissing. A member's own Chronicle works as before.
+dashboard: settings, Sync, analyses, pinning and dismissing. A member's own Interlatch works as before.
 
 Until you add the first person, computers send with the shared token, and the hub's dashboard has no sign-in, so it
-opens only at the hub itself and for the Tailscale logins `chronicle tailnet on` lets in ([Your phone](#your-phone)).
+opens only at the hub itself and for the Tailscale logins `interlatch tailnet on` lets in ([Your phone](#your-phone)).
 Anyone else, from another device or through a reverse proxy, is turned away with how to add the first admin. Once
 the hub has people, everyone who opens its dashboard from another device signs in, through Tailscale too.
 
 ### Whoever is at the hub is an admin
 
-Someone at the hub computer itself is always an admin: the `chronicle hub` commands run there, and so does the
+Someone at the hub computer itself is always an admin: the `interlatch hub` commands run there, and so does the
 dashboard opened on that computer. That is how the first people are added. It is also how you recover a hub whose
-admins are gone: at the hub, run `chronicle hub role ana@example.com admin`. A person with the admin role can't
+admins are gone: at the hub, run `interlatch hub role ana@example.com admin`. A person with the admin role can't
 demote or remove the hub's last admin; at the hub itself you can.
 
 ### Inviting someone
@@ -287,7 +287,7 @@ demote or remove the hub's last admin; at the hub itself you can.
 On the hub, run:
 
 ```bash
-chronicle hub invite "Ana Lima" --email ana@example.com --role member --all-projects
+interlatch hub invite "Ana Lima" --email ana@example.com --role member --all-projects
 ```
 
 or use **Team › People › Invite someone** in the hub's dashboard. `--role` is `member` when you leave
@@ -297,28 +297,28 @@ more; [Projects and who sees them](#projects-and-who-sees-them)). Inviting someo
 admin always sees every project. You get:
 
 - a code, such as `K7PQ-M2XD-9HNA`;
-- the command for Ana's computer: `chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge`;
-- a link for a browser: `https://chronicle.example.internal/signin?code=K7PQ-M2XD-9HNA`;
+- the command for Ana's computer: `interlatch hub join https://interlatch.example.internal --code K7PQ-M2XD-9HNA --share knowledge`;
+- a link for a browser: `https://interlatch.example.internal/signin?code=K7PQ-M2XD-9HNA`;
 - when the code expires.
 
 A code works once, for 7 days. The hub sends no email: pass the code on by chat. It is shown once, because the hub
-keeps only a hash of it. If it is lost or has expired, make a new one: run `chronicle hub invite` again with the same
+keeps only a hash of it. If it is lost or has expired, make a new one: run `interlatch hub invite` again with the same
 email, or use **New invite** next to the person. One code joins one computer or signs in one browser, so someone
 with a laptop and a phone needs two. Case and dashes don't matter when a code is typed.
 
-The command and the link use the hub's address, `[hub] address`, which `chronicle hub enable --url <address>` sets.
-`chronicle hub people` lists everyone with their role, the projects they see and their computers.
+The command and the link use the hub's address, `[hub] address`, which `interlatch hub enable --url <address>` sets.
+`interlatch hub people` lists everyone with their role, the projects they see and their computers.
 
 ### Joining a computer
 
-On the person's computer, after [installing Chronicle](install.md). [Joining your team's hub](join-a-hub.md) is a
+On the person's computer, after [installing Interlatch](install.md). [Joining your team's hub](join-a-hub.md) is a
 step-by-step guide to send them:
 
 ```bash
-chronicle hub join https://chronicle.example.internal --code K7PQ-M2XD-9HNA --share knowledge
+interlatch hub join https://interlatch.example.internal --code K7PQ-M2XD-9HNA --share knowledge
 ```
 
-The hub trades the code for a token for that person and that computer, kept in `~/.claude-chronicle/hub-token`. The
+The hub trades the code for a token for that person and that computer, kept in `~/.interlatch/hub-token`. The
 token only works from that computer. From then on the computer sends like any other
 ([Your other computers](#your-other-computers)). `--share knowledge` keeps its transcripts on the computer
 ([Sharing knowledge only](#sharing-knowledge-only)); leave it out to send everything. Joining again with a new code
@@ -326,17 +326,17 @@ for the same person replaces the computer's old token. A code for someone else i
 still joined as another person, so an invite can't take a computer over: an admin first uses **Revoke** next to it
 ([Removing someone](#removing-someone)), then it joins with the new code.
 
-A computer the hub already knows (one that sent to it with the shared token) joins only from itself. Chronicle keeps
-a key in `~/.claude-chronicle/machine-key`, the hub records it the first time the computer says hello, and `hub join
+A computer the hub already knows (one that sent to it with the shared token) joins only from itself. Interlatch keeps
+a key in `~/.interlatch/machine-key`, the hub records it the first time the computer says hello, and `hub join
 --code` shows it, saying hello with the shared token first if the computer still has it. Someone else's invite used
 with that computer's id is refused, so it can't claim the computer and its sessions. For a computer that can't show
-its key (it last sent with an older Chronicle, and the shared token is off now), an admin makes an invite for that
-one computer: `chronicle hub invite <name> --computer <name or id>`, with its name as **Team › Computers** shows it
+its key (it last sent with an older Interlatch, and the shared token is off now), an admin makes an invite for that
+one computer: `interlatch hub invite <name> --computer <name or id>`, with its name as **Team › Computers** shows it
 or the id the refused join printed. That code joins that computer only.
 
 ### Opening the hub's dashboard
 
-- **From your own Chronicle.** On a computer that joined, **Settings › Devices › Open the hub's dashboard** asks the
+- **From your own Interlatch.** On a computer that joined, **Settings › Devices › Open the hub's dashboard** asks the
   hub for a sign-in link, valid for 5 minutes, and opens it in your browser. There is no password.
 - **With the invite link.** Opening `…/signin?code=…` signs that browser in. You can also paste the code on the
   hub's sign-in screen. Use this for a phone, or for someone with no computer joined to the hub.
@@ -358,7 +358,7 @@ A project only the hub computer works on stays off the team's Home; **Activity**
 of every session on the hub. Someone limited to projects sees their projects only.
 
 **What's new.** When another computer shares sessions or lessons the hub didn't have, or a computer joins, the
-**Team overview** icon shows a count, so does the browser tab (`(3) Team overview — Chronicle`), and an open dashboard
+**Team overview** icon shows a count, so does the browser tab (`(3) Team overview — Interlatch`), and an open dashboard
 says what came in: *New from Yuma in AI-BPO-Resona: 2 sessions, 4 lessons*. Opening Team overview lists what is new
 since your last visit, adds **+2** to that project's sessions and lessons, and clears the count. A session a computer
 sends again because it went on is not new; a lesson its new analysis found is. What you saw is kept on the hub, per
@@ -370,7 +370,7 @@ Admins run the hub from **Team** in the sidebar: **People**, **Shared projects**
 backups).
 Every page of a hub's dashboard says it is one, so it never passes for your own: a green band across the top with the
 hub's name, its address and what kind of hub it is, a **Hub** line in the status bar, and a green tint. The name is
-the hub computer's unless you set one: `chronicle config set hub.name "Resona team"` on the hub.
+the hub computer's unless you set one: `interlatch config set hub.name "Resona team"` on the hub.
 
 A **dedicated hub** (`[hub] dedicated = true`, which [the Docker image](docker.md) sets) is a server for the team with
 no sessions of its own. Its dashboard opens on the team's Home and leaves out what only a person's own computer needs:
@@ -399,32 +399,32 @@ hub owner keeps Resona in
 `~/Projects/Work/Resona`, and Aki and Ben should see Resona and nothing else. On the hub:
 
 ```bash
-chronicle hub project add ~/Projects/Work/Resona
-chronicle hub invite Aki --email aki@example.com --project Resona
-chronicle hub invite Ben --email ben@example.com --project Resona
+interlatch hub project add ~/Projects/Work/Resona
+interlatch hub invite Aki --email aki@example.com --project Resona
+interlatch hub invite Ben --email ben@example.com --project Resona
 ```
 
 On Aki's computer (and the same on Ben's, with Ben's code):
 
 ```bash
-chronicle hub join https://chronicle.example.internal --code XXXX-XXXX-XXXX
-chronicle hub add-folder ~/work/Resona --project Resona
+interlatch hub join https://interlatch.example.internal --code XXXX-XXXX-XXXX
+interlatch hub add-folder ~/work/Resona --project Resona
 ```
 
 - **A project set up on the hub** is a folder on the hub computer and everything below it, named after the folder.
   The hub's own sessions there are filed under it at once, with their knowledge, and so are new ones. Other computers
   can add a folder to it right away, before anything was sent to it. The folder must exist on the hub or have
   sessions that ran in it. It can't be `/`, your home folder or a folder above it, and it can't sit inside or around
-  another project set up this way. `chronicle hub project list` lists the hub's projects and marks the ones set up here. On the dashboard, **Team › Shared projects**
+  another project set up this way. `interlatch hub project list` lists the hub's projects and marks the ones set up here. On the dashboard, **Team › Shared projects**
   shows the same, with who sees each project and which computers send to it, and a **Shared** badge marks them in
   **Projects**. At the hub computer itself, that card also shares another project or stops sharing one.
-  `chronicle hub project remove <folder>` undoes one: the hub's own sessions go back to their own folders, and what
+  `interlatch hub project remove <folder>` undoes one: the hub's own sessions go back to their own folders, and what
   other computers sent stays where it was filed until they send it again.
 - **Which projects a person sees.** `--project` takes the name or the path of any project on the hub, set up here or
   not, and can be repeated; `--all-projects` gives every project.
-  `chronicle hub access <email|id> --project <name>` (or `--all-projects`) changes it later, from their next request;
+  `interlatch hub access <email|id> --project <name>` (or `--all-projects`) changes it later, from their next request;
   what their computers already sent stays. It replaces the list, so name every project they keep:
-  `--project Resona --project Website` gives Ben Website and keeps Resona. `chronicle hub people` shows what each
+  `--project Resona --project Website` gives Ben Website and keeps Resona. `interlatch hub people` shows what each
   person sees. On the hub's dashboard, **Team › People** lets an admin choose the projects when inviting someone and
   change them later; on a hub with more than six projects, a search box finds them by name or folder.
 - **A new project isn't added to anyone's list.** Someone limited to projects doesn't see a project created
@@ -432,7 +432,7 @@ chronicle hub add-folder ~/work/Resona --project Resona
   matches.", and `add-folder` says the hub has no such project. Give it to each person who should see it, as
   above. Admins, and people who see every project, see it at once.
 - **Joining.** A computer that joins as someone limited to projects shares knowledge only, with or without
-  `--share knowledge` ([Sharing knowledge only](#sharing-knowledge-only)), and `chronicle hub join` lists the projects
+  `--share knowledge` ([Sharing knowledge only](#sharing-knowledge-only)), and `interlatch hub join` lists the projects
   it shares. `add-folder` then files the sessions in `~/work/Resona` under Resona. A repository whose git remote the
   hub already files under Resona goes there without a folder being added.
 - **What their computers send.** Only the sessions the hub files under their projects: those in a folder added to
@@ -456,7 +456,7 @@ chronicle hub add-folder ~/work/Resona --project Resona
   use the project's knowledge in any folder inside a project set up there.
 - **The shared token is not limited.** A computer that sends with the hub's shared token is nobody in particular, so
   no project limit applies to it. Once everyone has joined with an invite, turn it off with
-  `chronicle hub shared-token off` ([below](#the-shared-token)); `chronicle hub access` reminds you while it is on.
+  `interlatch hub shared-token off` ([below](#the-shared-token)); `interlatch hub access` reminds you while it is on.
 
 ### The shared token
 
@@ -466,24 +466,24 @@ person; a computer that joined with an invite is its person's, and only its own 
 joined with an invite, turn it off on the hub:
 
 ```bash
-chronicle hub shared-token off
+interlatch hub shared-token off
 ```
 
 or with the switch in **Team › People**. From then on the hub refuses the shared token, and a computer
-that still uses it has to join again with a code. `chronicle hub shared-token on` turns it back on. The shared token
+that still uses it has to join again with a code. `interlatch hub shared-token on` turns it back on. The shared token
 never opens the dashboard. It belongs to nobody in particular, so no [project
 limit](#projects-and-who-sees-them) applies to a computer that sends with it.
 
 ### Removing someone
 
-`chronicle hub remove ana@example.com`, or **Remove** next to the person in **Team › People**, takes a
+`interlatch hub remove ana@example.com`, or **Remove** next to the person in **Team › People**, takes a
 person off the hub. Their unused codes, their computers' tokens and their browser sessions stop working at the next
 request. What their computers sent stays on the hub.
 
 To cut off one computer or one browser and keep the person, a lost laptop say, use **Revoke** next to it in the
-same list. That computer can join again with a new code, as the same person or as someone else. `chronicle hub role ana@example.com readonly` changes a
-role, and `chronicle hub access ana@example.com --project demo-app` the projects someone sees. These commands take an
-email or the id that `chronicle hub people` shows.
+same list. That computer can join again with a new code, as the same person or as someone else. `interlatch hub role ana@example.com readonly` changes a
+role, and `interlatch hub access ana@example.com --project demo-app` the projects someone sees. These commands take an
+email or the id that `interlatch hub people` shows.
 
 ### Taking back what a computer sent
 
@@ -491,9 +491,9 @@ Removing someone, or limiting the projects they see, keeps what their computers 
 hub, run on the hub:
 
 ```bash
-chronicle hub purge ana@example.com --outside-access      # what Ana's computers sent outside the projects she sees
-chronicle hub purge ana@example.com --project demo-app    # what they sent to demo-app
-chronicle hub purge "Ana's laptop" --project demo-app     # one computer: its name, or its id from `chronicle hub status`
+interlatch hub purge ana@example.com --outside-access      # what Ana's computers sent outside the projects she sees
+interlatch hub purge ana@example.com --project demo-app    # what they sent to demo-app
+interlatch hub purge "Ana's laptop" --project demo-app     # one computer: its name, or its id from `interlatch hub status`
 ```
 
 It lists the sessions by project and asks before removing anything (`--yes` doesn't ask). They go for good: their
@@ -501,7 +501,7 @@ summaries, lessons and notes, any transcripts that computer sent, their copy in 
 they stated, and the knowledge bases built from them, which the next sync builds again from what is left. The
 computer keeps its own copy, and the hub refuses those sessions if it sends them again. Weekly reviews already written
 don't change, and a teammate's computer that already fetched lessons from them keeps its copy until it next fetches.
-The audit log records each purge. The hub's own sessions can't be purged; `chronicle forget <id>` removes one.
+The audit log records each purge. The hub's own sessions can't be purged; `interlatch forget <id>` removes one.
 
 ### The audit log
 
@@ -513,10 +513,10 @@ only as hashes.
 ## Reaching the hub without Tailscale
 
 Tailscale is one way to reach a hub. Many companies don't allow it, and a hub works just as well on the company
-network or over the company VPN. Say the hub should be reached at `https://chronicle.example.internal`:
+network or over the company VPN. Say the hub should be reached at `https://interlatch.example.internal`:
 
-1. **Set the address and add people first.** At the hub, `chronicle hub enable --url
-   https://chronicle.example.internal` sets `[hub] address`, which the join commands and sign-in links use. Then
+1. **Set the address and add people first.** At the hub, `interlatch hub enable --url
+   https://interlatch.example.internal` sets `[hub] address`, which the join commands and sign-in links use. Then
    invite yourself and your team ([above](#inviting-someone)). Until a hub has people, its dashboard has no sign-in
    and answers only the hub itself: anyone else, through the proxy or from another device, is turned away.
 2. **Put HTTPS in front.** The dashboard speaks plain HTTP, and codes, tokens and sign-in cookies must not cross the
@@ -539,17 +539,17 @@ network or over the company VPN. Say the hub should be reached at `https://chron
    ```toml
    [server]
    host = "0.0.0.0"                                # only when the proxy runs on another computer
-   allowed_hosts = ["chronicle.example.internal"]
+   allowed_hosts = ["interlatch.example.internal"]
    trusted_proxies = ["10.0.4.12"]                 # that computer, so its X-Forwarded-Proto is believed
    ```
 
    When the proxy runs on the hub itself, keep `host = "127.0.0.1"` and the default `trusted_proxies`, and add
    `behind_proxy = true`: a proxied request can look exactly like one made at the hub, which is always an admin, so
    with it set no request through the dashboard counts as made at the hub. Admins then sign in like everyone, or use
-   the `chronicle hub` commands at the hub. With `0.0.0.0`, let only the proxy reach the dashboard's port (11524) through the firewall.
+   the `interlatch hub` commands at the hub. With `0.0.0.0`, let only the proxy reach the dashboard's port (11524) through the firewall.
    Restart the dashboard afterwards.
 
-With Tailscale instead, `chronicle tailnet on --anyone` lets everyone in your tailnet reach the hub over HTTPS
+With Tailscale instead, `interlatch tailnet on --anyone` lets everyone in your tailnet reach the hub over HTTPS
 ([Your phone](#your-phone)). Once the hub has people, they still sign in.
 
 ### Company sign-in
@@ -573,12 +573,12 @@ with a code, so let requests to `/api/hub/` through the auth proxy without sign-
 
 ## A Linux hub
 
-On Linux, `chronicle install` sets up systemd user units instead of launchd agents: `chronicle-sync.timer` (the
-15-minute sync) and `chronicle-ui.service` (the dashboard). Two one-time commands help a hub that runs unattended:
+On Linux, `interlatch install` sets up systemd user units instead of launchd agents: `interlatch-sync.timer` (the
+15-minute sync) and `interlatch-ui.service` (the dashboard). Two one-time commands help a hub that runs unattended:
 
 ```bash
 loginctl enable-linger $USER             # keep them running while nobody is logged in
-sudo tailscale set --operator=$USER      # let `chronicle tailnet on` configure Tailscale Serve
+sudo tailscale set --operator=$USER      # let `interlatch tailnet on` configure Tailscale Serve
 ```
 
 The desktop app is macOS only; the command line and the dashboard work the same.
@@ -590,16 +590,16 @@ A team's hub on a server can also run in Docker, with HTTPS and the team store s
 If you would rather not run a hub, [Syncthing](https://syncthing.net) (or rsync) can copy another computer's
 sessions to the main one: sync its `~/.claude/projects` into a folder such as `~/sessions/laptop/claude/projects`
 and its `~/.codex/sessions` into `~/sessions/laptop/codex/sessions`, then add `~/sessions/laptop/claude` to
-`claude_dirs` and `~/sessions/laptop/codex` to `codex_dirs`. Chronicle records them as its own: without the
+`claude_dirs` and `~/sessions/laptop/codex` to `codex_dirs`. Interlatch records them as its own: without the
 computer's name, project matching or the handover of earlier analyses.
 
-Never sync `~/.claude-chronicle` itself between computers: a SQLite database copied while it is in use can be
+Never sync `~/.interlatch` itself between computers: a SQLite database copied while it is in use can be
 corrupted.
 
 ## Not covered yet
 
 - **The Claude app on your phone.** Claude's custom connectors reach MCP servers from Anthropic's cloud, not from
   your phone, so the hub's tailnet address is out of their reach. Claude Code's Remote Control, from the phone into
-  a session on the hub, does have Chronicle's tools.
+  a session on the hub, does have Interlatch's tools.
 - **A copy to read offline** on the other computers.
 - **Windows.**

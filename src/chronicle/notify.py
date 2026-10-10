@@ -1,4 +1,4 @@
-"""Desktop notification of a new Chronicle release (opt-in: `[updates] notify`).
+"""Desktop notification of a new Interlatch release (opt-in: `[updates] notify`).
 
 The background sync calls release_check() on every run. It asks pypi.org at most once a day (update.check_due) and
 notifies once per release, so a notification that was ignored or dismissed does not come back. macOS posts through
@@ -17,8 +17,8 @@ from .config import Config
 log = logging.getLogger("chronicle.notify")
 
 NOTIFIED_KEY = "update_notified"  # kv: the release the last notification was about
-UPGRADE = {"uv": "uv tool upgrade agents-chronicle", "pipx": "pipx upgrade agents-chronicle",
-           "pip": "pip install -U agents-chronicle"}
+UPGRADE = {"uv": "uv tool upgrade interlatch", "pipx": "pipx upgrade interlatch",
+           "pip": "pip install -U interlatch"}
 
 
 def _applescript(text: str) -> str:
@@ -30,7 +30,7 @@ def post(title: str, message: str) -> bool:
     if platform.system() == "Darwin":
         cmd = ["osascript", "-e", f"display notification {_applescript(message)} with title {_applescript(title)}"]
     elif shutil.which("notify-send"):
-        cmd = ["notify-send", "--app-name=Chronicle", title, message]
+        cmd = ["notify-send", "--app-name=Interlatch", title, message]
     else:
         return False
     try:
@@ -41,9 +41,16 @@ def post(title: str, message: str) -> bool:
 
 def how_to_update(cfg: Config, kind: str) -> str:
     if kind == "app":
-        return "Open Chronicle › Status › Updates to download it."
+        return "Open Interlatch › Status › Updates to download it."
     where = f"the dashboard's Status › Updates (http://127.0.0.1:{cfg.server_port}/#/status?focus=updates)"
-    return f"Update from {where}, or run: {UPGRADE[kind]}" if kind in UPGRADE else f"Update from {where}."
+    return f"Update from {where}, or run: {_upgrade(kind)}" if kind in UPGRADE else f"Update from {where}."
+
+
+def _upgrade(kind: str) -> str:
+    """The command that updates this install; for one of the agents-chronicle package, the move to interlatch."""
+    from .update import check, install_method
+
+    return (check()["command"] if install_method().get("move") else None) or UPGRADE[kind]
 
 
 def release_check(cfg: Config, conn) -> str | None:
@@ -60,12 +67,12 @@ def release_check(cfg: Config, conn) -> str | None:
     offer = update.available()
     if not offer or kv_get(conn, NOTIFIED_KEY) == offer["key"]:
         return None
-    if not post(f"Chronicle {offer['to']} is available", how_to_update(cfg, update.install_method()["kind"])):
-        log.info("no way to show a notification for Chronicle %s here", offer["to"])
+    if not post(f"Interlatch {offer['to']} is available", how_to_update(cfg, update.install_method()["kind"])):
+        log.info("no way to show a notification for Interlatch %s here", offer["to"])
         return None
     kv_set(conn, NOTIFIED_KEY, offer["key"])
     conn.commit()
-    log.info("notified about Chronicle %s", offer["to"])
+    log.info("notified about Interlatch %s", offer["to"])
     return offer["to"]
 
 

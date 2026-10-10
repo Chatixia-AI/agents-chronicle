@@ -1,7 +1,7 @@
-"""Build a demo Chronicle home from made-up sessions, for screenshots and trying the dashboard without your own data.
+"""Build a demo Interlatch home from made-up sessions, for screenshots and trying the dashboard without your own data.
 
-    uv run python docs/demo/make_demo.py /tmp/chronicle-demo
-    CHRONICLE_HOME=/tmp/chronicle-demo/home uv run python -m chronicle ui --port 8898 --open
+    uv run python docs/demo/make_demo.py /tmp/interlatch-demo
+    INTERLATCH_HOME=/tmp/interlatch-demo/home uv run python -m chronicle ui --port 8898 --open
 
 It writes synthetic Claude Code transcripts for a fictional developer (five projects, about six weeks), then runs the
 real pipeline over them: sync, analysis, knowledge bases, glossary and weekly reviews. The only stand-in is `claude`:
@@ -476,7 +476,7 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "re
 
 
 def main() -> None:
-    out = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/chronicle-demo").resolve()
+    out = Path(sys.argv[1] if len(sys.argv) > 1 else "/tmp/interlatch-demo").resolve()
     if out.exists():
         shutil.rmtree(out)
     claude_dir, home, bindir = out / "claude", out / "home", out / "bin"
@@ -515,8 +515,11 @@ def main() -> None:
         f'[analysis]\nauto = true\nclaude_bin = "{fake}"\nidle_minutes = 0\nmax_per_run = 100\nconcurrency = 4\n\n'
         f'[synthesis]\nmin_new_items = 1\n')
 
-    env = {**os.environ, "CHRONICLE_HOME": str(home), "COPILOT_HOME": str(out / "none"), "BOB_HOME": str(out / "none")}
-    env.pop("CHRONICLE_CLAUDE_DIRS", None)
+    # both names: INTERLATCH_HOME wins over CHRONICLE_HOME, so a home set in your shell under either can't leak in
+    env = {**os.environ, "INTERLATCH_HOME": str(home), "CHRONICLE_HOME": str(home), "COPILOT_HOME": str(out / "none"),
+           "BOB_HOME": str(out / "none")}
+    for name in ("INTERLATCH_CLAUDE_DIRS", "CHRONICLE_CLAUDE_DIRS"):
+        env.pop(name, None)
 
     def chronicle(*args: str) -> None:
         subprocess.run([sys.executable, "-m", "chronicle", *args], env=env, check=True)
@@ -526,7 +529,7 @@ def main() -> None:
     for w in range(1, WEEKS_REVIEWED + 1):
         week = (now - timedelta(weeks=w)).strftime("%G-W%V")
         chronicle("review", week)
-    print(f"\nDemo ready. Open it with:\n  CHRONICLE_HOME={home} uv run python -m chronicle ui --port 8898 --open")
+    print(f"\nDemo ready. Open it with:\n  INTERLATCH_HOME={home} uv run python -m chronicle ui --port 8898 --open")
 
 
 if __name__ == "__main__":

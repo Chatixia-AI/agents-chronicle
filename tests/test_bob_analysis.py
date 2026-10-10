@@ -25,7 +25,7 @@ modes = json.load(open(os.path.join(ws, ".bob", "custom_modes.yaml")))["customMo
 mode = next(m for m in modes if m["slug"] == args[args.index("--mode") + 1])
 with open(os.environ["FAKE_BOB_LOG"], "a") as fh:
     fh.write(json.dumps({"args": args, "prompt_chars": len(prompt), "groups": mode["groups"], "cwd": os.getcwd(),
-                         "key": os.environ.get("BOB_API_KEY"), "internal": os.environ.get("CHRONICLE_INTERNAL")}) + "\n")
+                         "key": os.environ.get("BOB_API_KEY"), "internal": os.environ.get("INTERLATCH_INTERNAL")}) + "\n")
 how = os.environ.get("FAKE_BOB_MODE", "ok")
 if how == "license":
     print("Error: A license agreement is required. Please accept the license terms before proceeding.", file=sys.stderr)

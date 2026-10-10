@@ -9,12 +9,12 @@ scene, question and answer, the explanation, the leads ruled out, and the princi
 found), with work notes and revisits kept in the browser. Asking before telling stays in All knowledge. The
 [roadmap](../../ROADMAP.md) says when the rest, measurement included, is planned.
 
-Chronicle writes down what every session taught, and today almost all of it goes to the agents: the MCP tools and
+Interlatch writes down what every session taught, and today almost all of it goes to the agents: the MCP tools and
 the start-of-session notes. People meet the same lessons as lists. On a computer that shares with a team hub, its
 teammates' lessons show up only as a count in **Settings › Devices**, while its agent gets all of them. The agent
 remembers, so the person never has to.
 
-This page describes how Chronicle could also help the people learn: as engineers, and as architects.
+This page describes how Interlatch could also help the people learn: as engineers, and as architects.
 
 ## What the research says
 
@@ -87,9 +87,9 @@ The **Architect's track** groups the cases by principle. Each principle has a su
 question about the person's own project, with no single right answer) and a reading list. Progress on the track is
 visible only to the person.
 
-A first principle list, drawn from the cases in Chronicle's own archive:
+A first principle list, drawn from the cases in Interlatch's own archive:
 
-| Principle | Example from Chronicle's own sessions | Reading |
+| Principle | Example from Interlatch's own sessions | Reading |
 |---|---|---|
 | Know what's running | The dashboard served web files read once at startup | [The Twelve-Factor App: Build, release, run](https://12factor.net/build-release-run) |
 | Cache invalidation keys | Python kept a stale `.pyc` after an edit and revert in the same second | [PEP 552](https://peps.python.org/pep-0552/) |
@@ -170,7 +170,7 @@ Asking people whether it helped flatters a passive list, so the measures are rec
 One trap: a gotcha can stop recurring because the agent's start-of-session notes prevent it, not because the
 person learned anything. So the agent always gets every lesson, and only what the person sees varies: for each
 eligible lesson, ask first, show plainly, or don't show. Comparing within each person works for teams of five to
-twenty. Run it on Chronicle's own use for six to eight weeks before building past parts 1 and 3.
+twenty. Run it on Interlatch's own use for six to eight weeks before building past parts 1 and 3.
 
 ## Not doing
 

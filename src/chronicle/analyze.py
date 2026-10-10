@@ -152,7 +152,7 @@ REDUCE_SCHEMA = {
 }
 
 SYSTEM_PROMPT = """\
-You are Chronicle, an analyst that turns AI coding-agent session transcripts (Claude Code, OpenAI Codex, GitHub Copilot, IBM Bob, \
+You are Interlatch, an analyst that turns AI coding-agent session transcripts (Claude Code, OpenAI Codex, GitHub Copilot, IBM Bob, \
 Google Antigravity) into a durable record and reusable knowledge for the developer who ran them.
 
 You receive metadata (including which agent ran the session) and a condensed transcript of one session: a \
@@ -217,7 +217,7 @@ WRITE_ENGLISH = "Write in English, but keep identifiers, error messages and quot
 
 
 def system_prompt(cfg: Config) -> str:
-    """SYSTEM_PROMPT in the language Chronicle writes in ([analysis] language)."""
+    """SYSTEM_PROMPT in the language Interlatch writes in ([analysis] language)."""
     return written_in(cfg, SYSTEM_PROMPT, WRITE_ENGLISH, "Tags stay short lowercase English terms, so sessions group by "
                       "topic whichever language they were analyzed in.")
 

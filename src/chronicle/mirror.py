@@ -1,15 +1,15 @@
 """A copy of your archive in a Postgres database you choose (`[mirror] to = "postgres"`): on this computer, in
 Docker, or in the cloud.
 
-Chronicle keeps working from its own SQLite, the only copy it reads. The mirror is for querying with SQL or a BI
+Interlatch keeps working from its own SQLite, the only copy it reads. The mirror is for querying with SQL or a BI
 tool, and for a copy kept somewhere else. It is one-way: the background run writes it after each pass (worker.py),
-`chronicle mirror sync` on demand, and nothing is ever read back from it.
+`interlatch mirror sync` on demand, and nothing is ever read back from it.
 
 What it holds (`[mirror] include`):
 - "knowledge" (default): every session's details, summary and analysis, your lessons, knowledge bases, weekly
   reviews, glossary, artifacts, token usage and the files sessions touched. No prompts, no transcript.
 - "everything": the prompts and transcripts (events, tool calls) too, with secrets redacted as in a digest.
-Sessions in projects you excluded (`[sources] exclude_projects`) never go, nor does Chronicle's own bookkeeping.
+Sessions in projects you excluded (`[sources] exclude_projects`) never go, nor does Interlatch's own bookkeeping.
 
 How it stays current: each row of a table with a key of its own (sessions, knowledge, ...) carries a hash of what it
 was written from (`_hash`). A sync hashes the rows here, reads the mirror's hashes, and writes only the rows that
@@ -18,7 +18,7 @@ with it: a session whose row or any of them changed is written again whole. One 
 names it), so two computers never overwrite each other's copy.
 
 The connection is read from PG* lines (PGHOST, PGPORT, PGDATABASE, PGUSER, PGPASSWORD, PGSSLMODE) in
-<chronicle home>/mirror.env. The Postgres driver comes with the postgres extra.
+<interlatch home>/mirror.env. The Postgres driver comes with the postgres extra.
 """
 
 from __future__ import annotations
@@ -41,11 +41,11 @@ log = logging.getLogger("chronicle.mirror")
 ENV_FILE = "mirror.env"
 INCLUDES = ("knowledge", "everything")
 VERSION = 1  # what a row becomes; raising it writes every row again
-LAST_KV = "mirror:last"  # the last sync's outcome, for the dashboard and `chronicle mirror status`
+LAST_KV = "mirror:last"  # the last sync's outcome, for the dashboard and `interlatch mirror status`
 LOCK = "mirror.lock"
 BATCH = 100  # sessions written per transaction
 KEYS_BATCH = 500  # rows of the other tables read and written at a time
-INSTALL = "uv tool install 'agents-chronicle[postgres]'"
+INSTALL = "uv tool install 'interlatch[postgres]'"
 
 # Tables whose rows have a key of their own: (table, key)
 TABLES = (("machines", "id"), ("sessions", "id"), ("knowledge", "id"), ("project_kb", "project_path"),
@@ -53,7 +53,7 @@ TABLES = (("machines", "id"), ("sessions", "id"), ("knowledge", "id"), ("project
 # A session's own rows, written with it
 CHILDREN = ("api_calls", "session_files", "subagents", "artifacts")
 TRANSCRIPT = ("events", "tool_calls")  # with include = "everything" only
-# Chronicle's bookkeeping: never copied
+# Interlatch's bookkeeping: never copied
 INTERNAL = {"sessions": {"claude_dir", "transcript_path", "archive_path", "source_present", "files_sig", "parser_version",
                          "analysis_attempts", "analysis_not_before", "screen_sig"},
             "machines": {"key_hash", "person_id"},
@@ -94,7 +94,7 @@ def check_settings(values: dict, saved: dict | None) -> dict:
 
 
 def write_settings(cfg: Config, params: dict) -> None:
-    pg.write_settings(env_path(cfg), params, "Chronicle's mirror ([mirror] to = \"postgres\"). Written by the dashboard; keep it private.")
+    pg.write_settings(env_path(cfg), params, "Interlatch's mirror ([mirror] to = \"postgres\"). Written by the dashboard; keep it private.")
 
 
 def enabled(cfg: Config) -> bool:
@@ -189,9 +189,9 @@ def _connect(params: dict):
     try:
         import psycopg
     except ImportError:
-        raise MirrorError(f"the mirror needs the Postgres driver: install Chronicle with the postgres extra ({INSTALL})") from None
+        raise MirrorError(f"the mirror needs the Postgres driver: install Interlatch with the postgres extra ({INSTALL})") from None
     try:
-        return psycopg.connect(**params, connect_timeout=15, autocommit=True, application_name="chronicle-mirror")
+        return psycopg.connect(**params, connect_timeout=15, autocommit=True, application_name="interlatch-mirror")
     except psycopg.Error as exc:
         raise MirrorError(f"can't reach the mirror database ({pg.where(params)}): {pg.first_line(exc)}") from None
 
@@ -258,7 +258,7 @@ def _prepare(c, local: sqlite3.Connection, schema: str, include: str, me: dict) 
                 if n not in have[t]:
                     c.execute(f"ALTER TABLE {s}.{_q(t)} ADD COLUMN {_q(n)} {typ}")
             for n in have[t]:
-                if n not in names:  # a prompt column after include went back to "knowledge", or one Chronicle dropped
+                if n not in names:  # a prompt column after include went back to "knowledge", or one Interlatch dropped
                     c.execute(f"ALTER TABLE {s}.{_q(t)} DROP COLUMN {_q(n)}")
     return want
 

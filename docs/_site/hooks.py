@@ -4,7 +4,7 @@ README.md and README.ja.md become the English and Japanese home pages, in place 
 docs/ja/README.md (indexes for browsing on GitHub; the site's navigation does their job). Every relative
 link is resolved from the file's place in the repository, so links that leave docs/ (the READMEs,
 CHANGELOG.md, LICENSE, source files) point at the home pages or at GitHub instead of breaking. The
-"← Chronicle · Docs index" line atop each page is dropped: the site's navigation does its job too.
+"← Interlatch · Docs index" line atop each page is dropped: the site's navigation does its job too.
 """
 
 import posixpath

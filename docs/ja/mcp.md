@@ -1,13 +1,13 @@
 # MCP サーバー
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) のサーバーが付いていて、MCP クライアントなら何でも
+Interlatch には [Model Context Protocol](https://modelcontextprotocol.io) のサーバーが付いていて、MCP クライアントなら何でも
 過去のセッションとナレッジを検索できます。Claude Code、Codex、Copilot、Bob、Antigravity、Claude Desktop、Cursor、Windsurf、Gemini CLI、
 そのほか MCP に対応したものすべてです。たとえば *「このエラー、前にも出た？」* *「なぜ冪等性を Postgres でやることにしたんだっけ？」*
 *「billing-api はどうデプロイする？」* のように尋ねられます。
 
-サーバーは `chronicle mcp` です。stdio で通信し、クライアントがローカルのプロセスとして起動するので、ネットワークで待ち受けるものは
+サーバーは `interlatch mcp` です。stdio で通信し、クライアントがローカルのプロセスとして起動するので、ネットワークで待ち受けるものは
 ありません。どのツールもローカルの保管庫を読むだけです。
 
 ## ツール
@@ -31,30 +31,30 @@ Chronicle には [Model Context Protocol](https://modelcontextprotocol.io) の�
 
 ## クライアントを接続する
 
-**Chronicle が記録するエージェント**は、接続したときにサーバーが登録されます（[ソース](sources.md)を参照）：
+**Interlatch が記録するエージェント**は、接続したときにサーバーが登録されます（[ソース](sources.md)を参照）：
 
 | エージェント | 登録先 |
 | --- | --- |
-| Claude Code | ユーザースコープ、`claude mcp add` で（`chronicle install` または `chronicle connect claude`） |
-| Codex | `~/.codex/config.toml`、`codex mcp add` で（`chronicle connect codex`） |
-| GitHub Copilot | VS Code の `User/mcp.json` と `~/.copilot/mcp-config.json`（`chronicle connect copilot`） |
-| IBM Bob（IDE と Bob Shell） | `~/.bob/settings/mcp.json` と `mcp_settings.json`（`chronicle connect bob`） |
-| Google Antigravity | `~/.gemini/config/mcp_config.json`（`chronicle connect antigravity`） |
+| Claude Code | ユーザースコープ、`claude mcp add` で（`interlatch install` または `interlatch connect claude`） |
+| Codex | `~/.codex/config.toml`、`codex mcp add` で（`interlatch connect codex`） |
+| GitHub Copilot | VS Code の `User/mcp.json` と `~/.copilot/mcp-config.json`（`interlatch connect copilot`） |
+| IBM Bob（IDE と Bob Shell） | `~/.bob/settings/mcp.json` と `mcp_settings.json`（`interlatch connect bob`） |
+| Google Antigravity | `~/.gemini/config/mcp_config.json`（`interlatch connect antigravity`） |
 
-**ほかのクライアント**にはサーバーだけを追加します。Chronicle はそのセッションを記録しません。**Settings › MCP ›
+**ほかのクライアント**にはサーバーだけを追加します。Interlatch はそのセッションを記録しません。**Settings › MCP ›
 Other MCP clients** から、またはコマンドラインで追加します：
 
 | クライアント | コマンド | 編集する設定ファイル |
 | --- | --- | --- |
-| Claude Desktop | `chronicle connect claude-desktop` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
-| Cursor | `chronicle connect cursor` | `~/.cursor/mcp.json` |
-| Windsurf | `chronicle connect windsurf` | `~/.codeium/windsurf/mcp_config.json` |
-| Gemini CLI | `chronicle connect gemini` | `~/.gemini/settings.json` |
+| Claude Desktop | `interlatch connect claude-desktop` | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Cursor | `interlatch connect cursor` | `~/.cursor/mcp.json` |
+| Windsurf | `interlatch connect windsurf` | `~/.codeium/windsurf/mcp_config.json` |
+| Gemini CLI | `interlatch connect gemini` | `~/.gemini/settings.json` |
 
-Chronicle は `chronicle` の項目を追加するだけで、ファイルのほかの部分には触れません。事前に `~/.claude-chronicle/backups/` に
+Interlatch は `interlatch` の項目を追加するだけで、ファイルのほかの部分には触れません。事前に `~/.interlatch/backups/` に
 バックアップし、プレーンな JSON でないファイル（コメント入りなど）は編集しません。サーバーを読み込むにはクライアントを再起動して
-ください。`chronicle disconnect <client>` で項目を削除でき、`chronicle uninstall` でも削除されます。どのクライアントに登録済みかは
-`chronicle sources` で確認できます。
+ください。`interlatch disconnect <client>` で項目を削除でき、`interlatch uninstall` でも削除されます。どのクライアントに登録済みかは
+`interlatch sources` で確認できます。
 
 ## そのほかのクライアント
 
@@ -62,27 +62,27 @@ Chronicle は `chronicle` の項目を追加するだけで、ファイルのほ
 VS Code・Codex・Claude Code 向けのコピーできる設定を、インストールに合ったパスで表示します。ターミナルでは次のコマンドで項目を出力します：
 
 ```bash
-chronicle mcp --print-config
+interlatch mcp --print-config
 ```
 
 ```json
 {
   "mcpServers": {
-    "chronicle": {
-      "command": "/Users/you/.local/bin/chronicle",
+    "interlatch": {
+      "command": "/Users/you/.local/bin/interlatch",
       "args": ["mcp"]
     }
   }
 }
 ```
 
-`chronicle` の項目をクライアントの MCP 設定に貼り付けます。多くのクライアントはこのような `mcpServers` を使いますが、VS Code は
+`interlatch` の項目をクライアントの MCP 設定に貼り付けます。多くのクライアントはこのような `mcpServers` を使いますが、VS Code は
 `servers` を使い、ほかの名前のクライアントもあるので、キーはクライアントのドキュメントで確認してください。次の点に注意してください：
 
 - **フルパスを使う。** デスクトップアプリはシェルの `PATH` を引き継ぎません。コマンドラインでインストールした場合は
-  `~/.local/bin/chronicle`、デスクトップアプリだけの場合は `~/.claude-chronicle/bin/chronicle`（アプリに同梱された Chronicle を
+  `~/.local/bin/interlatch`、デスクトップアプリだけの場合は `~/.interlatch/bin/interlatch`（アプリに同梱された Interlatch を
   実行する小さなスクリプト）です。
-- **ホームを変えている場合。** `CHRONICLE_HOME` を設定しているなら、それも渡します：`"env": {"CHRONICLE_HOME": "/path/to/home"}`。
+- **ホームを変えている場合。** `INTERLATCH_HOME` を設定しているなら、それも渡します：`"env": {"INTERLATCH_HOME": "/path/to/home"}`。
 - **トランスポート。** 対応しているのは stdio だけです。URL でしか接続できないクライアントは、まだ使えません。
 
 ## 手で試す
@@ -90,7 +90,7 @@ chronicle mcp --print-config
 [MCP Inspector](https://github.com/modelcontextprotocol/inspector) でツールの一覧を見て、呼び出せます：
 
 ```bash
-npx @modelcontextprotocol/inspector ~/.local/bin/chronicle mcp
+npx @modelcontextprotocol/inspector ~/.local/bin/interlatch mcp
 ```
 
 または JSON-RPC をそのまま送ります：
@@ -99,12 +99,12 @@ npx @modelcontextprotocol/inspector ~/.local/bin/chronicle mcp
 printf '%s\n' \
   '{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}' \
   '{"jsonrpc":"2.0","id":2,"method":"tools/call","params":{"name":"search_knowledge","arguments":{"query":"webhook"}}}' \
-  | chronicle mcp
+  | interlatch mcp
 ```
 
 ## プライバシー
 
-サーバーはあなたの Mac で動き、Chronicle 自身のデータベースだけを読みます。ただし、ツールが返した内容はクライアントの会話の一部になり、
+サーバーはあなたの Mac で動き、Interlatch 自身のデータベースだけを読みます。ただし、ツールが返した内容はクライアントの会話の一部になり、
 その会話はクライアントのモデルに送られます。Claude Desktop なら Claude、Cursor、Windsurf、Gemini CLI なら選んだモデルです。
 ツールの結果には分析用の要約と同じ伏せ字処理がかかります（API キー、トークン、URL 内のパスワードなど）。それ以外のトランスクリプトの
 内容はクライアントのモデルに届きうるので、セッションを見せてもよいと思えるモデル提供元のクライアントにだけサーバーを追加してください。
@@ -113,8 +113,8 @@ printf '%s\n' \
 ## トラブルシューティング
 
 - **ツールが表示されない。** 接続したあとクライアントを再起動してください。設定に書かれたパスが存在するかも確認します：
-  `ls -l ~/.local/bin/chronicle`。
-- **どこでも「No knowledge found」になる。** セッションはバックグラウンドで分析されます。`chronicle status` で待ち行列を確認できます。
+  `ls -l ~/.local/bin/interlatch`。
+- **どこでも「No knowledge found」になる。** セッションはバックグラウンドで分析されます。`interlatch status` で待ち行列を確認できます。
 - **別のプロジェクトの答えが返ってくる。** `project` を明示するか、プロジェクト名を挙げて尋ねてください。
 
 そのほかは[トラブルシューティング](troubleshooting.md)を参照してください。

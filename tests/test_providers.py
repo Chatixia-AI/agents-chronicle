@@ -160,7 +160,7 @@ def test_chat_completions(env, fake, provider, auth):
     assert "max_tokens" not in req["body"] and "max_completion_tokens" not in req["body"] and "tools" not in req["body"]
     assert (res.input_tokens, res.output_tokens) == (1200, 300)
     if provider == "openrouter":
-        assert req["headers"]["x-title"] == "Chronicle" and res.cost_usd == pytest.approx(0.0042)
+        assert req["headers"]["x-title"] == "Interlatch" and res.cost_usd == pytest.approx(0.0042)
     runner.run("x", {"type": "object"}, system="Summarize the session.", model="haiku")
     assert fake.posts()[-1]["body"]["model"] == "m-small"
     runner.run("x", {"type": "object"}, system="Summarize the session.", model="gpt-5.5")  # a model of its own: as is

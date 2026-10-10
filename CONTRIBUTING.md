@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for helping. Chronicle is a small Python project with no build step for the dashboard.
+Thanks for helping. Interlatch is a small Python project with no build step for the dashboard.
 
 1. `uv sync && uv run pytest -q` runs the tests in about 40 seconds. They use a fake `claude` binary and synthetic
    Codex, Copilot, Bob and Antigravity stores, so they never touch your real data or spend tokens.
@@ -13,7 +13,7 @@ Thanks for helping. Chronicle is a small Python project with no build step for t
 [docs/development.md](docs/development.md) covers the code layout, building the app and releasing.
 
 When you open a pull request, say what changed and how you checked it, and include a screenshot for UI changes
-(taken from the demo data, not your own sessions). Please keep all data local: Chronicle must not send anything
+(taken from the demo data, not your own sessions). Please keep all data local: Interlatch must not send anything
 anywhere except the analysis calls through the user's own `claude`.
 
 Found a way in rather than a bug? [SECURITY.md](SECURITY.md) says how to report it privately.
@@ -23,5 +23,5 @@ its topic, not in CHANGELOG.md itself. The **Changelog** check fails a pull requ
 `docker/` or `vscode-extension/` without one; label it `no-changelog` if nothing changes for users.
 
 Code outside `ee/` is MIT, and so are your contributions to it. `ee/` is under the
-[Chronicle Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
+[Interlatch Enterprise License](ee/LICENSE), and pull requests to it fall under section 3 of that license. The MIT
 core must never import from `ee/` ([ee/README.md](ee/README.md)).

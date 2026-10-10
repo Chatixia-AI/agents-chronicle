@@ -333,7 +333,7 @@ describe it in one short sentence. Avoid vague buckets such as "Misc" or "Genera
 terms that fit nowhere. Put every term id in exactly one theme."""
 THEMES_JA = ("Name and describe the themes in Japanese (system and product names stay as they are), and call the theme "
              "for terms that fit nowhere 「その他」 instead of \"Other\".")
-OTHER_THEME = {"en": ("Other", "Terms that fit none of the other themes."),  # leftovers, in the language Chronicle writes in
+OTHER_THEME = {"en": ("Other", "Terms that fit none of the other themes."),  # leftovers, in the language Interlatch writes in
                "ja": ("その他", "ほかのどのテーマにも入らない用語。")}
 
 THEMES_SCHEMA = {

@@ -248,7 +248,7 @@ def test_the_shared_token_cant_act_as_a_persons_computer(two_spokes):
 def test_a_hub_without_people_lets_no_other_device_in(dashboard):
     url = dashboard["url"]
     code, r = _call(url, "/api/sessions", headers=REMOTE)
-    assert code == 403 and r["nobody"] is True and "chronicle hub invite" in r["error"]
+    assert code == 403 and r["nobody"] is True and "interlatch hub invite" in r["error"]
     for path, body in (("/api/update", {}), ("/api/sync", {}), ("/api/suggestions/1/apply", {})):
         assert _call(url, path, body, REMOTE)[0] == 403, path
     assert _call(url, "/api/sessions", headers={"X-Real-IP": "203.0.113.5"})[0] == 403  # a proxy on this computer

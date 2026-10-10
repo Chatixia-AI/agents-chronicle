@@ -150,7 +150,7 @@ def test_join_with_an_invite_then_sign_in(hubcfg, monkeypatch, capsys):
     httpd, url = _stub_hub(cfg)
     try:
         home = _spoke_home(hubcfg["tmp"])
-        monkeypatch.setenv("CHRONICLE_HOME", str(home))
+        monkeypatch.setenv("INTERLATCH_HOME", str(home))
         assert main(["hub", "join", url, "--no-push"]) == 2  # a code or a token
         assert main(["hub", "join", url, "--code", code, "--token", "t", "--no-push"]) == 2
         capsys.readouterr()
@@ -181,7 +181,7 @@ def test_join_with_a_token_still_works(env, monkeypatch, capsys):
     from chronicle.cli import main
 
     home = _spoke_home(env["tmp"])
-    monkeypatch.setenv("CHRONICLE_HOME", str(home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(home))
     assert main(["hub", "join", "hub.example.ts.net", "--token", "shared", "--no-push"]) == 0
     spoke = load_config(home)
     assert spoke.hub_url == "https://hub.example.ts.net" and hub.read_token(spoke) == "shared"
@@ -218,7 +218,7 @@ def test_people_from_the_command_line(hubcfg, monkeypatch, capsys):
     out = _out(capsys)
     code = CODE_RE.search(out).group(0)
     assert "Added Ada (ada@example.com), an admin" in out
-    assert f"chronicle hub join https://chronicle.example.internal --code {code} --share knowledge" in out
+    assert f"interlatch hub join https://chronicle.example.internal --code {code} --share knowledge" in out
     assert f"https://chronicle.example.internal/signin?code={code}" in out
     assert main(["hub", "invite", "Ada", "--email", "ADA@example.com"]) == 0  # a new code for the same person
     out = _out(capsys)

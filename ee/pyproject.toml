@@ -1,13 +1,13 @@
 [project]
-name = "agents-chronicle-enterprise"
+name = "interlatch-enterprise"
 version = "0.0.0"
-description = "Chronicle Enterprise: single sign-on, policies, audit export and admin reports for Chronicle's team hub."
+description = "Interlatch Enterprise: single sign-on, policies, audit export and admin reports for Interlatch's team hub."
 readme = "README.md"
 requires-python = ">=3.11"
-license = "LicenseRef-Chronicle-Enterprise"
+license = "LicenseRef-Interlatch-Enterprise"
 license-files = ["LICENSE"]
 authors = [{ name = "Adrian Tam" }]
-dependencies = ["agents-chronicle"]
+dependencies = ["interlatch"]
 
 [project.urls]
 Repository = "https://github.com/Chatixia-AI/agents-chronicle/tree/main/ee"

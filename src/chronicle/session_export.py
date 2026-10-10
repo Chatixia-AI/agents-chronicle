@@ -1,7 +1,7 @@
 """Export sessions as files to download: one session as a file, several as a .zip.
 
 Markdown is the readable record: the session overview (summary, knowledge, files) followed by the conversation.
-JSON carries the same record plus every event. Both are redacted like everything else Chronicle shows. The
+JSON carries the same record plus every event. Both are redacted like everything else Interlatch shows. The
 original transcript is the agent's own file as archived, unredacted, for the sessions that have one of their own.
 """
 
@@ -151,9 +151,9 @@ def export_sessions(conn: sqlite3.Connection, ids: list[str], fmt: str) -> tuple
         ctype = {"md": "text/markdown; charset=utf-8", "json": "application/json"}.get(fmt, "application/octet-stream")
         return one[0], ctype, one[1]
     stamp = datetime.now().strftime("%Y-%m-%d %H%M")
-    folder = f"Chronicle sessions {stamp}"
+    folder = f"Interlatch sessions {stamp}"
     buf = io.BytesIO()
-    index = [f"# Chronicle export, {stamp}", "", f"{len(ids)} sessions · {FORMATS[fmt]}", "",
+    index = [f"# Interlatch export, {stamp}", "", f"{len(ids)} sessions · {FORMATS[fmt]}", "",
              "| Started | Session | Project | Agent | File |", "|---|---|---|---|---|"]
     missing = []
     with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:

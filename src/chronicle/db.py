@@ -335,7 +335,7 @@ CREATE TABLE IF NOT EXISTS machines (
     id TEXT PRIMARY KEY,                           -- a UUID each computer makes once (machine.json)
     name TEXT,
     platform TEXT,
-    version TEXT,                                  -- its Chronicle version
+    version TEXT,                                  -- its Interlatch version
     role TEXT,                                     -- this | spoke
     first_seen TEXT,
     last_seen TEXT,                                -- last time it said hello
@@ -359,7 +359,7 @@ CREATE TABLE IF NOT EXISTS people (                -- people on a hub (people.py
     projects_json TEXT                             -- NULL: every project; else a JSON list of the project paths they see
 );
 
-CREATE TABLE IF NOT EXISTS hub_projects (          -- projects set up on a hub ahead of time (`chronicle hub project add`)
+CREATE TABLE IF NOT EXISTS hub_projects (          -- projects set up on a hub ahead of time (`interlatch hub project add`)
     path TEXT PRIMARY KEY,                         -- a folder on the hub computer: its sessions, and everything below it
     created_at TEXT NOT NULL,
     created_by TEXT                                -- "person:<id>" or "this computer"

@@ -1,4 +1,4 @@
-"""Command line interface: `chronicle <command>`."""
+"""Command line interface: `interlatch <command>` (or `chronicle <command>`, its name before the rename)."""
 
 from __future__ import annotations
 
@@ -81,9 +81,11 @@ def cmd_ingest_session(args) -> int:
 
 def cmd_sync(args) -> int:
     from .ingest import sync
+    from .migrate import migrate_if_due
     from .notify import release_check_safely
     from .util import setup_logging
 
+    migrate_if_due(quiet=args.quiet)  # the background sync: Chronicle's folder becomes Interlatch's
     cfg = _cfg()
     setup_logging(cfg.logs_dir, verbose=args.verbose)
     release_check_safely(cfg)  # [updates] notify: at most one PyPI request a day, one notification per release
@@ -406,7 +408,7 @@ def cmd_status(args) -> int:
     counts = {r[0]: r[1] for r in conn.execute("SELECT analysis_status, COUNT(*) FROM sessions GROUP BY 1")}
     pending = count_pending(conn, cfg)
     spent = conn.execute("SELECT COALESCE(SUM(cost_usd),0) FROM analyses").fetchone()[0]
-    console.print(f"[bold]Chronicle[/] · home {cfg.home}")
+    console.print(f"[bold]Interlatch[/] · home {cfg.home}")
     from .hub import last_push, read_token
 
     if cfg.is_spoke:
@@ -415,7 +417,7 @@ def cmd_status(args) -> int:
                       f" (last push: {local_str(last['at']) + ' · ' + last['summary'] if last else 'never'})", highlight=False)
     elif read_token(cfg):
         others = conn.execute("SELECT COUNT(*) FROM machines WHERE role = 'spoke'").fetchone()[0]
-        console.print(f"  hub for {others} other computer{'s' * (others != 1)} (`chronicle hub status`)")
+        console.print(f"  hub for {others} other computer{'s' * (others != 1)} (`interlatch hub status`)")
     console.print(f"  {ok(hooks.get('SessionEnd'))} SessionEnd hook   {ok(hooks.get('SessionStart'))} SessionStart context hook"
                   f"{' (optional)' if not cfg.inject_session_start else ''}")
     plan = plan_usage(conn)
@@ -423,7 +425,7 @@ def cmd_status(args) -> int:
                         for k, v in ((plan or {}).get("limits") or {}).items())
     console.print(f"  {ok(statusline_installed(cfg))} status-line usage collector"
                   + (f": plan limits {limits}, as of {local_str(plan['as_of'])}" if limits
-                     else " (optional: chronicle install --statusline)" if not statusline_installed(cfg)
+                     else " (optional: interlatch install --statusline)" if not statusline_installed(cfg)
                      else ": no plan limits seen yet (Pro and Max plans only)"), highlight=False)
     ui = launchd_status(UI_LABEL)
     console.print(f"  {ok(ld.get('loaded'))} background sync agent (runs: {ld.get('runs', '-')}, last exit: {ld.get('last_exit', '-')})")
@@ -490,7 +492,7 @@ def _setup_choices(cfg, conn, console, *, ask) -> tuple[list[str], list[str]]:
     elif cloud["connected"]:
         picked.append("codex-cloud")
     mcp = [c["name"] for c in clients if c["detected"] and not c["registered"]
-           and ask(f"Give {c['label']} Chronicle's MCP tools (search your past sessions)?", True)]
+           and ask(f"Give {c['label']} Interlatch's MCP tools (search your past sessions)?", True)]
     return picked, mcp
 
 
@@ -548,13 +550,13 @@ def _analysis_step(cfg, conn, console, analyzer, *, interactive: bool, choice: s
     if background_sync and cfg.analysis.auto:
         later = "in the background"
     elif not cfg.analysis.auto:
-        later = "when you run `chronicle analyze --pending` (analysis.auto is off)"
+        later = "when you run `interlatch analyze --pending` (analysis.auto is off)"
     else:
-        later = "when you run `chronicle analyze --pending` (nothing runs in the background)"
+        later = "when you run `interlatch analyze --pending` (nothing runs in the background)"
     if not n:
         return [], 0, later
     console.print("\n[bold]Analysis: knowledge, the Glossary and the Map[/]")
-    console.print(f"  Chronicle reads each session through your {analyzer.label} login and pulls out what was learned "
+    console.print(f"  Interlatch reads each session through your {analyzer.label} login and pulls out what was learned "
                   "(fixes, decisions, gotchas, commands). That knowledge builds each project's knowledge base, then the "
                   "Glossary, then the Map. Until sessions are analyzed, the Glossary and the Map stay empty.",
                   highlight=False)
@@ -692,7 +694,7 @@ def _notify_choice(cfg, conn, args, *, ask, background_sync: bool) -> bool | Non
     if (ask is None or cfg.update_notify or not background_sync or kv_get(conn, NOTIFY_ASKED_KEY)
             or not compares_online()):
         return None
-    return ask("Notify you when a new version of Chronicle is out? (a desktop notification; asks pypi.org once a "
+    return ask("Notify you when a new version of Interlatch is out? (a desktop notification; asks pypi.org once a "
                "day and sends nothing about you)", True)
 
 
@@ -708,7 +710,7 @@ def _menu_bar_choice(cfg, conn, args, *, ask, login_dashboard: bool) -> bool | N
     if (ask is None or platform.system() != "Darwin" or not login_dashboard or cfg.server_menu_bar
             or kv_get(conn, MENU_BAR_ASKED_KEY)):
         return None
-    return ask("Show Chronicle's icon in the menu bar? (what it's doing, a search and your recent sessions, a click "
+    return ask("Show Interlatch's icon in the menu bar? (what it's doing, a search and your recent sessions, a click "
                "away)", False)
 
 
@@ -721,6 +723,10 @@ def cmd_install(args) -> int:
                           statusline_installed, uninstall_launchd)
     from .util import utcnow_iso
 
+    if not args.dry_run:
+        from .migrate import migrate_if_due
+
+        migrate_if_due(quiet=False)
     cfg = _cfg()
     conn = _conn(cfg)
     console = _console()
@@ -728,18 +734,18 @@ def cmd_install(args) -> int:
     interactive = not args.yes and not args.dry_run and sys.stdin.isatty()
     ask = _ask if interactive else (lambda _q, default: default)
 
-    console.print("[bold]Chronicle setup[/]\n")
+    console.print("[bold]Interlatch setup[/]\n")
     analyzer = _choose_analyzer(cfg, console, ask=ask, dry_run=args.dry_run)
     if " -m " in exe:
-        console.print(f"[yellow]`chronicle` is not on PATH[/]; hooks will run `{exe}`. "
-                      "`uv tool install agents-chronicle` gives it a stable path.\n", highlight=False)
+        console.print(f"[yellow]`interlatch` is not on PATH[/]; hooks will run `{exe}`. "
+                      "`uv tool install interlatch` gives it a stable path.\n", highlight=False)
 
     picked, mcp_clients = _setup_choices(cfg, conn, console, ask=ask)
-    background_on = False  # nothing keeps Chronicle running here: say so instead of promising background analysis
+    background_on = False  # nothing keeps Interlatch running here: say so instead of promising background analysis
     turned_off = [label for label, off in ((LAUNCHD_LABEL, args.no_launchd), (UI_LABEL, args.no_ui)) if off]
     if background_supported() and not (args.no_launchd and args.no_ui):
         background_on = (any(launchd_status(label).get("loaded") for label in (LAUNCHD_LABEL, UI_LABEL))
-                         or ask("Run Chronicle in the background, starting at login? (syncs every 15 minutes and "
+                         or ask("Run Interlatch in the background, starting at login? (syncs every 15 minutes and "
                                 "keeps the dashboard up)", True))
     notify = _notify_choice(cfg, conn, args, ask=_ask if interactive else None,
                             background_sync=background_on and not args.no_launchd)
@@ -828,25 +834,25 @@ def cmd_install(args) -> int:
     url = f"http://127.0.0.1:{cfg.server_port}/"
     ui_running = any(a.startswith("dashboard always available") for a in background)
     console.print("\n[bold green]Done.[/]" + (" Nothing is recorded yet: connect an agent any time with "
-                                              "`chronicle connect <name>`." if not picked else ""))
+                                              "`interlatch connect <name>`." if not picked else ""))
     if after:
         console.print(after, highlight=False)
     if not background_on:
         hooked = "claude" in picked and not args.no_hooks
         console.print("Not running in the background"
                       + (": Claude Code sessions are still recorded and analyzed as they end." if hooked else ".")
-                      + " Run `chronicle sync --work` now and then to import new sessions and analyze the queue; "
-                      "re-run `chronicle install` to turn background running on.", highlight=False)
+                      + " Run `interlatch sync --work` now and then to import new sessions and analyze the queue; "
+                      "re-run `interlatch install` to turn background running on.", highlight=False)
     if ui_running:
-        console.print(f"Dashboard: [bold]{url}[/] (kept running in the background; `chronicle ui --open` opens it)",
+        console.print(f"Dashboard: [bold]{url}[/] (kept running in the background; `interlatch ui --open` opens it)",
                       highlight=False)
         if interactive and first_install and ask("Open it now?", True) and _wait_for_port(cfg.server_port):
             import webbrowser
 
             webbrowser.open(url)
     else:
-        console.print(f"Dashboard: run [bold]chronicle ui --open[/] (serves {url} while it runs)", highlight=False)
-    console.print(f"[dim]More: chronicle sources · chronicle status · config {cfg.config_path}[/]", highlight=False, soft_wrap=True)
+        console.print(f"Dashboard: run [bold]interlatch ui --open[/] (serves {url} while it runs)", highlight=False)
+    console.print(f"[dim]More: interlatch sources · interlatch status · config {cfg.config_path}[/]", highlight=False, soft_wrap=True)
     return 0
 
 
@@ -854,11 +860,11 @@ def _menu_bar_line(on: bool) -> str:
     import importlib.util
 
     if not on:
-        return "no menu-bar icon (`chronicle install --menu-bar` adds it)"
+        return "no menu-bar icon (`interlatch install --menu-bar` adds it)"
     if importlib.util.find_spec("AppKit") is None:
         return ("the menu-bar icon, once the `app` extra is installed: "
-                "uv tool install --force --python 3.13 'agents-chronicle\\[app]', then `chronicle install` again")  # \\[ keeps Rich from reading [app] as markup
-    return "Chronicle's icon in the menu bar (`chronicle install --no-menu-bar` removes it)"
+                "uv tool install --force --python 3.13 'interlatch\\[app]', then `interlatch install` again")  # \\[ keeps Rich from reading [app] as markup
+    return "Interlatch's icon in the menu bar (`interlatch install --no-menu-bar` removes it)"
 
 
 def _analyzer(cfg) -> str:
@@ -877,7 +883,7 @@ def _choose_analyzer(cfg, console, *, ask, dry_run: bool):
     if runner.available():
         if other_found:
             console.print(f"Sessions are analyzed with {runner.label}. To use {BACKENDS[other]} instead: Status › "
-                          f"Analysis in the dashboard, or `chronicle config set analysis.backend {other}`.\n",
+                          f"Analysis in the dashboard, or `interlatch config set analysis.backend {other}`.\n",
                           highlight=False)
         return runner
     missing = f"{runner.unavailable_reason()}."
@@ -887,7 +893,7 @@ def _choose_analyzer(cfg, console, *, ask, dry_run: bool):
             _set_config_value(cfg, "analysis", "backend", json.dumps(other))
         cfg.analysis.backend = other
         return make_runner(cfg)
-    console.print(f"[yellow]{missing}[/] Chronicle analyzes sessions through your own Claude Code or Codex login, or a "
+    console.print(f"[yellow]{missing}[/] Interlatch analyzes sessions through your own Claude Code or Codex login, or a "
                   "model provider's API (Status › Analysis in the dashboard); until one is set up (and chosen as "
                   "analysis.backend), sessions are recorded but not analyzed, so the Glossary and the Map stay empty.\n",
                   highlight=False)
@@ -922,9 +928,11 @@ def cmd_uninstall(args) -> int:
 
 
 def cmd_serve(args) -> int:
+    from .migrate import migrate_if_due
     from .server import serve
     from .util import setup_logging
 
+    migrate_if_due(quiet=False)  # the dashboard at login: Chronicle's folder becomes Interlatch's
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
     serve(cfg, host=args.host, port=args.port, open_browser=args.open, menu_bar=args.menu_bar)
@@ -935,6 +943,18 @@ def cmd_app(args) -> int:
     from .desktop import main
 
     return main()
+
+
+def cmd_migrate(args) -> int:
+    """`interlatch migrate`: Chronicle's folder and settings become Interlatch's (migrate.py)."""
+    from .migrate import migrate
+
+    lines = migrate(dry_run=args.dry_run)
+    for line in lines:
+        print(f"• {line}")
+    if not lines:
+        print("Nothing to move: everything already uses Interlatch's names.")
+    return 0
 
 
 def cmd_export(args) -> int:
@@ -954,7 +974,7 @@ def cmd_export(args) -> int:
 
 
 def _export_sessions(cfg, args) -> int:
-    """`chronicle export ID...`: the sessions as one file (or a .zip of several) instead of the vault."""
+    """`interlatch export ID...`: the sessions as one file (or a .zip of several) instead of the vault."""
     from pathlib import Path
 
     from .session_export import ExportError, export_sessions
@@ -987,7 +1007,9 @@ def cmd_mcp(args) -> int:
         from .connectors import mcp_server_entry
         from .install import executable
 
-        print(json.dumps({"mcpServers": {"chronicle": mcp_server_entry(executable())}}, indent=2))
+        from .install import MCP_NAME
+
+        print(json.dumps({"mcpServers": {MCP_NAME: mcp_server_entry(executable())}}, indent=2))
         return 0
     from .mcp_server import serve
 
@@ -1014,14 +1036,14 @@ def cmd_config(args) -> int:
 
 
 def _config_set(cfg, key: str | None, value: str | None) -> int:
-    """`chronicle config set section.key value`: the value is TOML, or a bare word taken as a string."""
+    """`interlatch config set section.key value`: the value is TOML, or a bare word taken as a string."""
     import tomllib
 
     from .config import LANGUAGES, load_config, set_config_value
     from .llm import BACKENDS
 
     if not key or value is None or "." not in key:
-        print("usage: chronicle config set SECTION.KEY VALUE   (e.g. chronicle config set analysis.backend codex)",
+        print("usage: interlatch config set SECTION.KEY VALUE   (e.g. interlatch config set analysis.backend codex)",
               file=sys.stderr)
         return 2
     section, name = key.rsplit(".", 1) if key.startswith("providers.") else key.split(".", 1)
@@ -1029,8 +1051,8 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
         from .providers import PROVIDERS, SETTINGS
 
         if section.split(".", 1)[1] not in PROVIDERS or name not in SETTINGS:
-            print(f"usage: chronicle config set providers.PROVIDER.KEY VALUE; PROVIDER is one of: {', '.join(PROVIDERS)}; "
-                  f"KEY one of: {', '.join(SETTINGS)} (API keys: chronicle config set-key PROVIDER)", file=sys.stderr)
+            print(f"usage: interlatch config set providers.PROVIDER.KEY VALUE; PROVIDER is one of: {', '.join(PROVIDERS)}; "
+                  f"KEY one of: {', '.join(SETTINGS)} (API keys: interlatch config set-key PROVIDER)", file=sys.stderr)
             return 2
     try:
         tomllib.loads(f"v = {value}")
@@ -1059,13 +1081,13 @@ def _config_set(cfg, key: str | None, value: str | None) -> int:
 
 
 def _config_key(cfg, provider: str | None, value: str | None, *, forget: bool) -> int:
-    """`chronicle config set-key PROVIDER [KEY]`: store a provider's API key (asked for, unechoed, when not given), or
+    """`interlatch config set-key PROVIDER [KEY]`: store a provider's API key (asked for, unechoed, when not given), or
     `forget-key PROVIDER` to remove it."""
     from .llm import BACKENDS
     from .providers import KEY_ENVS, keys_path, set_key
 
     if provider not in KEY_ENVS:
-        print(f"usage: chronicle config {'forget-key' if forget else 'set-key'} PROVIDER; PROVIDER is one of: "
+        print(f"usage: interlatch config {'forget-key' if forget else 'set-key'} PROVIDER; PROVIDER is one of: "
               f"{', '.join(KEY_ENVS)}", file=sys.stderr)
         return 2
     label = BACKENDS[provider]
@@ -1183,7 +1205,7 @@ def cmd_systems(args) -> int:
         found = system(data, key) or next((system(data, s["id"]) for s in data["systems"]
                                            if s["label"].lower() == key.lower() or s["id"].rsplit("/", 1)[-1].lower() == key.lower()), None)
         if not found:
-            print(f"no system named {args.name!r} (see `chronicle systems`)")
+            print(f"no system named {args.name!r} (see `interlatch systems`)")
             return 1
         if args.json:
             print(json.dumps(found, indent=1, ensure_ascii=False, default=str))
@@ -1240,7 +1262,7 @@ def cmd_systems(args) -> int:
         for ln in data["links"]:
             console.print(f"  {escape(by_id[ln['from']]['label'])} → {escape(by_id[ln['to']]['label'])}  "
                           f"[dim]{ln['kind']}: {escape(ln['evidence'][0]['text'][:120])}[/]")
-    console.print(f"\n[dim]{len(data['systems'])} systems, {len(data['links'])} links · `chronicle systems NAME` for one system's parts[/]")
+    console.print(f"\n[dim]{len(data['systems'])} systems, {len(data['links'])} links · `interlatch systems NAME` for one system's parts[/]")
     return 0
 
 
@@ -1316,7 +1338,7 @@ def _print_diff(console, diff: str) -> None:
 def _show_suggestion(console, s: dict, pv: dict) -> None:
     console.print(f"[bold]#{s['id']}[/] [cyan]{s['kind']}[/] {escape_markup(s['title'])}", highlight=False, soft_wrap=True)
     if pv.get("command") is not None:
-        console.print("  run it yourself, then `chronicle suggest done " + str(s["id"]) + "`:", highlight=False, soft_wrap=True)
+        console.print("  run it yourself, then `interlatch suggest done " + str(s["id"]) + "`:", highlight=False, soft_wrap=True)
         console.print(f"    {pv['command']}", highlight=False, markup=False, soft_wrap=True)
     elif not pv.get("ok"):
         console.print(f"  [red]cannot apply:[/] {escape_markup(str(pv.get('error')))}", highlight=False, soft_wrap=True)
@@ -1343,7 +1365,7 @@ def cmd_suggest(args) -> int:
         return 0
     if action == "list":
         if ids:
-            print("to look at one suggestion: chronicle suggest show ID", file=sys.stderr)
+            print("to look at one suggestion: interlatch suggest show ID", file=sys.stderr)
             return 2
         rows = suggest.list_suggestions(conn, status=None if args.all else "new", project=_project_arg(conn, args.project))
         if args.json:
@@ -1362,10 +1384,10 @@ def cmd_suggest(args) -> int:
         if not rows:
             print("no suggestions" + ("" if args.all else " waiting (--all for applied and dismissed ones)"))
         else:
-            print("\nchronicle suggest show ID · apply ID · dismiss ID · done ID (setup steps) · move ID --to user|project")
+            print("\ninterlatch suggest show ID · apply ID · dismiss ID · done ID (setup steps) · move ID --to user|project")
         return 0
     if not ids:
-        print(f"usage: chronicle suggest {action} ID", file=sys.stderr)
+        print(f"usage: interlatch suggest {action} ID", file=sys.stderr)
         return 2
     failed = 0
     for sid in ids:
@@ -1388,14 +1410,14 @@ def cmd_suggest(args) -> int:
             continue
         if action == "move":
             if not args.to:
-                print("usage: chronicle suggest move ID --to user|project", file=sys.stderr)
+                print("usage: interlatch suggest move ID --to user|project", file=sys.stderr)
                 return 2
             got = suggest.move(conn, cfg, sid, args.to)
             if not got["ok"]:
                 print(f"#{sid}: {got['error']}", file=sys.stderr)
                 failed += 1
             elif got["moved"]:
-                print(f"#{sid} moved to " + ", ".join(_home_short(t) for t in got["targets"]) + " (see chronicle suggest)")
+                print(f"#{sid} moved to " + ", ".join(_home_short(t) for t in got["targets"]) + " (see interlatch suggest)")
             else:
                 print(f"#{sid} moved, but nothing is waiting there: it was dismissed or applied there before")
             continue
@@ -1424,7 +1446,7 @@ def cmd_suggest(args) -> int:
                 continue
         got = suggest.apply(conn, cfg, sid)
         if got["ok"]:
-            print(f"#{sid} applied to {_home_short(got['path'])} (undo: chronicle suggest undo {sid})")
+            print(f"#{sid} applied to {_home_short(got['path'])} (undo: interlatch suggest undo {sid})")
         else:
             print(f"#{sid}: {got['error']}", file=sys.stderr)
             failed += 1
@@ -1486,7 +1508,7 @@ def cmd_friction(args) -> int:
         print(f"filtered as noise: {ns['occurrences']} failure{'s' if ns['occurrences'] != 1 else ''} in {ns['sessions']} "
               f"session{'s' if ns['sessions'] != 1 else ''} (expected test failures, "
               "read-only checks, provider hiccups); --noise shows them")
-    print("fixes for these: chronicle suggest")
+    print("fixes for these: interlatch suggest")
     return 0
 
 
@@ -1507,7 +1529,7 @@ def cmd_sources(args) -> int:
             mark = "[green]✓[/]" if chk["ok"] else ("[dim]–[/]" if chk["ok"] is None or chk.get("optional") else "[red]✗[/]")
             console.print(f"  {mark} {chk['label']}: [dim]{chk['detail']}[/]", highlight=False)
         console.print()
-    console.print("[bold]Other MCP clients[/] [dim](not recorded; `chronicle connect <name>` gives them Chronicle's MCP tools)[/]", highlight=False)
+    console.print("[bold]Other MCP clients[/] [dim](not recorded; `interlatch connect <name>` gives them Interlatch's MCP tools)[/]", highlight=False)
     for c in mcp_clients_status():
         state = "[green]✓ MCP server added[/]" if c["registered"] else ("[yellow]detected[/]" if c["detected"] else "[dim]not installed[/]")
         console.print(f"  {c['label']} [dim]({c['name']})[/] · {state} · [dim]{c['config']}[/]", highlight=False)
@@ -1530,8 +1552,8 @@ def cmd_import(args) -> int:
     if args.screen and not args.analyze:
         return _screen_run(cfg, conn, source=None, redo=False, limit=None, sample=False)
     if counts["new"] + counts["updated"]:
-        print("queued for analysis (`chronicle work` runs it now)" if args.analyze
-              else "not analyzed: `chronicle screen` sorts out which chats are worth analyzing (reading only their "
+        print("queued for analysis (`interlatch work` runs it now)" if args.analyze
+              else "not analyzed: `interlatch screen` sorts out which chats are worth analyzing (reading only their "
                    "openings); or open one and choose Analyze now, or re-run with --analyze to queue them all")
     return 0
 
@@ -1545,7 +1567,7 @@ def _screen_run(cfg, conn, *, source, redo, limit, sample) -> int:
     print(report.summary() + (f" · screening cost {human_cost(report.cost_usd)}" if report.calls else ""))
     worth = sum(screen_status(conn, s)["to_queue"] for s in SOURCES)
     if worth:
-        print(f"next: `chronicle screen --list analyze` shows them, `chronicle screen --queue` queues the {worth:,} worth "
+        print(f"next: `interlatch screen --list analyze` shows them, `interlatch screen --queue` queues the {worth:,} worth "
               "analyzing (add --maybe for the maybes too)")
     return 1 if report.left and not report.screened else 0
 
@@ -1558,8 +1580,8 @@ def cmd_screen(args) -> int:
     if args.queue:
         n = queue(conn, source=args.source, maybe=args.maybe)
         print(f"queued {n:,} chat{'' if n == 1 else 's'} for analysis: the background agent analyzes "
-              f"{cfg.analysis.max_per_run} every 15 minutes, newest first (`chronicle analyze --pending` runs them now)"
-              if n else "nothing to queue: screen the chats first (`chronicle screen`), or they are queued already")
+              f"{cfg.analysis.max_per_run} every 15 minutes, newest first (`interlatch analyze --pending` runs them now)"
+              if n else "nothing to queue: screen the chats first (`interlatch screen`), or they are queued already")
         return 0
     if args.list:
         return _screen_list(conn, args)
@@ -1663,7 +1685,7 @@ def cmd_push(args) -> int:
     cfg = _cfg()
     setup_logging(cfg.logs_dir)
     if not cfg.is_spoke:
-        print("This computer has not joined a hub. On the hub run `chronicle hub enable`, then run the command it "
+        print("This computer has not joined a hub. On the hub run `interlatch hub enable`, then run the command it "
               "prints here.", file=sys.stderr)
         return 1
     return _push(cfg, quiet=args.quiet)
@@ -1689,7 +1711,7 @@ def cmd_hub(args) -> int:
 
     if action == "enable":
         if cfg.is_spoke:
-            console.print(f"This computer sends its sessions to the hub at {cfg.hub_url}. Run `chronicle hub leave` "
+            console.print(f"This computer sends its sessions to the hub at {cfg.hub_url}. Run `interlatch hub leave` "
                           "first to make it a hub itself.", highlight=False)
             return 1
         token = hub.read_token(cfg)
@@ -1708,8 +1730,8 @@ def cmd_hub(args) -> int:
         console.print(f"[bold]{hub.local_machine(cfg)['name']}[/] is a hub: other computers can send it their sessions.",
                       highlight=False)
         if not url:
-            console.print("Other computers need an address to reach it. Run `chronicle tailnet on` (Tailscale), then "
-                          "`chronicle hub enable` again, or pass the address: `chronicle hub enable --url "
+            console.print("Other computers need an address to reach it. Run `interlatch tailnet on` (Tailscale), then "
+                          "`interlatch hub enable` again, or pass the address: `interlatch hub enable --url "
                           f"http://<address>:{cfg.server_port}` (only on a network you trust: without Tailscale the "
                           "files travel unencrypted).", highlight=False)
             return 0
@@ -1721,17 +1743,17 @@ def cmd_hub(args) -> int:
             _set_config_value(cfg, "server", "allowed_hosts", json.dumps([*cfg.server_allowed_hosts, name]))
             if cfg.server_host in ("127.0.0.1", "localhost"):
                 console.print(f"[yellow]The dashboard listens on {cfg.server_host} only[/]: for other computers to reach "
-                              f"{url} without Tailscale, set `chronicle config set server.host 0.0.0.0` and restart it. "
+                              f"{url} without Tailscale, set `interlatch config set server.host 0.0.0.0` and restart it. "
                               "Its dashboard then opens on other devices only for people signed in: add yourself with "
-                              "`chronicle hub invite <your name> --email <email> --role admin`.", highlight=False)
-        console.print("On each other computer, install Chronicle and run:\n")
+                              "`interlatch hub invite <your name> --email <email> --role admin`.", highlight=False)
+        console.print("On each other computer, install Interlatch and run:\n")
         console.print(f"  [bold]{hub.join_command(url, token)}[/]\n", highlight=False, soft_wrap=True)
         console.print("[dim]The token lets a computer send sessions here; keep it private. "
-                      "`chronicle hub enable --rotate` replaces it. To give each person a token of their own and a "
-                      "dashboard sign-in instead: `chronicle hub invite <name> --email <email>`.[/]", highlight=False)
+                      "`interlatch hub enable --rotate` replaces it. To give each person a token of their own and a "
+                      "dashboard sign-in instead: `interlatch hub invite <name> --email <email>`.[/]", highlight=False)
         if not _wait_for_port(cfg.server_port, 1.0):
             console.print(f"[yellow]The dashboard is not running on port {cfg.server_port}[/]: it is what receives "
-                          "the files. `chronicle install` keeps it running (or run `chronicle ui`).", highlight=False)
+                          "the files. `interlatch install` keeps it running (or run `interlatch ui`).", highlight=False)
         if platform.system() == "Linux":
             console.print("[dim]A hub that should run while nobody is logged in: `loginctl enable-linger $USER`.[/]",
                           highlight=False)
@@ -1739,11 +1761,11 @@ def cmd_hub(args) -> int:
 
     if action == "join":
         if not args.url or bool(args.token) == bool(args.code):
-            console.print("Usage: chronicle hub join <hub address> --code <invite code> (from the hub's admin), or "
-                          "--token <token> (the hub's `chronicle hub enable` prints the whole command).")
+            console.print("Usage: interlatch hub join <hub address> --code <invite code> (from the hub's admin), or "
+                          "--token <token> (the hub's `interlatch hub enable` prints the whole command).")
             return 2
         if hub.read_token(cfg) and not cfg.is_spoke:
-            console.print("This computer is a hub itself (`chronicle hub disable` first).")
+            console.print("This computer is a hub itself (`interlatch hub disable` first).")
             return 1
         url = args.url.rstrip("/")
         if "://" not in url:
@@ -1769,7 +1791,7 @@ def cmd_hub(args) -> int:
             if limited:
                 names = ", ".join(p.get("name") or p["path"] for p in got.get("projects") or []) or "none yet"
                 console.print(f"Projects you share with it: [bold]{names}[/]. Add your folder for each one: "
-                              "`chronicle hub add-folder <folder> --project <name>`; sessions elsewhere stay here.",
+                              "`interlatch hub add-folder <folder> --project <name>`; sessions elsewhere stay here.",
                               highlight=False)
         hub.write_token(cfg, token)
         _set_config_value(cfg, "hub", "url", json.dumps(url))
@@ -1787,7 +1809,7 @@ def cmd_hub(args) -> int:
                 console.print("It shares sessions from every folder on this computer (--all-folders).", highlight=False)
             elif not args.code or got.get("projects") is None:  # a limited person heard which projects above
                 console.print("Only sessions in the hub's projects are shared: add your folder for each one with "
-                              "`chronicle hub add-folder <folder> --project <name>` (`chronicle hub folders --list` "
+                              "`interlatch hub add-folder <folder> --project <name>` (`interlatch hub folders --list` "
                               "lists them). Sessions in other folders stay here.", highlight=False)
         else:
             console.print(f"Joined the hub at {url}. This computer now sends its Claude Code and Codex sessions there; "
@@ -1798,7 +1820,7 @@ def cmd_hub(args) -> int:
                       else "Sending the sessions on this computer (the first time can take a while)…")
         code = _push(cfg)
         if code == 0 and cfg.shares_knowledge:
-            console.print("New sessions are shared after each analysis. `chronicle hub leave` stops sharing.")
+            console.print("New sessions are shared after each analysis. `interlatch hub leave` stops sharing.")
             return code
         if code == 0:
             bg = background_status()
@@ -1807,9 +1829,9 @@ def cmd_hub(args) -> int:
                 console.print("New sessions go to the hub as each one ends" + (" and every 15 minutes." if bg.get("loaded") else "."))
             else:
                 console.print("To send new sessions automatically (as each ends, and every 15 minutes), run "
-                              "`chronicle install`. Until then: `chronicle push`.")
+                              "`interlatch install`. Until then: `interlatch push`.")
             console.print("[dim]This computer's own dashboard and MCP tools keep what they had and are no longer "
-                          "updated; open the hub's dashboard instead. `chronicle hub leave` undoes this.[/]",
+                          "updated; open the hub's dashboard instead. `interlatch hub leave` undoes this.[/]",
                           highlight=False)
         return code
 
@@ -1850,7 +1872,7 @@ def cmd_hub(args) -> int:
 
     if action == "signin":
         if not cfg.is_spoke:
-            console.print("This computer has not joined a hub; its own dashboard is `chronicle ui`.")
+            console.print("This computer has not joined a hub; its own dashboard is `interlatch ui`.")
             return 1
         try:
             link = hub.dashboard_signin(cfg)
@@ -1875,16 +1897,16 @@ def cmd_hub(args) -> int:
                           highlight=False)
         if cfg.hub_folders:
             n = len(cfg.hub_folders)
-            console.print(f"  {n} folder{'s' * (n != 1)} added to projects on the hub (`chronicle hub folders`)", highlight=False)
+            console.print(f"  {n} folder{'s' * (n != 1)} added to projects on the hub (`interlatch hub folders`)", highlight=False)
         return 0
     conn = _conn(cfg)
     rows = hub.machines(conn, cfg)
     conn.close()
-    role = "a hub" if hub.read_token(cfg) else "not a hub (`chronicle hub enable` makes it one)"
+    role = "a hub" if hub.read_token(cfg) else "not a hub (`interlatch hub enable` makes it one)"
     console.print(f"[bold]{hub.local_machine(cfg)['name']}[/] is {role}.", highlight=False)
     if hub.read_token(cfg) and cfg.hub_accept == "knowledge":
         console.print("  takes knowledge only: computers that send transcripts are turned away "
-                      "(`chronicle config set hub.accept everything` takes them again)", highlight=False)
+                      "(`interlatch config set hub.accept everything` takes them again)", highlight=False)
     from .util import local_str
 
     for m in rows:
@@ -1901,7 +1923,7 @@ def cmd_hub(args) -> int:
 
 
 def _hub_store(cfg, console) -> int:
-    """`chronicle hub store`: connect to the hub's team store, run its upgrade steps, and show what it holds."""
+    """`interlatch hub store`: connect to the hub's team store, run its upgrade steps, and show what it holds."""
     from . import hub, team_store
 
     if cfg.is_spoke:
@@ -1912,8 +1934,8 @@ def _hub_store(cfg, console) -> int:
     if cfg.hub_store != "postgres":
         console.print("This hub keeps what computers share in its own SQLite only. To keep the team's record in "
                       f"Postgres as well: put PGHOST, PGDATABASE, PGUSER and PGPASSWORD in {path} (chmod 600), "
-                      "install the driver (uv tool install 'agents-chronicle[team]'), run "
-                      "`chronicle config set hub.store postgres`, and restart the dashboard.", highlight=False)
+                      "install the driver (uv tool install 'interlatch[team]'), run "
+                      "`interlatch config set hub.store postgres`, and restart the dashboard.", highlight=False)
         return 0
     try:
         store = team_store.get(cfg)
@@ -1928,7 +1950,7 @@ def _hub_store(cfg, console) -> int:
     console.print(f"  upgrade steps: {', '.join(st['steps']) or 'none'} · last activity: {st['last_activity'] or 'none'}",
                   highlight=False)
     if not hub.read_token(cfg):
-        console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
+        console.print("[yellow]This computer is not a hub yet[/]: `interlatch hub enable`.", highlight=False)
     return 0
 
 
@@ -1948,7 +1970,7 @@ def _projects_arg(conn, args) -> tuple[list[str] | None, str | None]:
     for name in args.project or []:
         project, problem = _pick_project(known, name)
         if problem:
-            return None, problem + "\n`chronicle hub project add <folder>` sets up a project before anything was sent to it."
+            return None, problem + "\n`interlatch hub project add <folder>` sets up a project before anything was sent to it."
         out.append(project["path"])
     return out, None
 
@@ -1974,7 +1996,7 @@ def _find_computer(conn, key: str) -> tuple[str | None, str | None]:
 
 
 def _find_person(conn, key: str | None) -> dict | None:
-    """A person on this hub by email, or by the id `chronicle hub people` shows."""
+    """A person on this hub by email, or by the id `interlatch hub people` shows."""
     from . import people
 
     key = (key or "").strip()
@@ -1985,7 +2007,7 @@ def _find_person(conn, key: str | None) -> dict | None:
 
 
 def _hub_purge(cfg, console, args) -> int:
-    """`chronicle hub purge <email|id|computer> --project <name>… | --outside-access`: remove for good what a person's
+    """`interlatch hub purge <email|id|computer> --project <name>… | --outside-access`: remove for good what a person's
     computers (or one computer) sent to this hub, in some projects or outside the ones they see."""
     from . import hub, people
     from .ingest import project_name_for
@@ -1994,7 +2016,7 @@ def _hub_purge(cfg, console, args) -> int:
         console.print(f"Purge runs on the hub; this computer sends to the hub at {cfg.hub_url}.", highlight=False)
         return 1
     if not args.url or bool(args.project) == bool(args.outside_access) or args.all_projects:
-        console.print("Usage: chronicle hub purge <email|id|computer> --project <name> … | --outside-access [--yes]")
+        console.print("Usage: interlatch hub purge <email|id|computer> --project <name> … | --outside-access [--yes]")
         return 2
     conn = _conn(cfg)
     try:
@@ -2009,11 +2031,11 @@ def _hub_purge(cfg, console, args) -> int:
             who = f"the computer {args.url}"
             if len(machines) > 1:
                 console.print(f"{len(machines)} computers are called {args.url}; pass the one you mean by its id "
-                              "(`chronicle hub status`).", highlight=False)
+                              "(`interlatch hub status`).", highlight=False)
                 return 1
         if not machines:
             console.print(f"No one on this hub has the email or id {args.url}, and no computer that sent to it is called "
-                          "that. `chronicle hub people` and `chronicle hub status` list them.", highlight=False)
+                          "that. `interlatch hub people` and `interlatch hub status` list them.", highlight=False)
             return 1
         if args.outside_access:
             if not person:
@@ -2022,7 +2044,7 @@ def _hub_purge(cfg, console, args) -> int:
             keep = people.projects_of(person)
             if keep is None:
                 console.print(f"{person['name']} sees every project, so nothing is outside what they see. Limit them "
-                              f"first: `chronicle hub access {args.url} --project <name>`.", highlight=False)
+                              f"first: `interlatch hub access {args.url} --project <name>`.", highlight=False)
                 return 1
             targets = hub.purge_targets(conn, machines, keep=keep)
             where = f"outside {_projects_words(conn, keep)}"
@@ -2071,7 +2093,7 @@ def _hub_purge(cfg, console, args) -> int:
 
 
 def _hub_people(cfg, console, args) -> int:
-    """`chronicle hub people | invite | role | remove | shared-token`: who may send to this hub and open its dashboard.
+    """`interlatch hub people | invite | role | remove | shared-token`: who may send to this hub and open its dashboard.
 
     It runs at the hub itself, so it acts as an admin (people.py: whoever is at the hub computer always is one).
     """
@@ -2088,7 +2110,7 @@ def _hub_people(cfg, console, args) -> int:
             rows = people.listing(conn)
             if not rows:
                 console.print("No people on this hub yet: computers send with its shared token. To give each person a "
-                              "token of their own and a dashboard sign-in: `chronicle hub invite <name> --email <email> "
+                              "token of their own and a dashboard sign-in: `interlatch hub invite <name> --email <email> "
                               "--role admin|member|readonly`.")
                 return 0
             n = len(rows)
@@ -2106,15 +2128,15 @@ def _hub_people(cfg, console, args) -> int:
                 if p["browsers"]:
                     n = len(p["browsers"])
                     console.print(f"       {n} browser{'s' * (n != 1)} signed in to the dashboard", highlight=False)
-            console.print("[dim]`chronicle hub role <email|id> <role>` changes a role, `chronicle hub access <email|id> "
-                          "--project <name>` the projects they see, `chronicle hub remove <email|id>` removes someone, "
-                          "`chronicle hub invite <name>` makes a new code.[/]", highlight=False)
+            console.print("[dim]`interlatch hub role <email|id> <role>` changes a role, `interlatch hub access <email|id> "
+                          "--project <name>` the projects they see, `interlatch hub remove <email|id>` removes someone, "
+                          "`interlatch hub invite <name>` makes a new code.[/]", highlight=False)
             return 0
 
         if action == "invite":
             name = (args.url or "").strip()
             if not name:
-                console.print("Usage: chronicle hub invite <name> [--email <email>] [--role admin|member|readonly] "
+                console.print("Usage: interlatch hub invite <name> [--email <email>] [--role admin|member|readonly] "
                               "--project <name> … | --all-projects")
                 return 2
             existing = _find_person(conn, args.email) if args.email else None
@@ -2134,7 +2156,7 @@ def _hub_people(cfg, console, args) -> int:
                     return 1
             if not existing and role != "admin" and not chose:  # nothing until granted: the inviter says what they see
                 console.print(f"Which projects should {name} see? Add --project <name> (repeat it for more), or "
-                              "--all-projects. `chronicle hub project list` shows the hub's projects.", highlight=False)
+                              "--all-projects. `interlatch hub project list` shows the hub's projects.", highlight=False)
                 return 2
             try:
                 if existing and args.role and args.role != existing["role"]:
@@ -2166,21 +2188,21 @@ def _hub_people(cfg, console, args) -> int:
             console.print("Or in their browser, to see the hub's dashboard:")
             console.print(f"  {hub.invite_link(where, code)}\n", highlight=False, soft_wrap=True)
             if not address:
-                console.print("[yellow]This hub has no address yet[/]: `chronicle hub enable --url https://<address>` "
+                console.print("[yellow]This hub has no address yet[/]: `interlatch hub enable --url https://<address>` "
                               "sets the one other computers and browsers reach it at.", highlight=False)
             console.print("[dim]Pass them on by chat; the code is not shown again. It joins one computer or opens one "
-                          "browser; `chronicle hub invite` again makes another.[/]", highlight=False)
+                          "browser; `interlatch hub invite` again makes another.[/]", highlight=False)
             if not hub.read_token(cfg):
-                console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
+                console.print("[yellow]This computer is not a hub yet[/]: `interlatch hub enable`.", highlight=False)
             return 0
 
         if action == "access":
             if not args.url or not (args.project or args.all_projects):
-                console.print("Usage: chronicle hub access <email|id> --project <name> … | --all-projects")
+                console.print("Usage: interlatch hub access <email|id> --project <name> … | --all-projects")
                 return 2
             person = _find_person(conn, args.url)
             if not person:
-                console.print(f"No one on this hub has the email or id {args.url}. `chronicle hub people` lists them.",
+                console.print(f"No one on this hub has the email or id {args.url}. `interlatch hub people` lists them.",
                               highlight=False)
                 return 1
             projects, problem = _projects_arg(conn, args)
@@ -2199,19 +2221,19 @@ def _hub_people(cfg, console, args) -> int:
             console.print(f"{person['name']} now sees {_projects_words(conn, people.projects_of(person))}.", highlight=False)
             if projects is not None and cfg.hub_shared_token:
                 console.print("[yellow]The hub's shared token is on[/]: a computer sending with it is nobody in "
-                              "particular and is not limited. `chronicle hub shared-token off` once everyone joined "
+                              "particular and is not limited. `interlatch hub shared-token off` once everyone joined "
                               "with an invite.", highlight=False)
             return 0
 
         if action in ("role", "remove"):
             role = args.value or args.role
             if not args.url or (action == "role" and not role):
-                console.print("Usage: chronicle hub role <email|id> admin|member|readonly" if action == "role"
-                              else "Usage: chronicle hub remove <email|id>")
+                console.print("Usage: interlatch hub role <email|id> admin|member|readonly" if action == "role"
+                              else "Usage: interlatch hub remove <email|id>")
                 return 2
             person = _find_person(conn, args.url)
             if not person:
-                console.print(f"No one on this hub has the email or id {args.url}. `chronicle hub people` lists them.",
+                console.print(f"No one on this hub has the email or id {args.url}. `interlatch hub people` lists them.",
                               highlight=False)
                 return 1
             try:
@@ -2233,7 +2255,7 @@ def _hub_people(cfg, console, args) -> int:
         # shared-token
         value = (args.url or "").lower()
         if value not in ("on", "off"):
-            console.print("Usage: chronicle hub shared-token on|off")
+            console.print("Usage: interlatch hub shared-token on|off")
             return 2
         on = value == "on"
         _set_config_value(cfg, "hub", "shared_token", json.dumps(on))
@@ -2243,7 +2265,7 @@ def _hub_people(cfg, console, args) -> int:
             console.print("Computers may send with the hub's shared token again, as well as with their own.")
             return 0
         if not people.has_people(conn):
-            console.print("The shared token is refused once this hub has people (`chronicle hub invite`); until then "
+            console.print("The shared token is refused once this hub has people (`interlatch hub invite`); until then "
                           "computers keep sending with it.")
             return 0
         console.print("Only computers that joined with an invite may send now; the shared token is refused.")
@@ -2258,17 +2280,17 @@ def _hub_people(cfg, console, args) -> int:
 
 
 def _hub_project(cfg, console, args) -> int:
-    """`chronicle hub project add | remove | list`: projects set up on this hub ahead of time, each a folder here."""
+    """`interlatch hub project add | remove | list`: projects set up on this hub ahead of time, each a folder here."""
     from . import hub
 
     if cfg.is_spoke:
         console.print(f"Projects belong to the hub; this computer sends to the hub at {cfg.hub_url}. To file a folder "
-                      "here under one of its projects: `chronicle hub add-folder <folder> --project <name>`.",
+                      "here under one of its projects: `interlatch hub add-folder <folder> --project <name>`.",
                       highlight=False)
         return 1
     verb = (args.url or "list").lower()
     if verb not in ("add", "remove", "list"):
-        console.print("Usage: chronicle hub project add <folder> | remove <folder> | list")
+        console.print("Usage: interlatch hub project add <folder> | remove <folder> | list")
         return 2
     conn = _conn(cfg)
     try:
@@ -2276,14 +2298,14 @@ def _hub_project(cfg, console, args) -> int:
             set_up = set(hub.declared_projects(conn))
             rows = hub.hub_projects(conn)
             if not rows:
-                console.print("No projects on this hub yet. `chronicle hub project add <folder>` sets one up.")
+                console.print("No projects on this hub yet. `interlatch hub project add <folder>` sets one up.")
                 return 0
             for p in rows:
                 mark = " · set up here" if p["path"] in set_up else ""
                 console.print(f"  {p['name']:<32} {p['sessions']:>5}  {p['path']}{mark}", highlight=False)
             return 0
         if not args.value:
-            console.print(f"Usage: chronicle hub project {verb} <folder>")
+            console.print(f"Usage: interlatch hub project {verb} <folder>")
             return 2
         try:
             got = hub.add_project(cfg, conn, args.value) if verb == "add" else hub.remove_project(cfg, conn, args.value)
@@ -2300,11 +2322,11 @@ def _hub_project(cfg, console, args) -> int:
         n = got["sessions"]
         console.print(f"Set up [bold]{got['name']}[/] ({got['path']}): this folder and everything below it is one "
                       f"project, with {n} session{'s' * (n != 1)} so far.", highlight=False)
-        console.print("Give people access: `chronicle hub invite <name> --email <email> --project "
-                      f"{got['name']}`. On their computers: `chronicle hub add-folder <their folder> --project "
+        console.print("Give people access: `interlatch hub invite <name> --email <email> --project "
+                      f"{got['name']}`. On their computers: `interlatch hub add-folder <their folder> --project "
                       f"{got['name']}`.", highlight=False)
         if not hub.read_token(cfg):
-            console.print("[yellow]This computer is not a hub yet[/]: `chronicle hub enable`.", highlight=False)
+            console.print("[yellow]This computer is not a hub yet[/]: `interlatch hub enable`.", highlight=False)
         return 0
     finally:
         conn.close()
@@ -2327,11 +2349,11 @@ def _pick_project(projects: list[dict], wanted: str) -> tuple[dict | None, str |
     near = [p for p in projects if w.lower() in p["path"].lower()][:8]
     return None, (f"The hub has no project called {wanted}."
                   + ("\nDid you mean:\n" + "\n".join(f"  {p['name']}  ({p['path']})" for p in near) if near
-                     else " `chronicle hub folders --list` shows the hub's projects."))
+                     else " `interlatch hub folders --list` shows the hub's projects."))
 
 
 def _hub_leave_project(cfg, console, args) -> int:
-    """`chronicle hub leave --project <name>` and `chronicle hub rejoin --project <name>`: this computer stops (or
+    """`interlatch hub leave --project <name>` and `interlatch hub rejoin --project <name>`: this computer stops (or
     starts again) sharing to one of the hub's projects and getting its teammates' lessons."""
     from pathlib import Path
 
@@ -2341,7 +2363,7 @@ def _hub_leave_project(cfg, console, args) -> int:
         console.print("This computer has not joined a hub.")
         return 1
     if not args.project or len(args.project) > 1:
-        console.print(f"Which project on the hub? One `--project <name>`: chronicle hub {args.action} --project <name>")
+        console.print(f"Which project on the hub? One `--project <name>`: interlatch hub {args.action} --project <name>")
         return 2
     wanted = args.project[-1]
     try:  # the hub's own list if it can be reached, else the one from the last push; and the projects left
@@ -2368,23 +2390,23 @@ def _hub_leave_project(cfg, console, args) -> int:
             console.print(str(exc), highlight=False)
             return 1
         console.print(f"Left [bold]{name}[/]: this computer no longer shares its sessions there or gets its teammates' "
-                      "lessons. What it already shared stays on the hub. `chronicle hub rejoin --project "
+                      "lessons. What it already shared stays on the hub. `interlatch hub rejoin --project "
                       f"{wanted}` undoes this.", highlight=False)
     if args.no_push:
-        console.print("The hub hears of it at the next push (`chronicle push`, or the background sync).")
+        console.print("The hub hears of it at the next push (`interlatch push`, or the background sync).")
         return 0
     return _push(cfg)
 
 
 def _hub_folders(cfg, console, args) -> int:
-    """`chronicle hub add-folder | remove-folder | folders`: folders here whose sessions belong to a project on the hub."""
+    """`interlatch hub add-folder | remove-folder | folders`: folders here whose sessions belong to a project on the hub."""
     from pathlib import Path
 
     from . import hub
 
     if not cfg.is_spoke:
         console.print("This computer doesn't send its sessions to a hub. Folders are added on a computer that does "
-                      "(after `chronicle hub join`); on the hub, `chronicle hub status` lists what each one added.")
+                      "(after `interlatch hub join`); on the hub, `interlatch hub status` lists what each one added.")
         return 1
     action = args.action
 
@@ -2405,7 +2427,7 @@ def _hub_folders(cfg, console, args) -> int:
         if not cfg.hub_folders:
             console.print("No folders added. Sessions go to the hub's project with the same git remote, or keep their "
                           "own folder. To file a folder's sessions under a project on the hub:\n\n"
-                          "  chronicle hub add-folder <folder> --project <name>\n")
+                          "  interlatch hub add-folder <folder> --project <name>\n")
             return 0
         report = (hub.last_folders(cfg) or {}).get("folders") or {}
         for folder, project in sorted(cfg.hub_folders.items()):
@@ -2419,14 +2441,14 @@ def _hub_folders(cfg, console, args) -> int:
         return 0
 
     if not args.url:
-        console.print(f"Usage: chronicle hub {action} <folder>" + (" --project <name>" if action == "add-folder" else ""))
+        console.print(f"Usage: interlatch hub {action} <folder>" + (" --project <name>" if action == "add-folder" else ""))
         return 2
     folder = str(Path(args.url).expanduser().resolve())
 
     if action == "remove-folder":
         key = folder if folder in cfg.hub_folders else args.url.rstrip("/") if args.url.rstrip("/") in cfg.hub_folders else None
         if key is None:
-            console.print(f"{folder} was not added. `chronicle hub folders` lists the folders that were.", highlight=False)
+            console.print(f"{folder} was not added. `interlatch hub folders` lists the folders that were.", highlight=False)
             return 1
         try:
             cfg, taken = hub.remove_folder(cfg, key)
@@ -2441,7 +2463,7 @@ def _hub_folders(cfg, console, args) -> int:
                           "lessons.", highlight=False)
     else:
         if not args.project or len(args.project) > 1:
-            console.print("Which project on the hub? One `--project <name>` (`chronicle hub folders --list` shows them).")
+            console.print("Which project on the hub? One `--project <name>` (`interlatch hub folders --list` shows them).")
             return 2
         if not Path(folder).is_dir():
             console.print(f"{folder} is not a folder.", highlight=False)
@@ -2473,7 +2495,7 @@ def _hub_folders(cfg, console, args) -> int:
                           highlight=False)
 
     if args.no_push:
-        console.print("The hub files them at the next push (`chronicle push`, or the background sync).")
+        console.print("The hub files them at the next push (`interlatch push`, or the background sync).")
         return 0
     code = _push(cfg)
     moved = (hub.last_folders(cfg) or {}).get("moved") or 0
@@ -2487,7 +2509,7 @@ def _hub_folders(cfg, console, args) -> int:
 
 
 def cmd_mirror(args) -> int:
-    """`chronicle mirror`: the copy of this archive in Postgres ([mirror] to = "postgres"): what it holds, or write it now."""
+    """`interlatch mirror`: the copy of this archive in Postgres ([mirror] to = "postgres"): what it holds, or write it now."""
     from . import mirror
     from .util import setup_logging
 
@@ -2497,8 +2519,8 @@ def cmd_mirror(args) -> int:
     if not mirror.enabled(cfg):
         console.print("The mirror is off. To keep a copy of this archive in Postgres (on this computer, in Docker or in "
                       f"the cloud): put PGHOST, PGDATABASE, PGUSER and PGPASSWORD in {path} (chmod 600), install the "
-                      f"driver ({mirror.INSTALL}), then `chronicle config set mirror.to postgres` and "
-                      "`chronicle mirror sync`. Or open Settings › Storage in the dashboard.", highlight=False)
+                      f"driver ({mirror.INSTALL}), then `interlatch config set mirror.to postgres` and "
+                      "`interlatch mirror sync`. Or open Settings › Storage in the dashboard.", highlight=False)
         return 0
     if args.action == "sync":
         setup_logging(cfg.logs_dir)
@@ -2522,7 +2544,7 @@ def cmd_mirror(args) -> int:
     if last:
         console.print(f"  last sync: {last['at']} · {mirror.Result(last).summary()}", highlight=False)
     else:
-        console.print("  not written yet: `chronicle mirror sync`, or wait for the next background run", highlight=False)
+        console.print("  not written yet: `interlatch mirror sync`, or wait for the next background run", highlight=False)
     return 0
 
 
@@ -2549,7 +2571,7 @@ def cmd_tailnet(args) -> int:
         serving = tailnet.serves_port(tailnet.serve_status(cli), cfg.server_port)
         console.print(f"Tailscale: {st.state or 'unknown'}" + (f" as {st.login} · this computer is {st.dns_name}" if st.running else ""),
                       highlight=False)
-        console.print(f"  dashboard on the tailnet: {st.url + '/' if serving else 'off (`chronicle tailnet on`)'}", highlight=False)
+        console.print(f"  dashboard on the tailnet: {st.url + '/' if serving else 'off (`interlatch tailnet on`)'}", highlight=False)
         console.print(f"  allowed_hosts: {cfg.server_allowed_hosts or '[]'} · allowed_users: {cfg.server_allowed_users or 'anyone on the tailnet'}",
                       highlight=False)
         return 0
@@ -2583,10 +2605,10 @@ def cmd_tailnet(args) -> int:
     console.print("On an iPhone: Share › Add to Home Screen, for an app icon. On Android: ⋮ › Add to Home screen.")
     who = "you" if not args.anyone and st.login else "anyone in your tailnet"
     console.print(f"[dim]Only {who} ({st.login or 'tailnet'}) can open it; nothing is reachable from the internet. "
-                  "`chronicle tailnet off` stops it.[/]", highlight=False)
+                  "`interlatch tailnet off` stops it.[/]", highlight=False)
     if not _wait_for_port(cfg.server_port, 1.0):
-        console.print(f"[yellow]The dashboard is not running on port {cfg.server_port}.[/] `chronicle install` keeps it "
-                      "running in the background (or run `chronicle ui`).", highlight=False)
+        console.print(f"[yellow]The dashboard is not running on port {cfg.server_port}.[/] `interlatch install` keeps it "
+                      "running in the background (or run `interlatch ui`).", highlight=False)
     return 0
 
 
@@ -2608,11 +2630,19 @@ def _analyze_choice(value: str) -> str:
     raise argparse.ArgumentTypeError("use all, later or a number of sessions")
 
 
+def prog_name() -> str:
+    """The command as it was run: `interlatch`, or `chronicle` (the same command under its name before the rename)."""
+    from pathlib import Path
+
+    name = Path(sys.argv[0]).name if sys.argv and sys.argv[0] else ""
+    return name if name in ("interlatch", "chronicle") else "interlatch"
+
+
 def build_parser() -> argparse.ArgumentParser:
     from .llm import BACKENDS
 
     p = argparse.ArgumentParser(
-        prog="chronicle",
+        prog=prog_name(),
         description="Record, archive and analyze every coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob, "
                     "Google Antigravity); extract reusable knowledge.",
     )
@@ -2631,7 +2661,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--statusline", action="store_true",
                    help="also record context and plan-limit usage from Claude Code's status line (keeps your own status line)")
     s.add_argument("--interval", type=int, default=15, help="background sync interval in minutes (default 15)")
-    s.add_argument("--exe", help="command used by hooks/launchd (default: the installed `chronicle`)")
+    s.add_argument("--exe", help="command used by hooks/launchd (default: the installed `interlatch`)")
     s.add_argument("--analyze", type=_analyze_choice, metavar="all|N|later",
                    help="analyze past sessions now with progress (all, or the newest N), or later; asked when omitted "
                         "(later without a terminal). The Glossary and the Map are built from the analyzed sessions")
@@ -2639,7 +2669,7 @@ def build_parser() -> argparse.ArgumentParser:
                    help="show a desktop notification when a new version is out (asks pypi.org once a day); "
                         "asked once when omitted")
     s.add_argument("--menu-bar", action=argparse.BooleanOptionalAction, default=None,
-                   help="macOS: show Chronicle's icon in the menu bar while the dashboard runs at login (needs the "
+                   help="macOS: show Interlatch's icon in the menu bar while the dashboard runs at login (needs the "
                         "`app` extra); asked once when omitted, off by default")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=cmd_install)
@@ -2730,7 +2760,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int)
     s.add_argument("--open", action="store_true", help="open a browser tab")
     s.add_argument("--menu-bar", action=argparse.BooleanOptionalAction, default=None,
-                   help="macOS: show Chronicle's menu-bar icon (default: only as the login item, with server.menu_bar on)")
+                   help="macOS: show Interlatch's menu-bar icon (default: only as the login item, with server.menu_bar on)")
     s.set_defaults(fn=cmd_serve)
 
     s = sub.add_parser("app", help="open the desktop app (macOS; needs the `app` extra)")
@@ -2800,9 +2830,9 @@ def build_parser() -> argparse.ArgumentParser:
     agents = ["claude", "codex", "codex-cloud", "copilot", "bob", "antigravity"]
     clients = ["claude-desktop", "cursor", "windsurf", "gemini"]
     s = sub.add_parser("connect", help="start recording an agent (claude, codex, codex-cloud, copilot, bob, antigravity), or give an MCP client "
-                                       "(claude-desktop, cursor, windsurf, gemini) Chronicle's MCP server")
+                                       "(claude-desktop, cursor, windsurf, gemini) Interlatch's MCP server")
     s.add_argument("name", choices=agents + clients)
-    s.add_argument("--exe", help="command the agent should run for Chronicle's MCP server")
+    s.add_argument("--exe", help="command the agent should run for Interlatch's MCP server")
     s.add_argument("--no-sync", action="store_true")
     s.set_defaults(fn=cmd_connect, disconnect=False)
 
@@ -2813,7 +2843,7 @@ def build_parser() -> argparse.ArgumentParser:
     s = sub.add_parser("import", help="import chats from a claude.ai or ChatGPT data export (the .zip, its folder, or conversations.json)")
     s.add_argument("path")
     s.add_argument("--analyze", action="store_true", help="queue the imported chats for analysis (uses your Claude plan)")
-    s.add_argument("--screen", action="store_true", help="then screen them: which are worth analyzing (`chronicle screen`)")
+    s.add_argument("--screen", action="store_true", help="then screen them: which are worth analyzing (`interlatch screen`)")
     s.set_defaults(fn=cmd_import)
 
     s = sub.add_parser("screen", help="sort imported chats into worth analyzing, maybe and not worth it, reading only "
@@ -2841,8 +2871,14 @@ def build_parser() -> argparse.ArgumentParser:
                                             "(asked for when left out, so it stays out of your shell history)")
     s.set_defaults(fn=cmd_config)
 
+    s = sub.add_parser("migrate", help="move Chronicle's data folder (~/.claude-chronicle) to ~/.interlatch and point "
+                                       "hooks, MCP servers and background agents at the new names (runs by itself "
+                                       "when the dashboard or the background sync starts)")
+    s.add_argument("--dry-run", action="store_true", help="show what would change, change nothing")
+    s.set_defaults(fn=cmd_migrate)
+
     s = sub.add_parser("mcp", help="run the MCP server (stdio); registered by `install` and `connect`")
-    s.add_argument("--print-config", action="store_true", help="print a JSON entry to add Chronicle to any MCP client by hand")
+    s.add_argument("--print-config", action="store_true", help="print a JSON entry to add Interlatch to any MCP client by hand")
     s.set_defaults(fn=cmd_mcp)
 
     s = sub.add_parser("mirror", help="a copy of this archive in a Postgres database you choose: what it holds, or write it now")
@@ -2867,7 +2903,7 @@ def build_parser() -> argparse.ArgumentParser:
                         "shared-token: on or off; with project: add, remove or list")
     s.add_argument("value", nargs="?", metavar="role|folder",
                    help="with role: admin, member or readonly; with project add and remove: a folder on this computer")
-    s.add_argument("--token", help="with join: the token the hub's `chronicle hub enable` printed")
+    s.add_argument("--token", help="with join: the token the hub's `interlatch hub enable` printed")
     s.add_argument("--code", help="with join: the invite code the hub's admin gave you (instead of --token)")
     s.add_argument("--url", dest="url_opt",
                    help="with enable: the address other computers and browsers reach this hub at (kept as [hub] address)")
@@ -2901,7 +2937,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--quiet", action="store_true")
     s.set_defaults(fn=cmd_push)
 
-    s = sub.add_parser("container", help="run a hub in a container (docker/): set it up from CHRONICLE_* variables, "
+    s = sub.add_parser("container", help="run a hub in a container (docker/): set it up from INTERLATCH_* (or CHRONICLE_*) variables, "
                                          "then serve the dashboard and sync every 15 minutes")
     s.set_defaults(fn=cmd_container)
 
@@ -2934,7 +2970,7 @@ def main(argv: list[str] | None = None) -> int:
 
         parser.print_help()
         if not (chronicle_home() / "config.toml").exists():
-            print("\nNew here? Run `chronicle install` to pick which coding agents to record and start the dashboard.")
+            print("\nNew here? Run `interlatch install` to pick which coding agents to record and start the dashboard.")
         return 0
     try:
         return args.fn(args) or 0

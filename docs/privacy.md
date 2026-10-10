@@ -1,30 +1,30 @@
 # Data and privacy
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
 **What leaves your machine:** one thing. When a session is analyzed, a condensed digest of it (secrets redacted
 first) goes to whatever you chose for analysis: Anthropic with Claude Code (`claude -p`, the default) or OpenAI with
 Codex (`codex exec`), through your own login, IBM with Bob Shell (`bob run`) and your Bob API key, or the [model provider](analysis.md#model-providers) you set up, with
-your own key (with Ollama on your computer, nothing leaves it). Nothing is sent to Chronicle's authors or any other service, and there is no telemetry. One other
+your own key (with Ollama on your computer, nothing leaves it). Nothing is sent to Interlatch's authors or any other service, and there is no telemetry. One other
 connection is the update check: it asks pypi.org for the latest version number and sends nothing about you. It
 runs when you click **Check for updates** on the Status page, and once a day only if you turn on **Check for
-updates daily** or **Notify me about new versions** there (both off by default; `chronicle install` asks about
+updates daily** or **Notify me about new versions** there (both off by default; `interlatch install` asks about
 the second). If you connect Codex Cloud, each sync also runs the
 `codex cloud` CLI, which fetches your own tasks from OpenAI with your Codex login; nothing is sent the other way.
 Importing a claude.ai or ChatGPT export reads only the chats, never the account files (`users.json`, `user.json`).
-To warn before a suggested line lands in a public repository, Chronicle runs `gh repo view` with your own `gh` login
+To warn before a suggested line lands in a public repository, Interlatch runs `gh repo view` with your own `gh` login
 for projects with a GitHub remote; that sends GitHub the repository's name and nothing else, and the answer is
 remembered for a week. Without `gh` nothing is sent ([Suggestions](suggestions.md#privacy)).
 
 **With your phone and other computers** ([Phone and other computers](devices.md)), nothing leaves your own
-devices either: `chronicle tailnet on` makes the dashboard reachable inside your Tailscale network, to your
+devices either: `interlatch tailnet on` makes the dashboard reachable inside your Tailscale network, to your
 Tailscale login only. A computer that joined a hub sends it one of two things. With `share = "everything"` (the
 default) it sends its **raw session files, unredacted** like the archive: secrets that appeared in a session (a key
 pasted in a prompt, a `.env` an agent read) reach the hub and its admins as they are. With `share = "knowledge"` it
 sends only summaries and project lessons, made from the redacted digest. Pick `knowledge` for a hub you don't run
 yourself. Inside a tailnet, or behind a proxy with HTTPS, the files travel encrypted; over plain `http://` they don't.
 
-**With a copy in Postgres** ([A copy in Postgres](postgres.md)), which is off unless you set it up, Chronicle writes
+**With a copy in Postgres** ([A copy in Postgres](postgres.md)), which is off unless you set it up, Interlatch writes
 your archive to the database you chose after every background run. With `include = "knowledge"` (the default) that is
 sessions' details, summaries and analyses, lessons, knowledge bases and usage, with no prompts or transcripts. With
 `"everything"`, prompts and transcripts go too, with secrets redacted. Sessions in excluded projects never go. Over
@@ -32,20 +32,20 @@ the internet the connection uses TLS (SSL mode `require`) unless you turn it off
 
 | Stored locally | Where |
 | --- | --- |
-| Database: sessions, events, knowledge, glossary, reviews | `~/.claude-chronicle/chronicle.db` (SQLite) |
-| Raw transcripts, kept forever (gzip) | `~/.claude-chronicle/archive/` |
-| Markdown vault | `~/.claude-chronicle/notes/` |
-| Logs | `~/.claude-chronicle/logs/` |
-| Backups of agent config and instruction files Chronicle edits | `~/.claude-chronicle/backups/` |
-| Status-line usage per session (only with `--statusline`) | `~/.claude-chronicle/statusline/` |
-| The app's launcher script and window storage | `~/.claude-chronicle/bin/chronicle`, `~/.claude-chronicle/webview/` |
-| This computer's id and name, its key for a hub; a hub's token (the key and token readable by you only) | `~/.claude-chronicle/machine.json`, `~/.claude-chronicle/machine-key`, `~/.claude-chronicle/hub-token` |
-| On a hub: the session files other computers sent | `~/.claude-chronicle/machines/` |
-| The mirror's connection, password included (readable by you only) | `~/.claude-chronicle/mirror.env` |
+| Database: sessions, events, knowledge, glossary, reviews | `~/.interlatch/chronicle.db` (SQLite) |
+| Raw transcripts, kept forever (gzip) | `~/.interlatch/archive/` |
+| Markdown vault | `~/.interlatch/notes/` |
+| Logs | `~/.interlatch/logs/` |
+| Backups of agent config and instruction files Interlatch edits | `~/.interlatch/backups/` |
+| Status-line usage per session (only with `--statusline`) | `~/.interlatch/statusline/` |
+| The app's launcher script and window storage | `~/.interlatch/bin/interlatch`, `~/.interlatch/webview/` |
+| This computer's id and name, its key for a hub; a hub's token (the key and token readable by you only) | `~/.interlatch/machine.json`, `~/.interlatch/machine-key`, `~/.interlatch/hub-token` |
+| On a hub: the session files other computers sent | `~/.interlatch/machines/` |
+| The mirror's connection, password included (readable by you only) | `~/.interlatch/mirror.env` |
 
 ## Details
 
-- **The Systems map reads manifests.** To draw what each project is made of, Chronicle reads a short, fixed list of
+- **The Systems map reads manifests.** To draw what each project is made of, Interlatch reads a short, fixed list of
   files in your project folders, read-only: package manifests, compose files, Dockerfiles, Terraform, GitHub workflows,
   vite configs, `.env.example` and deploy configs, two folder levels deep. Never `.env`, never source code, and
   nothing is stored or sent: the map is rebuilt from them in memory. A git remote is shown without its credentials.
@@ -56,19 +56,19 @@ the internet the connection uses TLS (SSL mode `require`) unless you turn it off
 - **Analysis runs sandboxed.** No session is written for the analysis itself, none of your hooks, plugins, MCP
   servers or instruction files load, and the model can only answer. `claude -p` runs with
   `--no-session-persistence --safe-mode --tools "" --strict-mcp-config`; `codex exec` runs `--ephemeral` and
-  `--ignore-user-config` in a read-only sandbox with every tool feature off, and Chronicle discards any reply that
+  `--ignore-user-config` in a read-only sandbox with every tool feature off, and Interlatch discards any reply that
   follows a tool call ([details](analysis.md#how-analysis-works)). A model provider gets a plain API request with no
   tools in it. `analysis.auto = false` turns automatic analysis off.
-- **Provider API keys** live in `provider-keys.json` in Chronicle's folder (mode 600), not in `config.toml`, and the
+- **Provider API keys** live in `provider-keys.json` in Interlatch's folder (mode 600), not in `config.toml`, and the
   dashboard never sends one back to the browser.
 - **The dashboard** binds to 127.0.0.1, rejects foreign `Host` headers (DNS rebinding) and requires a custom header
   on state-changing requests (CSRF). Its page runs only the dashboard's own script files (a Content-Security-Policy),
   so text from a transcript that slipped into the page as HTML could run nothing. In the app window, the page can call only three window actions (theme, drag,
   zoom). Reached through Tailscale Serve, it answers only to the names in `[server] allowed_hosts` and lets in only
   the Tailscale logins in `[server] allowed_users`, a header it trusts only from Serve on the same computer. A
-  hub takes other computers' files only with its token (`chronicle hub enable --rotate` replaces it). Reached from
+  hub takes other computers' files only with its token (`interlatch hub enable --rotate` replaces it). Reached from
   another device directly (`server.host 0.0.0.0`) or through a reverse proxy, the dashboard opens only for people
-  signed in: until a hub has people (`chronicle hub invite`), it answers only this computer itself.
+  signed in: until a hub has people (`interlatch hub invite`), it answers only this computer itself.
 - **On a hub, each computer's sessions stay its own.** A session another computer sent can't be replaced, changed
   or taken back by a different computer, and an invite can't take over a computer that already joined as someone
   else.
@@ -79,14 +79,14 @@ the internet the connection uses TLS (SSL mode `require`) unless you turn it off
   client's conversation and so reach that client's model, with secrets redacted as in the digests. Give the server
   only to clients whose model provider you trust with your sessions. See [MCP server](mcp.md#privacy).
 - **Other agents' stores are only read.** SQLite databases are opened read-only and archived as snapshots; Bob's
-  login state is never read, and from Antigravity only conversation logs and Markdown artifacts are archived. Connecting an agent edits its MCP config, backed up to `~/.claude-chronicle/backups/`
+  login state is never read, and from Antigravity only conversation logs and Markdown artifacts are archived. Connecting an agent edits its MCP config, backed up to `~/.interlatch/backups/`
   first.
-- **Instruction files and `~/.claude.json` are written only when you apply a suggestion.** Chronicle may add a line
-  to a `CLAUDE.md` or `AGENTS.md`, inside its own `<!-- BEGIN chronicle -->` block and nowhere else in the file, or
+- **Instruction files and `~/.claude.json` are written only when you apply a suggestion.** Interlatch may add a line
+  to a `CLAUDE.md` or `AGENTS.md`, inside its own `<!-- BEGIN interlatch -->` block and nowhere else in the file, or
   add the missing Playwright MCP arguments to `~/.claude.json`. Each file is backed up to
-  `~/.claude-chronicle/backups/` first, and **Undo** takes the change back out. Setup steps are only shown; Chronicle
+  `~/.interlatch/backups/` first, and **Undo** takes the change back out. Setup steps are only shown; Interlatch
   never runs them or edits your shell startup files. See [Suggestions](suggestions.md).
-- **Deleting.** `chronicle forget <id> [--delete-transcript]` removes a session for good; `chronicle uninstall
+- **Deleting.** `interlatch forget <id> [--delete-transcript]` removes a session for good; `interlatch uninstall
   --purge` deletes everything.
 
 ## What redaction catches
@@ -119,5 +119,5 @@ it is on your computer, an **Original transcript** download, or the session file
   attached as an image or a PDF.
 - Personal data: names, email addresses, phone numbers and the like are left as they are.
 
-When a secret has reached a session, rotate it: redaction keeps it out of what Chronicle shows and sends, not out of
+When a secret has reached a session, rotate it: redaction keeps it out of what Interlatch shows and sends, not out of
 the transcript the agent wrote.

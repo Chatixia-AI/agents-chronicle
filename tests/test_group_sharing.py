@@ -24,7 +24,7 @@ def member(tmp_path, monkeypatch):
     home.mkdir()
     (home / "config.toml").write_text('[hub]\nurl = "http://hub"\nshare = "knowledge"\n'
                                       '[hub.folders]\n"/home/yuma/resona" = "/srv/Resona"\n')
-    monkeypatch.setenv("CHRONICLE_HOME", str(home))
+    monkeypatch.setenv("INTERLATCH_HOME", str(home))
     cfg = load_config(home)
     conn = connect(cfg.db_path)
     for sid, path in PATHS.items():

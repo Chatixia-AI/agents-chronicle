@@ -9,7 +9,7 @@ Three request shapes cover the providers:
   Ollama's small default would otherwise cut the start of a long transcript off without a word.
 
 Settings live in config.toml under [providers.<name>]; API keys live apart from it, in provider-keys.json (mode 600)
-in Chronicle's folder, or come from the provider's usual environment variable. Only the standard library is used.
+in Interlatch's folder, or come from the provider's usual environment variable. Only the standard library is used.
 No tools are offered to the model: a plain API call can only answer.
 """
 
@@ -69,9 +69,9 @@ PROVIDERS: dict[str, Provider] = {
     "openai-compatible": Provider("OpenAI-compatible", "openai", "", "", needs_key=False, json_mode=False,
                                   hint="http://localhost:1234/v1"),
 }
-# every backend whose API key Chronicle can store: the providers, and IBM Bob, whose headless runs need one
+# every backend whose API key Interlatch can store: the providers, and IBM Bob, whose headless runs need one
 KEY_ENVS = {**{name: p.key_env for name, p in PROVIDERS.items()}, "bob": "BOB_API_KEY"}
-# [providers.<name>] keys the dashboard and `chronicle config set` may write; anything else in the section is ignored
+# [providers.<name>] keys the dashboard and `interlatch config set` may write; anything else in the section is ignored
 SETTINGS = {"base_url": str, "model": str, "small_model": str, "region": str, "profile": str, "resource": str,
             "num_ctx": int, "chunk_chars": int, "max_output_tokens": int, "json_mode": bool, "key_env": str}
 OLLAMA_NUM_CTX = 32_768
@@ -351,7 +351,7 @@ class ApiRunner(Runner):
         return model, self.s.get("small_model") or self.spec.small_model or model
 
     def _model(self, model: str | None) -> str:
-        """The model for a call. Callers pass Chronicle's Claude defaults ("sonnet", "haiku"): those pick this
+        """The model for a call. Callers pass Interlatch's Claude defaults ("sonnet", "haiku"): those pick this
         provider's model, or its small model for "haiku". A full Claude id goes as is to the Claude providers and
         picks the same way elsewhere; any other name is taken as this provider's own model id."""
         main, small = self._models()
@@ -411,7 +411,7 @@ class ApiRunner(Runner):
     def _post(self, path: str, payload: dict, headers: dict, timeout: int) -> dict:
         url = self.base_url + path
         body = json.dumps(payload).encode()
-        headers = {"content-type": "application/json", "user-agent": "agents-chronicle", **headers}
+        headers = {"content-type": "application/json", "user-agent": "interlatch", **headers}
         status, raw = http("POST", url, body=body, headers=headers, timeout=timeout, name=self.label)
         if status >= 400:
             raise _error(self.label, status, raw)
@@ -475,7 +475,7 @@ class ApiRunner(Runner):
         elif key:
             headers = {"authorization": f"Bearer {key}"}
         if self.name == "openrouter":
-            headers |= {"http-referer": "https://chronicle.chatixia.net", "x-title": "Chronicle"}
+            headers |= {"http-referer": "https://interlatch.com", "x-title": "Interlatch"}
             payload["usage"] = {"include": True}
         data = self._post("/chat/completions", payload, headers, timeout)
         choice = (data.get("choices") or [{}])[0] or {}
@@ -538,7 +538,7 @@ class ApiRunner(Runner):
         if not self.base_url:
             return []
         try:
-            status, raw = http("GET", self.base_url + path, body=None, headers={"user-agent": "agents-chronicle", **headers},
+            status, raw = http("GET", self.base_url + path, body=None, headers={"user-agent": "interlatch", **headers},
                                timeout=timeout, name=self.label)
             data = json.loads(raw) if status < 400 else {}
         except (LLMError, ValueError):

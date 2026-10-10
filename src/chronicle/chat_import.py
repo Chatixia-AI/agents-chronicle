@@ -1,4 +1,4 @@
-"""Import chats from a claude.ai or ChatGPT data export as sessions (`chronicle import`, Sources › Import export…).
+"""Import chats from a claude.ai or ChatGPT data export as sessions (`interlatch import`, Sources › Import export…).
 
 Both exports are a .zip with conversations.json; the format is recognized from its contents. Only the chats
 (conversations.json, and claude.ai's projects.json for project names) are read and archived; the account files
@@ -62,7 +62,7 @@ FORMATS = (CLAUDE_AI, CHATGPT)
 
 
 class ExportError(Exception):
-    """The file is not an export Chronicle can read."""
+    """The file is not an export Interlatch can read."""
 
 
 @dataclass
@@ -114,7 +114,7 @@ def _cut_off_zip(path: Path, name: str) -> tuple[dict[str, bytes], str]:
 
     `zipfile` needs the central directory, the last thing in a zip, so a partial download looks like no zip at all
     even when every chat is there: ChatGPT puts conversations-*.json near the start and gigabytes of attachments
-    after them. The chats are accepted only when the cut falls in a later file Chronicle does not read.
+    after them. The chats are accepted only when the cut falls in a later file Interlatch does not read.
     """
     size = path.stat().st_size
     files: dict[str, bytes] = {}
