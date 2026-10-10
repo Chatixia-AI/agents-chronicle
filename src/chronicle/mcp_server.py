@@ -1,4 +1,4 @@
-"""MCP server (stdio, JSON-RPC 2.0) that lets coding agents and other MCP clients query the Chronicle vault."""
+"""MCP server (stdio, JSON-RPC 2.0) that lets coding agents and other MCP clients query the Interlatch vault."""
 
 from __future__ import annotations
 
@@ -24,7 +24,7 @@ from .views import case_lines, project_labels, resolve_session_id, session_markd
 SUPPORTED_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"]
 
 INSTRUCTIONS = (
-    "Chronicle is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob, Google Antigravity), "
+    "Interlatch is the user's local archive of every past coding-agent session (Claude Code, Codex, GitHub Copilot, IBM Bob, Google Antigravity), "
     "plus chats imported from claude.ai and ChatGPT and tasks run in Codex Cloud, with AI-extracted knowledge "
     "(fixes, gotchas, decisions, project facts, commands, preferences), per-project knowledge bases, and the artifacts "
     "sessions made (documents, pages, diagrams, decks, published links, pull requests, commits). "
@@ -373,7 +373,7 @@ def _handle(msg, handlers) -> dict | None:
             result = {
                 "protocolVersion": requested if requested in SUPPORTED_VERSIONS else SUPPORTED_VERSIONS[0],
                 "capabilities": {"tools": {"listChanged": False}},
-                "serverInfo": {"name": "chronicle", "version": __version__},
+                "serverInfo": {"name": "interlatch", "version": __version__},
                 "instructions": INSTRUCTIONS,
             }
         elif method == "ping":

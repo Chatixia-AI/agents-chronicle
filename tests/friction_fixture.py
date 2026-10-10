@@ -102,7 +102,7 @@ def make_archive(tmp_path, monkeypatch):
     monkeypatch.delenv("CLAUDE_CONFIG_DIR", raising=False)
     monkeypatch.delenv("CODEX_HOME", raising=False)
     chome = tmp_path / "chronicle"
-    monkeypatch.setenv("CHRONICLE_HOME", str(chome))
+    monkeypatch.setenv("INTERLATCH_HOME", str(chome))
     monkeypatch.setattr("chronicle.instructions._gh_bin", lambda: None)  # never ask GitHub from tests
     monkeypatch.setattr("chronicle.instructions._VISIBILITY", {})
     cfg = load_config(chome)

@@ -27,7 +27,7 @@ def test_frozen_executable_is_a_shim_that_runs_the_app(env, frozen):
     from chronicle.install import executable, shim_path
 
     exe = executable()
-    assert exe == str(shim_path()) == str(env["home"] / "bin" / "chronicle")
+    assert exe == str(shim_path()) == str(env["home"] / "bin" / "interlatch")
     out = subprocess.run([exe, "hook", "session-end"], capture_output=True, text=True, check=True).stdout
     assert out.strip() == "ran:hook session-end"
 
@@ -49,7 +49,7 @@ def test_frozen_hooks_point_at_the_shim(env, frozen):
     install_hooks(env["cfg"], executable(), inject=False)
     settings = json.loads(settings_path(env["cfg"]).read_text())
     command = settings["hooks"]["SessionEnd"][0]["hooks"][0]["command"]
-    assert command == f"{env['home'] / 'bin' / 'chronicle'} hook session-end"
+    assert command == f"{env['home'] / 'bin' / 'interlatch'} hook session-end"
 
 
 def test_self_command(monkeypatch):
@@ -96,7 +96,7 @@ def test_version_comes_from_the_package_metadata():
 
     import chronicle
 
-    assert chronicle.__version__ == version("agents-chronicle")
+    assert chronicle.__version__ == version("interlatch")
 
 
 def test_app_window_loads_the_transparent_page():

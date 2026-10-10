@@ -307,7 +307,7 @@ def test_install_turns_it_on_when_asked(setup, monkeypatch, capsys):
     monkeypatch.setattr("importlib.util.find_spec", lambda name, *a: None if name == "AppKit" else object())
     assert len(_install(monkeypatch, {"menu bar": "y", "Open": "n"})) == 1
     assert load_config(setup["home"]).server_menu_bar is True
-    assert "agents-chronicle[app]" in capsys.readouterr().out  # without the app extra it says how to add it
+    assert "interlatch[app]" in capsys.readouterr().out  # without the app extra it says how to add it
     assert _install(monkeypatch, {"Open": "n"}) == []  # on already: nothing to ask
 
 
@@ -342,7 +342,7 @@ def mac(env, monkeypatch):
 
     monkeypatch.setattr("sys.platform", "darwin")
     monkeypatch.setattr(update, "_method", {"kind": "uv", "label": "uv tool from PyPI", "source": None, "local": False,
-                                            "extras": ["team"], "command": ["/opt/uv", "tool", "upgrade", "agents-chronicle"]})
+                                            "extras": ["team"], "command": ["/opt/uv", "tool", "upgrade", "interlatch"]})
     monkeypatch.setattr(update, "RESTARTABLE", True)
     monkeypatch.setattr(menubar, "SHOWN", False)
     monkeypatch.setattr(menubar, "app_extra", lambda: False)
@@ -373,7 +373,7 @@ def test_the_extra_is_added_keeping_the_others_and_the_version(mac, monkeypatch)
     from chronicle import __version__, menubar, update
 
     assert menubar.extra_command() == ["/opt/uv", "tool", "install", "--force", "--python",
-                                       f"{sys.version_info[0]}.{sys.version_info[1]}", f"agents-chronicle[app,team]=={__version__}"]
+                                       f"{sys.version_info[0]}.{sys.version_info[1]}", f"interlatch[app,team]=={__version__}"]
     info = menubar.setting_info(mac["cfg"])
     assert info["supported"] and info["can_install"] and not info["app_extra"] and not info["on"]
     assert info["listed_as"].startswith("python")  # what System Settings › Menu Bar calls it
@@ -397,7 +397,7 @@ def test_turning_it_on_installs_the_missing_extra_then_restarts(mac):
 
     said, expected = [], menubar.extra_command()
     out = menubar.apply_setting(mac["cfg"], True, said.append)
-    assert mac["ran"] == [expected] and "agents-chronicle[app,team]" in expected[-1]
+    assert mac["ran"] == [expected] and "interlatch[app,team]" in expected[-1]
     assert said == ["installing the app extra…"] and "restarting" in out
     assert _on(mac) and mac["restarts"] == [update.restart]
 

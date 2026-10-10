@@ -107,7 +107,7 @@ def test_cli_screen(env, capsys):
     cfg = env["cfg"]
     write_export(env["tmp"] / "chatgpt.zip")
     assert main(["import", str(env["tmp"] / "chatgpt.zip")]) == 0
-    assert "chronicle screen" in capsys.readouterr().out
+    assert "interlatch screen" in capsys.readouterr().out
     assert main(["screen", "--dry-run"]) == 0
     assert "6 chats to screen: 2 settled by rules, 4 for haiku in 1 call" in capsys.readouterr().out
     log = env["tmp"] / "fake_claude.log"

@@ -19,19 +19,19 @@ NINJA = "<!-- agent-ninja-START -->\n- ninja rule\n<!-- agent-ninja-END -->\n"
 
 def test_render_creates_a_block_in_an_empty_file():
     out = ins.render_file("", [("k1", "Quote every glob.")])
-    assert out == f"{BEGIN}\n- Quote every glob. <!-- chronicle:k1 -->\n{END}\n"
+    assert out == f"{BEGIN}\n- Quote every glob. <!-- interlatch:k1 -->\n{END}\n"
 
 
 def test_render_appends_after_existing_text_and_leaves_it_alone():
     old = "# Project\n\nKeep tests hermetic.\n"
     out = ins.render_file(old, [("k1", "Rule one.")])
-    assert out.startswith(old) and out.endswith(f"\n\n{BEGIN}\n- Rule one. <!-- chronicle:k1 -->\n{END}\n")
+    assert out.startswith(old) and out.endswith(f"\n\n{BEGIN}\n- Rule one. <!-- interlatch:k1 -->\n{END}\n")
 
 
 def test_render_rewrites_an_existing_block_in_place():
-    old = f"# A\n\n{BEGIN}\n- old <!-- chronicle:k1 -->\n{END}\n\n## Later section\ntext\n"
+    old = f"# A\n\n{BEGIN}\n- old <!-- interlatch:k1 -->\n{END}\n\n## Later section\ntext\n"
     out = ins.render_file(old, [("k1", "new"), ("k2", "two")])
-    assert out == f"# A\n\n{BEGIN}\n- new <!-- chronicle:k1 -->\n- two <!-- chronicle:k2 -->\n{END}\n\n## Later section\ntext\n"
+    assert out == f"# A\n\n{BEGIN}\n- new <!-- interlatch:k1 -->\n- two <!-- interlatch:k2 -->\n{END}\n\n## Later section\ntext\n"
 
 
 def test_block_goes_after_another_tools_block_and_never_inside_it():
@@ -39,10 +39,10 @@ def test_block_goes_after_another_tools_block_and_never_inside_it():
     out = ins.render_file(old, [("k", "x")])
     assert out.index("agent-ninja-END") < out.index(BEGIN)
     assert out.startswith(old)
-    stranded = f"<!-- agent-ninja-START -->\n- ninja\n{BEGIN}\n- x <!-- chronicle:k -->\n{END}\n<!-- agent-ninja-END -->\n"
+    stranded = f"<!-- agent-ninja-START -->\n- ninja\n{BEGIN}\n- x <!-- interlatch:k -->\n{END}\n<!-- agent-ninja-END -->\n"
     moved = ins.render_file(stranded, [("k", "y")])
     assert moved == "<!-- agent-ninja-START -->\n- ninja\n<!-- agent-ninja-END -->\n\n" \
-                    f"{BEGIN}\n- y <!-- chronicle:k -->\n{END}\n"
+                    f"{BEGIN}\n- y <!-- interlatch:k -->\n{END}\n"
 
 
 def test_merge_is_idempotent_and_removing_the_last_line_removes_the_block():
@@ -59,14 +59,14 @@ def test_merge_is_idempotent_and_removing_the_last_line_removes_the_block():
 
 
 def test_lines_people_typed_into_the_block_are_kept():
-    old = f"{BEGIN}\n- mine, no marker\n- x <!-- chronicle:k -->\n{END}\n"
+    old = f"{BEGIN}\n- mine, no marker\n- x <!-- interlatch:k -->\n{END}\n"
     out = ins.merge(old, [], {"k"})
     assert out == f"{BEGIN}\n- mine, no marker\n{END}\n"
 
 
 def test_keys_with_double_dashes_and_markup_in_text_survive():
     out = ins.render_file("", [("knowledge:1:/p/my--repo/CLAUDE.md", "Use <!-- this --> carefully")])
-    assert "--repo" not in out.split("chronicle:", 1)[1].split(" -->")[0]
+    assert "--repo" not in out.split("interlatch:", 1)[1].split(" -->")[0]
     assert ins.parse_block(out)[0] == [("knowledge:1:/p/my--repo/CLAUDE.md", "Use this carefully")]
 
 
@@ -90,7 +90,7 @@ def test_write_lines_creates_backs_up_and_replaces_atomically(tmp_path):
 
 def test_overlap_ignores_our_own_block():
     existing = ("# Rules\n- Always quote glob arguments in zsh: `grep --include='*.py'` or use rg\n\n"
-                f"{BEGIN}\n- Use uv run with packages for throwaway python scripts <!-- chronicle:k -->\n{END}\n")
+                f"{BEGIN}\n- Use uv run with packages for throwaway python scripts <!-- interlatch:k -->\n{END}\n")
     assert ins.overlap("Always quote glob arguments in zsh (`grep --include='*.py'`), or use rg", existing)
     assert not ins.overlap("Use uv run with packages for throwaway python scripts", existing)
     assert not ins.overlap("Restart the backend after editing .env", existing)
@@ -232,8 +232,8 @@ def test_cross_project_lessons_become_one_user_level_line_per_agent(archive):
 @pytest.mark.parametrize("damaged", [
     f"# A\n\n{BEGIN}\n- stray\n\n## User section\n\nkeep me\n\n" + NINJA,  # an orphan BEGIN
     f"# A\n- stray\n{END}\n",  # an orphan END
-    f"# A\n{END}\n- x <!-- chronicle:k -->\n{BEGIN}\n",  # END before BEGIN
-    f"{BEGIN}\n- x <!-- chronicle:k -->\n{END}\n\n# Mine\n\n{BEGIN}\n- y <!-- chronicle:j -->\n{END}\n",  # two blocks
+    f"# A\n{END}\n- x <!-- interlatch:k -->\n{BEGIN}\n",  # END before BEGIN
+    f"{BEGIN}\n- x <!-- interlatch:k -->\n{END}\n\n# Mine\n\n{BEGIN}\n- y <!-- interlatch:j -->\n{END}\n",  # two blocks
 ])
 def test_a_damaged_block_is_refused_not_guessed(tmp_path, damaged):
     from chronicle.config import load_config
@@ -254,7 +254,7 @@ def test_keys_with_spaces_round_trip():
     key = "friction:cwd-drift:claude:/Users/a/My Projects/app"
     out = ins.render_file("# Mine\n", [(key, "Use absolute paths.")])
     assert ins.parse_block(out) == ([(key, "Use absolute paths.")], [])
-    assert ins.merge(out, [(key, "Edited.")]).count("<!-- chronicle:") == 1
+    assert ins.merge(out, [(key, "Edited.")]).count("<!-- interlatch:") == 1
     assert ins.merge(out, [], {key}) == "# Mine\n"
 
 

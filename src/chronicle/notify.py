@@ -43,7 +43,14 @@ def how_to_update(cfg: Config, kind: str) -> str:
     if kind == "app":
         return "Open Interlatch › Status › Updates to download it."
     where = f"the dashboard's Status › Updates (http://127.0.0.1:{cfg.server_port}/#/status?focus=updates)"
-    return f"Update from {where}, or run: {UPGRADE[kind]}" if kind in UPGRADE else f"Update from {where}."
+    return f"Update from {where}, or run: {_upgrade(kind)}" if kind in UPGRADE else f"Update from {where}."
+
+
+def _upgrade(kind: str) -> str:
+    """The command that updates this install; for one of the agents-chronicle package, the move to interlatch."""
+    from .update import check, install_method
+
+    return (check()["command"] if install_method().get("move") else None) or UPGRADE[kind]
 
 
 def release_check(cfg: Config, conn) -> str | None:

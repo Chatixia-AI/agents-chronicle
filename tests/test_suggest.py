@@ -133,7 +133,7 @@ def test_preview_apply_unapply_an_instruction(archive):
     assert res["ok"] and res["path"] == str(target) and f"+{BEGIN}" in res["diff"]
     text = target.read_text()
     assert text.startswith(before) and text.index("agent-ninja-END") < text.index(BEGIN)
-    assert "<!-- chronicle:friction:zsh-nomatch -->" in text and s["key"] not in text  # the marker carries no path
+    assert "<!-- interlatch:friction:zsh-nomatch -->" in text and s["key"] not in text  # the marker carries no path
     row = suggest.get(conn, s["id"])
     assert row["status"] == "applied" and row["applied_text"] == s["text"] and row["applied_at"]
     backups = list((cfg.home / "backups").glob("CLAUDE.md.*.bak"))
@@ -145,7 +145,7 @@ def test_preview_apply_unapply_an_instruction(archive):
     assert suggest.get(conn, s["id"])["status"] == "new"
 
     edited = suggest.apply(conn, cfg, s["id"], text="Quote globs:\n zsh.")
-    assert edited["ok"] and "- Quote globs: zsh. <!-- chronicle:" in target.read_text()
+    assert edited["ok"] and "- Quote globs: zsh. <!-- interlatch:" in target.read_text()
     assert suggest.get(conn, s["id"])["text"] == "Quote globs: zsh."
 
 
@@ -281,7 +281,7 @@ def test_a_relearned_lesson_is_not_proposed_again(archive, decision):
     assert [x["id"] for x in suggest.list_suggestions(conn)] == [s["id"]]
     assert suggest.get(conn, s["id"])["status"] == ("dismissed" if decision == "dismiss" else "applied")
     claude_md = a.root / "projects" / "app" / "CLAUDE.md"
-    assert (claude_md.read_text() if claude_md.exists() else "").count("<!-- chronicle:") == (decision == "apply")
+    assert (claude_md.read_text() if claude_md.exists() else "").count("<!-- interlatch:") == (decision == "apply")
 
 
 def test_project_lines_carry_no_path_and_survive_spaces(archive):
@@ -295,9 +295,9 @@ def test_project_lines_carry_no_path_and_survive_spaces(archive):
     target = a.root / "projects" / "My Projects app" / "CLAUDE.md"
     assert suggest.apply(conn, cfg, s["id"])["ok"]
     text = target.read_text()
-    assert "<!-- chronicle:friction:cwd-drift -->" in text and str(a.root) not in text
+    assert "<!-- interlatch:friction:cwd-drift -->" in text and str(a.root) not in text
     assert suggest.apply(conn, cfg, s["id"], text="Edited: cd with absolute paths.")["ok"]
-    assert target.read_text().count("<!-- chronicle:") == 1
+    assert target.read_text().count("<!-- interlatch:") == 1
     assert suggest.unapply(conn, cfg, s["id"])["ok"] and not target.exists()  # Chronicle made it, so it goes
 
 
@@ -320,7 +320,7 @@ def test_refresh_never_moves_an_applied_line(archive):
     suggest.refresh(conn, cfg)
     s = _by_key(conn)["friction:zsh-nomatch:claude:user"]
     target = home / ".claude" / "CLAUDE.md"
-    assert suggest.apply(conn, cfg, s["id"])["ok"] and "chronicle:" in target.read_text()
+    assert suggest.apply(conn, cfg, s["id"])["ok"] and "interlatch:" in target.read_text()
     cfg.claude_dirs = [home / "elsewhere"]  # another process routes user-level lines somewhere else
     suggest.refresh(conn, cfg)
     assert suggest.get(conn, s["id"])["target_path"] == str(target)
@@ -355,7 +355,7 @@ def test_apply_refuses_a_damaged_block(archive):
     damaged = f"# Mine\n{BEGIN}\n- stray\n\n## Keep\n"
     target.write_text(damaged)
     res = suggest.apply(conn, cfg, s["id"])
-    assert not res["ok"] and "malformed chronicle block" in res["error"] and str(target) in res["error"]
+    assert not res["ok"] and "malformed interlatch block" in res["error"] and str(target) in res["error"]
     assert target.read_text() == damaged and suggest.get(conn, s["id"])["status"] == "new"
 
 

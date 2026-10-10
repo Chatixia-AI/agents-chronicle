@@ -46,7 +46,7 @@ def test_mcp_server_protocol(synced):
     ])
     by_id = {m["id"]: m for m in out}
     assert by_id[1]["result"]["protocolVersion"] == "2025-06-18"
-    assert by_id[1]["result"]["serverInfo"]["name"] == "chronicle"
+    assert by_id[1]["result"]["serverInfo"]["name"] == "interlatch"
     assert {t["name"] for t in by_id[2]["result"]["tools"]} >= {"search_knowledge", "search_sessions", "get_session", "project_knowledge"}
     assert all(t["annotations"]["readOnlyHint"] and not t["annotations"]["openWorldHint"] for t in by_id[2]["result"]["tools"])
     text = lambda i: by_id[i]["result"]["content"][0]["text"]  # noqa: E731
@@ -395,7 +395,7 @@ def test_mcp_page_info(env):
     search = next(t for t in info["tools"] if t["name"] == "search_sessions")
     assert search["params"][0] == "query" and "agent" in search["params"]  # required first
     snip = info["snippets"]
-    assert json.loads(snip["json"])["mcpServers"]["chronicle"]["command"] == info["command"]
-    assert json.loads(snip["vscode"])["servers"]["chronicle"]["type"] == "stdio"
-    assert tomllib.loads(snip["codex"])["mcp_servers"]["chronicle"]["args"] == info["args"]
-    assert snip["claude"].startswith("claude mcp add --scope user chronicle -- ") and snip["claude"].endswith(" mcp")
+    assert json.loads(snip["json"])["mcpServers"]["interlatch"]["command"] == info["command"]
+    assert json.loads(snip["vscode"])["servers"]["interlatch"]["type"] == "stdio"
+    assert tomllib.loads(snip["codex"])["mcp_servers"]["interlatch"]["args"] == info["args"]
+    assert snip["claude"].startswith("claude mcp add --scope user interlatch -- ") and snip["claude"].endswith(" mcp")

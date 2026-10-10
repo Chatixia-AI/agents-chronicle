@@ -1,7 +1,7 @@
 """Local dashboard: JSON API + static single-page app (stdlib only, binds to localhost).
 
 Besides 127.0.0.1 and localhost it answers only to the names in `[server] allowed_hosts` (Tailscale Serve's, set by
-`chronicle tailnet on`), and there only to the Tailscale logins in `[server] allowed_users`. On a hub, /api/hub/* takes
+`interlatch tailnet on`), and there only to the Tailscale logins in `[server] allowed_users`. On a hub, /api/hub/* takes
 other computers' session files, authenticated by the hub's token or a person's computer token instead (hub.py).
 
 Once a hub has people (people.py), its API answers only someone signed in: at the hub computer itself (an admin),
@@ -29,7 +29,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, unquote, urlparse
 
 from . import __version__, i18n, news
-from .config import LANGUAGES, Config
+from .config import LANGUAGES, Config, env
 from .db import connect, kv_get, kv_set
 from .i18n import tr
 from .ladder import reason_text
@@ -58,7 +58,7 @@ TEAM_MAX_PROJECTS = 500
 PROXY_HEADERS = ("X-Forwarded-For", "Tailscale-User-Login", "X-Forwarded-Proto", "X-Real-IP", "Forwarded")
 HUB_PUSH = ("/api/hub/file", "/api/hub/sessions", "/api/hub/analyses", "/api/hub/done", "/api/hub/hello",
             "/api/hub/withdraw")
-SIGNIN_HELP = ("Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
+SIGNIN_HELP = ("Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Interlatch "
                "(Settings › Devices).")
 TOO_MANY_CODES = "too many wrong codes from this address; try again in {seconds} s"  # people.CodeAttempts
 # The dashboard page's Content-Security-Policy: scripts, styles, images, fonts and requests from the dashboard itself
@@ -189,7 +189,7 @@ class App:
             return None
 
     def refresh_config(self) -> None:
-        """The dashboard runs for days: pick up config.toml edits (e.g. `chronicle connect codex`) without a restart."""
+        """The dashboard runs for days: pick up config.toml edits (e.g. `interlatch connect codex`) without a restart."""
         from .config import load_config
 
         sig = self._config_sig()
@@ -1083,7 +1083,7 @@ class App:
     def mcp_info(self) -> dict:
         """What the MCP page shows: the command that starts the server, its tools, and config to paste."""
         from .connectors import mcp_server_entry
-        from .install import executable
+        from .install import MCP_NAME, executable
         from .mcp_server import INSTRUCTIONS, TOOLS
 
         entry = mcp_server_entry(executable())
@@ -1097,10 +1097,10 @@ class App:
                                         key=lambda k: k not in t["inputSchema"].get("required", [])),
                        "required": t["inputSchema"].get("required", [])} for t in TOOLS],
             "snippets": {
-                "json": json.dumps({"mcpServers": {"chronicle": entry}}, indent=2),
-                "vscode": json.dumps({"servers": {"chronicle": {"type": "stdio", **entry}}}, indent=2),
-                "codex": f'[mcp_servers.chronicle]\ncommand = {json.dumps(cmd)}\nargs = [{toml_args}]\n',
-                "claude": f"claude mcp add --scope user chronicle -- {shell}",
+                "json": json.dumps({"mcpServers": {MCP_NAME: entry}}, indent=2),
+                "vscode": json.dumps({"servers": {MCP_NAME: {"type": "stdio", **entry}}}, indent=2),
+                "codex": f'[mcp_servers.{MCP_NAME}]\ncommand = {json.dumps(cmd)}\nargs = [{toml_args}]\n',
+                "claude": f"claude mcp add --scope user {MCP_NAME} -- {shell}",
             },
         }
 
@@ -1338,7 +1338,7 @@ class App:
         return out, 200
 
     def action_leave_hub(self) -> dict:
-        """Settings › Devices › Leave the hub (`chronicle hub leave`)."""
+        """Settings › Devices › Leave the hub (`interlatch hub leave`)."""
         from .hub import leave_hub
 
         if not self.cfg.is_spoke:
@@ -1356,16 +1356,16 @@ class App:
 
         if self.cfg.is_spoke or not read_token(self.cfg):
             return {"error": tr("this computer is not a hub")}
-        container = bool(os.environ.get("CHRONICLE_CONTAINER"))
+        container = bool(env("CONTAINER"))
         return {"name": self.cfg.hub_name, "default_name": local_machine(self.cfg)["name"],
                 "address": self.cfg.hub_address, "accept": self.cfg.hub_accept, "store": self.cfg.hub_store,
                 "container": container, "dedicated": self.cfg.hub_dedicated,
-                "managed": {"address": container, "name": container and bool((os.environ.get("CHRONICLE_HUB_NAME") or "").strip())},
+                "managed": {"address": container, "name": container and bool((env("HUB_NAME") or "").strip())},
                 "home": str(self.cfg.home), "db": str(self.cfg.db_path)}
 
     def action_hub_settings(self, body: dict, by: dict | None) -> tuple[dict, int]:
         """Rename this hub, or change the address computers and browsers reach it at (invites and sign-in links
-        use it). A new address's host name is added to [server] allowed_hosts, as `chronicle hub enable --url` does."""
+        use it). A new address's host name is added to [server] allowed_hosts, as `interlatch hub enable --url` does."""
         from . import people
         from .config import load_config, set_config_value
         from .hub import read_token
@@ -1376,21 +1376,21 @@ class App:
         changed: dict = {}
         if "name" in body:
             if managed["name"]:
-                return {"error": tr("CHRONICLE_HUB_NAME in the hub's .env sets its name: change it there.")}, 400
+                return {"error": tr("INTERLATCH_HUB_NAME in the hub's .env sets its name: change it there.")}, 400
             name = " ".join("".join(c for c in str(body.get("name") or "") if c.isprintable() or c.isspace()).split())
             if len(name) > 80:
                 return {"error": tr("A hub's name is up to 80 characters.")}, 400
-            if not name and os.environ.get("CHRONICLE_CONTAINER"):  # else it would be the container's random host name
+            if not name and env("CONTAINER"):  # else it would be the container's random host name
                 return {"error": tr("Give the hub a name.")}, 400
             changed["name"] = name
         if "address" in body:
             if managed["address"]:
-                return {"error": tr("CHRONICLE_HUB_URL in the hub's .env sets its address: change it there.")}, 400
+                return {"error": tr("INTERLATCH_HUB_URL in the hub's .env sets its address: change it there.")}, 400
             address = str(body.get("address") or "").strip().rstrip("/")
             parts = urlparse(address)
             if address and (parts.scheme not in ("http", "https") or not parts.hostname or parts.path or parts.query
                             or parts.fragment or parts.username or parts.password):
-                return {"error": tr("An address is like https://chronicle.example.com: http or https and a host name, "
+                return {"error": tr("An address is like https://interlatch.example.com: http or https and a host name, "
                                     "with a port if needed.")}, 400
             changed["address"] = address
         if not changed:
@@ -1594,7 +1594,7 @@ class App:
                "join": invite_command(address, code), "link": invite_link(address, code)}
         if not self.cfg.hub_address:  # guessed from this page's address, which others may not reach
             out["note"] = tr("this hub has no address set ([hub] address), so these use the address this page was "
-                             "opened at; set it with `chronicle hub enable --url`")
+                             "opened at; set it with `interlatch hub enable --url`")
         return out
 
     def _projects_body(self, body: dict) -> list[str] | None:
@@ -1793,7 +1793,7 @@ class App:
         (set up or not). Never an API key, only where one comes from."""
         return {"backend": make_runner(self.cfg).name,
                 "choices": [self._runner_for(name).describe() for name in BACKENDS],
-                "language": self.cfg.analysis.language,  # what Chronicle writes knowledge in, not the dashboard's language
+                "language": self.cfg.analysis.language,  # what Interlatch writes knowledge in, not the dashboard's language
                 "languages": [{"code": code, "label": label} for code, label in LANGUAGES.items()]}
 
     def action_backend(self, backend: str) -> dict:
@@ -1961,7 +1961,7 @@ class App:
         return {"started": self.jobs.start("update", run_update)}
 
     def status(self) -> dict:
-        from .install import hooks_installed, launchd_status, mcp_registered, statusline_installed
+        from .install import UI_LABEL, hooks_installed, launchd_status, mcp_registered, statusline_installed
         from .statusline import plan_usage
 
         c = self.conn
@@ -1971,7 +1971,7 @@ class App:
         st["analysis_cost"] = c.execute("SELECT COALESCE(SUM(cost_usd),0) FROM analyses").fetchone()[0]
         st["hooks"] = hooks_installed(self.cfg)
         st["launchd"] = launchd_status()
-        st["ui_agent"] = launchd_status("com.claude-chronicle.ui")
+        st["ui_agent"] = launchd_status(UI_LABEL)
         st["mcp"] = mcp_registered()
         st["statusline"] = {"installed": statusline_installed(self.cfg), "plan": plan_usage(c)}
         from .menubar import setting_info
@@ -2263,7 +2263,7 @@ def make_handler(app: App, port: int):
             return people.has_people(app.conn)
 
         def _local(self) -> str | None:
-            """"mac" or "linux" when the request comes from this computer itself and Chronicle can open files here;
+            """"mac" or "linux" when the request comes from this computer itself and Interlatch can open files here;
             None otherwise. Gates "Open on this Mac"."""
             import sys
 
@@ -2319,7 +2319,7 @@ def make_handler(app: App, port: int):
                         and self.headers.get("Tailscale-User-Login")):
                     return None, None
                 return None, ({"error": tr("this dashboard has no people yet, so only this computer may open it. At "
-                                           "the hub, run `chronicle hub invite <your name> --email <email> --role admin` "
+                                           "the hub, run `interlatch hub invite <your name> --email <email> --role admin` "
                                            "and open the invite link it prints"), "nobody": True}, 403)
             header = app.cfg.server_auth_header
             if header and self.client_address[0] in app.cfg.server_trusted_proxies and self.headers.get(header):
@@ -2350,7 +2350,7 @@ def make_handler(app: App, port: int):
             return f"{'https' if self._proxied_https() else 'http'}://{self._host() or '127.0.0.1'}"
 
         def _signin(self, code: str, page: str | None = None):
-            """An invite link, or a sign-in link a person's own Chronicle asked for: opens a browser session, on the page
+            """An invite link, or a sign-in link a person's own Interlatch asked for: opens a browser session, on the page
             the link's next names (people.landing) or Home. After a few unknown codes from one address, its next tries
             wait their turn (people.CodeAttempts)."""
             import html
@@ -2371,7 +2371,7 @@ def make_handler(app: App, port: int):
                 title = html.escape(tr("Could not sign in"))
                 body = (f'<!doctype html><html lang="{i18n.lang.get()}"><meta charset="utf-8">'
                         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-                        f'<meta name="color-scheme" content="light dark"><title>{title} · Chronicle</title>'
+                        f'<meta name="color-scheme" content="light dark"><title>{title} · Interlatch</title>'
                         '<body style="font: 16px/1.5 system-ui, sans-serif; max-width: 36rem; margin: 12vh auto; '
                         f'padding: 0 16px"><h1 style="font-size: 1.3rem">{title}</h1><p>{html.escape(exc.shown())}</p>'
                         f"<p>{html.escape(tr(SIGNIN_HELP))}</p>"
@@ -2788,7 +2788,7 @@ def make_handler(app: App, port: int):
                 m = re.fullmatch(r"/api/artifacts/(\d+)/reveal", p)
                 if m:  # open the file in its own app, or show it in Finder: only from this computer
                     if not self._local():
-                        return self._json({"error": tr("files open only on the computer Chronicle runs on")}, 403)
+                        return self._json({"error": tr("files open only on the computer Interlatch runs on")}, 403)
                     err = app.artifact_reveal(int(m.group(1)), "reveal" if body.get("how") == "reveal" else "open")
                     return self._json({"error": err}, 400) if err else self._json({"ok": True})
                 if p in ("/api/team-store/test", "/api/team-store/save"):
@@ -2949,12 +2949,12 @@ def make_server(cfg: Config, host: str | None = None, port: int | None = None, *
 
 
 def _already_running(cfg: Config, port: int, open_browser: bool) -> None:
-    """The port is taken: say by what (usually Chronicle's own launchd agent) and how to get the new code served."""
+    """The port is taken: say by what (usually Interlatch's own launchd agent) and how to get the new code served."""
     import os
     import sys
     from urllib.request import urlopen
 
-    from .install import launchd_status
+    from .install import UI_LABEL, active_label, launchd_status
 
     url = f"http://127.0.0.1:{port}/"
     try:
@@ -2967,11 +2967,11 @@ def _already_running(cfg: Config, port: int, open_browser: bool) -> None:
         raise SystemExit(1)
     if open_browser:
         webbrowser.open(url)
-    agent = launchd_status("com.claude-chronicle.ui").get("loaded")
-    print(f"Chronicle {running} is already running at {url}" + (" (the background agent from `chronicle install`)." if agent else "."),
+    agent = launchd_status(UI_LABEL).get("loaded")
+    print(f"Interlatch {running} is already running at {url}" + (" (the background agent from `interlatch install`)." if agent else "."),
           file=sys.stderr)
     if running != __version__ or agent:
-        restart = (f"launchctl kickstart -k gui/{os.getuid()}/com.claude-chronicle.ui" if agent
+        restart = (f"launchctl kickstart -k gui/{os.getuid()}/{active_label(UI_LABEL)}" if agent
                    else "stop that one (Ctrl+C where it runs)")
         print(f"If it still runs older code (after an update), restart it to load this install ({__version__}): {restart}",
               file=sys.stderr)
@@ -2994,7 +2994,7 @@ def serve(cfg: Config, host: str | None = None, port: int | None = None, open_br
             raise
         _already_running(cfg, port or cfg.server_port, open_browser)
     url = f"http://127.0.0.1:{httpd.server_address[1]}/"
-    print(banner or f"Chronicle dashboard: {url}  (Ctrl+C to stop)", flush=True)
+    print(banner or f"Interlatch dashboard: {url}  (Ctrl+C to stop)", flush=True)
     if open_browser:
         threading.Timer(0.5, lambda: webbrowser.open(url)).start()
     from .menubar import run_with_server, wants_menu_bar

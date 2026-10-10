@@ -1,9 +1,14 @@
-"""Self-update for the dashboard's Update button: find how Chronicle was installed and upgrade it the same way.
+"""Self-update for the dashboard's Update button: find how Interlatch was installed and upgrade it the same way.
 
 Checking PyPI is the only network call. It runs when the user asks (Status › Check for updates) or, with
 `[updates] check_daily` on, once a day while the dashboard is open; the last answer is kept in the database.
 An install from a local checkout is checked without the network: it is out of date when the checkout's
 files changed after the install.
+
+Interlatch was called Chronicle, and its package agents-chronicle. Each release also comes out as an agents-chronicle
+that depends on interlatch and carries the same chronicle/ files (so pip's removal of the old package can't
+delete them), so an old install's own upgrade lands here; such an install is offered the move to
+the interlatch package instead of an upgrade (move_steps).
 """
 
 from __future__ import annotations
@@ -29,11 +34,12 @@ from .i18n import tr
 
 log = logging.getLogger("chronicle.update")
 
-DIST = "agents-chronicle"
+DIST = "interlatch"
+LEGACY_DIST = "agents-chronicle"  # the package's name before the rename
 PYPI_JSON = f"https://pypi.org/pypi/{DIST}/json"
 RELEASES_URL = "https://github.com/Chatixia-AI/agents-chronicle/releases/latest"
 
-# server.serve() sets this: a plain `chronicle ui` (by hand or launchd) can restart itself after an update;
+# server.serve() sets this: a plain `interlatch ui` (by hand or launchd) can restart itself after an update;
 # the desktop app serves the dashboard from its own process and is restarted by the user instead.
 RESTARTABLE = False
 REMOTE_KEY = "update_check"  # kv: the last PyPI check, so it outlives a restart
@@ -43,7 +49,7 @@ _method: dict = {}  # install_method() is polled with the status bar; it only ch
 
 
 def _vkey(v: str | None) -> tuple:
-    """Release numbers of a version ("0.1.10" -> (0, 1, 10)); enough to order Chronicle's own releases."""
+    """Release numbers of a version ("0.1.10" -> (0, 1, 10)); enough to order Interlatch's own releases."""
     m = re.match(r"\d+(?:\.\d+)*", v or "")
     return tuple(int(n) for n in m.group(0).split(".")) if m else ()
 
@@ -59,43 +65,100 @@ def _which(name: str) -> str | None:
 
 
 def install_method() -> dict:
-    """How this copy was installed: kind, where from, and the command that upgrades it (None when there is none)."""
+    """How this copy was installed: kind, where from, and the command that upgrades it (None when there is none).
+    "steps", when there are several commands (the move from agents-chronicle), runs them in order; "command" is the
+    first."""
     if not _method:
         _method.update(_install_method())
     return _method
 
 
 def _install_method() -> dict:
+    from .config import env
+
     if getattr(sys, "frozen", False):
-        return {"kind": "app", "label": "Chronicle.app", "command": None}
-    if os.environ.get("CHRONICLE_CONTAINER"):  # docker/Dockerfile: an upgrade in place would vanish with the container
+        return {"kind": "app", "label": "Interlatch.app", "command": None}
+    if env("CONTAINER"):  # docker/Dockerfile: an upgrade in place would vanish with the container
         return {"kind": "container", "label": "container image", "command": None}
     receipt = Path(sys.prefix) / "uv-receipt.toml"
     if receipt.is_file():
         reqs = tomllib.loads(receipt.read_text()).get("tool", {}).get("requirements", [])
-        req = next((r for r in reqs if r.get("name") == DIST), {})
+        # the tool is named after its package: interlatch, or agents-chronicle installed before the rename
+        req = next((r for r in reqs if r.get("name") == DIST), None) or next(
+            (r for r in reqs if r.get("name") == LEGACY_DIST), {})
         source = req.get("directory") or req.get("path") or req.get("git") or req.get("url")
         uv = _which("uv")
+        extras = list(req.get("extras") or [])  # e.g. app, team: a reinstall that adds one keeps the others
+        method = {"kind": "uv", "label": f"uv tool from {source}" if source else "uv tool from PyPI", "source": source,
+                  "local": bool(req.get("directory") or req.get("path")), "extras": extras,
+                  # installed files carry the install time (the receipt is not rewritten by an upgrade)
+                  "installed_at": (Path(__file__).parent / "__init__.py").stat().st_mtime}
+        if req.get("name") == LEGACY_DIST and not source:
+            return {**method, "label": f"uv tool {LEGACY_DIST} from PyPI", "move": True,
+                    **_steps(move_steps("uv", uv, extras) if uv else None)}
         # a checkout's version rarely changes, so a plain upgrade would keep the old build: --reinstall rebuilds it
-        cmd = [uv, "tool", "upgrade", *(["--reinstall"] if source else []), DIST] if uv else None
-        return {"kind": "uv", "label": f"uv tool from {source}" if source else "uv tool from PyPI", "source": source,
-                "local": bool(req.get("directory") or req.get("path")),
-                "extras": list(req.get("extras") or []),  # e.g. app, team: a reinstall that adds one keeps the others
-                # installed files carry the install time (the receipt is not rewritten by an upgrade)
-                "installed_at": (Path(__file__).parent / "__init__.py").stat().st_mtime,
-                "command": cmd}
-    try:
-        direct = json.loads(distribution(DIST).read_text("direct_url.json") or "null")
-    except PackageNotFoundError:
+        return {**method, "command": [uv, "tool", "upgrade", *(["--reinstall"] if source else []),
+                                      req.get("name") or DIST] if uv else None}
+    found = _distribution()
+    if found is None:
         return {"kind": "source", "label": "source tree (not installed)", "command": None}
+    name, direct = found
     if direct and direct.get("dir_info", {}).get("editable"):
         return {"kind": "source", "label": f"editable checkout {unquote(urlparse(direct['url']).path)}", "command": None}
     if "pipx" in Path(sys.prefix).parts or "pipx" in sys.prefix:
         pipx = _which("pipx")
+        if Path(sys.prefix).name == LEGACY_DIST:  # pipx names the environment after the package
+            return {"kind": "pipx", "label": f"pipx {LEGACY_DIST}", "move": True,
+                    **_steps(move_steps("pipx", pipx, []) if pipx else None)}
         return {"kind": "pipx", "label": "pipx", "command": [pipx, "upgrade", DIST] if pipx else None}
     has_pip = subprocess.run([sys.executable, "-m", "pip", "--version"], capture_output=True).returncode == 0
+    if name == LEGACY_DIST or _installed(LEGACY_DIST):
+        return {"kind": "pip", "label": f"pip in {sys.prefix} ({LEGACY_DIST})", "move": True,
+                **_steps(move_steps("pip", sys.executable, []) if has_pip else None)}
     return {"kind": "pip", "label": f"pip in {sys.prefix}",
             "command": [sys.executable, "-m", "pip", "install", "--upgrade", DIST] if has_pip else None}
+
+
+def _installed(name: str) -> bool:
+    try:
+        distribution(name)
+        return True
+    except PackageNotFoundError:
+        return False
+
+
+def _distribution() -> tuple[str, dict | None] | None:
+    """(the installed package's name, its direct_url.json): interlatch, else agents-chronicle; None from a source tree."""
+    for name in (DIST, LEGACY_DIST):
+        try:
+            return name, json.loads(distribution(name).read_text("direct_url.json") or "null")
+        except PackageNotFoundError:
+            continue
+    return None
+
+
+def _steps(steps: list[list[str]] | None) -> dict:
+    return {"command": steps[0] if steps else None, "steps": steps}
+
+
+def move_steps(kind: str, tool: str, extras: list[str]) -> list[list[str]]:
+    """The commands that replace an agents-chronicle install with interlatch, keeping its extras.
+
+    agents-chronicle (the one that depends on interlatch and carries its files) installs the same `interlatch` and `chronicle` commands.
+    With uv: install interlatch over them first (nothing is lost when that fails), remove agents-chronicle, which takes
+    the commands with it, then install interlatch once more, which puts them back from what the first step fetched.
+    pipx can't install the second package over the first's commands, so it removes agents-chronicle first. pip keeps
+    both in one environment, sharing the module and the commands: reinstalling interlatch after removing the other
+    brings back what that removal took."""
+    want = f"{DIST}[{','.join(sorted(extras))}]" if extras else DIST
+    if kind == "uv":
+        install = [tool, "tool", "install", "--python", f"{sys.version_info[0]}.{sys.version_info[1]}", want]
+        return [[*install[:3], "--force", *install[3:]], [tool, "tool", "uninstall", LEGACY_DIST], install]
+    if kind == "pipx":
+        return [[tool, "uninstall", LEGACY_DIST], [tool, "install", want]]
+    pip = [tool, "-m", "pip"]
+    return [[*pip, "install", "--upgrade", want], [*pip, "uninstall", "-y", LEGACY_DIST],
+            [*pip, "install", "--force-reinstall", "--no-deps", DIST]]
 
 
 def _checkout_files(source: str) -> list[Path]:
@@ -151,9 +214,10 @@ def check(remote: bool = False, detail: bool = False) -> dict:
     """What the Status page shows. remote=True asks PyPI for the latest release; otherwise the last answer is reused.
     detail=True also lists what a checkout reinstall would bring in (the status bar's poll leaves it out)."""
     m = install_method()
+    steps = m.get("steps") or ([m["command"]] if m["command"] else [])
     info = {"current": __version__, "kind": m["kind"], "method": m["label"], "source": m.get("source"),
-            "local": m.get("local", False), "latest": None, "available": False,
-            "can_update": m["command"] is not None, "command": shlex.join(m["command"]) if m["command"] else None,
+            "local": m.get("local", False), "latest": None, "available": False, "move": bool(m.get("move")),
+            "can_update": bool(steps), "command": " && ".join(shlex.join(s) for s in steps) or None,
             "restartable": RESTARTABLE, "checked_at": None, "error": None, "releases_url": RELEASES_URL}
     if m["kind"] == "source":
         info["note"] = tr("Running from a source checkout: git pull to update.")
@@ -174,7 +238,10 @@ def check(remote: bool = False, detail: bool = False) -> dict:
     error = re.fullmatch(r"Could not reach PyPI \((\w+)\)", _remote.get("error") or "")  # kept in English: say it here
     info.update(latest=_remote.get("latest"), checked_at=_remote.get("checked_at"),
                 error=tr(PYPI_ERROR, error=error.group(1)) if error else _remote.get("error"))
-    info["available"] = bool(info["latest"]) and _vkey(info["latest"]) > _vkey(__version__)
+    # an agents-chronicle install moves to interlatch at any version, the one it runs included
+    info["available"] = bool(info["latest"]) and (info["move"] or _vkey(info["latest"]) > _vkey(__version__))
+    if info["move"]:
+        info["note"] = tr(MOVE_NOTE)
     if info["available"]:
         info["notes_url"] = f"https://github.com/Chatixia-AI/agents-chronicle/releases/tag/v{info['latest']}"
     if m["kind"] == "app":
@@ -185,6 +252,8 @@ def check(remote: bool = False, detail: bool = False) -> dict:
 
 
 PYPI_ERROR = "Could not reach PyPI ({error})"
+MOVE_NOTE = ("Chronicle is now Interlatch. Updating moves this install from the agents-chronicle package to "
+             "interlatch; the chronicle command keeps working.")
 
 
 PYPI_TRIES = 3
@@ -199,7 +268,7 @@ def fetch_latest() -> None:
     latest = None
     for _ in range(PYPI_TRIES):
         try:
-            req = Request(PYPI_JSON, headers={"User-Agent": f"chronicle/{__version__}", "Accept": "application/json"})
+            req = Request(PYPI_JSON, headers={"User-Agent": f"interlatch/{__version__}", "Accept": "application/json"})
             with urlopen(req, timeout=8) as r:
                 version = json.load(r)["info"]["version"]
         except Exception as exc:  # offline, proxy, PyPI down: shown on the page, unless an earlier try answered
@@ -259,6 +328,8 @@ def available() -> dict | None:
         return None
     if not info["available"]:
         return None
+    if info["move"]:
+        return {"to": info["latest"], "key": f"move:{info['latest']}"}
     if _vkey(info["latest"]) > _vkey(__version__):
         return {"to": info["latest"], "key": info["latest"]}
     head = (_git(info["source"], "rev-parse", "--short", "HEAD") or "").strip() if info["source"] else ""
@@ -273,21 +344,40 @@ def available_version() -> str | None:
 
 def run_update(progress) -> str:
     """Upgrade with the install's own tool; returns a line for the UI. Restarts the dashboard when it can."""
-    m = install_method()
-    if not m["command"]:
-        raise RuntimeError(f"Chronicle installed as {m['label']} cannot update itself")
-    progress("updating Chronicle…")
-    r = subprocess.run(m["command"], capture_output=True, text=True, timeout=900, stdin=subprocess.DEVNULL)
-    out = (r.stdout + r.stderr).strip()
-    _method.clear()  # a reinstall rewrites the receipt
-    if r.returncode:
-        raise RuntimeError(out.splitlines()[-1] if out else f"{m['command'][0]} exited with {r.returncode}")
-    new = subprocess.run([sys.executable, "-c", f"import importlib.metadata as m; print(m.version({DIST!r}))"],
-                         capture_output=True, text=True).stdout.strip() or "?"
+    m = dict(install_method())  # a copy: each step clears what install_method() remembers
+    steps = m.get("steps") or ([m["command"]] if m["command"] else [])
+    if not steps:
+        raise RuntimeError(f"Interlatch installed as {m['label']} cannot update itself")
+    progress("moving to the interlatch package…" if m.get("move") else "updating Interlatch…")
+    from . import install  # noqa: F401  restart() needs it, and a move deletes this environment's files
+
+    for step in steps:
+        r = subprocess.run(step, capture_output=True, text=True, timeout=900, stdin=subprocess.DEVNULL)
+        out = (r.stdout + r.stderr).strip()
+        _method.clear()  # a reinstall rewrites the receipt
+        if r.returncode:
+            raise RuntimeError(out.splitlines()[-1] if out else f"{step[0]} exited with {r.returncode}")
+    if m.get("move"):
+        new = _new_version() or "?"
+    else:
+        new = subprocess.run([sys.executable, "-c", f"import importlib.metadata as m; print(m.version({DIST!r}))"],
+                             capture_output=True, text=True).stdout.strip() or "?"
     if RESTARTABLE:
         threading.Timer(3.0, restart).start()  # after the next status poll has seen this job finish
-        return f"Updated to Chronicle {new}; the dashboard is restarting"
-    return f"Updated to Chronicle {new}; quit and reopen Chronicle to use it"
+        return f"Updated to Interlatch {new}; the dashboard is restarting"
+    return f"Updated to Interlatch {new}; quit and reopen Interlatch to use it"
+
+
+def _new_version() -> str | None:
+    """The version the `interlatch` command now runs (after a move this environment is gone)."""
+    exe = _which("interlatch")
+    if not exe:
+        return None
+    try:
+        out = subprocess.run([exe, "--version"], capture_output=True, text=True, timeout=30).stdout.split()
+    except (OSError, subprocess.SubprocessError):
+        return None
+    return out[-1] if out else None
 
 
 def restart() -> None:
@@ -295,16 +385,20 @@ def restart() -> None:
 
     The macOS login item asks launchd for a new process (`launchctl kickstart -k`): a process that re-executes itself
     in place keeps its pid, and macOS then keeps its menu-bar icon hidden. Anything else replaces this process with a
-    fresh copy of itself (the pid stays, so a systemd unit is undisturbed; the listening socket is not inherited)."""
-    from .install import UI_LABEL
+    fresh copy of itself (the pid stays, so a systemd unit is undisturbed; the listening socket is not inherited).
+    After the move from agents-chronicle this environment is gone: the fresh copy is the `interlatch` command's."""
+    from .install import LEGACY_LABELS, UI_LABEL
 
     sys.stdout.flush()
     sys.stderr.flush()
-    if sys.platform == "darwin" and os.environ.get("XPC_SERVICE_NAME") == UI_LABEL:
+    label = os.environ.get("XPC_SERVICE_NAME")
+    if sys.platform == "darwin" and label in (UI_LABEL, LEGACY_LABELS[UI_LABEL]):
         try:  # its own session, so launchd stopping this agent's processes doesn't stop launchctl too
-            subprocess.Popen(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{UI_LABEL}"], start_new_session=True,
+            subprocess.Popen(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{label}"], start_new_session=True,
                              stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
             return
         except OSError:
             log.warning("launchctl kickstart failed; restarting in place")
+    if not Path(sys.executable).exists() and (exe := _which("interlatch")):
+        os.execv(exe, [exe, *sys.argv[1:]])
     os.execv(sys.executable, sys.orig_argv)

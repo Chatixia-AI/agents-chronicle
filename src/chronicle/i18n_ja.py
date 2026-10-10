@@ -417,35 +417,5 @@ JA: dict[str, str] = {
     "A folder rule can't be empty or the whole disk.": "フォルダーのルールを空やディスク全体にすることはできません。",
     "Pick a project to move.": "移動するプロジェクトを選んでください。",
     "This computer doesn't send to a hub.": "このコンピューターはハブに送っていません。",
-
-    # ---- until core's rename lands: the same strings before it (delete this block once instructions.py,
-    # connectors.py and server.py say Interlatch)
-    "malformed chronicle block ({begins} BEGIN and {ends} END markers, expected one BEGIN followed by one END)":
-        "Chronicle のブロックが壊れています（BEGIN が {begins} 個、END が {ends} 個。BEGIN 1 個のあとに END 1 個が必要です）",
-    "registered MCP server 'chronicle' in Codex": "Codex に MCP サーバー「chronicle」を登録しました",
-    "removed MCP server 'chronicle' from Codex": "Codex から MCP サーバー「chronicle」を削除しました",
-    "{label}: {path} is not plain JSON; add the 'chronicle' MCP server by hand":
-        "{label}：{path} は素の JSON ではありません。MCP サーバー「chronicle」は手で追加してください",
-    "{label}: no chronicle MCP server to remove": "{label}：削除する MCP サーバー「chronicle」がありません",
-    "{label}: chronicle MCP server already registered": "{label}：MCP サーバー「chronicle」は登録済みです",
-    "{label}: removed MCP server 'chronicle' ({path})": "{label}：MCP サーバー「chronicle」を削除しました（{path}）",
-    "{label}: registered MCP server 'chronicle' ({path})": "{label}：MCP サーバー「chronicle」を登録しました（{path}）",
-    "files open only on the computer Chronicle runs on": "ファイルは Chronicle が動いているコンピューターでだけ開けます",
-    "this dashboard has no people yet, so only this computer may open it. At the hub, run `chronicle hub invite <your "
-    "name> --email <email> --role admin` and open the invite link it prints":
-        "このダッシュボードにはまだ人が登録されていないため、開けるのはこのコンピューター自身だけです。ハブで "
-        "`chronicle hub invite <名前> --email <メール> --role admin` を実行し、表示される招待リンクを開いてください",
-    "Ask an admin of this hub for a new invite, or open the hub's dashboard again from your own Chronicle "
-    "(Settings › Devices).":
-        "このハブの管理者に新しい招待を頼むか、自分の Chronicle（「設定」›「デバイス」）からハブのダッシュボードを開き直してください。",
-    "this hub has no address set ([hub] address), so these use the address this page was opened at; set it with "
-    "`chronicle hub enable --url`":
-        "このハブにはアドレスが設定されていない（[hub] address）ため、このページを開いたアドレスを使っています。"
-        "`chronicle hub enable --url` で設定してください",
-    "CHRONICLE_HUB_NAME in the hub's .env sets its name: change it there.":
-        "ハブの名前はハブの .env の CHRONICLE_HUB_NAME で決まります。そちらで変更してください。",
-    "CHRONICLE_HUB_URL in the hub's .env sets its address: change it there.":
-        "ハブのアドレスはハブの .env の CHRONICLE_HUB_URL で決まります。そちらで変更してください。",
-    "An address is like https://chronicle.example.com: http or https and a host name, with a port if needed.":
-        "アドレスは https://chronicle.example.com のように、http か https とホスト名で指定します（必要ならポートも）。",
+    "Chronicle is now Interlatch. Updating moves this install from the agents-chronicle package to interlatch; the chronicle command keeps working.": "Chronicle は Interlatch になりました。更新すると、このインストールは agents-chronicle パッケージから interlatch に移ります。chronicle コマンドはそのまま使えます。",
 }
