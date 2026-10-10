@@ -233,6 +233,30 @@ print(json.dumps({"type": "result", "subtype": "success", "is_error": False, "re
 '''
 
 
+@pytest.fixture(autouse=True)
+def no_real_background_agents(tmp_path_factory, monkeypatch):
+    """No test reaches this computer's own launchd or systemd agents: `chronicle install --no-ui` in a test once
+    booted out the developer's real dashboard. Agent files go to a scratch folder, and launchctl and systemctl are
+    never run (a test that wants to see those calls patches subprocess.run itself, over this)."""
+    import subprocess
+
+    from chronicle import install
+
+    agents = tmp_path_factory.mktemp("agents")
+    monkeypatch.setattr(install, "plist_path", lambda label=install.LAUNCHD_LABEL: agents / f"{label}.plist")
+    monkeypatch.setattr(install, "systemd_dir", lambda: agents / "systemd")
+    real_run = subprocess.run
+
+    def run(cmd, *args, **kwargs):
+        if isinstance(cmd, (list, tuple)) and cmd and Path(str(cmd[0])).name in ("launchctl", "systemctl"):
+            print_ = "print" in cmd or "is-active" in cmd  # asking about an agent: there is none
+            return subprocess.CompletedProcess(cmd, 113 if print_ else 0, "" if kwargs.get("text") else b"",
+                                               "" if kwargs.get("text") else b"")
+        return real_run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(subprocess, "run", run)
+
+
 @pytest.fixture()
 def env(tmp_path, monkeypatch):
     home = tmp_path / "chronicle"

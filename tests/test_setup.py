@@ -263,3 +263,17 @@ def test_version_flag_reports_the_installed_version(capsys):
     with pytest.raises(SystemExit) as exit_:
         main(["--version"])
     assert exit_.value.code == 0 and capsys.readouterr().out.strip() == f"chronicle {__version__}"
+
+
+def test_tests_never_reach_this_computers_own_agents():
+    """conftest's no_real_background_agents: a test that runs `chronicle install --no-ui` must not boot out the
+    developer's real dashboard, as one did."""
+    import subprocess
+    from pathlib import Path
+
+    from chronicle import install
+
+    assert Path("~/Library/LaunchAgents").expanduser() not in install.plist_path(install.UI_LABEL).parents
+    assert Path("~/.config").expanduser() not in install.systemd_dir().parents
+    r = subprocess.run(["launchctl", "print", f"gui/{os.getuid()}/{install.UI_LABEL}"], capture_output=True, text=True)
+    assert r.returncode == 113 and r.stdout == ""
