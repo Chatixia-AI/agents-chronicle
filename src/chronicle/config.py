@@ -106,7 +106,8 @@ trusted_proxies = ["127.0.0.1", "::1"]
 # at this computer itself, so nobody is an admin just by coming through the proxy. Admins sign in, or use the CLI.
 behind_proxy = false
 # macOS: the dashboard that opens at login also shows Chronicle's icon in the menu bar (needs the `app` extra).
-menu_bar = true
+# Off unless you turn it on: `chronicle install` asks, or `chronicle install --menu-bar`.
+menu_bar = false
 
 [hub]
 # On a computer that sends its sessions to another one (the hub): the hub's address. Set by `chronicle hub join`.
@@ -264,7 +265,7 @@ class Config:
     server_auth_header: str = ""
     server_trusted_proxies: list[str] = field(default_factory=lambda: ["127.0.0.1", "::1"])
     server_behind_proxy: bool = False
-    server_menu_bar: bool = True
+    server_menu_bar: bool = False
     hub_url: str = ""
     hub_path_map: dict[str, str] = field(default_factory=dict)
     hub_folders: dict[str, str] = field(default_factory=dict)
@@ -457,7 +458,7 @@ def load_config(home: Path | None = None, *, create: bool = True) -> Config:
         server_allowed_users=[str(u).strip() for u in server.get("allowed_users") or [] if str(u).strip()],
         server_auth_header=str(server.get("auth_header") or "").strip(),
         server_behind_proxy=bool(server.get("behind_proxy", False)),
-        server_menu_bar=bool(server.get("menu_bar", True)),
+        server_menu_bar=bool(server.get("menu_bar", False)),
         server_trusted_proxies=[str(x).strip() for x in server.get("trusted_proxies", ["127.0.0.1", "::1"]) or [] if str(x).strip()],
         hub_url=str(hub.get("url") or "").strip().rstrip("/"),
         hub_path_map={str(k).rstrip("/"): str(v).rstrip("/") for k, v in path_map.items()} if isinstance(path_map, dict) else {},

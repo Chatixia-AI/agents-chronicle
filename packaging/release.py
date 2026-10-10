@@ -5,7 +5,8 @@
     python3 packaging/release.py fold VERSION DATE        add "## VERSION (DATE)" with those files' lines to CHANGELOG.md,
                                                           and print the files to delete
     python3 packaging/release.py entry BASE               fail when the commits since BASE change what ships but add no
-                                                          file to changelog.d/ (.github/workflows/changelog.yml)
+                                                          file to changelog.d/, or edit none no release has taken yet
+                                                          (.github/workflows/changelog.yml)
 
 Each pull request that users will notice adds its own file to changelog.d/. A release's notes are the files added since
 the previous tag, so a pull request merged at any moment lands in exactly one release: nothing is renamed, and nothing
@@ -96,14 +97,15 @@ def not_ready(text: str, entries: list[str], last: str | None) -> str | None:
     return None
 
 
-def missing_entry(changed: list[str], added: list[str], head: str) -> str | None:
+def missing_entry(changed: list[str], entries: list[str], head: str) -> str | None:
     """Why a pull request needs a changelog entry it doesn't have, or None: it changes what ships (SHIPPED) and adds no
-    file to changelog.d/ (added: the files it adds; head: CHANGELOG.md after it)."""
+    file to changelog.d/ (entries: the files there it adds, or edits before any release took them; head: CHANGELOG.md
+    after it)."""
     if unreleased(head):
         return (f"this pull request puts lines under '## Unreleased' in CHANGELOG.md: move them into a new file in "
                 f"{FRAGMENTS}/, e.g. {FRAGMENTS}/<topic>.md (see {FRAGMENTS}/README.md), and leave CHANGELOG.md as it is")
     shipped = [f for f in changed if f.startswith(SHIPPED)]
-    if not shipped or any(is_fragment(f) for f in added):
+    if not shipped or any(is_fragment(f) for f in entries):
         return None
     more = f" and {len(shipped) - 3} more" if len(shipped) > 3 else ""
     return (f"this pull request changes {', '.join(shipped[:3])}{more} but adds no file to {FRAGMENTS}/: add "
@@ -134,7 +136,7 @@ def show(ref: str, path: str) -> str:
 def main(argv: list[str]) -> int:
     cmd, *args = argv or ["help"]
     text = CHANGELOG.read_text()
-    if cmd in ("next", "notes", "fold"):
+    if cmd in ("next", "notes", "fold", "entry"):
         tags = git("tag", "--list", "v*").splitlines()
     if cmd == "next" and len(args) == 1:
         last = "v" + ".".join(map(str, latest(tags))) if latest(tags) != (0, 0, 0) else None
@@ -154,8 +156,11 @@ def main(argv: list[str]) -> int:
     elif cmd == "entry" and len(args) == 1:
         base = git("merge-base", args[0], "HEAD").strip()
         changed = git("diff", "--name-only", base, "HEAD").splitlines()
-        added = git("diff", "--name-only", "--diff-filter=A", base, "HEAD").splitlines()
-        if why := missing_entry(changed, added, text):
+        last = "v" + ".".join(map(str, latest(tags))) if latest(tags) != (0, 0, 0) else None
+        taken = set(git("ls-tree", "-r", "--name-only", last, "--", FRAGMENTS).splitlines()) if last else set()
+        touched = git("diff", "--name-only", "--diff-filter=AM", base, "HEAD").splitlines()
+        # a new entry, or an unreleased one reworded (an entry the last tag has was released)
+        if why := missing_entry(changed, [f for f in touched if f not in taken], text):
             print(f"::error file=CHANGELOG.md::{why}", file=sys.stderr)
             return 1
     else:

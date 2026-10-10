@@ -86,7 +86,7 @@ For Claude Code, and for the Mac itself, it sets up four things (each can be ski
 | --- | --- |
 | `SessionEnd` hook in `~/.claude/settings.json` | Hands the ended transcript to a detached process that archives, ingests and analyzes it. Returns in milliseconds; a backup of `settings.json` is kept in `~/.claude-chronicle/backups/`. |
 | launchd `com.claude-chronicle.sync` | `chronicle sync --work` every 15 minutes: catches anything the hook missed, processes the analysis queue, synthesizes knowledge bases, exports notes. |
-| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:11524/>, with [Chronicle's icon in the menu bar](#the-menu-bar-icon) when the `app` extra is installed. |
+| launchd `com.claude-chronicle.ui` | Keeps the dashboard at <http://127.0.0.1:11524/>, with [Chronicle's icon in the menu bar](#the-menu-bar-icon) if you turned it on and the `app` extra is installed. |
 | MCP server `chronicle` (user scope) | Lets Claude Code search your past sessions and knowledge. |
 
 Optional: `chronicle install --inject-context` also adds a `SessionStart` hook that gives each new
@@ -110,10 +110,11 @@ first and let the app connect Claude Code, so the launchd agents do not run alon
 
 ## The menu-bar icon
 
-On macOS, Chronicle's mark (the stack of pages from its app icon) sits in the menu bar: in the app, and for a
-command-line install whose dashboard runs at login, once the `app` extra is installed
-(`uv tool install --python 3.13 'agents-chronicle[app]'`, then restart the dashboard with
-`launchctl kickstart -k gui/$(id -u)/com.claude-chronicle.ui`). The icon stays plain while there is nothing to report:
+On macOS, Chronicle's mark (the stack of pages from its app icon) can sit in the menu bar. The app always shows it.
+A command-line install shows it only if you turn it on: `chronicle install` asks once (No unless you say yes), and
+`chronicle install --menu-bar` turns it on without asking. It needs the dashboard running at login and the `app`
+extra (`uv tool install --force --python 3.13 'agents-chronicle[app]'`, then `chronicle install --menu-bar` again,
+which restarts the dashboard). The icon stays plain while there is nothing to report:
 
 | Icon | When |
 | --- | --- |
@@ -142,8 +143,8 @@ Chronicle**. For the login item, Quit stops the dashboard (and the icon) until y
 sessions are still recorded.
 
 The command-line install shows the icon only for the dashboard that runs at login, so a second `chronicle ui` in a
-terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off, set
-`[server] menu_bar = false` (`chronicle config set server.menu_bar false`) and restart the dashboard.
+terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off again, run
+`chronicle install --no-menu-bar` (or set `[server] menu_bar = false` and restart the dashboard).
 
 ## Updating
 
