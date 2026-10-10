@@ -381,7 +381,7 @@ class DesktopApp:
 
         self.menu = StatusMenu(
             refresh=lambda: snapshot(self.server_app, sync_running=self.bg.running, sync_error=self.bg.error),
-            open_page=self.open_page, sync_now=self.bg.sync_now, open_title="Open Chronicle",
+            open_page=self.open_page, sync_now=self.bg.sync_now, open_title="Open Chronicle", base_url=self.url,
             quit=lambda: AppHelper.callAfter(AppKit.NSApp.terminate_, None),
             extras=[
                 Extra("browser", "Open in Browser", lambda: webbrowser.open(self.url)),

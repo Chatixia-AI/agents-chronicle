@@ -122,19 +122,24 @@ command-line install whose dashboard runs at login, once the `app` extra is inst
 | With a "!" | The last sync failed, the background sync agent exited with an error, or the hub refused the last push |
 | Dimmed | Analysis is paused (a usage limit was reached; it resumes by itself) |
 
-Clicking it opens a menu:
+Clicking it opens a panel over the menu-bar glass, in the dashboard's blueprint style (light or dark, as the menu
+bar is):
 
-| Menu item | |
+| Part | |
 | --- | --- |
-| The first line | What is happening: *Synced at 14:05*, *Analyzing 2 of 5…*, *Sync failed: …*. Click it for the Activity page |
-| *N sessions waiting for analysis* | The analysis queue, when there is one (not on a computer whose hub analyzes its sessions) |
-| *Sharing knowledge with …* | On a computer that sends a hub what it learned: when it last sent |
-| Recent Sessions | The five most recent coding-agent sessions (imported chats left out), each with its project and time; click one to open it |
-| Search Sessions… | The dashboard's search page |
-| Open Dashboard | The dashboard (in the app: **Open Chronicle**, the app window) |
-| Sync Now | Archive, ingest and analyze now instead of at the next 15-minute run |
-| Update to … | Shown when a new version is out; opens **Status**, where the update runs |
-| Quit Chronicle | For the login item: stops the dashboard (and the icon) until you next log in or run `chronicle ui`. Sessions are still recorded |
+| The header | What is happening, with a picture for it: *All caught up · Synced 5 min ago*, *Syncing · 2 of 5* with a progress bar, *Sync failed* with the reason, *Analysis paused*. ⟳ syncs now (archive, ingest and analyze instead of waiting for the 15-minute run); the pulse opens the Activity page |
+| The numbers | Sessions today, sessions waiting for analysis (not on a computer whose hub analyzes them), and lessons learned in the last seven days. Each opens its page |
+| Notes | When knowledge last went to your hub, and what stops the analysis queue if something does |
+| Search | Type anywhere in the panel to search every session, as the dashboard's search does; ↵ opens all the results in the dashboard |
+| Recent sessions | The six most recent coding-agent sessions (imported chats left out) by day, each with its agent, project, outcome and time. ↑ ↓ move through them, ↵ or a click opens one |
+| Open Dashboard | The dashboard (in the app: the app window). **Update to …** sits beside it when a new version is out and opens **Status**, where the update runs |
+| ⋯ | The quick menu below |
+
+Esc clears the search, then closes the panel. A right-click (or Control-click) on the icon opens the quick menu
+instead: the status line, Search Sessions…, Open Dashboard, Sync Now, Update, the app's own items (**Open in
+Browser**, **Connect Claude Code…**, **Open at Login**, **Install Command-Line Tool**, **Open Data Folder**) and **Quit
+Chronicle**. For the login item, Quit stops the dashboard (and the icon) until you next log in or run `chronicle ui`;
+sessions are still recorded.
 
 The command-line install shows the icon only for the dashboard that runs at login, so a second `chronicle ui` in a
 terminal adds no second icon (`--menu-bar` shows one anyway, `--no-menu-bar` hides it). To turn it off, set

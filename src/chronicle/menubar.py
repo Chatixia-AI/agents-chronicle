@@ -1,13 +1,15 @@
-"""The menu-bar item on macOS: Chronicle's mark, which says at a glance whether it is working or needs a look, and a
-menu with the status, the recent sessions and the way into the dashboard.
+"""The menu-bar item on macOS: Chronicle's mark, which says at a glance whether it is working or needs a look; a click
+opens a panel (web/panel.html in a popover: the status, numbers, search and recent sessions), a right-click a quick
+native menu.
 
 `chronicle ui` shows it when launchd runs it as the login item (or with --menu-bar), and Chronicle.app (desktop.py)
-shows the same menu with its own items added. What the menu says is worked out without AppKit (snapshot(),
-summarize()); StatusMenu draws it.
+shows the same with its own menu items added. What it says is worked out without AppKit (snapshot(), summarize());
+StatusMenu draws it.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import subprocess
@@ -15,7 +17,7 @@ import sys
 import threading
 import webbrowser
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timedelta
 from urllib.parse import urlparse
 
 from .config import Config
@@ -24,7 +26,7 @@ from .util import parse_ts, to_iso, utcnow
 log = logging.getLogger("chronicle.menubar")
 
 OK, WORKING, ATTENTION, PAUSED = "ok", "working", "attention", "paused"
-RECENT_N = 5
+RECENT_N = 6
 POLL_S = 30  # how often the icon catches up with what other processes did
 POLL_BUSY_S = 4  # while something runs, so the icon settles soon after it ends
 TITLE_MAX = 48
@@ -34,17 +36,34 @@ JOB_LABELS = {"sync": "Syncing", "push": "Sending to the hub", "import": "Import
               "screen": "Screening imported chats", "update": "Updating Chronicle", "themes": "Grouping glossary themes",
               "analyze": "Analyzing", "glossary": "Updating the glossary", "review": "Writing the weekly review",
               "synthesize": "Updating knowledge"}
+# the panel's picture for each state, from the dashboard's 3D cast (web/art-*.webp)
+ART = {OK: "art-book.webp", WORKING: "art-gears.webp", ATTENTION: "art-glitch.webp", PAUSED: "art-clock.webp"}
 
 
 @dataclass
 class Snapshot:
     state: str
-    headline: str
-    detail: str = ""
+    title: str  # "All caught up", "Syncing", "Sync failed"
+    sub: str = ""  # "Synced 5 min ago", "2 of 5", the error
+    detail: str = ""  # the analysis queue, for the native menu
     hub: str = ""  # a computer that shares knowledge with a hub: what it last sent
     recent: list[dict] = field(default_factory=list)
     update: str | None = None  # the version on offer, "build" for a changed checkout
     syncing: bool = False
+    progress: tuple[int, int] | None = None  # (done, total) of the running job
+    stats: dict = field(default_factory=dict)  # today, waiting, lessons (the panel's tiles)
+    note: str = ""  # what stops the analysis queue, when something does
+
+    @property
+    def headline(self) -> str:
+        """One line, for the native menu and the icon's tooltip."""
+        return f"{self.title} · {self.sub}" if self.sub else self.title
+
+    def to_page(self) -> dict:
+        """What the panel (web/panel.js) renders."""
+        return {"state": self.state, "title": self.title, "sub": self.sub, "hub": self.hub, "recent": self.recent,
+                "update": self.update, "syncing": self.syncing, "stats": self.stats, "note": self.note,
+                "art": ART[self.state], "progress": list(self.progress) if self.progress else None}
 
 
 def when(iso: str | None, now: datetime | None = None) -> str:
@@ -56,15 +75,51 @@ def when(iso: str | None, now: datetime | None = None) -> str:
     return f"at {dt:%H:%M}" if dt.date() == today else f"{dt:%b} {dt.day} at {dt:%H:%M}"
 
 
+def ago(iso: str | None, now: datetime | None = None) -> str:
+    """'just now', '5 min ago', '3 h ago', 'yesterday', '3 days ago', then the date."""
+    dt = parse_ts(iso)
+    if dt is None:
+        return ""
+    now = now or utcnow()
+    secs = (now - dt).total_seconds()
+    days = (now.astimezone().date() - dt.astimezone().date()).days
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)} min ago"
+    if days == 0:
+        return f"{int(secs // 3600)} h ago"
+    if days == 1:
+        return "yesterday"
+    if days < 7:
+        return f"{days} days ago"
+    local = dt.astimezone()
+    return f"{local:%b} {local.day}"
+
+
+def day_label(iso: str | None, now: datetime | None = None) -> str:
+    """The heading a session is listed under: Today, Yesterday, or its date."""
+    dt = parse_ts(iso)
+    if dt is None:
+        return ""
+    days = ((now or utcnow()).astimezone().date() - dt.astimezone().date()).days
+    local = dt.astimezone()
+    return "Today" if days == 0 else "Yesterday" if days == 1 else f"{local:%a}, {local:%b} {local.day}"
+
+
 def _short(text: str, n: int = 60) -> str:
     text = " ".join(str(text).split())
     return text if len(text) <= n else text[: n - 1] + "…"
 
 
+def _n(n: int, one: str) -> str:
+    return f"{n} {one}{'' if n == 1 else 's'}"
+
+
 def summarize(st: dict, *, now: datetime | None = None, analyzing: int = 0, sync_running: bool = False,
               sync_error: str | None = None, push: dict | None = None, hub_name: str | None = None,
               sends_files: bool = False) -> Snapshot:
-    """The icon's state and the menu's first two lines, from the dashboard's status (App.status_small()).
+    """The icon's state and what the panel's header says, from the dashboard's status (App.status_small()).
 
     `analyzing`: sessions being analyzed by any process; `sync_running`/`sync_error`: the sync that runs outside the
     dashboard (the app's own loop, or the launchd agent); `push`: a spoke's last push (hub.last_push()),
@@ -74,45 +129,69 @@ def summarize(st: dict, *, now: datetime | None = None, analyzing: int = 0, sync
     jobs = {name: j for name, j in (st.get("jobs") or {}).items() if j.get("state") == "running"}
     failed = (st.get("jobs") or {}).get("sync") or {}
     syncing = sync_running or "sync" in jobs or "push" in jobs
-    queued = 0 if sends_files else int((st.get("pending") or {}).get("queued") or 0)  # else the hub analyzes them
-    detail = f"{queued} session{'' if queued == 1 else 's'} waiting for analysis" if queued else ""
+    pending = st.get("pending") or {}
+    queued = 0 if sends_files else int(pending.get("queued") or 0)  # else the hub analyzes them
+    detail = f"{_n(queued, 'session')} waiting for analysis" if queued else ""
     hub = (hub_name or urlparse(st["hub_url"]).hostname or st["hub_url"]) if st.get("hub_url") else ""
-    sent = when((push or {}).get("at"), now)
+    sent = ago((push or {}).get("at"), now)
     shared = (f"Sharing knowledge with {hub}" + (f" · last sent {sent}" if sent else " · nothing sent yet")
               if hub and not sends_files else "")
+    note = _short(pending.get("block") or "", 120) if queued and not sends_files else ""
 
-    def snap(state: str, headline: str) -> Snapshot:
-        return Snapshot(state, headline, detail, shared, update=(st.get("update") or {}).get("to"), syncing=syncing)
+    def snap(state: str, title: str, sub: str = "", progress: tuple[int, int] | None = None) -> Snapshot:
+        return Snapshot(state, title, sub, detail, shared, update=(st.get("update") or {}).get("to"),
+                        syncing=syncing, progress=progress, stats={"waiting": None if sends_files else queued},
+                        note=note)
 
     if sync_error:
-        return snap(ATTENTION, f"Sync failed: {_short(sync_error)}")
+        return snap(ATTENTION, "Sync failed", _short(sync_error, 90))
     if failed.get("state") == "error":
-        return snap(ATTENTION, f"Sync failed: {_short(failed.get('result') or 'see the logs')}")
+        return snap(ATTENTION, "Sync failed", _short(failed.get("result") or "see the logs", 90))
     if push and push.get("errors"):
-        return snap(ATTENTION, f"Sending to the hub failed: {_short(push['errors'][0])}")
+        return snap(ATTENTION, "Sending to the hub failed", _short(push["errors"][0], 90))
     if jobs or syncing or analyzing:
         name, job = next(iter(jobs.items()), ("sync" if syncing else "analyze", {}))
         label = JOB_LABELS.get(name.split(":", 1)[0], "Working")
+        message = _short(job.get("message") or "", 60)
         if job.get("total"):
-            return snap(WORKING, f"{label} {job.get('done') or 0} of {job['total']}…")
+            done = int(job.get("done") or 0)
+            return snap(WORKING, label, f"{done} of {job['total']}", progress=(done, int(job["total"])))
         if label == "Analyzing" and analyzing:
-            return snap(WORKING, f"Analyzing {analyzing} session{'' if analyzing == 1 else 's'}…")
-        return snap(WORKING, f"{label}…")
+            return snap(WORKING, f"Analyzing {_n(analyzing, 'session')}", message)
+        return snap(WORKING, label, message)
     paused = st.get("paused_until")
     if paused and paused > to_iso(now):
-        return snap(PAUSED, f"Analysis paused until {when(paused, now).removeprefix('at ')}")
+        return snap(PAUSED, "Analysis paused", f"Resumes {when(paused, now)} (usage limit)")
     if hub and sends_files:
-        return snap(OK, f"Sending to {hub}" + (f" · last sent {sent}" if sent else " · nothing sent yet"))
-    at = when(st.get("last_sync"), now)
-    return snap(OK, f"Synced {at}" if at else "Not synced yet")
+        return snap(OK, f"Sending to {hub}", f"Last sent {sent}" if sent else "Nothing sent yet")
+    synced = f"Synced {ago(st.get('last_sync'), now)}" if st.get("last_sync") else "Not synced yet"
+    if queued:
+        return snap(OK, f"{_n(queued, 'session')} to analyze", synced)
+    return snap(OK, "All caught up", synced)
 
 
-def recent_sessions(conn, n: int = RECENT_N) -> list[dict]:
+def recent_sessions(conn, n: int = RECENT_N, now: datetime | None = None) -> list[dict]:
     marks = ",".join("?" * len(RECENT_SKIP))
-    return [dict(r) for r in conn.execute(
-        f"SELECT id, title, project_name, COALESCE(ended_at, started_at) at FROM sessions "
-        f"WHERE source NOT IN ({marks}) AND COALESCE(ended_at, started_at) IS NOT NULL "
+    rows = [dict(r) for r in conn.execute(
+        f"SELECT id, title, project_name, agent, outcome, analysis_status, COALESCE(ended_at, started_at) at "
+        f"FROM sessions WHERE source NOT IN ({marks}) AND COALESCE(ended_at, started_at) IS NOT NULL "
         f"ORDER BY COALESCE(ended_at, started_at) DESC LIMIT ?", [*RECENT_SKIP, n])]
+    for r in rows:
+        local = parse_ts(r["at"]).astimezone()
+        r["day"], r["time"] = day_label(r["at"], now), f"{local:%H:%M}"
+    return rows
+
+
+def stats(conn, now: datetime | None = None) -> dict:
+    """Sessions since midnight and lessons learned in the last seven days."""
+    now = now or utcnow()
+    midnight = to_iso(now.astimezone().replace(hour=0, minute=0, second=0, microsecond=0))
+    marks = ",".join("?" * len(RECENT_SKIP))
+    today = conn.execute(f"SELECT COUNT(*) FROM sessions WHERE source NOT IN ({marks}) "
+                         f"AND COALESCE(ended_at, started_at) >= ?", [*RECENT_SKIP, midnight]).fetchone()[0]
+    lessons = conn.execute("SELECT COUNT(*) FROM knowledge WHERE status = 'active' AND source = 'analysis' "
+                           "AND created_at >= ?", [to_iso(now - timedelta(days=7))]).fetchone()[0]
+    return {"today": today, "lessons": lessons}
 
 
 def snapshot(app, *, sync_running: bool = False, sync_error: str | None = None) -> Snapshot:
@@ -129,6 +208,7 @@ def snapshot(app, *, sync_running: bool = False, sync_error: str | None = None) 
                          push=last_push(app.cfg) if spoke else None, sends_files=app.cfg.sends_files,
                          hub_name=(last_folders(app.cfg) or {}).get("hub") if spoke else None)
         snap.recent = recent_sessions(conn)
+        snap.stats.update(stats(conn))
         return snap
     finally:
         app.release()  # no read transaction held between polls
@@ -260,34 +340,55 @@ class Extra:
     checked: object = None
 
 
-_TARGET_CLASS = None
+_CLASSES: dict = {}
 
 
-def _target_class():
-    """NSObject subclass receiving the menu's actions (ObjC classes can only be defined once per process)."""
-    global _TARGET_CLASS
-    if _TARGET_CLASS is None:
+def _classes() -> dict:
+    """The NSObject subclasses the item needs (ObjC classes can only be defined once per process): the target of the
+    icon and the menu, and the panel's message handler."""
+    if not _CLASSES:
         import AppKit
+        import objc
+        import WebKit  # noqa: F401  (registers the WKScriptMessageHandler protocol)
 
         class ChronicleStatusTarget(AppKit.NSObject):
             def act_(self, sender):
                 self.owner.act(str(sender.representedObject()))
 
+            def clicked_(self, sender):
+                self.owner.clicked()
+
             def menuWillOpen_(self, menu):
                 self.owner.will_open()
 
-        _TARGET_CLASS = ChronicleStatusTarget
-    return _TARGET_CLASS
+        class ChroniclePanelBridge(AppKit.NSObject, protocols=[objc.protocolNamed("WKScriptMessageHandler")]):
+            def userContentController_didReceiveScriptMessage_(self, controller, message):
+                body = message.body()
+                if isinstance(body, AppKit.NSDictionary):
+                    self.owner.panel_message({str(k): v for k, v in body.items()})
+
+        _CLASSES.update(target=ChronicleStatusTarget, bridge=ChroniclePanelBridge)
+    return _CLASSES
 
 
 class StatusMenu:
     """The menu-bar item. `open_page(hash)` opens a dashboard page ("#/", "#/session/<id>"), `refresh()` returns a
-    Snapshot (run on the poll thread), `sync_now()` and `quit()` run on a background thread. Main thread: install()."""
+    Snapshot (run on the poll thread), `sync_now()` and `quit()` run on a background thread. Main thread: install().
+
+    With `base_url` (the dashboard serving web/panel.html), a click opens the panel, a popover over the menu-bar glass,
+    and a right-click (or Control-click) the native menu; without it, a click opens the menu."""
+
+    PANEL_WIDTH = 360
+    PANEL_MAX_HEIGHT = 720
 
     def __init__(self, *, refresh, open_page, sync_now, quit, open_title: str = "Open Dashboard",
-                 extras: list[Extra] | None = None):
+                 extras: list[Extra] | None = None, base_url: str | None = None):
         self.refresh, self.open_page, self.sync_now, self.quit = refresh, open_page, sync_now, quit
         self.open_title = open_title
+        self.base_url = base_url
+        self.popover = None
+        self.webview = None
+        self.panel_ready = False
         self.extras = extras or []
         self.items: dict = {}
         self.recent_items: list = []
@@ -299,7 +400,7 @@ class StatusMenu:
     def install(self) -> None:
         import AppKit
 
-        self.target = _target_class().alloc().init()
+        self.target = _classes()["target"].alloc().init()
         self.target.owner = self
         menu = AppKit.NSMenu.alloc().init()
         menu.setAutoenablesItems_(False)
@@ -342,9 +443,17 @@ class StatusMenu:
 
         self.status_item = AppKit.NSStatusBar.systemStatusBar().statusItemWithLength_(
             AppKit.NSVariableStatusItemLength)
-        self.status_item.setMenu_(menu)
+        button = self.status_item.button()
+        if self.base_url:
+            button.setTarget_(self.target)
+            button.setAction_("clicked:")
+            button.sendActionOn_(AppKit.NSEventMaskLeftMouseUp | AppKit.NSEventMaskRightMouseUp)
+        else:
+            self.status_item.setMenu_(menu)
         self.status_item.button().setImage_(self._image(OK))
         self.status_item.button().setToolTip_("Chronicle")
+        if self.base_url:
+            self._build_panel()  # loaded and filled in before the first click
         self.will_open()
         threading.Thread(target=self._poll, name="chronicle-menubar", daemon=True).start()
 
@@ -383,7 +492,7 @@ class StatusMenu:
         button.setAccessibilityLabel_(f"Chronicle, {snap.headline}")
         self.items["headline"].setTitle_(snap.headline)
         self.items["detail"].setTitle_(snap.detail)
-        self.items["detail"].setHidden_(not snap.detail)
+        self.items["detail"].setHidden_(not snap.detail or bool(self.base_url))
         self.items["hub"].setTitle_(snap.hub)
         self.items["hub"].setHidden_(not snap.hub)
         self.items["sync"].setEnabled_(not snap.syncing)
@@ -396,7 +505,7 @@ class StatusMenu:
             self.menu.removeItem_(item)
         self.recent_items = []
         at = self.menu.indexOfItem_(self.items["recent"]) + 1
-        for i, s in enumerate(snap.recent):
+        for i, s in enumerate([] if self.base_url else snap.recent):  # the panel lists them
             title = _short(s.get("title") or "(untitled session)", TITLE_MAX)
             item = AppKit.NSMenuItem.alloc().initWithTitle_action_keyEquivalent_(title, "act:", "")
             item.setTarget_(self.target)
@@ -408,8 +517,9 @@ class StatusMenu:
                 item.setToolTip_(sub)
             self.menu.insertItem_atIndex_(item, at + i)
             self.recent_items.append(item)
-        self.items["recent"].setHidden_(not snap.recent)
-        self.items["recent_sep"].setHidden_(not snap.recent)
+        self.items["recent"].setHidden_(not self.recent_items)
+        self.items["recent_sep"].setHidden_(not self.recent_items)
+        self._push()
 
     def will_open(self) -> None:
         """Main thread, as the menu opens: the embedding app's items, and a fresh snapshot on its way."""
@@ -425,7 +535,104 @@ class StatusMenu:
                 log.exception("menu item %s", extra.key)
         self.poke()
 
+    # -------------------------------------------------------------- the panel (main thread)
+    def clicked(self) -> None:
+        """The icon was clicked: the panel, or with the right button or Control the native menu."""
+        import AppKit
+
+        event = AppKit.NSApp.currentEvent()
+        secondary = event is not None and (event.type() == AppKit.NSEventTypeRightMouseUp
+                                           or event.modifierFlags() & AppKit.NSEventModifierFlagControl)
+        if secondary:
+            self._close_panel()
+            self.status_item.setMenu_(self.menu)  # shown by the click below, which returns once the menu closes
+            self.status_item.button().performClick_(None)
+            self.status_item.setMenu_(None)
+        elif self.popover is not None and self.popover.isShown():
+            self._close_panel()
+        else:
+            self._show_panel()
+
+    def _build_panel(self) -> None:
+        import AppKit
+        import WebKit
+
+        classes = _classes()
+        url = self.base_url + "panel.html"
+        self.bridge = classes["bridge"].alloc().init()
+        self.bridge.owner = self
+        config = WebKit.WKWebViewConfiguration.alloc().init()
+        config.userContentController().addScriptMessageHandler_name_(self.bridge, "chronicle")
+        view = WebKit.WKWebView.alloc().initWithFrame_configuration_(((0, 0), (self.PANEL_WIDTH, 420)), config)
+        view.setValue_forKey_(False, "drawsBackground")  # transparent: the popover's glass shows through
+        # The page loads nothing but itself: it has no links or forms, session text goes in as text, its CSP allows
+        # this dashboard only, and panel.js cancels any link click. Its actions come through the bridge above.
+        view.loadRequest_(AppKit.NSURLRequest.requestWithURL_(AppKit.NSURL.URLWithString_(url)))
+        controller = AppKit.NSViewController.alloc().init()
+        controller.setView_(view)
+        popover = AppKit.NSPopover.alloc().init()
+        popover.setContentViewController_(controller)
+        popover.setContentSize_((self.PANEL_WIDTH, 420))
+        popover.setBehavior_(AppKit.NSPopoverBehaviorTransient)
+        popover.setAnimates_(True)
+        self.webview, self.popover = view, popover
+
+    def _show_panel(self) -> None:
+        import AppKit
+
+        if self.popover is None:
+            self._build_panel()
+        AppKit.NSApp.activateIgnoringOtherApps_(True)  # so the search field takes the keyboard
+        button = self.status_item.button()
+        self.popover.showRelativeToRect_ofView_preferredEdge_(button.bounds(), button, AppKit.NSRectEdgeMinY)
+        self.popover.contentViewController().view().window().makeKeyWindow()
+        self._push()
+        self._js("window.chronicle && chronicle.opened()")
+        self.will_open()  # the extras' state for the More menu, and a fresh snapshot
+
+    def _close_panel(self) -> None:
+        if self.popover is not None and self.popover.isShown():
+            self.popover.performClose_(None)
+
+    def _js(self, code: str) -> None:
+        if self.webview is not None and self.panel_ready:
+            self.webview.evaluateJavaScript_completionHandler_(code, None)
+
+    def _push(self) -> None:
+        if self.snap is not None:
+            self._js(f"window.chronicle && chronicle.render({json.dumps(self.snap.to_page())})")
+
+    def panel_message(self, msg: dict) -> None:
+        """What the panel page sent (web/panel.js): {type: open|sync|update|menu|close|size|ready, …}."""
+        import AppKit
+
+        kind = str(msg.get("type") or "")
+        if kind == "ready":
+            self.panel_ready = True
+            self._push()
+        elif kind == "size":
+            height = max(160, min(self.PANEL_MAX_HEIGHT, int(msg.get("height") or 0)))
+            self.popover.setContentSize_((self.PANEL_WIDTH, height))
+        elif kind == "open":
+            page = str(msg.get("page") or "#/")
+            if page.startswith("#/"):  # dashboard pages only
+                self._close_panel()
+                self._run(lambda: self.open_page(page))
+        elif kind == "sync":
+            self._run(self._sync)
+        elif kind == "update":
+            self._close_panel()
+            self._run(lambda: self.open_page("#/status"))
+        elif kind == "menu":
+            self.will_open()
+            AppKit.NSMenu.popUpContextMenu_withEvent_forView_(self.menu, AppKit.NSApp.currentEvent(), self.webview)
+        elif kind == "close":
+            self._close_panel()
+
     # -------------------------------------------------------------- actions
+    def _run(self, fn) -> None:
+        threading.Thread(target=self._safely, args=(fn,), daemon=True).start()
+
     def act(self, key: str) -> None:
         """Main thread: hand the action to a thread, since it may wait (an alert, the browser, a job)."""
         if key.startswith("session:"):
@@ -437,7 +644,8 @@ class StatusMenu:
                   "open": lambda: self.open_page("#/"), "update": lambda: self.open_page("#/status"),
                   "sync": self._sync, "quit": self.quit}.get(key)
         if fn is not None:
-            threading.Thread(target=self._safely, args=(fn,), daemon=True).start()
+            self._close_panel()
+            self._run(fn)
 
     def _safely(self, fn) -> None:
         try:
@@ -476,7 +684,8 @@ def run_with_server(cfg: Config, httpd, url: str) -> bool:
         AppHelper.callAfter(AppKit.NSApp.terminate_, None)
 
     menu = StatusMenu(refresh=lambda: snapshot(app, sync_error=agent_sync_error()),
-                      open_page=lambda page: webbrowser.open(url + page), sync_now=app.action_sync, quit=quit_)
+                      open_page=lambda page: webbrowser.open(url + page), sync_now=app.action_sync, quit=quit_,
+                      base_url=url)
     AppHelper.callAfter(menu.install)
     log.info("menu-bar icon on, dashboard at %s", url)
     AppHelper.runEventLoop(installInterrupt=True)

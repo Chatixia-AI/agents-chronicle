@@ -2467,6 +2467,8 @@ def make_handler(app: App, port: int):
             if name == "index.html":
                 app_window = parse_qs(urlparse(self.path).query).get("app") == ["mac"] and self._from_here()
                 self.send_header("Content-Security-Policy", PAGE_CSP.format(eval=" 'unsafe-eval'" if app_window else ""))
+            elif name == "panel.html":  # the menu-bar panel (menubar.py): the same rules, no eval
+                self.send_header("Content-Security-Policy", PAGE_CSP.format(eval=""))
             self.end_headers()
             self.wfile.write(body)
 

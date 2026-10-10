@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from chronicle.menubar import ATTENTION, OK, PAUSED, WORKING, summarize, when
+from chronicle.menubar import ATTENTION, OK, PAUSED, WORKING, ago, day_label, summarize, when
+from chronicle.util import to_iso
 
 NOW = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
 
@@ -19,35 +20,47 @@ def status(**kw) -> dict:
 
 def test_quiet_when_nothing_needs_a_look():
     snap = summarize(status(), now=NOW)
-    assert snap.state == OK
-    assert snap.headline == f"Synced {when('2026-10-10T11:30:00Z', NOW)}"
-    assert snap.detail == "" and snap.update is None and not snap.syncing
+    assert (snap.state, snap.title, snap.sub) == (OK, "All caught up", "Synced 30 min ago")
+    assert snap.headline == "All caught up · Synced 30 min ago"
+    assert snap.detail == "" and snap.update is None and not snap.syncing and snap.note == ""
 
 
 def test_never_synced():
-    assert summarize(status(last_sync=None), now=NOW).headline == "Not synced yet"
+    assert summarize(status(last_sync=None), now=NOW).sub == "Not synced yet"
 
 
-def test_the_queue_is_the_second_line_and_does_not_change_the_icon():
+def test_a_queue_is_the_title_and_does_not_change_the_icon():
     snap = summarize(status(pending={"ready": 3, "queued": 12}), now=NOW)
-    assert (snap.state, snap.detail) == (OK, "12 sessions waiting for analysis")
-    assert summarize(status(pending={"queued": 1}), now=NOW).detail == "1 session waiting for analysis"
+    assert (snap.state, snap.title, snap.sub) == (OK, "12 sessions to analyze", "Synced 30 min ago")
+    assert snap.detail == "12 sessions waiting for analysis" and snap.stats == {"waiting": 12}
+    assert summarize(status(pending={"queued": 1}), now=NOW).title == "1 session to analyze"
+
+
+def test_what_stops_the_queue_is_noted():
+    st = status(pending={"queued": 3, "block": "automatic analysis is off (analysis.auto)"})
+    assert summarize(st, now=NOW).note == "automatic analysis is off (analysis.auto)"
+    assert summarize(status(pending={"queued": 0, "block": "off"}), now=NOW).note == ""
 
 
 def test_a_running_job_with_progress():
     jobs = {"sync": {"state": "running", "done": 2, "total": 5}}
     snap = summarize(status(jobs=jobs), now=NOW)
-    assert (snap.state, snap.headline, snap.syncing) == (WORKING, "Syncing 2 of 5…", True)
+    assert (snap.state, snap.title, snap.sub, snap.progress, snap.syncing) == (WORKING, "Syncing", "2 of 5", (2, 5), True)
+
+
+def test_a_running_job_says_what_it_is_doing():
+    snap = summarize(status(jobs={"themes": {"state": "running", "message": "grouping 40 terms…"}}), now=NOW)
+    assert (snap.title, snap.sub, snap.progress) == ("Grouping glossary themes", "grouping 40 terms…", None)
 
 
 def test_analysis_by_another_process_counts_as_working():
     snap = summarize(status(), now=NOW, analyzing=2)
-    assert (snap.state, snap.headline, snap.syncing) == (WORKING, "Analyzing 2 sessions…", False)
+    assert (snap.state, snap.title, snap.syncing) == (WORKING, "Analyzing 2 sessions", False)
 
 
 def test_the_apps_own_sync_loop_counts_as_syncing():
     snap = summarize(status(), now=NOW, sync_running=True)
-    assert (snap.state, snap.headline, snap.syncing) == (WORKING, "Syncing…", True)
+    assert (snap.state, snap.title, snap.syncing) == (WORKING, "Syncing", True)
 
 
 def test_finished_jobs_are_not_work():
@@ -55,13 +68,13 @@ def test_finished_jobs_are_not_work():
     assert snap.state == OK
 
 
-@pytest.mark.parametrize("kw, headline", [
-    ({"sync_error": "database is locked"}, "Sync failed: database is locked"),
-    ({"push": {"at": "2026-10-10T11:00:00Z", "errors": ["hub unreachable"]}}, "Sending to the hub failed: hub unreachable"),
+@pytest.mark.parametrize("kw, title, sub", [
+    ({"sync_error": "database is locked"}, "Sync failed", "database is locked"),
+    ({"push": {"at": "2026-10-10T11:00:00Z", "errors": ["hub unreachable"]}}, "Sending to the hub failed", "hub unreachable"),
 ])
-def test_failures_need_a_look_even_while_something_runs(kw, headline):
+def test_failures_need_a_look_even_while_something_runs(kw, title, sub):
     snap = summarize(status(jobs={"analyze:abc": {"state": "running"}}), now=NOW, **kw)
-    assert (snap.state, snap.headline) == (ATTENTION, headline)
+    assert (snap.state, snap.title, snap.sub) == (ATTENTION, title, sub)
 
 
 def test_a_failed_sync_job_needs_a_look_until_the_next_one():
@@ -71,34 +84,34 @@ def test_a_failed_sync_job_needs_a_look_until_the_next_one():
     assert summarize(st, now=NOW).state == WORKING
 
 
-def test_long_errors_are_cut_to_fit_the_menu():
+def test_long_errors_are_cut_to_fit():
     snap = summarize(status(), now=NOW, sync_error="x " * 200)
-    assert len(snap.headline) <= len("Sync failed: ") + 60 and snap.headline.endswith("…")
+    assert len(snap.sub) <= 90 and snap.sub.endswith("…")
 
 
 def test_paused_until_later_but_not_once_it_has_passed():
     snap = summarize(status(paused_until="2026-10-10T13:00:00Z"), now=NOW)
-    assert snap.state == PAUSED and snap.headline.startswith("Analysis paused until ")
+    assert (snap.state, snap.title) == (PAUSED, "Analysis paused")
+    assert snap.sub == f"Resumes {when('2026-10-10T13:00:00Z', NOW)} (usage limit)"
     assert summarize(status(paused_until="2026-10-10T11:00:00Z"), now=NOW).state == OK
 
 
 def test_a_spoke_that_sends_its_sessions_says_where():
     st = status(hub_url="https://hub.example.com:8443", pending={"queued": 4})
     snap = summarize(st, now=NOW, sends_files=True)
-    assert snap.headline == "Sending to hub.example.com · nothing sent yet"
-    assert snap.detail == "" and snap.hub == ""  # the hub analyzes them
+    assert (snap.title, snap.sub) == ("Sending to hub.example.com", "Nothing sent yet")
+    assert snap.detail == "" and snap.hub == "" and snap.stats == {"waiting": None}  # the hub analyzes them
     snap = summarize(st, now=NOW, sends_files=True, hub_name="Team hub", push={"at": "2026-10-10T11:45:00Z", "errors": []})
-    assert (snap.state, snap.headline) == (OK, f"Sending to Team hub · last sent {when('2026-10-10T11:45:00Z', NOW)}")
+    assert (snap.state, snap.title, snap.sub) == (OK, "Sending to Team hub", "Last sent 15 min ago")
 
 
 def test_a_spoke_that_shares_knowledge_syncs_and_analyzes_here():
     st = status(hub_url="https://hub.example.com", pending={"queued": 4})
     snap = summarize(st, now=NOW, hub_name="Team hub")
-    assert snap.headline.startswith("Synced ")
-    assert snap.detail == "4 sessions waiting for analysis"
+    assert snap.title == "4 sessions to analyze"
     assert snap.hub == "Sharing knowledge with Team hub · nothing sent yet"
     snap = summarize(st, now=NOW, push={"at": "2026-10-10T11:45:00Z", "errors": []})
-    assert snap.hub == f"Sharing knowledge with hub.example.com · last sent {when('2026-10-10T11:45:00Z', NOW)}"
+    assert snap.hub == "Sharing knowledge with hub.example.com · last sent 15 min ago"
 
 
 def test_no_hub_no_hub_line():
@@ -116,6 +129,36 @@ def test_when_says_the_day_only_before_today():
     assert when(None, NOW) == ""
 
 
+@pytest.mark.parametrize("iso, expected", [
+    ("2026-10-10T11:59:30Z", "just now"),
+    ("2026-10-10T11:05:00Z", "55 min ago"),
+    (None, ""),
+])
+def test_ago(iso, expected):
+    assert ago(iso, NOW) == expected
+
+
+def test_ago_counts_calendar_days():
+    local_noon = NOW.astimezone().replace(hour=12, minute=0)
+    assert ago(to_iso(local_noon - timedelta(hours=3)), local_noon) == "3 h ago"
+    assert ago(to_iso(local_noon - timedelta(days=1)), local_noon) == "yesterday"
+    assert ago(to_iso(local_noon - timedelta(days=3)), local_noon) == "3 days ago"
+    assert ago(to_iso(local_noon - timedelta(days=30)), local_noon) == f"{(local_noon - timedelta(days=30)):%b} {(local_noon - timedelta(days=30)).day}"
+
+
+def test_day_label():
+    local_noon = NOW.astimezone().replace(hour=12, minute=0)
+    assert day_label(to_iso(local_noon), local_noon) == "Today"
+    assert day_label(to_iso(local_noon - timedelta(days=1)), local_noon) == "Yesterday"
+    assert day_label(to_iso(local_noon - timedelta(days=4)), local_noon).count(",") == 1
+
+
+def test_the_page_gets_the_state_and_its_picture():
+    page = summarize(status(), now=NOW, sync_error="boom").to_page()
+    assert page["state"] == ATTENTION and page["art"] == "art-glitch.webp"
+    assert {"title", "sub", "hub", "recent", "update", "syncing", "stats", "note", "progress"} <= set(page)
+
+
 def test_snapshot_from_the_dashboards_own_app(synced):
     from chronicle.menubar import snapshot
     from chronicle.server import make_server
@@ -127,7 +170,28 @@ def test_snapshot_from_the_dashboards_own_app(synced):
         httpd.server_close()
     assert snap.state in (OK, WORKING)
     assert snap.recent and snap.recent[0]["id"]
-    assert all(set(r) == {"id", "title", "project_name", "at"} for r in snap.recent)
+    assert all(set(r) == {"id", "title", "project_name", "agent", "outcome", "analysis_status", "at", "day", "time"}
+               for r in snap.recent)
+    assert set(snap.stats) == {"waiting", "today", "lessons"}
+
+
+def test_stats_count_today_and_the_last_week(synced):
+    from chronicle.menubar import stats
+
+    conn = synced["conn"]
+    n = conn.execute("SELECT COUNT(*) FROM sessions WHERE source NOT IN ('history')").fetchone()[0]
+    conn.execute("UPDATE sessions SET ended_at = ?", (to_iso(NOW),))
+    conn.execute("INSERT INTO knowledge (kind, title, source, status, created_at) VALUES ('fix', 'a', 'analysis', 'active', ?)",
+                 (to_iso(NOW - timedelta(days=2)),))
+    conn.execute("INSERT INTO knowledge (kind, title, source, status, created_at) VALUES ('fix', 'b', 'analysis', 'active', ?)",
+                 (to_iso(NOW - timedelta(days=9)),))
+    conn.execute("INSERT INTO knowledge (kind, title, source, status, created_at) VALUES ('fix', 'c', 'manual', 'active', ?)",
+                 (to_iso(NOW),))
+    got = stats(conn, NOW)
+    assert got["today"] == n and got["lessons"] >= 1
+    before = got["lessons"]
+    conn.execute("UPDATE knowledge SET status = 'dismissed' WHERE title = 'a'")
+    assert stats(conn, NOW)["lessons"] == before - 1
 
 
 def test_recent_sessions_leave_out_imported_chats(synced):
