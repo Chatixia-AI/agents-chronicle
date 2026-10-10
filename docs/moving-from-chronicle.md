@@ -87,9 +87,6 @@ calls it.
 
 ## The VS Code extension
 
-The extension has a new name and identifier, **Interlatch** (`chatixia.interlatch`), so VS Code sees it as a new
-extension and won't update the old one to it. Install it ([VS Code extension](vscode.md)) and uninstall
-**Chronicle**; while both are installed, Interlatch suggests that once. Your `chronicle.*` settings are still read:
-each `interlatch.*` setting you leave unset takes the old one's value.
+The [extension](vscode.md) keeps its Chronicle name for now and works with Interlatch as it is: nothing to do.
 
 Something not working? See [Troubleshooting](troubleshooting.md#moving-from-chronicle).

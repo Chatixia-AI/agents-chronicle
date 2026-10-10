@@ -87,9 +87,6 @@ macOS からは別のアプリに見えるため、Chronicle.app はそのまま
 
 ## VS Code 拡張機能
 
-拡張機能は名前と ID が **Interlatch**（`chatixia.interlatch`）に変わりました。VS Code からは別の拡張機能に見えるので、
-古いものが自動で置き換わることはありません。新しいものをインストールし（[VS Code 拡張機能](vscode.md)）、
-**Chronicle** はアンインストールしてください。両方が入っている間は、Interlatch が一度だけそう勧めます。
-`chronicle.*` の設定は引き続き読み込まれ、設定していない `interlatch.*` の項目には古い値が使われます。
+[拡張機能](vscode.md)は今のところ Chronicle の名前のままで、Interlatch でそのまま使えます。することはありません。
 
 うまくいかないときは[トラブルシューティング](troubleshooting.md#chronicle-からの移行)を参照してください。
