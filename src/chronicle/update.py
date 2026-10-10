@@ -9,6 +9,7 @@ files changed after the install.
 from __future__ import annotations
 
 import json
+import logging
 import os
 import re
 import shlex
@@ -26,11 +27,13 @@ from urllib.request import Request, urlopen
 from . import __version__
 from .i18n import tr
 
+log = logging.getLogger("chronicle.update")
+
 DIST = "agents-chronicle"
 PYPI_JSON = f"https://pypi.org/pypi/{DIST}/json"
 RELEASES_URL = "https://github.com/Chatixia-AI/agents-chronicle/releases/latest"
 
-# server.serve() sets this: a plain `chronicle ui` (by hand or launchd) can re-exec itself after an update;
+# server.serve() sets this: a plain `chronicle ui` (by hand or launchd) can restart itself after an update;
 # the desktop app serves the dashboard from its own process and is restarted by the user instead.
 RESTARTABLE = False
 REMOTE_KEY = "update_check"  # kv: the last PyPI check, so it outlives a restart
@@ -288,8 +291,20 @@ def run_update(progress) -> str:
 
 
 def restart() -> None:
-    """Replace this process with a fresh copy of itself. The pid stays, so a launchd KeepAlive agent is undisturbed;
-    the listening socket is not inherited, and open tabs reload themselves when they see the new build."""
+    """Start the dashboard afresh; open tabs reload themselves when they see it back (or a new build).
+
+    The macOS login item asks launchd for a new process (`launchctl kickstart -k`): a process that re-executes itself
+    in place keeps its pid, and macOS then keeps its menu-bar icon hidden. Anything else replaces this process with a
+    fresh copy of itself (the pid stays, so a systemd unit is undisturbed; the listening socket is not inherited)."""
+    from .install import UI_LABEL
+
     sys.stdout.flush()
     sys.stderr.flush()
+    if sys.platform == "darwin" and os.environ.get("XPC_SERVICE_NAME") == UI_LABEL:
+        try:  # its own session, so launchd stopping this agent's processes doesn't stop launchctl too
+            subprocess.Popen(["launchctl", "kickstart", "-k", f"gui/{os.getuid()}/{UI_LABEL}"], start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            return
+        except OSError:
+            log.warning("launchctl kickstart failed; restarting in place")
     os.execv(sys.executable, sys.orig_argv)
