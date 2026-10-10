@@ -1,4 +1,4 @@
-"""The coding agents Chronicle records, and how each is named."""
+"""The coding agents Interlatch records, and how each is named."""
 
 AGENTS = {  # id -> (full name, short name, speaker label in digests)
     "claude": ("Claude Code", "Claude", "CLAUDE"),

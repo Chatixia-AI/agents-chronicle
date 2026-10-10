@@ -22,12 +22,15 @@ KIND_ICON = {
 
 # why a session was not analyzed, as ingest, analyze and chat_import store it (the analyzer's own errors aside)
 ANALYSIS_REASONS = ("too little content", "too few prompts", "excluded project", "session continued during analysis",
-                    "session continued after analysis", "history only (transcript deleted before Chronicle)")
+                    "session continued after analysis", "history only (transcript deleted before Interlatch)")
 NOT_ANALYZED_CHAT = "imported {label} chat: not analyzed automatically (Analyze now, or import with --analyze)"
+RENAMED_REASONS = {  # what ingest stored before Chronicle became Interlatch, shown as it reads now
+    "history only (transcript deleted before Chronicle)": "history only (transcript deleted before Interlatch)"}
 
 
 def reason_text(reason: str | None) -> str | None:
-    """A stored analysis_reason in the dashboard viewer's language (i18n), when it is one Chronicle writes itself."""
+    """A stored analysis_reason in the dashboard viewer's language (i18n), when it is one Interlatch writes itself."""
+    reason = RENAMED_REASONS.get(reason, reason)
     if not reason or lang.get() == "en":
         return reason
     m = re.fullmatch(r"imported (.+) chat: not analyzed automatically \(Analyze now, or import with --analyze\)", reason)

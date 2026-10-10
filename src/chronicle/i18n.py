@@ -1,8 +1,8 @@
 """The dashboard's language for the text the server writes: every /api call says which one (X-Chronicle-Lang: en or ja),
-so it is chosen per browser, independently of [analysis] language (what Chronicle writes its knowledge in).
+so it is chosen per browser, independently of [analysis] language (what Interlatch writes its knowledge in).
 
 tr() and trn() translate while a response is built, never at import time. What is not for the dashboard stays English:
-the CLI and the MCP server (they send no header), files Chronicle writes, logs, codes, and anything sent to a model.
+the CLI and the MCP server (they send no header), files Interlatch writes, logs, codes, and anything sent to a model.
 Text stored in the database is translated when it is read, where it is one of a known set of templates.
 """
 

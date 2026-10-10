@@ -218,7 +218,7 @@ def test_people_from_the_command_line(hubcfg, monkeypatch, capsys):
     out = _out(capsys)
     code = CODE_RE.search(out).group(0)
     assert "Added Ada (ada@example.com), an admin" in out
-    assert f"chronicle hub join https://chronicle.example.internal --code {code} --share knowledge" in out
+    assert f"interlatch hub join https://chronicle.example.internal --code {code} --share knowledge" in out
     assert f"https://chronicle.example.internal/signin?code={code}" in out
     assert main(["hub", "invite", "Ada", "--email", "ADA@example.com"]) == 0  # a new code for the same person
     out = _out(capsys)

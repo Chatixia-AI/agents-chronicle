@@ -253,7 +253,7 @@ def test_after_sync_respects_settings(archive, monkeypatch):
     assert suggest.after_sync(conn, cfg) is None and suggest.counts(conn)["new"] == 0
     cfg.suggestions_enabled, cfg.suggestions_notify = True, True
     assert suggest.after_sync(conn, cfg)["new"] == 2
-    assert posted == [("Chronicle", "2 new suggestions. Open the dashboard > Suggestions")]
+    assert posted == [("Interlatch", "2 new suggestions. Open the dashboard > Suggestions")]
     assert suggest.after_sync(conn, cfg)["new"] == 0 and len(posted) == 1
 
 

@@ -1,6 +1,6 @@
 # What gets recorded and how analysis works
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
 ## Recorded for every session
 
@@ -49,15 +49,15 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
      --tools "" --strict-mcp-config`.
    - **Codex** (`backend = "codex"`): `codex exec --ephemeral --ignore-user-config --sandbox read-only`, with
      every tool feature switched off (shell, code execution, sub-agents, apps, plugins, web search, images),
-     hooks, `AGENTS.md` and skill instructions off, and Chronicle's instructions in place of Codex's own. Codex
-     cannot switch off every tool by flag, so Chronicle also reads its event stream: a reply that follows any tool
+     hooks, `AGENTS.md` and skill instructions off, and Interlatch's instructions in place of Codex's own. Codex
+     cannot switch off every tool by flag, so Interlatch also reads its event stream: a reply that follows any tool
      call is thrown away and the analysis counts as failed.
    - **IBM Bob** (`backend = "bob"`): Bob Shell's `bob run --format stream-json --max-turns 1 --disable-mcp
      --disable-subagents`, with every tool group disabled, in a throwaway workspace whose custom mode holds
-     Chronicle's instructions and no tools; as with Codex, a reply that follows any tool call is thrown away. Headless
-     runs need a Bob API key (the app's sign-in isn't used): `chronicle config set-key bob`, the IBM Bob tab in
+     Interlatch's instructions and no tools; as with Codex, a reply that follows any tool call is thrown away. Headless
+     runs need a Bob API key (the app's sign-in isn't used): `interlatch config set-key bob`, the IBM Bob tab in
      **Status › Analysis**, or `BOB_API_KEY`. Bob picks its own model. It keeps each analysis in its own task list;
-     Chronicle doesn't import those as sessions.
+     Interlatch doesn't import those as sessions.
 
    - **A model provider's API** (`backend = "anthropic"`, `"bedrock"`, `"openai"`, `"azure"`, `"openrouter"`,
      `"ollama"` or `"openai-compatible"`): one plain HTTP request per call, with no tools in it, so the model can
@@ -68,8 +68,8 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
    alias (`sonnet`, `opus`, `haiku`, `fable`) or a full model id such as `claude-opus-5-5`; for Codex,
    `analysis.codex_model` (empty: Codex's default). Both share `analysis.effort`.
 
-   `CHRONICLE_INTERNAL=1` makes Chronicle's own hooks inert for these runs. Switch in **Status › Analysis**, with
-   `chronicle config set analysis.backend codex`, or for one run with `chronicle analyze --backend codex`.
+   `INTERLATCH_INTERNAL=1` makes Interlatch's own hooks inert for these runs. Switch in **Status › Analysis**, with
+   `interlatch config set analysis.backend codex`, or for one run with `interlatch analyze --backend codex`.
 4. The JSON reply is validated leniently (with one repair pass) and stored. When a project gains
    `min_new_items` new items, its knowledge base is re-synthesized; items that are outdated, contradicted or
    duplicated get marked *superseded*, each naming the item that replaced it (pinned and memory items are never
@@ -83,7 +83,7 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
    Calls have a wall-clock deadline, and a call frozen by the Mac going to sleep is killed right after wake and
    re-queued without counting as a failure. Sessions that continue after being analyzed are re-analyzed.
    A session that is not analyzed yet always says why: on its page, in **Status › Analysis** (a count per
-   reason) and in `chronicle status`. *Queued* reasons clear by themselves (ready for the next run, still active,
+   reason) and in `interlatch status`. *Queued* reasons clear by themselves (ready for the next run, still active,
    waiting to retry); *held* ones need a change first (project excluded, too few prompts, from before install
    with backfill off, failed four times). When the whole queue is stopped (paused for a usage limit, automatic
    analysis off, or the analyzer not found), that is said too.
@@ -94,10 +94,10 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
 
 ## Language
 
-Chronicle writes in English unless `[analysis] language` is `ja` ([Configuration](configuration.md#analysis), or
+Interlatch writes in English unless `[analysis] language` is `ja` ([Configuration](configuration.md#analysis), or
 **Status › Analysis**). Then summaries, knowledge, knowledge bases, the playbook, glossary definitions and theme names,
 weekly reviews and screening reasons are written in Japanese. Identifiers, commands, paths, error messages and quotes
-stay as they were, and so do tags and the codes Chronicle reads back (kinds, outcomes, verdicts). The setting applies
+stay as they were, and so do tags and the codes Interlatch reads back (kinds, outcomes, verdicts). The setting applies
 to what is analyzed or synthesized from then on; earlier sessions keep their language until they are analyzed again.
 Synthesis treats items in different languages that state the same lesson as duplicates, so they merge and confirm
 each other. The dashboard's own words follow the language chosen in the dashboard, per browser, whatever this
@@ -157,7 +157,7 @@ stated so it applies to other work), **checks** for similar work next time, the 
 than made up. When a session revised a finding or a decision, the lesson states where it ended up.
 
 Lessons from an earlier version have no case file, principle or diagram. A session's lessons get them when it is
-analyzed again (`chronicle analyze <session>`), which uses your analysis login like any other analysis.
+analyzed again (`interlatch analyze <session>`), which uses your analysis login like any other analysis.
 
 ## Model providers
 
@@ -166,9 +166,9 @@ Instead of a coding agent, analysis can call a model provider's API with your ow
 then **Test connection** and **Use for analysis**. From the terminal:
 
 ```sh
-chronicle config set providers.openai.model gpt-5.5
-chronicle config set-key openai            # asks for the key; it stays out of your shell history
-chronicle config set analysis.backend openai
+interlatch config set providers.openai.model gpt-5.5
+interlatch config set-key openai            # asks for the key; it stays out of your shell history
+interlatch config set analysis.backend openai
 ```
 
 | Provider | `backend` | Endpoint | Sign-in |
@@ -182,14 +182,14 @@ chronicle config set analysis.backend openai
 | Any Chat Completions server | `openai-compatible` | yours, e.g. LM Studio, vLLM, Groq, Gemini's OpenAI endpoint | optional key |
 
 - **Models.** `model` does the analysis and builds knowledge bases; `small_model` screens imported chats
-  (default: `model`). Chronicle's settings name Claude models (`sonnet`, `haiku`): with a provider they mean
+  (default: `model`). Interlatch's settings name Claude models (`sonnet`, `haiku`): with a provider they mean
   `model` and `small_model`. Anthropic and Bedrock default to Claude Sonnet 5.5 and Claude Haiku 4.5; the others
   need a model. On Azure, the model is your deployment's name.
-- **Keys** are stored in `provider-keys.json` in Chronicle's folder, readable by your user only, never in
+- **Keys** are stored in `provider-keys.json` in Interlatch's folder, readable by your user only, never in
   `config.toml`. A stored key wins over the environment variable, so the dashboard (which launchd starts without your
   shell's variables) and the CLI use the same key. The dashboard never shows a key back, and only the computer
   itself (or an admin of a hub) can change keys and endpoints.
-- **Local models (Ollama).** Chronicle calls Ollama's own `/api/chat` with `num_ctx` (default 32,768 tokens) and
+- **Local models (Ollama).** Interlatch calls Ollama's own `/api/chat` with `num_ctx` (default 32,768 tokens) and
   sends 60,000 characters of transcript per call (`chunk_chars`). A prompt that fills the context window is an
   error, not a silent cut. Lessons are only as good as the model: a 1B model writes thin, generic ones, so pick
   the largest model your computer runs comfortably.
@@ -203,5 +203,5 @@ analysis runs through your own Claude Code or Codex login, or your Bob API key (
 With Claude, the reported cost is the API
 list-price equivalent: sessions averaged about $0.38 each with Sonnet (digests average ~150k characters), and
 `max_budget_usd` caps each call. Codex reports tokens but no price, so Codex analyses show no cost. On a Claude or
-ChatGPT subscription the usage is drawn from the plan's allowance rather than billed. `chronicle analyze --pending
+ChatGPT subscription the usage is drawn from the plan's allowance rather than billed. `interlatch analyze --pending
 --dry-run` sizes a backlog before you spend anything.

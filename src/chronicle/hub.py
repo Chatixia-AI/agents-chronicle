@@ -6,14 +6,14 @@ and the hub ingests them as if they were its own, tagged with the computer they 
 the spoke asks the hub which files it already has (by size and modification time) and sends only the rest, so a
 lost push is simply redone by the next one.
 
-A spoke that already analyzed sessions with its own Chronicle sends those results once, when it first joins, so
+A spoke that already analyzed sessions with its own Interlatch sends those results once, when it first joins, so
 the hub does not pay to analyze the same sessions again.
 
 With `[hub] store = "postgres"` the hub also keeps the team's record in Postgres (team_store.py), and each computer
 that shares knowledge gets its teammates' lessons for its own projects back after every push, kept read-only in its
 own database (knowledge.source 'team') where its MCP tools and start-of-session notes find them.
 
-Projects can be set up on the hub ahead of time (`chronicle hub project add <folder>`): a folder on the hub computer
+Projects can be set up on the hub ahead of time (`interlatch hub project add <folder>`): a folder on the hub computer
 whose sessions, and everything below it, are one project that other computers can add folders to before anything was
 sent. Its own analyzed sessions go to the team store like a member's, so teammates get the hub owner's lessons too.
 A person limited to projects (people.py) hears only of those projects, and the hub keeps only what belongs to them.
@@ -71,7 +71,7 @@ SHARING_LOCK = "hub-sharing.lock"  # on a spoke: one push, hello or folder chang
 PUSH_WAIT_S = 600  # a push waits this long for another to finish
 CHANGE_WAIT_S = 60  # a folder change, which someone is waiting on, this long
 
-# The analysis a spoke's own Chronicle already wrote, carried over when it joins (see export_analyses).
+# The analysis a spoke's own Interlatch already wrote, carried over when it joins (see export_analyses).
 ANALYSIS_COLS = ("analysis_status", "analysis_reason", "analyzed_at", "analysis_model", "analyzed_prompts", "llm_title",
                  "summary", "goal", "outcome", "outcome_note", "sentiment", "work_types_json", "tags_json",
                  "highlights_json", "open_threads_json", "friction_json", "analysis_json")
@@ -483,7 +483,7 @@ def shared_projects(conn) -> list[dict]:
 
 
 def declared_projects(conn) -> list[str]:
-    """The projects set up on this hub ahead of time (`chronicle hub project add`): folders on this computer."""
+    """The projects set up on this hub ahead of time (`interlatch hub project add`): folders on this computer."""
     return [r[0] for r in conn.execute("SELECT path FROM hub_projects ORDER BY path")]
 
 
@@ -497,7 +497,7 @@ PROJECT_NAME_RULE = "A project's name is up to 80 characters, without / or \\, a
 
 
 def named_project_folder(cfg: Config, name: str) -> str:
-    """The folder of a project a dedicated hub's admin makes by name (`[hub] dedicated`): <chronicle home>/projects/
+    """The folder of a project a dedicated hub's admin makes by name (`[hub] dedicated`): <interlatch home>/projects/
     <name>, created here. Only a plain name: never a path, so it can't reach a folder outside that one."""
     name = " ".join(str(name or "").split())
     if (not name or len(name) > 80 or name.startswith(".") or any(c in name for c in "/\\")
@@ -547,7 +547,7 @@ def remove_project(cfg: Config, conn, folder: str) -> dict:
     computers sent stays where it was filed until they send it again; people keep the project in their lists."""
     path = project_folder(folder)
     if not conn.execute("SELECT 1 FROM hub_projects WHERE path = ?", (path,)).fetchone():
-        raise HubError(f"{path} is not a project set up on this hub (`chronicle hub project list`)")
+        raise HubError(f"{path} is not a project set up on this hub (`interlatch hub project list`)")
     conn.execute("DELETE FROM hub_projects WHERE path = ?", (path,))
     conn.commit()
     resolver(cfg, conn, fresh=True)
@@ -593,7 +593,7 @@ def computers_of(conn, person_id: int) -> list[str]:
 
 def purge_targets(conn, machine_ids: list[str], *, projects: list[str] | None = None,
                   keep: list[str] | None = None) -> list[dict]:
-    """What `chronicle hub purge` would remove: sessions those computers sent, filed under `projects`, or (`keep`)
+    """What `interlatch hub purge` would remove: sessions those computers sent, filed under `projects`, or (`keep`)
     under any project but those, sessions filed under no project included."""
     if not machine_ids or (projects is None) == (keep is None):
         return []
@@ -623,7 +623,7 @@ def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, per
     ids = [x["id"] for x in sessions]
     if conn.execute(f"SELECT 1 FROM sessions WHERE machine_id = ? AND id IN ({', '.join('?' for _ in ids) or 'NULL'})",
                     (me, *ids)).fetchone():
-        raise HubError("purge removes what other computers sent, not this hub's own sessions (`chronicle forget`)")
+        raise HubError("purge removes what other computers sent, not this hub's own sessions (`interlatch forget`)")
     if owner is not None and conn.execute(
             f"SELECT 1 FROM sessions WHERE machine_id IS NOT ? AND id IN ({', '.join('?' for _ in ids) or 'NULL'})",
             (owner, *ids)).fetchone():
@@ -652,7 +652,7 @@ def purge(cfg: Config, conn, sessions: list[dict], *, by: str | None = None, per
 
 def withdraw(cfg: Config, conn, body: dict, person: dict | None = None) -> dict:
     """POST /api/hub/withdraw: a computer that shares knowledge takes back what it shared from a folder it added to a
-    project here (`chronicle hub remove-folder`: the wrong folder). The sessions it sent from that folder that are
+    project here (`interlatch hub remove-folder`: the wrong folder). The sessions it sent from that folder that are
     filed under the folder's project go, with their lessons, here and in the team store. Unlike purge they aren't
     kept out: once their folder is added to the right project, they are shared again."""
     from .people import actor_of
@@ -724,7 +724,7 @@ class HubClient:
     def request(self, method: str, path: str, *, params: dict | None = None, body=None, length: int | None = None,
                 headers: dict | None = None) -> dict:
         target = path + (f"?{urlencode(params)}" if params else "")
-        hdrs = {"User-Agent": f"chronicle/{__version__}", **(headers or {})}
+        hdrs = {"User-Agent": f"interlatch/{__version__}", **(headers or {})}
         if self.token:  # none when redeeming an invite: the code is the credential
             hdrs["Authorization"] = f"Bearer {self.token}"
         if isinstance(body, (dict, list)):
@@ -751,7 +751,7 @@ class HubClient:
             payload = {"error": data[:200].decode(errors="replace")}
         if resp.status == 401:
             raise HubUnauthorized("the hub did not accept this computer's token; join it again with a new invite "
-                                  "(`chronicle hub invite` on the hub) or the command `chronicle hub enable` prints there")
+                                  "(`interlatch hub invite` on the hub) or the command `interlatch hub enable` prints there")
         if resp.status >= 400:
             raise HubError(f"hub error {resp.status}: {payload.get('error') or payload}")
         return payload
@@ -904,7 +904,7 @@ def hello_info(cfg: Config, roots: list[Root], routes: GroupRoutes | None = None
 
 def _check_protocol(hello: dict) -> None:
     if int(hello.get("protocol", 0)) != PROTOCOL:
-        raise HubError(f"the hub runs Chronicle {hello.get('version')}, which speaks a different protocol; "
+        raise HubError(f"the hub runs version {hello.get('version')}, which speaks a different protocol; "
                        "update both computers to the same version")
 
 
@@ -951,7 +951,7 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
     """Say hello without sending files: the hub's projects and what it made of this computer's folders."""
     token = read_token(cfg)
     if not cfg.hub_url or not token:
-        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+        raise HubError("this computer has not joined a hub (`interlatch hub join`)")
     client = client or HubClient(cfg.hub_url, token)
     routes = group_routes(cfg)
     info = hello_info(cfg, spoke_roots(cfg), routes)
@@ -966,7 +966,7 @@ def handshake(cfg: Config, client: HubClient | None = None) -> dict:
 
 
 def redeem_invite(cfg: Config, url: str, code: str, client: HubClient | None = None) -> dict:
-    """Trade an invite code for this computer's own token at the hub (`chronicle hub join --code`).
+    """Trade an invite code for this computer's own token at the hub (`interlatch hub join --code`).
 
     Returns the hub's answer: {"token", "person", "hub"}. The caller keeps the token (write_token).
     """
@@ -984,8 +984,8 @@ def redeem_invite(cfg: Config, url: str, code: str, client: HubClient | None = N
                                                              "key": machine_key(cfg), "platform": platform_label(),
                                                              "version": __version__})
     except HubUnauthorized:  # a hub that predates invites asks every caller for its shared token
-        raise HubError(f"the hub at {client.url} doesn't take invite codes yet: update Chronicle there, or join with "
-                       "the command its `chronicle hub enable` prints") from None
+        raise HubError(f"the hub at {client.url} doesn't take invite codes yet: update Interlatch there, or join with "
+                       "the command its `interlatch hub enable` prints") from None
     finally:
         client.close()
     if not isinstance(got.get("token"), str) or not got["token"]:
@@ -1000,7 +1000,7 @@ def dashboard_signin(cfg: Config, client: HubClient | None = None, page: str | N
 
     token = read_token(cfg)
     if not cfg.hub_url or not token:
-        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+        raise HubError("this computer has not joined a hub (`interlatch hub join`)")
     client = client or HubClient(cfg.hub_url, token)
     try:
         got = client.request("POST", "/api/hub/signin", body={"machine": local_machine(cfg)["id"]})
@@ -1034,7 +1034,7 @@ def push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = Non
 def _push_files(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
     token = read_token(cfg)
     if not cfg.hub_url or not token:
-        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+        raise HubError("this computer has not joined a hub (`interlatch hub join`)")
     t0 = time.monotonic()
     report = PushReport(hub=cfg.hub_url)
     roots = spoke_roots(cfg)
@@ -1233,7 +1233,7 @@ def share_own(cfg: Config, conn, store) -> int:
 def _push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = None) -> PushReport:
     token = read_token(cfg)
     if not cfg.hub_url or not token:
-        raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+        raise HubError("this computer has not joined a hub (`interlatch hub join`)")
     t0 = time.monotonic()
     report = PushReport(hub=cfg.hub_url, kind="knowledge")
     client = client or HubClient(cfg.hub_url, token)
@@ -1247,7 +1247,7 @@ def _push_knowledge(cfg: Config, *, progress=None, client: HubClient | None = No
         _record_folders(cfg, hello, info["repos"])
         have = hello.get("knowledge")
         if not isinstance(have, dict):
-            raise HubError(f"the hub runs Chronicle {hello.get('version')}, which can't take knowledge only; update it")
+            raise HubError(f"the hub runs version {hello.get('version')}, which can't take knowledge only; update it")
         scope = hello.get("scope") if isinstance(hello.get("scope"), list) else None  # the hub limits this person
         records, report.unchanged, report.skipped = _shared_records(cfg, have, scope=scope,
                                                                     remotes=hello.get("remotes") or {},
@@ -1430,7 +1430,7 @@ def apply_team_lessons(cfg: Config, data: dict, repos: dict) -> int:
 
 
 def _record_push(cfg: Config, report: PushReport) -> None:
-    """The spoke's own note of its last push, for `chronicle hub status` and its dashboard."""
+    """The spoke's own note of its last push, for `interlatch hub status` and its dashboard."""
     try:
         (cfg.home / "last-push.json").write_text(json.dumps({
             "at": utcnow_iso(), "summary": report.summary(), "errors": report.errors[:5], "kind": report.kind,
@@ -1447,7 +1447,7 @@ def last_push(cfg: Config) -> dict | None:
 
 
 def _record_folders(cfg: Config, hello: dict, repos: dict | None = None) -> None:
-    """The spoke's note of what the hub made of its folders, for `chronicle hub folders` (an older hub sends none),
+    """The spoke's note of what the hub made of its folders, for `interlatch hub folders` (an older hub sends none),
     with the hub's projects and the ones this computer's repositories go to by their git remote, for Devices."""
     if not isinstance(hello.get("folders"), dict):
         return
@@ -1479,7 +1479,7 @@ def _save_hub(cfg: Config, *, folders: dict[str, str] | None = None, left: list[
 
 @_one_change
 def add_folder(cfg: Config, folder: str, project: dict, hello: dict) -> tuple[Config, str | None]:
-    """`chronicle hub add-folder`: file the sessions in `folder` (absolute), and the folders below it, under the hub's
+    """`interlatch hub add-folder`: file the sessions in `folder` (absolute), and the folders below it, under the hub's
     `project`; one this computer left is joined again. `hello`: the hub's answer to handshake(), for the git remotes
     it knows. Returns the reloaded config and, when nothing changed because the folder's repository already goes
     there by its git remote, that remote. Raises FolderError when the folder can't go there."""
@@ -1501,7 +1501,7 @@ def add_folder(cfg: Config, folder: str, project: dict, hello: dict) -> tuple[Co
 
 @_one_change
 def remove_folder(cfg: Config, folder: str, client: HubClient | None = None) -> tuple[Config, int | None]:
-    """`chronicle hub remove-folder`, for the wrong folder: its sessions no longer go to the project. A computer that
+    """`interlatch hub remove-folder`, for the wrong folder: its sessions no longer go to the project. A computer that
     shares knowledge first has the hub take back what it shared from there (withdraw); one that sends transcripts
     leaves them to the hub, which files them by their git remote or their own folder again. Returns the reloaded
     config and how many sessions the hub took back (None: it wasn't asked)."""
@@ -1511,13 +1511,13 @@ def remove_folder(cfg: Config, folder: str, client: HubClient | None = None) -> 
     if cfg.shares_knowledge:  # the hub first: if it can't be reached, nothing here changes
         token = read_token(cfg)
         if not token:
-            raise HubError("this computer has not joined a hub (`chronicle hub join`)")
+            raise HubError("this computer has not joined a hub (`interlatch hub join`)")
         client = client or HubClient(cfg.hub_url, token)
         try:
             r = client.request("POST", "/api/hub/withdraw", body={"machine": local_machine(cfg)["id"], "folder": folder})
         except HubError as exc:
             if str(exc).startswith("hub error 404"):
-                raise FolderError("The hub runs an older Chronicle that can't take back what this computer shared. "
+                raise FolderError("The hub runs an older version that can't take back what this computer shared. "
                                   "Update the hub first.") from None
             raise
         finally:
@@ -1550,7 +1550,7 @@ def rejoin_project(cfg: Config, project: str) -> Config:
 
 @_one_change
 def leave_hub(cfg: Config) -> Config:
-    """`chronicle hub leave`: stop sending to the hub. This computer records and analyzes its own sessions again; the
+    """`interlatch hub leave`: stop sending to the hub. This computer records and analyzes its own sessions again; the
     hub keeps what it was sent."""
     from .config import load_config, set_config_value
 
@@ -1585,7 +1585,7 @@ def check_machine(cfg: Config, machine_id: str) -> str:
     if not MACHINE_RE.match(machine_id or ""):
         raise HubError("bad machine id")
     if machine_id == local_machine(cfg)["id"]:
-        raise HubError("that is this hub's own id: the spoke's Chronicle folder was copied from the hub; delete "
+        raise HubError("that is this hub's own id: the spoke's Interlatch folder was copied from the hub; delete "
                        "machine.json on the spoke and join again")
     return machine_id
 
@@ -1631,8 +1631,8 @@ def _in_store(call, *args):
 
 def limited_error(person: dict) -> HubError:
     return HubError(f"{person['name']} sees only some projects on this hub, so this computer may share knowledge only "
-                    "(summaries and project lessons, not transcripts): run `chronicle config set hub.share knowledge`, "
-                    "then `chronicle push`")
+                    "(summaries and project lessons, not transcripts): run `interlatch config set hub.share knowledge`, "
+                    "then `interlatch push`")
 
 
 def transcripts_refused(cfg: Config, person: dict | None) -> HubError | None:
@@ -1642,8 +1642,8 @@ def transcripts_refused(cfg: Config, person: dict | None) -> HubError | None:
 
     if cfg.hub_accept == "knowledge":
         return HubError("this hub takes knowledge only (summaries and project lessons, not transcripts), so this "
-                        "computer may share knowledge only: run `chronicle config set hub.share knowledge`, then "
-                        "`chronicle push`")
+                        "computer may share knowledge only: run `interlatch config set hub.share knowledge`, then "
+                        "`interlatch push`")
     if projects_of(person) is not None:
         return limited_error(person)
     return None
@@ -1782,7 +1782,7 @@ def receive_file(cfg: Config, conn, params: dict, rfile, length: int) -> dict:
         raise HubError("bad file parameters")
     if any(sid in rel.name for sid in forgotten_ids(conn)):
         _drain(rfile, length)
-        return {"ok": True, "skipped": "forgotten"}  # `chronicle forget` on the hub keeps it out for good
+        return {"ok": True, "skipped": "forgotten"}  # `interlatch forget` on the hub keeps it out for good
     target = machine_dir(cfg, machine_id) / root / Path(*rel.parts)
     target.parent.mkdir(parents=True, exist_ok=True)
     tmp = target.with_name(f"{target.name}.tmp-{os.getpid()}-{threading.get_ident()}")
@@ -1998,7 +1998,7 @@ def receive_analyses(cfg: Config, conn, params: dict, rfile, length: int) -> dic
 
 
 class IngestTrigger:
-    """Runs `chronicle sync --work` after a push, one at a time; a push during a run queues exactly one more."""
+    """Runs `interlatch sync --work` after a push, one at a time; a push during a run queues exactly one more."""
 
     def __init__(self, cfg: Config):
         self.cfg = cfg
@@ -2176,7 +2176,7 @@ class ProjectResolver:
     """Maps a project folder on another computer to the same project's folder here.
 
     By git remote (the other computer reported its repositories' remotes, or the transcript names one), or by a
-    folder that computer added to a project here (`chronicle hub add-folder`), whichever is more specific: a
+    folder that computer added to a project here (`interlatch hub add-folder`), whichever is more specific: a
     repository with a known remote inside an added folder follows its remote. Then by `[hub] path_map` prefixes;
     otherwise the folder is kept as that computer recorded it.
     """
@@ -2278,12 +2278,12 @@ def resolver(cfg: Config, conn, *, fresh: bool = False) -> ProjectResolver:
 
 
 def join_command(url: str, token: str) -> str:
-    return f"chronicle hub join {url} --token={quote(token, safe='-_')}"  # "=": a token may start with "-"
+    return f"interlatch hub join {url} --token={quote(token, safe='-_')}"  # "=": a token may start with "-"
 
 
 def invite_command(address: str, code: str) -> str:
     """What an invited person runs on their computer: it joins as them and shares knowledge only."""
-    return f"chronicle hub join {address} --code {code} --share knowledge"
+    return f"interlatch hub join {address} --code {code} --share knowledge"
 
 
 def invite_link(address: str, code: str) -> str:

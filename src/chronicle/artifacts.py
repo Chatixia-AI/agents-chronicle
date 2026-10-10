@@ -482,7 +482,7 @@ def artifact_by_id(conn, artifact_id: int, local_machine: str | None = None) -> 
 
 
 def preview_file(conn, artifact_id: int, local_machine: str | None = None, cache_dir=None) -> tuple[bytes, str] | None:
-    """An artifact's picture by its id (only a file Chronicle recorded as an artifact, never a path a request names): an
+    """An artifact's picture by its id (only a file Interlatch recorded as an artifact, never a path a request names): an
     image or SVG as it is, or a Quick Look thumbnail of a deck, document, spreadsheet or PDF."""
     a = artifact_by_id(conn, artifact_id, local_machine)
     if a is None or a["status"] not in ("present", "changed"):
@@ -507,7 +507,7 @@ def preview_file(conn, artifact_id: int, local_machine: str | None = None, cache
 OPEN_MAX = 60_000_000
 _TEXT_EXT = {".md", ".markdown", ".mdx", ".rst", ".csv", ".mmd", ".mermaid", ".puml", ".excalidraw", ".drawio", ".txt"}
 # an agent's HTML page keeps its own scripts (charts, interactivity) but runs in a sandbox: an opaque origin, with no
-# way into Chronicle's data, cookies or API
+# way into Interlatch's data, cookies or API
 HTML_POLICY = "sandbox allow-scripts allow-popups allow-popups-to-escape-sandbox allow-forms allow-modals allow-downloads"
 IMAGE_POLICY = "default-src 'none'; img-src data:; style-src 'unsafe-inline'; sandbox"
 TEXT_POLICY = "default-src 'none'; sandbox"

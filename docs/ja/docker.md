@@ -1,6 +1,6 @@
 # Docker でハブを動かす
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
 このガイドでは、Docker が動くサーバーにチームの[ハブ](devices.md#ほかのコンピューター)を用意します。空のサーバーから、
 チームメイトがプロジェクトで学んだことを共有できるようになるまでです。ハブを運用する人向けです。チームメイトは
@@ -8,7 +8,7 @@
 
 `docker/compose.yaml` は次の 3 つのコンテナーを起動します。
 
-- **ハブ**：イメージ `ghcr.io/chatixia-ai/chronicle-hub`
+- **ハブ**：イメージ `ghcr.io/chatixia-ai/interlatch-hub`
 - **Caddy**：ハブの前に立ち、HTTPS の証明書を取得・更新します
 - **Postgres**：[チームストア](devices.md#チームメイトのナレッジとpostgres-のチームストア)。各コンピューターが学んだことを
   まとめ、チームメイトのナレッジを送り返します
@@ -22,7 +22,7 @@
 - **Docker が動く Linux サーバー**（SSH で接続できるもの）。CPU 2 つとメモリー 4 GB で十分です。
 - **ポート 80 と 443**：ハブを使うコンピューターから届くように開けておきます。Caddy が Let's Encrypt から証明書を
   取得するのにも使います。
-- **ハブの名前**：`chronicle.example.com` のように、DNS がサーバーを指す名前です。まだない場合は、サーバーの IP
+- **ハブの名前**：`interlatch.example.com` のように、DNS がサーバーを指す名前です。まだない場合は、サーバーの IP
   アドレスをハイフンでつなぎ `.sslip.io` を付けた名前で試せます。`172-207-25-249.sslip.io` は `172.207.25.249` を
   指す無料の名前です。社内ネットワークからしか届かない名前の場合は[自分の証明書を使う](#自分の証明書を使う)を
   参照してください。
@@ -42,8 +42,8 @@ sudo usermod -aG docker $USER && newgrp docker
   貼り付けます。
 
     ```bash
-    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_chronicle_hub -C chronicle-hub
-    pbcopy < ~/.ssh/id_ed25519_chronicle_hub.pub
+    ssh-keygen -t ed25519 -f ~/.ssh/id_ed25519_interlatch_hub -C interlatch-hub
+    pbcopy < ~/.ssh/id_ed25519_interlatch_hub.pub
     ```
 
     代わりに **新しいキーの組の生成** を選ぶと、VM の作成の最後に **秘密キーのダウンロード** ダイアログが
@@ -52,7 +52,7 @@ sudo usermod -aG docker $USER && newgrp docker
 - **名前を付けます**：VM のパブリック IP アドレス › **構成** › **DNS 名ラベル** で
   `<ラベル>.<リージョン>.cloudapp.azure.com` になります。上の sslip.io の名前でもかまいません。
 
-接続は `ssh -i ~/.ssh/id_ed25519_chronicle_hub azureuser@<VM の IP アドレス>` です。
+接続は `ssh -i ~/.ssh/id_ed25519_interlatch_hub azureuser@<VM の IP アドレス>` です。
 
 ## ハブを用意する
 
@@ -61,7 +61,7 @@ sudo usermod -aG docker $USER && newgrp docker
 ### 1. ファイルをダウンロードする
 
 ```bash
-mkdir ~/chronicle-hub && cd ~/chronicle-hub
+mkdir ~/interlatch-hub && cd ~/interlatch-hub
 base=https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker
 curl -fsSL "$base/compose.yaml" -o compose.yaml
 curl -fsSL "$base/Caddyfile" -o Caddyfile
@@ -80,10 +80,10 @@ nano .env
 次の 4 行を設定します。nano では Ctrl+O のあと Enter で保存、Ctrl+X で終了します。
 
 ```bash
-CHRONICLE_DOMAIN=chronicle.example.com   # ハブの名前
-CHRONICLE_ADMIN_EMAIL=you@example.com    # 最初の管理者（あなた）
-CHRONICLE_ADMIN_NAME=You
-POSTGRES_PASSWORD=...                    # コピーしたパスワード
+INTERLATCH_DOMAIN=interlatch.example.com  # ハブの名前
+INTERLATCH_ADMIN_EMAIL=you@example.com    # 最初の管理者（あなた）
+INTERLATCH_ADMIN_NAME=You
+POSTGRES_PASSWORD=...                     # コピーしたパスワード
 ```
 
 ### 3. 起動する
@@ -98,19 +98,19 @@ docker compose logs hub
 ```text
 Added You (you@example.com) as this hub's admin. The invite works once, for 7 days:
 
-  In a browser, to open the hub's dashboard:  https://chronicle.example.com/signin?code=ABCD-EFGH-JKLM
-  Or on their computer, to join it:           chronicle hub join https://chronicle.example.com --code ABCD-EFGH-JKLM --share knowledge
+  In a browser, to open the hub's dashboard:  https://interlatch.example.com/signin?code=ABCD-EFGH-JKLM
+  Or on their computer, to join it:           interlatch hub join https://interlatch.example.com --code ABCD-EFGH-JKLM --share knowledge
 ```
 
 これが表示されるのは**ハブの最初の起動のときだけ**です。再起動しても利用者はそのままで、招待は表示されません。
 見逃したときや期限が切れたときは、新しく作ります。
 
 ```bash
-docker compose exec hub chronicle hub invite you@example.com
+docker compose exec hub interlatch hub invite you@example.com
 ```
 
 ハブに管理者ができるまで、コンテナーは何も提供しません。利用者のいないハブにはサインインがなく、そのダッシュボードは
-プロキシ経由の人には誰にも応答しないため、`CHRONICLE_ADMIN_EMAIL` なしで起動するとエラーで止まり、何も提供しません。
+プロキシ経由の人には誰にも応答しないため、`INTERLATCH_ADMIN_EMAIL` なしで起動するとエラーで止まり、何も提供しません。
 
 ### 4. サインインする
 
@@ -125,12 +125,12 @@ docker compose exec hub chronicle hub invite you@example.com
 **Create project** を選びます。
 
 古いイメージにはこのボタンがありません。その場合、プロジェクトはプロジェクト名を付けたハブのコンピューター上のフォルダーで、
-サーバーの `~/chronicle-hub` で作ります。
+サーバーの `~/interlatch-hub` で作ります。
 
 ```bash
 docker compose exec hub mkdir -p /data/projects/Website
-docker compose exec hub chronicle hub project add /data/projects/Website
-docker compose exec hub chronicle hub project list
+docker compose exec hub interlatch hub project add /data/projects/Website
+docker compose exec hub interlatch hub project list
 ```
 
 あとは各コンピューターがそれぞれのフォルダーをプロジェクトに加えます（次の節）。あるコンピューターが git リポジトリのセッションを送ると、同じリポジトリのほかの
@@ -141,23 +141,23 @@ docker compose exec hub chronicle hub project list
 変えてください。一覧はまるごと置き換わるので、残すプロジェクトもすべて指定します。`Mobile` が見えている人なら：
 
 ```bash
-docker compose exec hub chronicle hub people
-docker compose exec hub chronicle hub access <メールアドレスか ID> --project Mobile --project Website
+docker compose exec hub interlatch hub people
+docker compose exec hub interlatch hub access <メールアドレスか ID> --project Mobile --project Website
 ```
 
 ## 自分のコンピューターをつなぐ
 
-自分のコンピューターも、チームメイトと同じように参加します。専用の招待と、その招待が表示する `chronicle hub join`
+自分のコンピューターも、チームメイトと同じように参加します。専用の招待と、その招待が表示する `interlatch hub join`
 コマンドを使います。まず、何を共有するかを決めます。
 
 - **そのプロジェクトだけ。** そのプロジェクトだけが見える人としてコンピューターを招待します。ブラウザーは管理者の
   サインインのままです。
 
     ```bash
-    docker compose exec hub chronicle hub invite "Your Mac" --project Website
+    docker compose exec hub interlatch hub invite "Your Mac" --project Website
     ```
 
-- **分析したすべて。** `docker compose exec hub chronicle hub invite you@example.com` で自分の新しいコードを作り、
+- **分析したすべて。** `docker compose exec hub interlatch hub invite you@example.com` で自分の新しいコードを作り、
   それで参加します。分析したコーディングエージェントのセッションすべての要約とプロジェクトのナレッジが送られ、
   すべてのプロジェクトがハブに現れます。
 
@@ -165,7 +165,7 @@ docker compose exec hub chronicle hub access <メールアドレスか ID> --pro
 
 招待はそれぞれ 2 つのものを表示し、そのコードは**どちらか一方に一度だけ**使えます。
 
-- **`chronicle hub join …` コマンド**はコンピューターをつなぎます。ターミナルで実行します。
+- **`interlatch hub join …` コマンド**はコンピューターをつなぎます。ターミナルで実行します。
 - **`https://…/signin?code=…` リンク**はダッシュボードを開きます。ブラウザーで開きます。
 
 リンクを開くとコードは使い切られ、コンピューターには新しいコードが必要になります。
@@ -173,10 +173,10 @@ docker compose exec hub chronicle hub access <メールアドレスか ID> --pro
 自分のコンピューターで：
 
 ```bash
-chronicle hub disable    # このコンピューター自体がハブの場合だけ
-chronicle hub leave      # ほかのハブに参加している場合だけ
-chronicle hub join https://chronicle.example.com --code XXXX-XXXX-XXXX --share knowledge --no-push
-chronicle hub add-folder ~/Projects/Website --project Website
+interlatch hub disable    # このコンピューター自体がハブの場合だけ
+interlatch hub leave      # ほかのハブに参加している場合だけ
+interlatch hub join https://interlatch.example.com --code XXXX-XXXX-XXXX --share knowledge --no-push
+interlatch hub add-folder ~/Projects/Website --project Website
 ```
 
 `add-folder` はすぐに送ります。`3 sessions shared … 300 excluded` のような結果は、そのプロジェクトの分析済みの
@@ -188,30 +188,30 @@ chronicle hub add-folder ~/Projects/Website --project Website
 サーバーで、1 人ずつ招待します。
 
 ```bash
-docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --project Website
+docker compose exec hub interlatch hub invite "Yuma" --email yuma@example.com --project Website
 ```
 
-リンクではなく `chronicle hub join …` の行を、[チームのハブに参加する](join-a-hub.md)と一緒に送ってください。
+リンクではなく `interlatch hub join …` の行を、[チームのハブに参加する](join-a-hub.md)と一緒に送ってください。
 残りの手順はそのページが案内します。コードは一度しか使えないので、両方は送らないでください。コンピューターが参加したあとは、
-本人の Chronicle からダッシュボードを開けます：**Settings › Devices › Open the hub's dashboard**、または
-`chronicle hub signin`。スマートフォン用や、ダッシュボードを見るだけの人には、
-`docker compose exec hub chronicle hub invite yuma@example.com`（または **Team › People** のその人の行の **New invite**）で
+本人の Interlatch からダッシュボードを開けます：**Settings › Devices › Open the hub's dashboard**、または
+`interlatch hub signin`。スマートフォン用や、ダッシュボードを見るだけの人には、
+`docker compose exec hub interlatch hub invite yuma@example.com`（または **Team › People** のその人の行の **New invite**）で
 新しいコードを作り、その**リンク**を送ります。
 
 ダッシュボードの **Team › People** でも、ロールと見えるプロジェクトを選んで招待できます。
 
 ## よく使うコマンド
 
-サーバーの `~/chronicle-hub` で：
+サーバーの `~/interlatch-hub` で：
 
 | すること | コマンド |
 |---|---|
-| 利用者と、それぞれに見えるものを一覧する | `docker compose exec hub chronicle hub people` |
-| 送ってくるコンピューターと、最後に送った時刻を見る | `docker compose exec hub chronicle hub status` |
-| プロジェクトを一覧する | `docker compose exec hub chronicle hub project list` |
-| すでにいる人の新しいコードを作る | `docker compose exec hub chronicle hub invite <メールアドレスか ID>` |
-| 見えるプロジェクトを変える | `docker compose exec hub chronicle hub access <メールアドレスか ID> --project <名前>…`（残すプロジェクトもすべて指定。一覧は置き換わります） |
-| 利用者を外す | `docker compose exec hub chronicle hub remove <メールアドレスか ID>` |
+| 利用者と、それぞれに見えるものを一覧する | `docker compose exec hub interlatch hub people` |
+| 送ってくるコンピューターと、最後に送った時刻を見る | `docker compose exec hub interlatch hub status` |
+| プロジェクトを一覧する | `docker compose exec hub interlatch hub project list` |
+| すでにいる人の新しいコードを作る | `docker compose exec hub interlatch hub invite <メールアドレスか ID>` |
+| 見えるプロジェクトを変える | `docker compose exec hub interlatch hub access <メールアドレスか ID> --project <名前>…`（残すプロジェクトもすべて指定。一覧は置き換わります） |
+| 利用者を外す | `docker compose exec hub interlatch hub remove <メールアドレスか ID>` |
 | ハブのログを読む | `docker compose logs hub` |
 
 新しいコードを作るときは、メールアドレスか、`hub people` が表示する ID を使ってください。名前をもう一度入力すると、
@@ -219,9 +219,9 @@ docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --p
 
 コンテナーのハブはあなたのリポジトリでセッションを実行しないので、その git リモートを知りません。参加したら、メンバーは
 プロジェクトごとに自分のフォルダーを追加します。追加しないと、そのコンピューターは何も共有しません：
-`chronicle hub add-folder ~/work/demo-app --project demo-app`。ほかのフォルダーのセッションはそのコンピューターに残ります
+`interlatch hub add-folder ~/work/demo-app --project demo-app`。ほかのフォルダーのセッションはそのコンピューターに残ります
 （[ナレッジだけを共有する](devices.md#ナレッジだけを共有する)）。コンピューターが送ったものを取り消すには：
-`docker compose exec hub chronicle hub purge bob@example.com --project demo-app`
+`docker compose exec hub interlatch hub purge bob@example.com --project demo-app`
 （[コンピューターが送ったものを取り消す](devices.md#コンピューターが送ったものを取り消す)）。
 
 ## ハブが受け取るもの
@@ -237,9 +237,9 @@ docker compose exec hub chronicle hub invite "Yuma" --email yuma@example.com --p
 Claude Code も Codex も入っていないので、ここでは使えません。
 
 ```bash
-docker compose exec hub chronicle config set hub.accept everything
-docker compose exec hub chronicle config set analysis.backend anthropic
-docker compose exec hub chronicle config set-key anthropic   # キーを尋ねられます
+docker compose exec hub interlatch config set hub.accept everything
+docker compose exec hub interlatch config set analysis.backend anthropic
+docker compose exec hub interlatch config set-key anthropic   # キーを尋ねられます
 docker compose restart hub
 ```
 
@@ -249,27 +249,28 @@ docker compose restart hub
 
 コンテナーは起動のたびに、次の変数から `config.toml` を設定します。値のある変数は `config.toml` より優先され、
 未設定または空の変数は `config.toml` をそのままにします。それ以外の設定は `config.toml` に残ります。
-`docker compose exec hub chronicle config set ...` で変更し、ハブを再起動してください。
+`docker compose exec hub interlatch config set ...` で変更し、ハブを再起動してください。どの変数も、名前が変わる前の
+名前（`INTERLATCH_HUB_URL` なら `CHRONICLE_HUB_URL`）でも読み込むので、以前の `.env` もそのまま使えます。
 
 | 変数 | 既定値 | |
 |---|---|---|
-| `CHRONICLE_HUB_URL` | （必須） | コンピューターとブラウザーがハブに届くアドレス。`[hub] address` になり、そのホスト名が `[server] allowed_hosts` に加わります。`compose.yaml` は `CHRONICLE_DOMAIN` から設定します。 |
-| `CHRONICLE_ADMIN_EMAIL` | （最初は必須） | 最初の管理者。ハブに利用者がいないときに追加されます。 |
-| `CHRONICLE_ADMIN_NAME` | メールアドレスの @ より前 | その人の名前。 |
-| `CHRONICLE_HUB_NAME` | `Chronicle hub` | ダッシュボードに表示される名前（`[hub] name`）。 |
-| `CHRONICLE_HOST` | `0.0.0.0` | ダッシュボードが待ち受けるアドレス。`compose.yaml` は `127.0.0.1` にします。ハブは Caddy のネットワークを共有するので、届くのは Caddy だけです。 |
-| `CHRONICLE_PORT` | `11524` | ダッシュボードのポート。 |
-| `CHRONICLE_ALLOWED_HOSTS` | | ダッシュボードが応答するほかの名前（カンマ区切り）。 |
-| `CHRONICLE_TRUSTED_PROXIES` | `127.0.0.1, ::1` | ハブが `X-Forwarded-Proto` を信じるプロキシのアドレス（カンマ区切り）。自分のプロキシからコンテナーに転送するときに設定します（[下記](#自分のプロキシを使う)）。 |
-| `CHRONICLE_TEAM_STORE` | | `postgres` にすると、チームストアを Postgres に置き、`PGHOST`、`PGDATABASE`、`PGUSER`、`PGPASSWORD`、`PGSSLMODE` で接続します。`compose.yaml` はすべて設定済みです。 |
-| `CHRONICLE_WORK_MINUTES` | `15` | ハブが送られてきたものを読み込み、バックグラウンドの処理を実行する間隔（分）。`0` で止めます。 |
+| `INTERLATCH_HUB_URL` | （必須） | コンピューターとブラウザーがハブに届くアドレス。`[hub] address` になり、そのホスト名が `[server] allowed_hosts` に加わります。`compose.yaml` は `INTERLATCH_DOMAIN` から設定します。 |
+| `INTERLATCH_ADMIN_EMAIL` | （最初は必須） | 最初の管理者。ハブに利用者がいないときに追加されます。 |
+| `INTERLATCH_ADMIN_NAME` | メールアドレスの @ より前 | その人の名前。 |
+| `INTERLATCH_HUB_NAME` | `Interlatch hub` | ダッシュボードに表示される名前（`[hub] name`）。 |
+| `INTERLATCH_HOST` | `0.0.0.0` | ダッシュボードが待ち受けるアドレス。`compose.yaml` は `127.0.0.1` にします。ハブは Caddy のネットワークを共有するので、届くのは Caddy だけです。 |
+| `INTERLATCH_PORT` | `11524` | ダッシュボードのポート。 |
+| `INTERLATCH_ALLOWED_HOSTS` | | ダッシュボードが応答するほかの名前（カンマ区切り）。 |
+| `INTERLATCH_TRUSTED_PROXIES` | `127.0.0.1, ::1` | ハブが `X-Forwarded-Proto` を信じるプロキシのアドレス（カンマ区切り）。自分のプロキシからコンテナーに転送するときに設定します（[下記](#自分のプロキシを使う)）。 |
+| `INTERLATCH_TEAM_STORE` | | `postgres` にすると、チームストアを Postgres に置き、`PGHOST`、`PGDATABASE`、`PGUSER`、`PGPASSWORD`、`PGSSLMODE` で接続します。`compose.yaml` はすべて設定済みです。 |
+| `INTERLATCH_WORK_MINUTES` | `15` | ハブが送られてきたものを読み込み、バックグラウンドの処理を実行する間隔（分）。`0` で止めます。 |
 
 ハブが保持するものはすべて `hub-data` ボリューム（コンテナー内の `/data`）にあります。チームストアのデータは
 `postgres-data` ボリュームにあります。
 
 管理者は、ハブのダッシュボードの **Team › Hub settings** でもハブの設定を確認できます：名前、アドレス、
 **Knowledge only**、各プロジェクトのナレッジベースを書くモデル、更新、下記のバックアップのコマンドです。
-名前とアドレスは、`CHRONICLE_HUB_NAME` や `CHRONICLE_HUB_URL` が決めている間はそこで変更できません（起動のたびに
+名前とアドレスは、`INTERLATCH_HUB_NAME` や `INTERLATCH_HUB_URL` が決めている間はそこで変更できません（起動のたびに
 書き直されるため）。`.env` の変数を変えて `docker compose up -d` を実行してください。
 
 ## 自分の証明書を使う
@@ -289,8 +290,8 @@ services:
 そして `Caddyfile` に `tls` の行を加えます。
 
 ```text
-{$CHRONICLE_DOMAIN} {
-	tls /certs/chronicle.crt /certs/chronicle.key
+{$INTERLATCH_DOMAIN} {
+	tls /certs/interlatch.crt /certs/interlatch.key
 	reverse_proxy 127.0.0.1:11524
 }
 ```
@@ -304,16 +305,16 @@ Caddy のルート証明書を信頼する必要があります。
 [Tailscale を使わずにハブにつなぐ](devices.md#tailscale-を使わずにハブにつなぐ)と同じ構成です。
 
 ```bash
-docker run -d --name chronicle-hub --restart unless-stopped -p 11524:11524 -v chronicle-hub:/data \
-  -e CHRONICLE_HUB_URL=https://chronicle.example.internal -e CHRONICLE_ADMIN_EMAIL=you@example.com \
-  -e CHRONICLE_TRUSTED_PROXIES=10.0.4.12 ghcr.io/chatixia-ai/chronicle-hub
+docker run -d --name interlatch-hub --restart unless-stopped -p 11524:11524 -v interlatch-hub:/data \
+  -e INTERLATCH_HUB_URL=https://interlatch.example.internal -e INTERLATCH_ADMIN_EMAIL=you@example.com \
+  -e INTERLATCH_TRUSTED_PROXIES=10.0.4.12 ghcr.io/chatixia-ai/interlatch-hub
 ```
 
-`CHRONICLE_TRUSTED_PROXIES` には、コンテナーから見たプロキシのアドレスを設定します。こうするとハブはプロキシの
+`INTERLATCH_TRUSTED_PROXIES` には、コンテナーから見たプロキシのアドレスを設定します。こうするとハブはプロキシの
 `X-Forwarded-Proto` を信じ、サインインの Cookie に `Secure` を付けます。同じサーバー上のプロキシが公開ポートに
 つなぐ場合、たいていは Docker のブリッジのゲートウェイ `172.17.0.1` です。ポート 11524 にはプロキシだけが
 届くようにしてください。チームストアがないと、共有したコンピューターにチームメイトのナレッジは返りません。
-Postgres を加えるには `CHRONICLE_TEAM_STORE=postgres` と `PG*` 変数を設定します。
+Postgres を加えるには `INTERLATCH_TEAM_STORE=postgres` と `PG*` 変数を設定します。
 
 ## 更新する
 
@@ -328,8 +329,15 @@ docker compose up -d
 自分で加える変更は `compose.yaml` ではなく `compose.override.yaml` に書きます（[自分の証明書を使う](#自分の証明書を使う)と同じです）。
 Postgres は 17 のままです。新しいメジャーバージョンは、移行しないと古いバージョンのデータを読めません。
 
-バージョンを固定するには、`.env` の `CHRONICLE_VERSION` を設定します（例：`0.13.0`）。ダッシュボードからはコンテナーを
-アップデートできません。**Status** には、代わりに新しいイメージを取得するよう表示されます。
+バージョンを固定するには、`.env` の `INTERLATCH_VERSION` にリリースのバージョン番号を設定します。ダッシュボードからは
+コンテナーをアップデートできません。**Status** には、代わりに新しいイメージを取得するよう表示されます。
+
+**Chronicle として用意したハブ**も同じ手順で移行できます。新しい `compose.yaml`（`Caddyfile` も、変更していなければ）を
+ダウンロードし、`.env` はそのままにして、上と同じく取得と起動をします。`docker compose logs hub` に
+`Interlatch hub is up` と表示されます。データは移動しません。ボリューム、Postgres のデータベースとユーザー（`chronicle`）、
+`/data` のデータはそのままです。`.env` で名前が変わる前のバージョンを固定している（`CHRONICLE_VERSION=0.13.0`）場合は、
+その行を削除してください。`interlatch-hub` のイメージにはそれほど古いタグがありません。古い `compose.yaml` のまま取得する
+だけのハブも動き続けます。`ghcr.io/chatixia-ai/chronicle-hub` にも各リリースが届きます（[Chronicle からの移行](moving-from-chronicle.md)）。
 
 ## バックアップする
 
@@ -337,7 +345,7 @@ Postgres は 17 のままです。新しいメジャーバージョンは、移�
 
 ```bash
 docker compose exec hub python -c "import sqlite3; sqlite3.connect('/data/chronicle.db').backup(sqlite3.connect('/data/backup.db'))"
-docker compose cp hub:/data/backup.db ./chronicle-backup.db
+docker compose cp hub:/data/backup.db ./interlatch-backup.db
 docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql
 ```
 
@@ -346,15 +354,15 @@ docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql
 ## トラブルシューティング
 
 **ログに招待が出ない。** 最初の管理者の招待は、ハブの最初の起動のときだけ表示されます。
-`docker compose exec hub chronicle hub invite you@example.com` で新しく作ってください。
+`docker compose exec hub interlatch hub invite you@example.com` で新しく作ってください。
 
 **起動の直後にページがエラーになる。** Caddy はハブより先に起動し、ハブが起動するまでの数秒間はエラーを返します。
 ページを再読み込みしてください。
 
 **コンピューター用のコードをブラウザーで開いてしまった、または期限が切れた。** その人のメールアドレスか ID で新しい
-コードを作ります（例：`docker compose exec hub chronicle hub invite 3`）。
+コードを作ります（例：`docker compose exec hub interlatch hub invite 3`）。
 
-**`chronicle hub join` が、このコンピューターはハブだと言う。** 先にそのコンピューターで `chronicle hub disable` を
+**`interlatch hub join` が、このコンピューターはハブだと言う。** 先にそのコンピューターで `interlatch hub disable` を
 実行します。保持しているものはそのまま残りますが、ほかのコンピューターはそこへ送れなくなります。
 
 **自分のダッシュボード `http://127.0.0.1:11524/` が応答しなくなった。** VS Code の Remote-SSH でサーバーにつなぎ、
@@ -362,7 +370,7 @@ docker compose exec -T postgres pg_dump -U chronicle chronicle > team-store.sql
 VS Code がそのポートを自分のコンピューターへ転送して、自分のダッシュボードの前に立ってしまいます。サーバーにつないだ
 VS Code のウィンドウ（隅に **SSH: …** と表示されるもの）で **Ports** を開き、11524 を右クリックして **Stop
 Forwarding Port** を選びます。VS Code の設定に `"remote.portsAttributes": { "11524": { "onAutoForward": "ignore" } }` を
-加えると、再発しません。以降のイメージは代わりに `Chronicle hub is up: <ハブのアドレス>` と表示します。
+加えると、再発しません。以降のイメージは代わりに `Interlatch hub is up: <ハブのアドレス>`（名前が変わる前は `Chronicle hub is up`）と表示します。
 
 **HTTPS がつながらない。** 名前がサーバーの IP アドレスを指しているか、ポート 80 と 443 が開いているか、
 `docker compose logs caddy` の内容を確認してください。社内ネットワークからしか届かないサーバーには Let's Encrypt が

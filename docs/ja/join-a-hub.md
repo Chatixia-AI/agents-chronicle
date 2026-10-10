@@ -1,11 +1,11 @@
 # チームのハブに参加する
 
-[← Chronicle](../../README.ja.md) · [ドキュメント一覧](README.md)
+[← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-チームが Chronicle のハブを運用していて、その管理者から次のようなコマンドが届いたとします。
+チームが Interlatch のハブを運用していて、その管理者から次のようなコマンドが届いたとします。
 
 ```bash
-chronicle hub join https://chronicle.example.com --code XXXX-XXXX-XXXX --share knowledge
+interlatch hub join https://interlatch.example.com --code XXXX-XXXX-XXXX --share knowledge
 ```
 
 このページでは、そのコマンドから始めて、チームのプロジェクトでコーディングエージェントが学んだことを共有し、
@@ -21,26 +21,27 @@ chronicle hub join https://chronicle.example.com --code XXXX-XXXX-XXXX --share k
 - **分析はこれまでどおりあなたのコンピューターで行います。** 使うのはあなたの Claude Code、Codex、またはモデル
   プロバイダーです。ハブは何も分析しません。
 
-## 1. Chronicle をインストールする
+## 1. Interlatch をインストールする
 
-インストール済みなら飛ばしてください。
+インストール済みなら飛ばしてください。以前の名前の Chronicle が入っている場合は、代わりに
+[Chronicle からの移行](moving-from-chronicle.md)を読んでください。
 
 ```bash
-uv tool install --python 3.13 agents-chronicle
-chronicle install
+uv tool install --python 3.13 interlatch
+interlatch install
 ```
 
-`chronicle install` の選択肢は[インストール](install.md)で説明しています。
+`interlatch install` の選択肢は[インストール](install.md)で説明しています。
 
 ## 2. ハブに参加する
 
 すでにほかのハブに送っている場合は、先にそこから抜けます。
 
 ```bash
-chronicle hub leave
+interlatch hub leave
 ```
 
-そのうえで、管理者から届いた `chronicle hub join …` コマンドをターミナルで実行します。共有するプロジェクトが
+そのうえで、管理者から届いた `interlatch hub join …` コマンドをターミナルで実行します。共有するプロジェクトが
 表示されます。
 
 ```text
@@ -48,14 +49,14 @@ Projects you share with it: Website. Add your folder for each one: …
 ```
 
 コードは 7 日間、一度だけ使えます。ブラウザーでリンクとして開いても使い切られるので、この手順にはリンクではなく
-`chronicle hub join` コマンドを管理者にもらってください。
+`interlatch hub join` コマンドを管理者にもらってください。
 
 ## 3. プロジェクトのフォルダーを加える
 
 プロジェクトがあなたのコンピューターのどこにあるかをハブに伝えます。
 
 ```bash
-chronicle hub add-folder ~/code/website --project Website
+interlatch hub add-folder ~/code/website --project Website
 ```
 
 フォルダーはあなたのコンピューターでのプロジェクトのフォルダー、名前は手順 2 で表示されたプロジェクト名です。
@@ -72,7 +73,7 @@ chronicle hub add-folder ~/code/website --project Website
 ## 4. 確認する
 
 ```bash
-chronicle hub status
+interlatch hub status
 ```
 
 ハブのアドレス、最後に送った時刻、受け取ったチームメイトのナレッジの数が表示されます。ダッシュボードの
@@ -82,24 +83,24 @@ chronicle hub status
 ## その後
 
 - **分析のたびに、** あなたのコンピューターはプロジェクトの新しい要約とナレッジを送ります。今すぐ送るには
-  `chronicle push`、または **Settings › Devices** の **Share now** を使います。
-- **送るたびに、** チームメイトがそのプロジェクトで学んだことが返ってきます。エージェントは Chronicle の MCP
+  `interlatch push`、または **Settings › Devices** の **Share now** を使います。
+- **送るたびに、** チームメイトがそのプロジェクトで学んだことが返ってきます。エージェントは Interlatch の MCP
   ツールを通じて、チームメイトのものと分かる形でそのナレッジを使えます。セッション開始時のメモを有効にしている場合
-  （`chronicle install --inject-context`）、新しいセッションの "From teammates' sessions" にも並びます。
+  （`interlatch install --inject-context`）、新しいセッションの "From teammates' sessions" にも並びます。
 - **あなたのダッシュボード**には、これまでどおりあなた自身のセッションが表示されます。チームメイトのナレッジは、
   プロジェクトのページと **All knowledge** に、どのコンピューターから来たかを示して並びます。**Settings › Devices** の
   **Read them** でそれだけの一覧が開きます。
 
 一つのプロジェクトへの共有をやめるには、**Settings › Devices** でその横の **Leave** を選びます（または
-`chronicle hub leave --project <name>`）。そこで共有したものはハブに残ります。間違ったフォルダーを追加したときは、
+`interlatch hub leave --project <name>`）。そこで共有したものはハブに残ります。間違ったフォルダーを追加したときは、
 その横の **Remove** でフォルダーを外すと、あなたのコンピューターがそこから共有したものをハブが削除します。送るのを
-すべてやめるには **Leave the hub…** を選びます（または `chronicle hub leave`）。すでに送ったものはハブに残ります。
+すべてやめるには **Leave the hub…** を選びます（または `interlatch hub leave`）。すでに送ったものはハブに残ります。
 
 ## うまくいかないとき
 
 - **コードが使えない。** すでに使われたか、7 日を過ぎています。管理者に新しいコードをもらってください。
 - **「this hub takes knowledge only」と表示される。** トランスクリプトを送る設定になっています。
-  `chronicle config set hub.share knowledge` を実行してから `chronicle push` を実行してください。
+  `interlatch config set hub.share knowledge` を実行してから `interlatch push` を実行してください。
 - **「This computer is a hub itself」と表示される。** あなたのコンピューターは、ほかのコンピューターが送ってくる
-  ハブになっています。用意した人に確認してから、参加の前に `chronicle hub disable` を実行してください。
+  ハブになっています。用意した人に確認してから、参加の前に `interlatch hub disable` を実行してください。
 - **証明書のエラーが出る。** あなたのコンピューターがハブの HTTPS 証明書を信頼していません。管理者に伝えてください。

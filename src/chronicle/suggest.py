@@ -5,7 +5,7 @@ instruction line, a config change, or a setup step for you to run), and knowledg
 one. Nothing is written until a suggestion is applied. A dismissed suggestion never comes back, text you edited
 before applying is kept, and a proposal whose cause stopped happening goes stale instead of nagging.
 
-Applying writes only inside Chronicle's block of an instruction file (instructions.py), or adds the missing
+Applying writes only inside Interlatch's block of an instruction file (instructions.py), or adds the missing
 Playwright MCP arguments to ~/.claude.json. Environment steps are shown, never run: you mark them done.
 """
 
@@ -128,7 +128,7 @@ def playwright_output_dir() -> str:
 
 
 def fix_text(fix: dict, cfg: Config) -> str:
-    """A catalog fix's text in the language Chronicle writes in: instruction lines have a Japanese version (text_ja);
+    """A catalog fix's text in the language Interlatch writes in: instruction lines have a Japanese version (text_ja);
     commands and config changes are the same in every language."""
     text = fix.get("text_ja") if cfg.analysis.language == "ja" and fix.get("text_ja") else fix["text"]
     return text.replace("{playwright_output_dir}", playwright_output_dir())
@@ -363,7 +363,7 @@ def move(conn: sqlite3.Connection, cfg: Config, sid: int, to: str) -> dict:
 
 
 def _in_file(p: dict) -> bool:
-    """The target file's Chronicle block already holds this proposal's line, by its marker."""
+    """The target file's Interlatch block already holds this proposal's line, by its marker."""
     if p["kind"] != "instruction" or not p["target_path"]:
         return False
     try:
@@ -406,13 +406,13 @@ def after_sync(conn: sqlite3.Connection, cfg: Config) -> dict[str, int] | None:
     if cfg.suggestions_notify and report["new"] > 0:
         from .notify import post
 
-        post("Chronicle", f"{report['new']} new suggestion{'s' if report['new'] != 1 else ''}. "
+        post("Interlatch", f"{report['new']} new suggestion{'s' if report['new'] != 1 else ''}. "
                           "Open the dashboard > Suggestions")
     return report
 
 
 # ---------------------------------------------------------------- config changes (~/.claude.json)
-# the only config change Chronicle makes: these flags, on a Playwright MCP server (an edited text cannot widen it)
+# the only config change Interlatch makes: these flags, on a Playwright MCP server (an edited text cannot widen it)
 CONFIG_FLAGS = {"--isolated": False, "--output-dir": True}  # flag -> takes a value
 
 
@@ -428,11 +428,11 @@ def parse_config_change(text: str) -> tuple[str, list[str]]:
     if not isinstance(args, list) or not all(isinstance(a, str) for a in args):
         raise ValueError(tr("the arguments must be a JSON list of strings"))
     if "playwright" not in m.group(1).lower():
-        raise ValueError(tr("Chronicle only changes the Playwright MCP server's arguments"))
+        raise ValueError(tr("Interlatch only changes the Playwright MCP server's arguments"))
     i = 0
     while i < len(args):
         if args[i] not in CONFIG_FLAGS:
-            raise ValueError(tr("Chronicle does not set {arg!r}; only {flags}", arg=args[i], flags=", ".join(CONFIG_FLAGS)))
+            raise ValueError(tr("Interlatch does not set {arg!r}; only {flags}", arg=args[i], flags=", ".join(CONFIG_FLAGS)))
         if CONFIG_FLAGS[args[i]]:
             i += 1
             if i >= len(args) or not args[i].startswith("/"):
@@ -536,7 +536,7 @@ def _plan(s: dict, text: str, *, remove: bool = False) -> tuple[Path, str, str]:
     if s["kind"] == "config":
         old, new = plan_config(path, text, remove=remove)
         return path, old, new
-    raise ValueError(tr("{kind} suggestions are not written by Chronicle", kind=s["kind"]))
+    raise ValueError(tr("{kind} suggestions are not written by Interlatch", kind=s["kind"]))
 
 
 def preview(conn: sqlite3.Connection, cfg: Config, sid: int, text: str | None = None) -> dict:
@@ -562,7 +562,7 @@ def apply(conn: sqlite3.Connection, cfg: Config, sid: int, text: str | None = No
     if s is None:
         return {"ok": False, "error": tr("no such suggestion")}
     if s["kind"] == "environment":
-        return {"ok": False, "error": tr("Chronicle does not run setup steps: run the command yourself, then mark it done")}
+        return {"ok": False, "error": tr("Interlatch does not run setup steps: run the command yourself, then mark it done")}
     text = one_line(text, 2000) if text is not None and s["kind"] == "instruction" else (text or s["text"]).strip()
     applied = text
     evidence = dict(s["evidence"])
@@ -598,7 +598,7 @@ def unapply(conn: sqlite3.Connection, cfg: Config, sid: int) -> dict:
             path, old, new = _plan(s, s["applied_text"] or s["text"], remove=True)
             if not new.strip() and s["evidence"].get("created_file") and s["kind"] == "instruction":
                 instructions.write_atomic(path, new, cfg=cfg, mkdir=False)  # backs it up first
-                Path(os.path.realpath(path)).unlink(missing_ok=True)  # Chronicle made this file: leave none behind
+                Path(os.path.realpath(path)).unlink(missing_ok=True)  # Interlatch made this file: leave none behind
             elif new != old:
                 instructions.write_atomic(path, new, cfg=cfg, mkdir=not s["project_path"])
             diff = _diff(old, new, path)

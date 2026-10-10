@@ -2,7 +2,7 @@
 
 Claude Code hands its status-line command a JSON snapshot after every turn: the context window in use and, for
 Pro and Max plans, how much of the 5-hour and 7-day limits are used. That is the only place those numbers exist,
-so `chronicle install --statusline` points the status line at `chronicle statusline`, which
+so `interlatch install --statusline` points the status line at `interlatch statusline`, which
 
 1. records the snapshot for its session (atomically: a reader never sees half a file), then
 2. runs the status-line command the user already had, with the same input, and prints its output unchanged; with
@@ -50,7 +50,7 @@ def wrapped_path() -> Path:
 
 def is_ours(status_line) -> bool:
     cmd = (status_line or {}).get("command") if isinstance(status_line, dict) else None
-    return bool(cmd) and "chronicle" in cmd and f"{COMMAND_MARKER} " in f" {cmd} "
+    return bool(cmd) and ("interlatch" in cmd or "chronicle" in cmd) and f"{COMMAND_MARKER} " in f" {cmd} "
 
 
 # ------------------------------------------------------------------ the command Claude Code runs
@@ -64,14 +64,14 @@ def main() -> int:
         if isinstance(payload, dict):
             record(payload)
     except Exception as exc:  # a broken record must never break the user's status line
-        print(f"chronicle statusline: {exc}", file=sys.stderr)
+        print(f"interlatch statusline: {exc}", file=sys.stderr)
     wrapped = _read_json(wrapped_path())
     command = wrapped.get("command") if isinstance(wrapped, dict) else None
     if command:
         try:
             done = subprocess.run(command, shell=True, input=raw, capture_output=True, timeout=30, check=False)
         except (OSError, subprocess.SubprocessError) as exc:
-            print(f"chronicle statusline: {exc}", file=sys.stderr)
+            print(f"interlatch statusline: {exc}", file=sys.stderr)
             return 0
         sys.stdout.buffer.write(done.stdout)
         sys.stderr.buffer.write(done.stderr)

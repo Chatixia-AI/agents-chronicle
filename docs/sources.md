@@ -1,10 +1,10 @@
 # Sources: Claude Code, Codex, GitHub Copilot, IBM Bob, Google Antigravity
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
-`chronicle sources` (or the dashboard's **Sources** tab) shows each coding agent: detected or not, version,
+`interlatch sources` (or the dashboard's **Sources** tab) shows each coding agent: detected or not, version,
 sessions on disk vs. recorded and analyzed, how it is recorded, and whether its hook and MCP server are in
-place. Connect or disconnect from the dashboard or with `chronicle connect <agent>` / `chronicle disconnect <agent>`
+place. Connect or disconnect from the dashboard or with `interlatch connect <agent>` / `interlatch disconnect <agent>`
 (`claude`, `codex`, `codex-cloud`, `copilot`, `bob`, `antigravity`; recorded sessions are always kept). Every source maps onto the same session
 model, so sessions from all agents share the dashboard, analysis, knowledge bases, glossary and MCP tools.
 
@@ -16,7 +16,7 @@ model, so sessions from all agents share the dashboard, analysis, knowledge base
   a code-mode `exec` script is named after the tool it calls), file edits (`FileChange` items or patches), real
   exit codes (result chunks, `CommandExecution` items, and long-running cells finished by `wait`), token usage
   per response, compactions and interrupts;
-- registers the MCP server in Codex (`codex mcp add chronicle`), so Codex can search every session, Claude's too;
+- registers the MCP server in Codex (`codex mcp add interlatch`), so Codex can search every session, Claude's too;
 - **recovers Claude Code sessions** that Codex Desktop imported: when Claude Code has already deleted the
   original transcript, Codex's copy becomes a full session (`source = codex-import`); duplicates are skipped.
 
@@ -24,16 +24,16 @@ Codex has no session-end hook (and its single `notify` slot may be taken by anot
 are picked up by the 15-minute background sync once idle. GPT token costs use OpenAI list prices; newer GPT
 models without a published price are estimated at GPT-5 rates.
 
-**Codex Cloud** (tasks at chatgpt.com/codex) is a separate opt-in (`chronicle connect codex-cloud`), because it
+**Codex Cloud** (tasks at chatgpt.com/codex) is a separate opt-in (`interlatch connect codex-cloud`), because it
 goes online: every sync runs `codex cloud list` with your Codex login (`codex login`), then `codex cloud diff` for
 each new or changed task. Each task becomes a Codex session (`source = codex-cloud`) with its title, repository,
 status, changed files with line counts, the diff and a link to the task; it joins your local project when the
 repository name matches one. The Codex CLI does not give a cloud task's conversation, so these sessions have no
-prompts and are not analyzed. The task and its diff are archived in `~/.claude-chronicle/archive/codex-cloud/` and
+prompts and are not analyzed. The task and its diff are archived in `~/.interlatch/archive/codex-cloud/` and
 stay after the task expires in the cloud. If listing fails (not logged in, offline), the Sources card says why and
 the next sync tries again.
 
-**GitHub Copilot** is opt-in (`chronicle connect copilot`). It records two stores:
+**GitHub Copilot** is opt-in (`interlatch connect copilot`). It records two stores:
 
 - Copilot agent sessions in `~/.copilot/session-state/<id>/events.jsonl` (Copilot CLI and VS Code's Copilot
   agent host): prompts, replies, reasoning, tool calls with results and durations, and line totals. Token usage
@@ -43,19 +43,19 @@ the next sync tries again.
   These logs do not split cached input from uncached input, so they carry token counts but no cost estimate.
 
 Connecting also registers the MCP server in VS Code (`User/mcp.json`) and the Copilot CLI (`~/.copilot/mcp-config.json`).
-Both files are backed up to `~/.claude-chronicle/backups/` first, and other servers in them are kept.
+Both files are backed up to `~/.interlatch/backups/` first, and other servers in them are kept.
 
-**IBM Bob** is opt-in (`chronicle connect bob`). It reads tasks and messages from `~/.bob/db/bob.db`, read-only,
+**IBM Bob** is opt-in (`interlatch connect bob`). It reads tasks and messages from `~/.bob/db/bob.db`, read-only,
 and archives a SQLite snapshot of that database; nothing else in `~/.bob` (e.g. login state) is read. The Bob IDE and
 Bob Shell (the `bob` command) both keep their tasks in that database, so tasks from either are recorded; the IDE keeps
 no other conversation files locally. Connecting registers the MCP server in `~/.bob/settings/mcp.json`, which Bob 2.x
 and Bob Shell read, and in `~/.bob/settings/mcp_settings.json` for older Bob IDE versions. If `mcp.json` doesn't exist
 yet, it is first copied from `mcp_settings.json`, as Bob itself does, so your other MCP servers carry over.
 
-**Google Antigravity** is opt-in (`chronicle connect antigravity`). Antigravity keeps each conversation in its own
+**Google Antigravity** is opt-in (`interlatch connect antigravity`). Antigravity keeps each conversation in its own
 store under `~/.gemini/antigravity/conversations/` (encrypted in older versions, a SQLite database in newer ones), and
 also writes a plain step log beside the agent's artifacts: `brain/<id>/.system_generated/logs/transcript_full.jsonl`
-(`transcript.jsonl` in older versions). Chronicle reads that log: prompts (artifact approvals included), replies,
+(`transcript.jsonl` in older versions). Interlatch reads that log: prompts (artifact approvals included), replies,
 thinking, tool calls with their results and durations, background-task notices and tokens per model call. From a
 newer version's conversation database, opened read-only, it adds the workspace folder, git branch and remote, and the
 model; the title comes from `annotations/<id>.pbtxt`. The log and the task, plan and walkthrough Markdown files are
@@ -66,7 +66,7 @@ registers the MCP server in `~/.gemini/config/mcp_config.json`, Antigravity's gl
 **Chats on claude.ai and ChatGPT** are not stored on your Mac, so they come in from a data export: on claude.ai,
 **Settings › Privacy › Export data**; on ChatGPT, **Settings › Data controls › Export data**. The email's link
 downloads a `.zip`. Import it with **Import export…** on the Sources page (card *Chat exports*), or
-`chronicle import <zip>` (the unpacked folder or `conversations.json` work too); which service it came from is
+`interlatch import <zip>` (the unpacked folder or `conversations.json` work too); which service it came from is
 recognized from its contents. Each chat becomes a session (agent `claude-ai` or `chatgpt`, `source =
 claude-ai-export` or `chatgpt-export`) with its prompts, replies, thinking, tool calls (claude.ai artifacts,
 ChatGPT's Python, browsing and image steps, with their output) and notes of attached files and images. claude.ai
@@ -87,7 +87,7 @@ Mac as an ordinary Claude Code transcript. Codex Cloud tasks are a separate sour
 Most of a chat history is lookups, rewrites and everyday questions that analysis would turn into nothing. Screening
 sorts the chats into **worth analyzing**, **maybe** and **not worth it**, with a topic and a one-line reason each,
 so the analysis goes where it pays. Choose **Screen N chats** on the export's card (Sources › Chat exports), or run
-`chronicle screen` (`--sample 200` tries it on a random 200 first, `--dry-run` only counts).
+`interlatch screen` (`--sample 200` tries it on a random 200 first, `--dry-run` only counts).
 
 - It reads only each chat's opening: title, date, the first and last prompt and the start of the first reply,
   redacted like everything sent for analysis.
@@ -101,10 +101,10 @@ so the analysis goes where it pays. Choose **Screen N chats** on the export's ca
 - About 3,400 ChatGPT chats take some 60 calls; with Claude the reported cost is a few dollars at API list price, drawn
   from your plan.
 
-Nothing is analyzed by screening. **Queue N worth analyzing** (or `chronicle screen --queue`, `--maybe` for the maybes
+Nothing is analyzed by screening. **Queue N worth analyzing** (or `interlatch screen --queue`, `--maybe` for the maybes
 too) puts them in the background queue, which analyzes a few every 15 minutes, newest first. The verdicts link to the
 Sessions list (filter *Screening*), where each chat shows its verdict and reason until it is analyzed; review the
-maybes there and **Analyze** the ones you want. `chronicle screen --list analyze|maybe|skip` shows the same on the
+maybes there and **Analyze** the ones you want. `interlatch screen --list analyze|maybe|skip` shows the same on the
 command line. A chat is screened once, and again when a newer export changes it; a queued chat stays queued.
 
 Claude Desktop, Cursor, Windsurf and Gemini CLI aren't recorded, but they can use the MCP server too. See

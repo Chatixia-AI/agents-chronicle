@@ -104,7 +104,7 @@ def waiting_reason(conn, cfg: Config, s) -> tuple[str, str] | None:
     if (s["n_prompts"] or 0) < cfg.analysis.min_prompts:
         return "too_short", tr("fewer than {n} prompts (analysis.min_prompts)", n=cfg.analysis.min_prompts)
     if not cfg.analysis.backfill and (s["started_at"] or "") < (kv_get(conn, "installed_at") or "0000"):
-        return "before_install", tr("it started before Chronicle was installed, and analysis.backfill is off")
+        return "before_install", tr("it started before Interlatch was installed, and analysis.backfill is off")
     now = utcnow()
     if s["analysis_not_before"] and s["analysis_not_before"] > to_iso(now):
         return "retry", tr("retrying at {when} after a failed attempt ({reason})",
@@ -127,7 +127,7 @@ def queue_block(conn, cfg: Config, runner: Runner | None = None) -> str | None:
     if paused and paused > to_iso(utcnow()):
         return tr("analysis is paused until {when} (usage limit); it resumes by itself", when=local_str(paused, "%m-%d %H:%M"))
     if not cfg.analysis.auto:
-        return tr("automatic analysis is off (analysis.auto); analyze it from its page or with `chronicle analyze`")
+        return tr("automatic analysis is off (analysis.auto); analyze it from its page or with `interlatch analyze`")
     runner = runner or make_runner(cfg)
     if not runner.available():
         return tr("{reason}, so nothing can be analyzed", reason=runner.unavailable_reason())
@@ -197,7 +197,7 @@ def run_worker(cfg: Config, *, session_ids: list[str] | None = None, max_analyse
             report.shared = push_knowledge(cfg).summary()
         except HubError as exc:
             report.shared = f"not sent ({exc})"
-    if cfg.mirror_to and not session_ids:  # a background or `chronicle work` run: bring the mirror up to date
+    if cfg.mirror_to and not session_ids:  # a background or `interlatch work` run: bring the mirror up to date
         from .mirror import sync as mirror_sync
 
         report.mirrored = mirror_sync(cfg).summary()  # never raises; a missed write is caught up by the next run
@@ -233,7 +233,7 @@ def _run_locked(cfg: Config, conn, report: WorkReport, *, session_ids, max_analy
         except Exception:  # export problems must never block analysis
             conn.rollback()
             log.exception("markdown export failed")
-    if not session_ids:  # a background or `chronicle work` run, not one asked for specific sessions
+    if not session_ids:  # a background or `interlatch work` run, not one asked for specific sessions
         _suggestions(cfg, conn, report)
 
 

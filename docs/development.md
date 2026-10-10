@@ -1,22 +1,22 @@
 # Development
 
-[← Chronicle](../README.md) · [Docs index](README.md)
+[← Interlatch](../README.md) · [Docs index](README.md)
 
 ## Tests and a local install
 
 ```bash
 uv sync && uv run pytest -q        # ~300 tests, ~40 s: a fake `claude` binary and synthetic Codex, Copilot, Bob and Antigravity stores
 # redeploy: --reinstall picks up uncommitted edits too (uv rebuilds on its own only when pyproject.toml, the commit or a tag changes)
-uv tool install --force --reinstall --python 3.13 . && chronicle install   # install restarts the agents
+uv tool install --force --reinstall --python 3.13 . && interlatch install   # install restarts the agents
 ```
 
 ## macOS app
 
-`uv run --extra app chronicle app` runs it from the checkout (menu-bar actions that only make sense
-in the bundle, such as Open at Login, are hidden). `./packaging/macos/build.sh` builds `dist/Chronicle.app` and
-`dist/Chronicle-<version>-<arch>.dmg` (PyInstaller, ~30 s; `packaging/macos/Chronicle.spec`). One binary is both the
+`uv run --extra app interlatch app` runs it from the checkout (menu-bar actions that only make sense
+in the bundle, such as Open at Login, are hidden). `./packaging/macos/build.sh` builds `dist/Interlatch.app` and
+`dist/Interlatch-<version>-<arch>.dmg` (PyInstaller, ~30 s; `packaging/macos/Interlatch.spec`). One binary is both the
 app (no arguments) and the CLI (any arguments), which is how hooks and MCP servers run it. Unsigned builds are ad-hoc
-signed and run on the Mac that built them; to distribute, set `CHRONICLE_CODESIGN_IDENTITY` (a Developer ID
+signed and run on the Mac that built them; to distribute, set `INTERLATCH_CODESIGN_IDENTITY` (a Developer ID
 Application certificate) and `NOTARY_KEYCHAIN_PROFILE` (from `xcrun notarytool store-credentials`), and the script
 signs, notarizes and staples the DMG. `uv run --group build python packaging/macos/make_icon.py` exports the committed
 `packaging/macos/icon-3d.webp` artwork (rendered by `packaging/icons3d/render.py`) to the macOS `.icns`, README icon, dashboard logo, favicon and phone
@@ -52,8 +52,8 @@ unless it has the `no-changelog` label), then run **Actions → Release → Run
 workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/release.yml` works out the next version
 from the latest tag, runs the tests, creates the tag and the GitHub release (its notes are the `changelog.d/` files
 added since the previous tag),
-publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`), publishes the hub's image
-`ghcr.io/chatixia-ai/chronicle-hub` (tagged with the version and `latest`, for amd64 and arm64, built from that
+publishes `interlatch` to PyPI (trusted publishing, environment `pypi`), publishes the hub's image
+`ghcr.io/chatixia-ai/interlatch-hub` (tagged with the version and `latest`, for amd64 and arm64, built from that
 PyPI release) and attaches the DMG to the release
 (signed and notarized when the `MACOS_*` / `APPLE_*` secrets are set; see the workflow header). Last, it opens a
 pull request that moves those files' lines into `CHANGELOG.md` under `## <version> (<date>)` and deletes the files.
@@ -62,7 +62,7 @@ next one, and the next release doesn't wait for this pull request. If GitHub
 Actions may not create pull requests in this repository, the run fails at its last step, after publishing, with a
 link to open that pull request by hand.
 `dry run`, the default, runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
-To try the hub's image before a release: `uv build --wheel -o docker/wheels && docker build -t chronicle-hub
+To try the hub's image before a release: `uv build --wheel -o docker/wheels && docker build -t interlatch-hub
 docker` builds it from this checkout instead of PyPI ([A hub in Docker](docker.md)); CI's `docker` job does the
 same and checks that it starts.
 Publishing a release tagged `v<version>` on GitHub by hand still works too.
@@ -83,7 +83,7 @@ confirm the icon is in the menu bar of every display:
 
 ### One-time setup before the first release
 
-1. On PyPI, add a *pending publisher* (Account → Publishing): project `agents-chronicle`, owner
+1. On PyPI, add a *pending publisher* (Account → Publishing): project `interlatch`, owner
    `Chatixia-AI`, repository `agents-chronicle`, workflow `release.yml`, environment `pypi`.
 2. In the GitHub repository, create an environment named `pypi` (Settings → Environments).
 3. To ship a signed, notarized DMG (Apple Developer Program membership): export the *Developer ID Application*
@@ -96,7 +96,7 @@ confirm the icon is in the menu bar of every display:
 
 ## Documentation site
 
-<https://chronicle.chatixia.net/docs/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md`
+<https://interlatch.com/docs/> is built with MkDocs Material from `docs/` and the READMEs, unchanged: `README.md`
 and `README.ja.md` become the home pages, and `docs/_site/hooks.py` points links that leave `docs/` at GitHub.
 The website around it, landing page included, lives in
 [Chatixia-AI/chronicle-site](https://github.com/Chatixia-AI/chronicle-site), which builds these docs as they are and
@@ -132,8 +132,8 @@ left out of the MIT wheel and sdist. The core never imports it; [ee/README.md](.
 
 ## Trying a change
 
-`./dev.sh` starts the dashboard from the checkout on a copy of your archive in `~/.chronicle-sandbox/dev-sh`, so
-your own `~/.claude-chronicle` and an installed Chronicle are never touched. Its config records, analyzes and
+`./dev.sh` starts the dashboard from the checkout on a copy of your archive in `~/.interlatch-sandbox/dev-sh`, so
+your own `~/.interlatch` and an installed Interlatch are never touched. Its config records, analyzes and
 shares nothing. `--app` opens the macOS app window instead, `--menu-bar` adds the [menu-bar icon](install.md#the-menu-bar-icon) to the
 browser dashboard (as the login item shows it), `--demo` uses the [demo data](#demo-data), `--fresh`
 re-copies the archive, and `--tree ../agents-chronicle-<topic>` runs another worktree's code. The server reads the
@@ -146,15 +146,15 @@ web files once at startup, so restart it after editing `app.css` or `app.js`.
 
 ## Demo data
 
-`docs/demo/make_demo.py` builds a Chronicle home from made-up sessions: a fictional developer with five projects
+`docs/demo/make_demo.py` builds an Interlatch home from made-up sessions: a fictional developer with five projects
 and about six weeks of work. It writes synthetic Claude Code transcripts and runs the real pipeline over them
 (sync, analysis, knowledge bases, glossary, weekly reviews). A stand-in `claude` answers each analysis with
 hand-written summaries and knowledge, so it costs nothing and needs no login. The screenshots in `docs/images/`
 come from it.
 
 ```bash
-uv run python docs/demo/make_demo.py /tmp/chronicle-demo
-CHRONICLE_HOME=/tmp/chronicle-demo/home uv run python -m chronicle ui --port 8898 --open
+uv run python docs/demo/make_demo.py /tmp/interlatch-demo
+INTERLATCH_HOME=/tmp/interlatch-demo/home uv run python -m chronicle ui --port 8898 --open
 ```
 
 The README's GIF and tour video come from it too. With that dashboard running, `docs/demo/record_demo.py` drives

@@ -211,7 +211,7 @@ def test_people_api_and_its_audit(team):
 
     app.cfg.hub_address = "https://hub.example.com"
     code, r = _call(url, "/api/people/invite", {"id": cy}, ada)
-    assert r["join"] == f"chronicle hub join https://hub.example.com --code {r['code']} --share knowledge"
+    assert r["join"] == f"interlatch hub join https://hub.example.com --code {r['code']} --share knowledge"
     assert r["link"] == f"https://hub.example.com/signin?code={r['code']}" and "note" not in r
     code, r = _call(url, "/api/people/role", {"id": cy, "role": "readonly"}, ada)
     assert code == 200 and {p["name"]: p["role"] for p in r["people"]}["Cy"] == "readonly"

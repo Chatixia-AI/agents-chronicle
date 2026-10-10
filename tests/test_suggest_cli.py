@@ -185,7 +185,7 @@ def test_background_run_refreshes_and_notifies(archive, monkeypatch):
 
     report = run_worker(replace(cfg, suggestions_notify=True), analyze=False, synthesize=False, export=False)
     assert report.suggestions == 2 and "2 new suggestions" in report.summary()
-    assert posted == [("Chronicle", "2 new suggestions. Open the dashboard > Suggestions")]
+    assert posted == [("Interlatch", "2 new suggestions. Open the dashboard > Suggestions")]
     assert run_worker(replace(cfg, suggestions_notify=True), analyze=False, synthesize=False, export=False).suggestions == 0
     assert len(posted) == 1  # nothing new, no notification
 
