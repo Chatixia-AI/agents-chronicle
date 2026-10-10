@@ -3,6 +3,13 @@
 <!-- Don't add lines here: a pull request puts its line in a new file in changelog.d/ (see changelog.d/README.md),
      and each release moves the files it took into a dated section below. -->
 
+## 0.21.0 (2026-10-10)
+
+- **Turn the menu-bar icon on or off from the dashboard:** **Settings › Status › Recording** has a **Menu-bar icon**
+  switch. Turning it on adds the `app` extra first if it is missing (for a uv install from PyPI, keeping your other
+  extras and your version), then restarts the dashboard with the icon; turning it off restarts it without. It works
+  only in a browser on the computer itself ([The menu-bar icon](docs/install.md#the-menu-bar-icon)).
+
 ## 0.20.0 (2026-10-10)
 
 - **Chronicle in the menu bar:** on macOS the dashboard that runs at login can now put Chronicle's mark in the menu
