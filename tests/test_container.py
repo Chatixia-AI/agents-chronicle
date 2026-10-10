@@ -97,7 +97,7 @@ def test_the_first_admin_is_added_once_with_an_invite(env):
         text = "\n".join(lines)
         assert "https://chronicle.example.com/signin?code=" in text
         assert "chronicle hub join https://chronicle.example.com --code" in text and "--share knowledge" in text
-        assert container.first_admin(cfg, conn, {**ENV, "INTERLATCH_ADMIN_EMAIL": "eve@example.com"}) == []
+        assert container.first_admin(cfg, conn, {**ENV, "CHRONICLE_ADMIN_EMAIL": "eve@example.com"}) == []
         assert people.by_email(conn, "eve@example.com") is None
     finally:
         conn.close()
