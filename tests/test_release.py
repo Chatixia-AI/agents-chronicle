@@ -168,3 +168,14 @@ def test_entry_check_reads_the_pull_requests_commits(repo, capsys):
     assert code == 1 and "adds no file to changelog.d/" in err
     repo.commit("entry", **{"changelog.d__x.md": "- **X:** one.\n"})
     assert main("entry", "base", capsys=capsys)[0] == 0
+
+    # rewording an entry no release has taken counts; one a release took (v1.0.0) doesn't
+    repo("tag", "v1.0.0")
+    repo.commit("next", **{"changelog.d__y.md": "- **Y:** two.\n"})
+    repo("branch", "-f", "base")
+    repo.commit("code and y", **{"src__x.py": "x = 2\n", "changelog.d__y.md": "- **Y:** two, reworded.\n"})
+    assert main("entry", "base", capsys=capsys)[0] == 0
+    repo("reset", "-q", "--hard", "base")
+    repo.commit("code and x", **{"src__x.py": "x = 3\n", "changelog.d__x.md": "- **X:** one, reworded.\n"})
+    code, _, err = main("entry", "base", capsys=capsys)
+    assert code == 1 and "adds no file to changelog.d/" in err

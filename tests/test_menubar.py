@@ -210,6 +210,7 @@ def test_only_the_login_item_shows_the_icon_by_itself(env, monkeypatch):
     from chronicle.menubar import wants_menu_bar
 
     cfg = env["cfg"]
+    cfg.server_menu_bar = True  # turned on at install
     monkeypatch.setattr("sys.platform", "darwin")
     monkeypatch.delenv("XPC_SERVICE_NAME", raising=False)
     assert not wants_menu_bar(cfg)  # a dashboard started in a terminal
@@ -222,13 +223,13 @@ def test_only_the_login_item_shows_the_icon_by_itself(env, monkeypatch):
     assert not wants_menu_bar(cfg)
 
 
-def test_menu_bar_can_be_turned_off_in_config(env):
+def test_menu_bar_is_off_until_turned_on_in_config(env):
     from chronicle.config import load_config
 
     cfg = env["cfg"]
-    assert load_config(cfg.home).server_menu_bar is True
-    cfg.config_path.write_text("[server]\nmenu_bar = false\n")
     assert load_config(cfg.home).server_menu_bar is False
+    cfg.config_path.write_text("[server]\nmenu_bar = true\n")
+    assert load_config(cfg.home).server_menu_bar is True
 
 
 def test_agent_sync_error_reads_the_launchd_exit_code(monkeypatch):
@@ -258,3 +259,74 @@ def test_without_pyobjc_the_dashboard_serves_as_before(env, monkeypatch):
 
     monkeypatch.setattr(builtins, "__import__", no_appkit)
     assert menubar.run_with_server(env["cfg"], object(), "http://127.0.0.1:1/") is False
+
+
+# ------------------------------------------------------------------------------------- opt-in at `chronicle install`
+@pytest.fixture
+def setup(env, monkeypatch):
+    """`chronicle install` on a Mac whose dashboard runs at login."""
+    monkeypatch.setattr("chronicle.update.compares_online", lambda: False)  # no release-notification question
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    monkeypatch.setattr("chronicle.install.launchd_status", lambda label="": {"loaded": True})
+    monkeypatch.setattr("chronicle.install.install_launchd", lambda *a, **k: [])
+    monkeypatch.setattr("chronicle.install.install_ui_agent", lambda *a, **k: [])
+    monkeypatch.setattr("chronicle.install.install_mcp", lambda *a, **k: [])
+    return env
+
+
+def _install(monkeypatch, answers, *extra):
+    import sys
+
+    from chronicle.cli import main
+
+    asked = []
+
+    class Tty:
+        def isatty(self):
+            return True
+
+    monkeypatch.setattr(sys, "stdin", Tty())
+    monkeypatch.setattr("builtins.input", lambda q: asked.append(q) or next((a for k, a in answers.items() if k in q), ""))
+    assert main(["install", "--exe", "/opt/bin/chronicle", "--no-sync", *extra]) == 0
+    return [q for q in asked if "menu bar" in q]
+
+
+def test_install_asks_once_and_defaults_to_no(setup, monkeypatch, capsys):
+    from chronicle.config import load_config
+
+    asked = _install(monkeypatch, {"Open": "n"})  # Enter: the default
+    assert len(asked) == 1 and "[y/N]" in asked[0]
+    assert load_config(setup["home"]).server_menu_bar is False
+    assert "no menu-bar icon" in capsys.readouterr().out
+    assert _install(monkeypatch, {"Open": "n"}) == []  # a re-run does not ask again
+
+
+def test_install_turns_it_on_when_asked(setup, monkeypatch, capsys):
+    from chronicle.config import load_config
+
+    monkeypatch.setattr("importlib.util.find_spec", lambda name, *a: None if name == "AppKit" else object())
+    assert len(_install(monkeypatch, {"menu bar": "y", "Open": "n"})) == 1
+    assert load_config(setup["home"]).server_menu_bar is True
+    assert "agents-chronicle[app]" in capsys.readouterr().out  # without the app extra it says how to add it
+    assert _install(monkeypatch, {"Open": "n"}) == []  # on already: nothing to ask
+
+
+def test_install_flag_sets_it_without_asking(setup, monkeypatch):
+    from chronicle.config import load_config
+
+    assert _install(monkeypatch, {"Open": "n"}, "--menu-bar") == []
+    assert load_config(setup["home"]).server_menu_bar is True
+    assert _install(monkeypatch, {"Open": "n"}, "--no-menu-bar") == []
+    assert load_config(setup["home"]).server_menu_bar is False
+
+
+def test_install_does_not_ask_without_the_login_dashboard_a_terminal_or_a_mac(setup, monkeypatch):
+    from chronicle.cli import main
+    from chronicle.config import load_config
+
+    assert _install(monkeypatch, {"Open": "n"}, "--no-ui") == []
+    monkeypatch.setattr("platform.system", lambda: "Linux")
+    assert _install(monkeypatch, {"Open": "n"}) == []
+    monkeypatch.setattr("platform.system", lambda: "Darwin")
+    assert main(["install", "--exe", "/opt/bin/chronicle", "--no-sync", "--yes"]) == 0
+    assert load_config(setup["home"]).server_menu_bar is False

@@ -678,6 +678,7 @@ def _analyze_now(cfg, console, ids: list[str], waiting: int, later: str) -> str:
 
 
 NOTIFY_ASKED_KEY = "update_notify_asked"  # kv: install asked about release notifications, so it asks only once
+MENU_BAR_ASKED_KEY = "menu_bar_asked"  # kv: install asked about the menu-bar icon, so it asks only once
 
 
 def _notify_choice(cfg, conn, args, *, ask, background_sync: bool) -> bool | None:
@@ -693,6 +694,22 @@ def _notify_choice(cfg, conn, args, *, ask, background_sync: bool) -> bool | Non
         return None
     return ask("Notify you when a new version of Chronicle is out? (a desktop notification; asks pypi.org once a "
                "day and sends nothing about you)", True)
+
+
+def _menu_bar_choice(cfg, conn, args, *, ask, login_dashboard: bool) -> bool | None:
+    """Turn the macOS menu-bar icon on or off (True/False), or leave the setting alone (None). It is opt-in: asked
+    once, and only where it can show, on a Mac whose dashboard runs at login."""
+    import platform
+
+    from .db import kv_get
+
+    if args.menu_bar is not None:
+        return args.menu_bar
+    if (ask is None or platform.system() != "Darwin" or not login_dashboard or cfg.server_menu_bar
+            or kv_get(conn, MENU_BAR_ASKED_KEY)):
+        return None
+    return ask("Show Chronicle's icon in the menu bar? (what it's doing, a search and your recent sessions, a click "
+               "away)", False)
 
 
 def cmd_install(args) -> int:
@@ -726,6 +743,8 @@ def cmd_install(args) -> int:
                                 "keeps the dashboard up)", True))
     notify = _notify_choice(cfg, conn, args, ask=_ask if interactive else None,
                             background_sync=background_on and not args.no_launchd)
+    menu_bar = _menu_bar_choice(cfg, conn, args, ask=_ask if interactive else None,
+                                login_dashboard=background_on and not args.no_ui)
     if args.dry_run:
         console.print("Would record: " + (", ".join(picked) or "nothing") +
                       (f"; would add the MCP server to: {', '.join(mcp_clients)}" if mcp_clients else ""))
@@ -754,6 +773,8 @@ def cmd_install(args) -> int:
         actions += [f"would remove background agent {agent_path(label)}" for label in turned_off if agent_path(label).exists()]
         if notify is not None:
             actions.append(f"would turn release notifications {'on' if notify else 'off'}")
+        if menu_bar is not None:
+            actions.append(f"would turn the menu-bar icon {'on' if menu_bar else 'off'}")
         for a in actions:
             console.print(f"• {a}", highlight=False, soft_wrap=True)
         return 0
@@ -765,6 +786,11 @@ def cmd_install(args) -> int:
         conn.commit()
         actions.append("a desktop notification when a new version is out (turn off in Status › Updates)" if notify
                        else "no release notifications (turn on in Status › Updates)")
+    if menu_bar is not None:  # before the dashboard agent (re)starts below, so it reads the new setting
+        _set_config_value(cfg, "server", "menu_bar", "true" if menu_bar else "false")
+        kv_set(conn, MENU_BAR_ASKED_KEY, utcnow_iso())
+        conn.commit()
+        actions.append(_menu_bar_line(menu_bar))
     for a in actions:
         console.print(f"• {a}", highlight=False, soft_wrap=True)
 
@@ -822,6 +848,17 @@ def cmd_install(args) -> int:
         console.print(f"Dashboard: run [bold]chronicle ui --open[/] (serves {url} while it runs)", highlight=False)
     console.print(f"[dim]More: chronicle sources · chronicle status · config {cfg.config_path}[/]", highlight=False, soft_wrap=True)
     return 0
+
+
+def _menu_bar_line(on: bool) -> str:
+    import importlib.util
+
+    if not on:
+        return "no menu-bar icon (`chronicle install --menu-bar` adds it)"
+    if importlib.util.find_spec("AppKit") is None:
+        return ("the menu-bar icon, once the `app` extra is installed: "
+                "uv tool install --force --python 3.13 'agents-chronicle\\[app]', then `chronicle install` again")  # \\[ keeps Rich from reading [app] as markup
+    return "Chronicle's icon in the menu bar (`chronicle install --no-menu-bar` removes it)"
 
 
 def _analyzer(cfg) -> str:
@@ -2601,6 +2638,9 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--notify-updates", action=argparse.BooleanOptionalAction, default=None,
                    help="show a desktop notification when a new version is out (asks pypi.org once a day); "
                         "asked once when omitted")
+    s.add_argument("--menu-bar", action=argparse.BooleanOptionalAction, default=None,
+                   help="macOS: show Chronicle's icon in the menu bar while the dashboard runs at login (needs the "
+                        "`app` extra); asked once when omitted, off by default")
     s.add_argument("--dry-run", action="store_true")
     s.set_defaults(fn=cmd_install)
 
@@ -2690,7 +2730,7 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--port", type=int)
     s.add_argument("--open", action="store_true", help="open a browser tab")
     s.add_argument("--menu-bar", action=argparse.BooleanOptionalAction, default=None,
-                   help="macOS: show Chronicle's menu-bar icon (default: only when it runs at login)")
+                   help="macOS: show Chronicle's menu-bar icon (default: only as the login item, with server.menu_bar on)")
     s.set_defaults(fn=cmd_serve)
 
     s = sub.add_parser("app", help="open the desktop app (macOS; needs the `app` extra)")
