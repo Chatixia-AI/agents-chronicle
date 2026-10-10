@@ -2,10 +2,11 @@ name: Release
 
 # Releasing is one button: Actions → Release → Run workflow on main, and pick patch, minor or major. The version
 # lives in the git tags (hatch-vcs), so nothing is committed first. The run works out the next version from the
-# latest vX.Y.Z tag, runs the tests, creates the tag and the GitHub release (the changelog's "## Unreleased"
-# section is its notes), publishes agents-chronicle to PyPI (trusted publishing, no token), publishes the hub's image
-# ghcr.io/chatixia-ai/chronicle-hub (docker/, built from that PyPI release), attaches Chronicle-X.Y.Z-arm64.dmg, and
-# opens a pull request that dates the changelog section.
+# latest vX.Y.Z tag, runs the tests, creates the tag and the GitHub release (its notes are the changelog.d/ files
+# added since the previous tag), publishes agents-chronicle to PyPI (trusted publishing, no token), publishes the hub's
+# image ghcr.io/chatixia-ai/chronicle-hub (docker/, built from that PyPI release), attaches Chronicle-X.Y.Z-arm64.dmg,
+# and opens a pull request that moves those files' lines into CHANGELOG.md under "## X.Y.Z (date)". The next release
+# doesn't wait for that pull request: a file merged after the tag is simply new since it.
 # "dry run" (the default) runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
 # Publishing a release tagged vX.Y.Z on GitHub by hand runs the same tests, PyPI and DMG jobs.
 #
@@ -92,6 +93,7 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
+          fetch-depth: 0  # the notes are the changelog.d/ files added since the previous tag
           persist-credentials: false
       - name: Create the tag and the release
         env:
@@ -248,28 +250,33 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v7.0.1
         with:
           ref: main
+          fetch-depth: 0  # the tags, to find which changelog.d/ files this release took
           persist-credentials: false
-      - name: Open a pull request that dates the changelog
+      - name: Open a pull request that moves the release's changelog.d/ files into CHANGELOG.md
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.plan.outputs.version }}
         run: |
           BRANCH="changelog-$VERSION"
-          python3 packaging/release.py date "$VERSION" "$(date -u +%F)"
-          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$(git rev-parse HEAD)" > /dev/null
-          gh api -X PUT "repos/$GITHUB_REPOSITORY/contents/CHANGELOG.md" -f branch="$BRANCH" \
-            -f message="Changelog: $VERSION" -f content="$(base64 -w0 CHANGELOG.md)" \
-            -f sha="$(git rev-parse HEAD:CHANGELOG.md)" > /dev/null
+          python3 packaging/release.py fold "$VERSION" "$(date -u +%F)" > "$RUNNER_TEMP/released.txt"
+          # one commit through the API: the new CHANGELOG.md, minus the files it took (ones merged since stay)
+          TREE=$(jq -n --rawfile changelog CHANGELOG.md --rawfile released "$RUNNER_TEMP/released.txt" \
+              --arg base "$(git rev-parse 'HEAD^{tree}')" \
+              '{base_tree: $base, tree: ([{path: "CHANGELOG.md", mode: "100644", type: "blob", content: $changelog}]
+                + [$released | split("\n")[] | select(. != "") | {path: ., mode: "100644", type: "blob", sha: null}])}' \
+            | gh api "repos/$GITHUB_REPOSITORY/git/trees" --input - -q .sha)
+          COMMIT=$(jq -n --arg tree "$TREE" --arg parent "$(git rev-parse HEAD)" --arg message "Changelog: $VERSION" \
+              '{message: $message, tree: $tree, parents: [$parent]}' \
+            | gh api "repos/$GITHUB_REPOSITORY/git/commits" --input - -q .sha)
+          gh api "repos/$GITHUB_REPOSITORY/git/refs" -f ref="refs/heads/$BRANCH" -f sha="$COMMIT" > /dev/null
           gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref "$BRANCH"  # the required test check
           if URL=$(gh pr create --repo "$GITHUB_REPOSITORY" --base main --head "$BRANCH" --title "Changelog: $VERSION" \
-              --body "Dates the changelog's Unreleased section for the $VERSION release."); then
+              --body "Moves the changelog.d/ files released in $VERSION into CHANGELOG.md. Merge it any time: the next release doesn't wait for it."); then
             echo "Changelog pull request: $URL" >> "$GITHUB_STEP_SUMMARY"
           else
-            # fail the run: the next release stops at its plan step until this pull request is merged, and a line in
-            # the summary alone goes unnoticed. Settings › Actions › General › "Allow GitHub Actions to create and
-            # approve pull requests" lets this step open it.
+            # the release is out and the next one doesn't need this, but CHANGELOG.md stays behind until it's merged
             OPEN="https://github.com/$GITHUB_REPOSITORY/compare/main...$BRANCH?expand=1"
-            echo "Open the changelog pull request, then merge it before the next release: $OPEN" >> "$GITHUB_STEP_SUMMARY"
-            echo "::error::$VERSION is released, but its changelog pull request could not be opened. Open it and merge it before the next release: $OPEN"
+            echo "Open the changelog pull request: $OPEN" >> "$GITHUB_STEP_SUMMARY"
+            echo "::error::$VERSION is released, but its changelog pull request could not be opened: $OPEN"
             exit 1
           fi

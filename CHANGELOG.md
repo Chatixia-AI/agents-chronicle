@@ -1,5 +1,8 @@
 # Changelog
 
+<!-- Don't add lines here: a pull request puts its line in a new file in changelog.d/ (see changelog.d/README.md),
+     and each release moves the files it took into a dated section below. -->
+
 ## 0.19.0 (2026-10-10)
 
 - **A copy in Postgres:** Chronicle can keep a copy of your archive in a Postgres database you choose (on this

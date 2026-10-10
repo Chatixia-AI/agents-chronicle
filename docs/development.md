@@ -45,17 +45,20 @@ The version is not written anywhere: it comes from the git tags (hatch-vcs). A t
 (`v0.7.0` → `0.7.0`), and commits after it as the next patch's dev release (`0.7.1.dev3+g1a2b3c4`), which is what a
 source checkout shows on the Status page.
 
-To release, add what changed under `## Unreleased` in `CHANGELOG.md` as you go (the **Changelog** check,
-`.github/workflows/changelog.yml`, fails a pull request that changes what ships without a line there, unless it has
-the `no-changelog` label), then run **Actions → Release → Run
+To release, give each pull request that users will notice a file in `changelog.d/` with its changelog line
+([changelog.d/README.md](https://github.com/Chatixia-AI/agents-chronicle/blob/main/changelog.d/README.md); the
+**Changelog** check, `.github/workflows/changelog.yml`, fails a pull request that changes what ships without one,
+unless it has the `no-changelog` label), then run **Actions → Release → Run
 workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/release.yml` works out the next version
-from the latest tag, runs the tests, creates the tag and the GitHub release (the Unreleased section is its notes),
+from the latest tag, runs the tests, creates the tag and the GitHub release (its notes are the `changelog.d/` files
+added since the previous tag),
 publishes `agents-chronicle` to PyPI (trusted publishing, environment `pypi`), publishes the hub's image
 `ghcr.io/chatixia-ai/chronicle-hub` (tagged with the version and `latest`, for amd64 and arm64, built from that
 PyPI release) and attaches the DMG to the release
 (signed and notarized when the `MACOS_*` / `APPLE_*` secrets are set; see the workflow header). Last, it opens a
-pull request that renames `## Unreleased` to `## <version> (<date>)`. Merge it before the next release: until then
-the released lines are still under Unreleased, and the next run stops at its first step saying so. If GitHub
+pull request that moves those files' lines into `CHANGELOG.md` under `## <version> (<date>)` and deletes the files.
+Merge it whenever: a pull request merged after the tag adds a file the release didn't take, so it goes out in the
+next one, and the next release doesn't wait for this pull request. If GitHub
 Actions may not create pull requests in this repository, the run fails at its last step, after publishing, with a
 link to open that pull request by hand.
 `dry run`, the default, runs the tests and keeps the DMG as a workflow artifact, publishing nothing.
