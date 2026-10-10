@@ -1,6 +1,7 @@
 # agents-chronicle, Interlatch's name on PyPI before it was renamed from Chronicle. It installs interlatch and keeps the
 # commands, so a copy installed under the old name moves to Interlatch with its usual upgrade: `uv tool upgrade
-# agents-chronicle`, or the dashboard's Update button, which runs it.
+# agents-chronicle`, `pipx upgrade agents-chronicle` or `pip install -U agents-chronicle`, which is what the dashboard's
+# Update button runs.
 #
 # The release workflow publishes it with every release, writing that release's version over the placeholder version
 # in each line below (.github/workflows/release.yml). Pinned to it, this name follows interlatch's releases exactly,
@@ -33,5 +34,9 @@ Repository = "https://github.com/Chatixia-AI/agents-chronicle"
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.targets.wheel]
-bypass-selection = true  # no code of its own: it comes with interlatch
+# The same chronicle/ files as interlatch, which both packages then list as theirs. pip installs interlatch first and
+# then removes the old agents-chronicle, and with it every file that package listed: the chronicle/ interlatch has just
+# written. Installing this one after it puts them back. Built as a wheel only (uv build --wheel): an sdist would leave
+# them out.
+[tool.hatch.build.targets.wheel.force-include]
+"../../src/chronicle" = "chronicle"

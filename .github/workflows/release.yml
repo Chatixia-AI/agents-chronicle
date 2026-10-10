@@ -89,7 +89,7 @@ jobs:
           enable-cache: false  # a release never restores a cache another run could have written
       - run: uv run --locked pytest -q
       - name: agents-chronicle builds (the farewell job publishes it)
-        run: uv build packaging/agents-chronicle-farewell -o "$RUNNER_TEMP/farewell"
+        run: uv build --wheel packaging/agents-chronicle-farewell -o "$RUNNER_TEMP/farewell"
 
   release:
     needs: [plan, test]
@@ -146,7 +146,8 @@ jobs:
   farewell:
     # agents-chronicle, Interlatch's name before the rename, at the same version: it installs interlatch, so a copy
     # installed under that name keeps updating, and one from before the rename (which asks PyPI about agents-chronicle)
-    # sees the release. Published after interlatch, so it never names a version PyPI doesn't have.
+    # sees the release. Published after interlatch, so it never names a version PyPI doesn't have. It carries the same
+    # chronicle/ files as interlatch, which pip needs (packaging/agents-chronicle-farewell/pyproject.toml): a wheel only.
     needs: [plan, pypi]
     if: ${{ !cancelled() && needs.pypi.result == 'success' }}
     runs-on: ubuntu-latest
@@ -164,15 +165,6 @@ jobs:
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7  # v10.2.0
         with:
           enable-cache: false  # a release never restores a cache another run could have written
-      - name: Build agents-chronicle at the release's version, pinned to the same interlatch
-        run: |
-          sed -i "s/0\.0\.0/$VERSION/g" packaging/agents-chronicle-farewell/pyproject.toml
-          uv build packaging/agents-chronicle-farewell -o dist
-          ls dist
-          if [ ! -f "dist/agents_chronicle-$VERSION-py3-none-any.whl" ]; then
-            echo "::error::The build is not version $VERSION"
-            exit 1
-          fi
       - name: Wait until PyPI serves interlatch
         run: |
           for _ in $(seq 1 30); do
@@ -184,6 +176,26 @@ jobs:
           done
           echo "::error::PyPI does not serve interlatch $VERSION after 5 minutes"
           exit 1
+      - name: Build agents-chronicle at the release's version, pinned to the same interlatch
+        run: |
+          sed -i "s/0\.0\.0/$VERSION/g" packaging/agents-chronicle-farewell/pyproject.toml
+          uv build --wheel packaging/agents-chronicle-farewell -o dist
+          ls dist
+          if [ ! -f "dist/agents_chronicle-$VERSION-py3-none-any.whl" ]; then
+            echo "::error::The build is not version $VERSION"
+            exit 1
+          fi
+      - name: Check it carries the chronicle/ files of the interlatch on PyPI
+        run: |
+          python3 - "$RUNNER_TEMP/probe/interlatch-$VERSION-py3-none-any.whl" "dist/agents_chronicle-$VERSION-py3-none-any.whl" <<'EOF'
+          import sys, zipfile
+          def files(wheel):  # chronicle/ path -> hash, from the wheel's RECORD
+              z = zipfile.ZipFile(wheel)
+              record = next(n for n in z.namelist() if n.endswith(".dist-info/RECORD"))
+              return {r.split(",")[0]: r.split(",")[1] for r in z.read(record).decode().splitlines() if r.startswith("chronicle/")}
+          if not files(sys.argv[1]) or files(sys.argv[1]) != files(sys.argv[2]):
+              sys.exit("::error::agents-chronicle's chronicle/ files differ from interlatch's")
+          EOF
       - uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33  # v1.14.2
 
   image:
