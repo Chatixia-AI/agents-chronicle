@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.19.0 (2026-10-10)
 
 - **A copy in Postgres:** Chronicle can keep a copy of your archive in a Postgres database you choose (on this
   computer, in Docker, or in the cloud) for SQL and BI tools. Set it up under **Settings › Storage** or with
