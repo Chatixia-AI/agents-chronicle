@@ -1728,6 +1728,7 @@ window.CHRONICLE_JA = {
   "Share the whole group as one project there": "グループ全体を、ハブの 1 つのプロジェクトとして共有します",
   "Every project in this group goes to {name} on the hub, including ones that join it later": "このグループのすべてのプロジェクトがハブの {name} に送られます。あとから入るものも含みます",
   "your group, with every project in it": "あなたのグループ（中のすべてのプロジェクト）",
+  "from {names}": "{names} から",
   "from teammates": "チームメイトから",
   "From teammates": "チームメイトから",
   "A teammate's lesson, sent back by the team hub. Your agent gets it too.": "チームのハブから届いた、チームメイトのナレッジです。あなたのエージェントにも渡ります。",
