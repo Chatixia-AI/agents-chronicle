@@ -184,6 +184,8 @@ const SCENES = {
 </script>
 <script src="scenes-more.js"></script>
 <script>
+// only a scene this page defines, never a name from the URL called as is
+if (!Object.prototype.hasOwnProperty.call(SCENES, SCENE) || typeof SCENES[SCENE] !== 'function') throw new Error(`Unknown scene: ${SCENE}`);
 const S = SCENES[SCENE]();
 window.LOOP = S.LOOP;
 window.renderFrame = (t) => { CAST.setTime(t); S.frame(((t % S.LOOP) + S.LOOP) % S.LOOP); return renderer.domElement.toDataURL('image/png'); };
