@@ -2,14 +2,14 @@
 
 [← Interlatch](../README.md) · [Docs index](README.md)
 
-Interlatch runs on macOS and needs a logged-in [Claude Code](https://claude.com/claude-code) (`claude`) or [Codex](https://github.com/openai/codex) (`codex`), which does the analysis. Setup uses Claude Code when it is installed and offers Codex when it is not; switch any time in **Status › Analysis** or with `interlatch config set analysis.backend codex`. There are two ways to run it; both use the same data in `~/.interlatch` and can coexist.
+Interlatch runs on macOS and needs something to analyze sessions: a logged-in [Claude Code](https://claude.com/claude-code) (`claude`) or [Codex](https://github.com/openai/codex) (`codex`), IBM Bob with a Bob API key, or a model provider's API with your own key ([Model providers](analysis.md#model-providers)). Setup uses Claude Code when it is installed and offers Codex when it is not; switch any time in **Status › Analysis** or with `interlatch config set analysis.backend codex`. There are two ways to run it; both use the same data in `~/.interlatch` and can coexist.
 
 Interlatch was called Chronicle. To update from Chronicle, see [Moving from Chronicle](moving-from-chronicle.md).
 
 ## Desktop app
 
 1. Download `Interlatch-<version>-arm64.dmg` from the
-   [latest release](https://github.com/Chatixia-AI/agents-chronicle/releases/latest) (Apple silicon, macOS 13+).
+   [latest release](https://github.com/Chatixia-AI/interlatch/releases/latest) (Apple silicon, macOS 13+).
 2. Open it and drag **Interlatch** into **Applications**, then open it from there.
 3. On first launch, choose **Connect** to record Claude Code sessions. This adds the `SessionEnd` hook and the MCP
    server (as `interlatch connect claude` does) and makes Interlatch open at login.
@@ -68,8 +68,8 @@ run `uv tool install --python 3.13 .` in it.
    show a desktop notification when a new version of Interlatch is out (`--notify-updates` or
    `--no-notify-updates` answers without asking).
 6. Explains analysis: each past session is read through your Claude Code (or Codex) login, which counts toward
-   your plan's usage, and the knowledge it yields builds each project's knowledge base, then the **Glossary**, then
-   the **Map**. Until sessions are analyzed, those two stay empty. It says how many sessions are waiting and how
+   your plan's usage (or through IBM Bob or the model provider you chose), and the knowledge it yields builds each
+   project's knowledge base, then the **Glossary**, then the **Map**. Until sessions are analyzed, those two stay empty. It says how many sessions are waiting and how
    long the background takes over them (6 every 15 minutes), then asks whether to analyze them now with a
    progress bar per stage (sessions, knowledge bases, glossary, map themes): all of them, or the newest 20 for a
    first Glossary and Map in minutes. Ctrl-C stops, keeping what is done; the rest is analyzed in the background.

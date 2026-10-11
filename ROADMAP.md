@@ -99,7 +99,7 @@ carefully.
 ## Not planned
 
 - **A hosted service, cloud sync or telemetry.** Interlatch's promise is that nothing leaves your machines except
-  the analysis call through your own login. Sharing across computers goes through your own hub.
+  the analysis call through your own login or key. Sharing across computers goes through your own hub.
 - **Computers connecting to a shared database.** One computer, the hub, writes; the others send it their sessions
   and never get a database's address or password. A hub may keep the team's record in your own Postgres as well
   ([team store](docs/devices.md#teammates-lessons-and-a-team-store-in-postgres)), but it stays the only writer.
@@ -109,5 +109,5 @@ carefully.
 
 ## Suggesting something
 
-Open an [issue](https://github.com/Chatixia-AI/agents-chronicle/issues) describing what you were trying to do and
+Open an [issue](https://github.com/Chatixia-AI/interlatch/issues) describing what you were trying to do and
 where Interlatch got in the way. That helps more than a feature name, and it is how items get onto this page.

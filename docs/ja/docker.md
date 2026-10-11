@@ -62,7 +62,7 @@ sudo usermod -aG docker $USER && newgrp docker
 
 ```bash
 mkdir ~/interlatch-hub && cd ~/interlatch-hub
-base=https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker
+base=https://raw.githubusercontent.com/Chatixia-AI/interlatch/main/docker
 curl -fsSL "$base/compose.yaml" -o compose.yaml
 curl -fsSL "$base/Caddyfile" -o Caddyfile
 curl -fsSL "$base/.env.example" -o .env
@@ -319,7 +319,7 @@ Postgres を加えるには `INTERLATCH_TEAM_STORE=postgres` と `PG*` 変数を
 ## 更新する
 
 ```bash
-curl -fsSL https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/docker/compose.yaml -o compose.yaml
+curl -fsSL https://raw.githubusercontent.com/Chatixia-AI/interlatch/main/docker/compose.yaml -o compose.yaml
 docker compose pull
 docker compose up -d
 ```

@@ -46,7 +46,7 @@ The version is not written anywhere: it comes from the git tags (hatch-vcs). A t
 source checkout shows on the Status page.
 
 To release, give each pull request that users will notice a file in `changelog.d/` with its changelog line
-([changelog.d/README.md](https://github.com/Chatixia-AI/agents-chronicle/blob/main/changelog.d/README.md); the
+([changelog.d/README.md](https://github.com/Chatixia-AI/interlatch/blob/main/changelog.d/README.md); the
 **Changelog** check, `.github/workflows/changelog.yml`, fails a pull request that changes what ships without one,
 unless it has the `no-changelog` label), then run **Actions → Release → Run
 workflow** on `main` and pick `patch`, `minor` or `major`. `.github/workflows/release.yml` works out the next version
@@ -84,7 +84,9 @@ confirm the icon is in the menu bar of every display:
 ### One-time setup before the first release
 
 1. On PyPI, add a *pending publisher* (Account → Publishing): project `interlatch`, owner
-   `Chatixia-AI`, repository `agents-chronicle`, workflow `release.yml`, environment `pypi`.
+   `Chatixia-AI`, repository `interlatch`, workflow `release.yml`, environment `pypi`; the project
+   `agents-chronicle` (the old name, which each release also publishes) needs the same publisher. PyPI matches the
+   repository by its name, so after renaming the repository, update both publishers there.
 2. In the GitHub repository, create an environment named `pypi` (Settings → Environments).
 3. To ship a signed, notarized DMG (Apple Developer Program membership): export the *Developer ID Application*
    certificate with its key as a `.p12`, and add the secrets `MACOS_CERT_P12` (base64 of the file),

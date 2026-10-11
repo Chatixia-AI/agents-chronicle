@@ -62,7 +62,9 @@ good with `interlatch forget <id>`.
 ## Analysis
 
 **Nothing gets analyzed.** Open the session: under its summary it says why it is waiting, and **Status ›
-Analysis** (or `interlatch status`) counts sessions per reason. Analysis needs the `claude` CLI to be logged in.
+Analysis** (or `interlatch status`) counts sessions per reason. Analysis needs what you chose for it to be ready:
+the `claude` (or `codex`) CLI logged in, a Bob API key for IBM Bob, or a model provider's key (**Test connection**
+in **Status › Analysis** checks it).
 `interlatch status` shows where it found `claude`; the app reads your login shell's PATH, so a `claude` installed
 with npm or Homebrew is found too. A session is analyzed once it ends or has been idle for `analysis.idle_minutes`.
 

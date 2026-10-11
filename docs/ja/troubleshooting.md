@@ -59,8 +59,10 @@ Codex にはセッション終了フックがないため、Codex のセッシ�
 ## 分析
 
 **何も分析されない。** セッションを開くと、要約の下に待っている理由が表示されます。**Status › Analysis**（または
-`interlatch status`）では理由ごとの件数がわかります。分析には、ログイン済みの `claude` CLI が必要です。`interlatch status` で `claude` がどこで見つかったかを
-確認できます。アプリはログインシェルの PATH を読み込むため、npm や Homebrew でインストールした `claude` も見つかります。
+`interlatch status`）では理由ごとの件数がわかります。分析には、選んだものが使える状態になっている必要があります：
+ログイン済みの `claude`（または `codex`）CLI、IBM Bob なら Bob API キー、モデルプロバイダーならそのキー（**Status › Analysis** の
+**Test connection** で確かめられます）。`interlatch status` で `claude` がどこで見つかったかを確認できます。アプリは
+ログインシェルの PATH を読み込むため、npm や Homebrew でインストールした `claude` も見つかります。
 セッションは、終了するか `analysis.idle_minutes` の間アイドルになると分析されます。
 
 **「usage limit」で分析が止まった。** Claude が使用量の上限や認証のエラーを返すと、Interlatch は分析を 1 時間停止し、その後自動で

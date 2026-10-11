@@ -10,7 +10,7 @@ authors = [{ name = "Adrian Tam" }]
 dependencies = ["interlatch"]
 
 [project.urls]
-Repository = "https://github.com/Chatixia-AI/agents-chronicle/tree/main/ee"
+Repository = "https://github.com/Chatixia-AI/interlatch/tree/main/ee"
 
 [build-system]
 requires = ["hatchling"]

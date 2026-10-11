@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 CHANGELOG = ROOT / "CHANGELOG.md"
 FRAGMENTS = "changelog.d"
-REPO_URL = "https://github.com/Chatixia-AI/agents-chronicle"
+REPO_URL = "https://github.com/Chatixia-AI/interlatch"
 BUMPS = ("major", "minor", "patch")
 SHIPPED = ("src/", "ee/src/", "docker/", "vscode-extension/")  # what users get: a change here needs a changelog entry
 VERSION_HEADING = re.compile(r"^## (\d+)\.(\d+)\.(\d+)\b", re.M)

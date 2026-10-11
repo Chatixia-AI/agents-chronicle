@@ -3,8 +3,10 @@
 README.md and README.ja.md become the English and Japanese home pages, in place of docs/README.md and
 docs/ja/README.md (indexes for browsing on GitHub; the site's navigation does their job). Every relative
 link is resolved from the file's place in the repository, so links that leave docs/ (the READMEs,
-CHANGELOG.md, LICENSE, source files) point at the home pages or at GitHub instead of breaking. The
-"← Interlatch · Docs index" line atop each page is dropped: the site's navigation does its job too.
+CHANGELOG.md, LICENSE, source files) point at the home pages or at GitHub instead of breaking. MkDocs turns
+Markdown links to .md files into page URLs but leaves raw HTML (the READMEs' quick links) alone, so those get
+the target page's URL here. The "← Interlatch · Docs index" line atop each page is dropped: the site's
+navigation does its job too.
 """
 
 import posixpath
@@ -12,9 +14,10 @@ import re
 from pathlib import Path
 
 from mkdocs.structure.files import File
+from mkdocs.utils import get_relative_url
 
 ROOT = Path(__file__).resolve().parents[2]
-GITHUB = "https://github.com/Chatixia-AI/agents-chronicle"
+GITHUB = "https://github.com/Chatixia-AI/interlatch"
 ICON = "packaging/macos/icon.png"
 HOMES = {"index.md": "README.md", "ja/index.md": "README.ja.md"}
 SITE_PATHS = {"README.md": "index.md", "docs/README.md": "index.md",
@@ -45,6 +48,9 @@ def on_page_markdown(markdown, page, config, files):
         if site is None:
             kind = "raw" if path.endswith((".png", ".svg", ".jpg", ".gif")) else "blob"
             return f"{m.group(1)}{GITHUB}/{kind}/main/{path}"
+        built = files.get_file_from_path(site)
+        if m.group(1) != "](" and built is not None:  # raw HTML: MkDocs leaves its hrefs alone, so link the URL
+            return m.group(1) + get_relative_url(built.url, page.url)
         return m.group(1) + posixpath.relpath(site, here)
 
     markdown = re.sub(r"^\[← .*\n+", "", markdown, count=1, flags=re.M)

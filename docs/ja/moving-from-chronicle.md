@@ -22,7 +22,7 @@ pipx では `pipx uninstall agents-chronicle` のあとに `pipx install interla
 両方のコマンドを残します。チェックアウトや git の URL からのインストールは、ボタンでは切り替わりません。
 アンインストールしてから、同じ方法で `interlatch` をインストールしてください。
 
-**デスクトップアプリの場合：** [最新リリース](https://github.com/Chatixia-AI/agents-chronicle/releases/latest)から
+**デスクトップアプリの場合：** [最新リリース](https://github.com/Chatixia-AI/interlatch/releases/latest)から
 `Interlatch-<version>-arm64.dmg` をダウンロードし、**Interlatch** を **アプリケーション** にドラッグして開きます。
 macOS からは別のアプリに見えるため、Chronicle.app はそのまま残ります。Interlatch が起動したら削除してください
 （ログイン時に開く設定も一緒に消えます）。
