@@ -4,8 +4,8 @@
 site_name: Interlatch
 site_description: Shared memory for your coding agents. Different agents, knowledge that stays.
 site_url: https://interlatch.com/docs/
-repo_url: https://github.com/Chatixia-AI/agents-chronicle
-repo_name: agents-chronicle
+repo_url: https://github.com/Chatixia-AI/interlatch
+repo_name: interlatch
 edit_uri: edit/main/docs/
 copyright: Part of <a href="https://chatixia.net">Chatixia</a> · MIT license
 

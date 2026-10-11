@@ -2,13 +2,13 @@
 
 [← Interlatch](../../README.ja.md) · [ドキュメント一覧](README.md)
 
-Interlatch は macOS で動作し、分析を行うためにログイン済みの [Claude Code](https://claude.com/claude-code)（`claude`）または [Codex](https://github.com/openai/codex)（`codex`）が必要です。セットアップは Claude Code がインストールされていればそれを使い、なければ Codex を提案します。**Status › Analysis** または `interlatch config set analysis.backend codex` でいつでも切り替えられます。使い方は 2 通りあり、どちらも `~/.interlatch` の同じデータを使うため、併用できます。
+Interlatch は macOS で動作し、セッションを分析するものが必要です。ログイン済みの [Claude Code](https://claude.com/claude-code)（`claude`）か [Codex](https://github.com/openai/codex)（`codex`）、Bob API キーを設定した IBM Bob、またはあなた自身のキーで使うモデルプロバイダーの API（[モデルプロバイダー](analysis.md#モデルプロバイダー)）のどれかです。セットアップは Claude Code がインストールされていればそれを使い、なければ Codex を提案します。**Status › Analysis** または `interlatch config set analysis.backend codex` でいつでも切り替えられます。使い方は 2 通りあり、どちらも `~/.interlatch` の同じデータを使うため、併用できます。
 
 Interlatch は以前 Chronicle という名前でした。Chronicle からのアップデートは[Chronicle からの移行](moving-from-chronicle.md)を参照してください。
 
 ## デスクトップアプリ
 
-1. [最新リリース](https://github.com/Chatixia-AI/agents-chronicle/releases/latest)から
+1. [最新リリース](https://github.com/Chatixia-AI/interlatch/releases/latest)から
    `Interlatch-<version>-arm64.dmg` をダウンロードします（Apple シリコン、macOS 13 以降）。
 2. 開いて **Interlatch** を「アプリケーション」フォルダにドラッグし、そこから起動します。
 3. 初回起動時に **Connect** を選ぶと、Claude Code のセッションの記録が始まります。`SessionEnd` フックと MCP サーバーが
@@ -66,7 +66,8 @@ interlatch install                               # pick the agents to record, im
    バックグラウンド同期がオンなら、Interlatch の新しいバージョンが出たときにデスクトップ通知を表示するかも一度だけ
    尋ねます（`--notify-updates` または `--no-notify-updates` を付けると尋ねません）。
 6. 分析について説明します：過去のセッションは Claude Code（または Codex）のログインで読み込まれ（プランの使用量に
-   含まれます）、そこから得た知識で各プロジェクトのナレッジベース、次に**用語集**、次に**マップ**が作られます。
+   含まれます。IBM Bob やモデルプロバイダーを選んでいればそちらで読み込みます）、そこから得た知識で各プロジェクトの
+   ナレッジベース、次に**用語集**、次に**マップ**が作られます。
    セッションが分析されるまで、この 2 つは空のままです。待っているセッション数と、バックグラウンドで（15 分ごとに
    6 件）すべて終わるまでの目安を示し、今すぐ分析するかを尋ねます。段階ごと（セッション、ナレッジベース、用語集、
    マップのテーマ）に進捗バーを表示します。すべてか、最初の用語集とマップを数分で作れる新しい 20 件を選べます。

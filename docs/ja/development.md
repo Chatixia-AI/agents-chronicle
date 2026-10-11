@@ -46,7 +46,7 @@ GitHub のシークレットスキャン、プッシュ保護、CodeQL のコー
 チェックアウトでは Status ページにこれが表示されます。
 
 リリースするには、利用者が気づく変更を含むプルリクエストごとに、変更履歴の 1 行を書いたファイルを `changelog.d/` に
-追加しておき（[changelog.d/README.md](https://github.com/Chatixia-AI/agents-chronicle/blob/main/changelog.d/README.md)。
+追加しておき（[changelog.d/README.md](https://github.com/Chatixia-AI/interlatch/blob/main/changelog.d/README.md)。
 **Changelog** チェック `.github/workflows/changelog.yml` は、出荷物を変えるのにこのファイルがないプルリクエストを、
 `no-changelog` ラベルがない限り失敗させます）、`main` で **Actions → Release →
 Run workflow** を実行して `patch`、`minor`、`major` のどれかを選びます。`.github/workflows/release.yml` が最新のタグから
@@ -84,7 +84,9 @@ GitHub で `v<version>` タグのリリースを手動で公開する方法も�
 ### 最初のリリースの前に一度だけ必要な設定
 
 1. PyPI で *pending publisher* を追加します（Account → Publishing）：プロジェクト `interlatch`、オーナー
-   `Chatixia-AI`、リポジトリ `agents-chronicle`、ワークフロー `release.yml`、環境 `pypi`。
+   `Chatixia-AI`、リポジトリ `interlatch`、ワークフロー `release.yml`、環境 `pypi`。プロジェクト `agents-chronicle`
+   （以前の名前で、リリースのたびにこちらも公開します）にも同じパブリッシャーが必要です。PyPI はリポジトリを名前で
+   照合するので、リポジトリの名前を変えたら、PyPI 側で両方のパブリッシャーを更新してください。
 2. GitHub リポジトリで `pypi` という名前の環境を作成します（Settings → Environments）。
 3. 署名・公証済みの DMG を配布するには（Apple Developer Program への加入が必要）：*Developer ID Application*
    証明書を鍵ごと `.p12` として書き出し、シークレット `MACOS_CERT_P12`（ファイルの base64）、

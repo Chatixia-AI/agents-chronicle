@@ -25,8 +25,8 @@ dependencies = ["rich>=13.7"]
 [project.urls]
 Homepage = "https://interlatch.com"
 Documentation = "https://interlatch.com/docs/"
-Repository = "https://github.com/Chatixia-AI/agents-chronicle"
-Issues = "https://github.com/Chatixia-AI/agents-chronicle/issues"
+Repository = "https://github.com/Chatixia-AI/interlatch"
+Issues = "https://github.com/Chatixia-AI/interlatch/issues"
 
 [project.scripts]
 interlatch = "chronicle.cli:main"
@@ -65,11 +65,11 @@ path = "README.md"
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(src="|\]\()(?!https?://|#)([^")]+\.(?:png|svg|jpg|gif))'
-replacement = '\1https://raw.githubusercontent.com/Chatixia-AI/agents-chronicle/main/\2'
+replacement = '\1https://raw.githubusercontent.com/Chatixia-AI/interlatch/main/\2'
 
 [[tool.hatch.metadata.hooks.fancy-pypi-readme.substitutions]]
 pattern = '(href="|\]\()(?!https?://|#)([^")]+)'
-replacement = '\1https://github.com/Chatixia-AI/agents-chronicle/blob/main/\2'
+replacement = '\1https://github.com/Chatixia-AI/interlatch/blob/main/\2'
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/chronicle"]

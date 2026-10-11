@@ -47,7 +47,7 @@ def test_only_markdown_files_directly_in_changelog_d_are_entries():
 
 def test_notes_are_the_entries_with_absolute_links():
     out = release.notes([ENTRY, "\n", "- **Two:** more.\n- **Three:** lines.\n"], "0.7.0")
-    assert out == ("- **New:** see [the docs](https://github.com/Chatixia-AI/agents-chronicle/blob/v0.7.0/docs/devices.md#people)"
+    assert out == ("- **New:** see [the docs](https://github.com/Chatixia-AI/interlatch/blob/v0.7.0/docs/devices.md#people)"
                    " and [PyPI](https://pypi.org/) or [below](#x).\n- **Two:** more.\n- **Three:** lines.")
 
 

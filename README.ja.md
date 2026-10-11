@@ -11,13 +11,12 @@ claude.ai・ChatGPT のチャットを自分のマシンの中で記録し、そ
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11 以上">
   <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS アプリと CLI">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT ライセンス"></a>
-  <a href="https://pepy.tech/projects/interlatch"><img src="https://static.pepy.tech/badge/interlatch" alt="累計ダウンロード数"></a>
-  <a href="https://github.com/Chatixia-AI/agents-chronicle/pkgs/container/interlatch-hub"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FChatixia-AI%2Fagents-chronicle%2Finterlatch-hub.json&query=%24.downloads&logo=docker&label=hub%20image%20pulls" alt="ハブの Docker イメージの pull 数"></a>
+  <a href="https://github.com/Chatixia-AI/interlatch/pkgs/container/interlatch-hub"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FChatixia-AI%2Fagents-chronicle%2Finterlatch-hub.json&query=%24.downloads&logo=docker&label=hub%20image%20pulls" alt="ハブの Docker イメージの pull 数"></a>
 </p>
 <p align="center">
-  <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main" alt="CodeQL"></a>
-  <a href="https://interlatch.com/docs/"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/docs.yml/badge.svg?branch=main" alt="Docs"></a>
+  <a href="https://github.com/Chatixia-AI/interlatch/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/interlatch/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/Chatixia-AI/interlatch/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Chatixia-AI/interlatch/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main" alt="CodeQL"></a>
+  <a href="https://interlatch.com/docs/"><img src="https://github.com/Chatixia-AI/interlatch/actions/workflows/docs.yml/badge.svg?branch=main" alt="Docs"></a>
   <a href="https://pre-commit.com/"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit" alt="pre-commit"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
 </p>
@@ -33,9 +32,9 @@ claude.ai・ChatGPT のチャットを自分のマシンの中で記録し、そ
 <sub>Interlatch は以前 Chronicle という名前でした。`chronicle` コマンドはそのまま使え、既存のインストールはアップデートすると
 自動で移行されます（[Chronicle からの移行](docs/ja/moving-from-chronicle.md)）。</sub>
 
-[![デモデータで Interlatch のセッションを開く：要約、ホバーで説明される用語集の用語、そこから抽出したナレッジ](docs/images/demo.gif)](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4)
+[![デモデータで Interlatch のセッションを開く：要約、ホバーで説明される用語集の用語、そこから抽出したナレッジ](docs/images/demo.gif)](https://github.com/Chatixia-AI/interlatch/releases/download/v0.17.0/demo.mp4)
 
-<sub>[デモデータ](docs/ja/development.md#デモデータ)のセッション。[1 分のツアーをダウンロード](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4)（MP4、6 MB）：ホーム、
+<sub>[デモデータ](docs/ja/development.md#デモデータ)のセッション。[1 分のツアーをダウンロード](https://github.com/Chatixia-AI/interlatch/releases/download/v0.17.0/demo.mp4)（MP4、6 MB）：ホーム、
 セッションとトランスクリプト、⌘K 検索、用語集のマップ、週次レビュー。</sub>
 
 ## 何が得られるか
@@ -73,8 +72,9 @@ Interlatch は終わったセッションを読み、残す価値のあること
 
 ## クイックスタート
 
-macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/claude-code) または [Codex](https://github.com/openai/codex)
-（分析を担当）が必要です。
+macOS 13 以降と、セッションを分析するものが必要です。ログイン済みの [Claude Code](https://claude.com/claude-code) か
+[Codex](https://github.com/openai/codex)、Bob API キーを設定した IBM Bob、またはあなた自身のキーで使うモデルプロバイダーの API の
+どれかです（[モデルプロバイダー](docs/ja/analysis.md#モデルプロバイダー)）。
 
 1. **インストール。**
 
@@ -84,7 +84,7 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
    ```
 
    `interlatch install` は Mac にあるコーディングエージェントを見つけ、どれを記録するか尋ね、過去のセッションを取り込み、
-   ログイン時から Interlatch を動かすかを尋ねます。アプリがよければ[最新リリース](https://github.com/Chatixia-AI/agents-chronicle/releases/latest)
+   ログイン時から Interlatch を動かすかを尋ねます。アプリがよければ[最新リリース](https://github.com/Chatixia-AI/interlatch/releases/latest)
    （Apple シリコン）からダウンロードして **Connect** を選びます。
 
 2. **いつも通りエージェントを使う。** 各セッションは終了時に記録され、バックグラウンドで分析されます。
@@ -125,17 +125,19 @@ macOS 13 以降と、ログイン済みの [Claude Code](https://claude.com/clau
 
 1. フック（または 15 分ごとの同期）が終わったセッションを Interlatch に渡し、Interlatch は元のトランスクリプトを保管して
    解析します：プロンプト、応答、ツール呼び出し、ファイル、トークン、コスト。
-2. セッションがアイドルになると、秘密情報を伏せた要約版のダイジェストが、選んだほうの Claude Code（`claude -p`）または
-   Codex（`codex exec`）に送られ、要約とナレッジ項目が返ってきます。この呼び出しはサンドボックス内で動き、ツール、フック、
-   MCP サーバーは使いません。
+2. セッションがアイドルになると、秘密情報を伏せた要約版のダイジェストが、分析用に選んだもの（Claude Code の `claude -p`、
+   Codex の `codex exec`、IBM Bob、またはモデルプロバイダーの API）に送られ、要約とナレッジ項目が返ってきます。この呼び出しは
+   サンドボックス内で動き、ツール、フック、MCP サーバーは使いません。
 3. 新しいナレッジはプロジェクトのナレッジベースにまとめられ、用語集が更新され、終わった週ごとに振り返りが書かれます。
 4. すべてがあなた（ダッシュボード、アプリ、保管庫、CLI）とエージェント（MCP）に提供されます。
 
-**マシンの外に出るもの：** その伏せ字済みのダイジェストだけで、あなた自身の Claude Code または Codex のログインを通じて
-Anthropic または OpenAI に送られます。テレメトリはなく、ほかの誰にも何も送りません。何がどこに保存されるかは[データとプライバシー](docs/ja/privacy.md)に
+**マシンの外に出るもの：** その伏せ字済みのダイジェストだけです。あなた自身の Claude Code か Codex のログインで Anthropic か
+OpenAI に、Bob API キーで IBM に、または設定したモデルプロバイダーにあなた自身のキーで送られます（自分のコンピューターの
+Ollama なら、それすら出ません）。テレメトリはなく、ほかの誰にも何も送りません。何がどこに保存されるかは[データとプライバシー](docs/ja/privacy.md)に
 あります。
 
-**費用：** 分析は、そのエージェントのほかの利用と同じように Claude または ChatGPT のプランから使われます。Claude の場合、
+**費用：** Claude Code や Codex での分析は、そのエージェントのほかの利用と同じように Claude または ChatGPT のプランから
+使われます。Bob やモデルプロバイダーはあなた自身のアカウントへの請求で、Ollama なら無料です。Claude の場合、
 API 換算では Sonnet で 1 セッションあたり平均約 $0.38 です。`interlatch analyze --pending --dry-run` で、使う前にたまった分の規模を確認できます。
 詳しくは[分析の仕組み](docs/ja/analysis.md)を参照してください。
 

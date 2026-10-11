@@ -11,13 +11,12 @@ claude.ai and ChatGPT chats, recorded on your own machine, and every lesson in t
   <img src="https://img.shields.io/badge/python-3.11%2B-blue" alt="Python 3.11+">
   <img src="https://img.shields.io/badge/macOS-app%20%2B%20CLI-lightgrey?logo=apple" alt="macOS app and CLI">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-green" alt="MIT license"></a>
-  <a href="https://pepy.tech/projects/interlatch"><img src="https://static.pepy.tech/badge/interlatch" alt="Total downloads"></a>
-  <a href="https://github.com/Chatixia-AI/agents-chronicle/pkgs/container/interlatch-hub"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FChatixia-AI%2Fagents-chronicle%2Finterlatch-hub.json&query=%24.downloads&logo=docker&label=hub%20image%20pulls" alt="Hub Docker image pulls"></a>
+  <a href="https://github.com/Chatixia-AI/interlatch/pkgs/container/interlatch-hub"><img src="https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fipitio%2Fbackage%2Fraw%2Findex%2FChatixia-AI%2Fagents-chronicle%2Finterlatch-hub.json&query=%24.downloads&logo=docker&label=hub%20image%20pulls" alt="Hub Docker image pulls"></a>
 </p>
 <p align="center">
-  <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
-  <a href="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main" alt="CodeQL"></a>
-  <a href="https://interlatch.com/docs/"><img src="https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/docs.yml/badge.svg?branch=main" alt="Docs"></a>
+  <a href="https://github.com/Chatixia-AI/interlatch/actions/workflows/ci.yml"><img src="https://github.com/Chatixia-AI/interlatch/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/Chatixia-AI/interlatch/actions/workflows/github-code-scanning/codeql"><img src="https://github.com/Chatixia-AI/interlatch/actions/workflows/github-code-scanning/codeql/badge.svg?branch=main" alt="CodeQL"></a>
+  <a href="https://interlatch.com/docs/"><img src="https://github.com/Chatixia-AI/interlatch/actions/workflows/docs.yml/badge.svg?branch=main" alt="Docs"></a>
   <a href="https://pre-commit.com/"><img src="https://img.shields.io/badge/pre--commit-enabled-brightgreen?logo=pre-commit" alt="pre-commit"></a>
   <a href="https://github.com/astral-sh/ruff"><img src="https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json" alt="Ruff"></a>
 </p>
@@ -33,9 +32,9 @@ from) and earns trust as later work confirms it.
 <sub>Interlatch was called Chronicle. The `chronicle` command still works, and an existing install moves over by itself
 when you update ([Moving from Chronicle](docs/moving-from-chronicle.md)).</sub>
 
-[![Opening a session in Interlatch on demo data: its summary, a glossary term explained on hover, and the knowledge extracted from it](docs/images/demo.gif)](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4)
+[![Opening a session in Interlatch on demo data: its summary, a glossary term explained on hover, and the knowledge extracted from it](docs/images/demo.gif)](https://github.com/Chatixia-AI/interlatch/releases/download/v0.17.0/demo.mp4)
 
-<sub>A session on the [demo data](docs/development.md#demo-data). [Download the one-minute tour](https://github.com/Chatixia-AI/agents-chronicle/releases/download/v0.17.0/demo.mp4) (MP4, 6 MB): Home, a
+<sub>A session on the [demo data](docs/development.md#demo-data). [Download the one-minute tour](https://github.com/Chatixia-AI/interlatch/releases/download/v0.17.0/demo.mp4) (MP4, 6 MB): Home, a
 session and its transcript, ⌘K search, the glossary Map and a weekly review.</sub>
 
 ## What it gives you
@@ -73,8 +72,9 @@ from the [demo data](docs/development.md#demo-data):
 
 ## Quick start
 
-You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/claude-code) or
-[Codex](https://github.com/openai/codex), which does the analysis.
+You need macOS 13 or later and something to analyze sessions: a logged-in [Claude Code](https://claude.com/claude-code)
+or [Codex](https://github.com/openai/codex), IBM Bob with a Bob API key, or a model provider's API with your own key
+([Model providers](docs/analysis.md#model-providers)).
 
 1. **Install.**
 
@@ -85,7 +85,7 @@ You need macOS 13 or later and a logged-in [Claude Code](https://claude.com/clau
 
    `interlatch install` finds the coding agents on your Mac, asks which to record, imports their past sessions and
    asks whether to run Interlatch from login. For the app instead, download it from the
-   [latest release](https://github.com/Chatixia-AI/agents-chronicle/releases/latest) (Apple silicon) and
+   [latest release](https://github.com/Chatixia-AI/interlatch/releases/latest) (Apple silicon) and
    choose **Connect**.
 
 2. **Use your agents as usual.** Each session is recorded when it ends and analyzed in the background.
@@ -126,17 +126,20 @@ Screenshots use made-up [demo data](docs/development.md#demo-data).
 
 1. A hook (or the 15-minute sync) hands each finished session to Interlatch, which archives the raw transcript and
    parses it: prompts, replies, tool calls, files, tokens and cost.
-2. Once the session is idle, a condensed digest with secrets redacted goes to Claude Code (`claude -p`) or Codex
-   (`codex exec`), whichever you chose, which returns a summary and knowledge items. The call runs sandboxed: no
-   tools, hooks or MCP servers.
+2. Once the session is idle, a condensed digest with secrets redacted goes to whatever you chose for analysis
+   (Claude Code's `claude -p`, Codex's `codex exec`, IBM Bob or a model provider's API), which returns a summary and
+   knowledge items. The call runs sandboxed: no tools, hooks or MCP servers.
 3. New knowledge is merged into the project's knowledge base, the glossary is refreshed, and each finished week
    gets a written review.
 4. Everything is served to you (dashboard, app, vault, CLI) and to your agents (MCP).
 
 **What leaves your machine:** only that redacted digest, sent to Anthropic or OpenAI through your own Claude Code
-or Codex login. No telemetry, nothing sent to anyone else. [Data and privacy](docs/privacy.md) lists what is stored where.
+or Codex login, to IBM with your Bob API key, or to the model provider you set up with your own key (with Ollama on
+your computer, not even that). No telemetry, nothing sent to anyone else. [Data and privacy](docs/privacy.md) lists
+what is stored where.
 
-**What it costs:** analysis draws from your Claude or ChatGPT plan like any other use of the agent. With Claude, in
+**What it costs:** through Claude Code or Codex, analysis draws from your Claude or ChatGPT plan like any other use
+of the agent; Bob and model providers bill your own account, and Ollama costs nothing. With Claude, in
 API terms it averages about $0.38 per session with Sonnet; `interlatch analyze --pending --dry-run` sizes a backlog before you spend
 anything. [How analysis works](docs/analysis.md#how-analysis-works) has the details.
 

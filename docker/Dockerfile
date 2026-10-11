@@ -7,7 +7,7 @@ FROM python:3.14.7-slim@sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a3
 ARG INTERLATCH_VERSION=
 LABEL org.opencontainers.image.title="Interlatch hub" \
       org.opencontainers.image.description="A team's hub for Interlatch: what its coding agents learned, without the transcripts" \
-      org.opencontainers.image.source="https://github.com/Chatixia-AI/agents-chronicle" \
+      org.opencontainers.image.source="https://github.com/Chatixia-AI/interlatch" \
       org.opencontainers.image.licenses="MIT"
 
 # The user keeps uid 1000, which owns /data in a volume made by an image from before the rename

@@ -7,7 +7,7 @@ reports are welcome and taken seriously.
 
 Please don't open a public issue for something that could be used against a running hub or dashboard.
 
-- Report it privately through GitHub: [Report a vulnerability](https://github.com/Chatixia-AI/agents-chronicle/security/advisories/new)
+- Report it privately through GitHub: [Report a vulnerability](https://github.com/Chatixia-AI/interlatch/security/advisories/new)
   (the **Security** tab of this repository).
 - If that page says private reporting is not enabled, open an issue that says only "security report, please get in
   touch", without details, and a maintainer will reply with a private channel.
@@ -38,9 +38,9 @@ Interlatch is reviewed with the same coding agents it records.
 - **October 2026**: a review of the hub and the dashboard with Claude Code (Claude Mythos 5.1), covering
   authentication and authorization between a hub's computers and people, uploads, file serving, the analyzers'
   subprocesses, the MCP server and the updater. What it found was fixed in
-  [#84](https://github.com/Chatixia-AI/agents-chronicle/pull/84) and
-  [#91](https://github.com/Chatixia-AI/agents-chronicle/pull/91); the smaller hardening steps it suggested are
-  tracked in [#92](https://github.com/Chatixia-AI/agents-chronicle/issues/92).
+  [#84](https://github.com/Chatixia-AI/interlatch/pull/84) and
+  [#91](https://github.com/Chatixia-AI/interlatch/pull/91); the smaller hardening steps it suggested are
+  tracked in [#92](https://github.com/Chatixia-AI/interlatch/issues/92).
 
-A review is a point in time, not a guarantee about later changes: [CodeQL](https://github.com/Chatixia-AI/agents-chronicle/actions/workflows/github-code-scanning/codeql)
+A review is a point in time, not a guarantee about later changes: [CodeQL](https://github.com/Chatixia-AI/interlatch/actions/workflows/github-code-scanning/codeql)
 and the pre-commit secret scan run on every change, and the next review goes on this list.

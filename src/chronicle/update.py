@@ -37,7 +37,7 @@ log = logging.getLogger("chronicle.update")
 DIST = "interlatch"
 LEGACY_DIST = "agents-chronicle"  # the package's name before the rename
 PYPI_JSON = f"https://pypi.org/pypi/{DIST}/json"
-RELEASES_URL = "https://github.com/Chatixia-AI/agents-chronicle/releases/latest"
+RELEASES_URL = "https://github.com/Chatixia-AI/interlatch/releases/latest"
 
 # server.serve() sets this: a plain `interlatch ui` (by hand or launchd) can restart itself after an update;
 # the desktop app serves the dashboard from its own process and is restarted by the user instead.
@@ -243,7 +243,7 @@ def check(remote: bool = False, detail: bool = False) -> dict:
     if info["move"]:
         info["note"] = tr(MOVE_NOTE)
     if info["available"]:
-        info["notes_url"] = f"https://github.com/Chatixia-AI/agents-chronicle/releases/tag/v{info['latest']}"
+        info["notes_url"] = f"https://github.com/Chatixia-AI/interlatch/releases/tag/v{info['latest']}"
     if m["kind"] == "app":
         info["note"] = tr("Download the new version and drag it into Applications.")
     if m["kind"] == "container":

@@ -42,9 +42,9 @@ instance, have no cache split (so no cost estimate), Bob tasks have no per-call 
    (full prompts and replies, one line per tool call, error excerpts, subagent reports). Very long
    sessions are split at prompt boundaries and map-reduced: each part's lessons are written once, and the final
    pass picks which to keep. Secrets are redacted first.
-3. The digest goes to the agent chosen in `analysis.backend`, through your own login, sandboxed so that no
-   session is written for the analysis itself, none of your hooks, plugins, MCP servers or instruction files load,
-   and the model can only answer:
+3. The digest goes to the agent or provider chosen in `analysis.backend`, through your own login or key, sandboxed so
+   that no session is written for the analysis itself, none of your hooks, plugins, MCP servers or instruction files
+   load, and the model can only answer:
    - **Claude Code** (`backend = "claude"`, the default): `claude -p --no-session-persistence --safe-mode
      --tools "" --strict-mcp-config`.
    - **Codex** (`backend = "codex"`): `codex exec --ephemeral --ignore-user-config --sandbox read-only`, with
@@ -157,7 +157,7 @@ stated so it applies to other work), **checks** for similar work next time, the 
 than made up. When a session revised a finding or a decision, the lesson states where it ended up.
 
 Lessons from an earlier version have no case file, principle or diagram. A session's lessons get them when it is
-analyzed again (`interlatch analyze <session>`), which uses your analysis login like any other analysis.
+analyzed again (`interlatch analyze <session>`), which uses your analysis login or key like any other analysis.
 
 ## Model providers
 

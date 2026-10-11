@@ -23,7 +23,7 @@ both commands. An install from a checkout or a git URL is not switched by the bu
 `interlatch` the same way.
 
 **The desktop app:** download `Interlatch-<version>-arm64.dmg` from the
-[latest release](https://github.com/Chatixia-AI/agents-chronicle/releases/latest), drag **Interlatch** into
+[latest release](https://github.com/Chatixia-AI/interlatch/releases/latest), drag **Interlatch** into
 **Applications** and open it. It is a new app to macOS, so Chronicle.app stays where it was: delete it once
 Interlatch has started (its Open at Login item goes with it).
 

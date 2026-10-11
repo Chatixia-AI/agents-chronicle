@@ -150,8 +150,8 @@ interlatch hub join https://pc.tail1234.ts.net --token … --share knowledge
 
 (or, on a computer that already joined, `interlatch config set hub.share knowledge`, or **Settings › Devices › What this
 computer sends** in its dashboard). That computer then works like a
-standalone Interlatch: it records its own sessions, analyzes them with its own Claude Code or Codex login, and keeps
-its dashboard and MCP tools up to date. After each analysis it sends the hub only:
+standalone Interlatch: it records its own sessions, analyzes them itself (with its own Claude Code or Codex login,
+Bob API key or model provider), and keeps its dashboard and MCP tools up to date. After each analysis it sends the hub only:
 
 - each analyzed session's details: when it ran, agent, model, branch, tokens and cost, which tools it used;
 - its analysis: title, summary, outcome, highlights and what went wrong;
@@ -170,9 +170,9 @@ the computer. Sessions from GitHub Copilot, IBM Bob and Google Antigravity are s
 
 On the hub these sessions are filed like any other from that computer (by git remote, an added folder or
 `path_map`) and their lessons join the project's knowledge base. A session page shows **transcript on
-<computer>** instead of the transcript, and the hub never analyzes these sessions again, so it needs no Claude login
-for them. It still builds each project's knowledge base and glossary with its own. **Team › Computers** marks the
-computer **knowledge only**. A session the hub already has the transcript of keeps the hub's record.
+<computer>** instead of the transcript, and the hub never analyzes these sessions again, so it needs no login or key
+to analyze them. It still builds each project's knowledge base and glossary with its own. **Team › Computers** marks
+the computer **knowledge only**. A session the hub already has the transcript of keeps the hub's record.
 
 ### A hub that takes knowledge only
 

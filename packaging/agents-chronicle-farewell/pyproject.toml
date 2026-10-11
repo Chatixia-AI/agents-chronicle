@@ -28,7 +28,7 @@ chronicle = "chronicle.cli:main"
 
 [project.urls]
 Homepage = "https://interlatch.com"
-Repository = "https://github.com/Chatixia-AI/agents-chronicle"
+Repository = "https://github.com/Chatixia-AI/interlatch"
 
 [build-system]
 requires = ["hatchling"]
